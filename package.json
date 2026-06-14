@@ -1,9 +1,26 @@
 {
   "name": "opencode-agentic-engine",
   "version": "0.1.0",
-  "description": "Multi-agent coordination plugin for OpenCode (Stage I: Tool-Augmented)",
+  "description": "Multi-agent software engineering plugin for OpenCode — implements Stages I-IV from \"The End of Software Engineering\" (arXiv:2606.05608)",
   "type": "module",
   "license": "MIT",
+  "author": "rahadiana",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rahadiana/opencode-agentic-engine.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rahadiana/opencode-agentic-engine/issues"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "agent",
+    "software-engineering",
+    "multi-agent",
+    "code-generation",
+    "ai"
+  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
