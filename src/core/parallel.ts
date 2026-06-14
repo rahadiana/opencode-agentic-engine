@@ -1,4 +1,4 @@
-import type { Subtask } from "./intent-parser"
+import type { Subtask } from "./intent-parser.js"
 
 export interface ParallelPlan {
   phases: Phase[]
@@ -10,6 +10,16 @@ export interface Phase {
   steps: Subtask[]
   canRunInParallel: boolean
 }
+
+export interface ParallelExecutionResult {
+  stepId: string
+  success: boolean
+  output?: string
+  error?: string
+  filesModified: string[]
+}
+
+export type StepRunner = (step: Subtask) => Promise<ParallelExecutionResult>
 
 export class ParallelExecutor {
   analyzeParallelism(subtasks: Subtask[]): ParallelPlan {
@@ -46,6 +56,50 @@ export class ParallelExecutor {
       phases,
       maxParallelism: Math.max(...phases.map(p => p.steps.length), 1),
     }
+  }
+
+  async executePhase(
+    phase: Phase,
+    runner: StepRunner,
+    abortOnFailure = false,
+  ): Promise<ParallelExecutionResult[]> {
+    if (!phase.canRunInParallel || phase.steps.length <= 1) {
+      const results: ParallelExecutionResult[] = []
+      for (const step of phase.steps) {
+        const result = await runner(step)
+        results.push(result)
+        if (abortOnFailure && !result.success) break
+      }
+      return results
+    }
+
+    const promises = phase.steps.map(step => runner(step))
+    const results = await Promise.all(promises)
+
+    if (abortOnFailure && results.some(r => !r.success)) {
+      return results
+    }
+
+    return results
+  }
+
+  async executeAll(
+    plan: ParallelPlan,
+    runner: StepRunner,
+    abortOnFailure = false,
+  ): Promise<ParallelExecutionResult[]> {
+    const allResults: ParallelExecutionResult[] = []
+
+    for (const phase of plan.phases) {
+      const phaseResults = await this.executePhase(phase, runner, abortOnFailure)
+      allResults.push(...phaseResults)
+
+      if (abortOnFailure && phaseResults.some(r => !r.success)) {
+        break
+      }
+    }
+
+    return allResults
   }
 
   suggestParallelTasks(subtasks: Subtask[], currentlyCompleted: string[]): { taskId: string; parallelGroup: number }[] {

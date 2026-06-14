@@ -10,15 +10,41 @@ export interface SchemaMigration {
 export class MemorySchemaVersion {
   private migrations: SchemaMigration[] = []
 
+  constructor() {
+    this.registerBuiltIn()
+  }
+
+  private registerBuiltIn(): void {
+    this.registerMigration({
+      from: 0,
+      to: 1,
+      description: "Initial schema: add schema_version and timestamp fields to all memory objects",
+      apply: (data: unknown) => {
+        const d = data as Record<string, unknown>
+        return {
+          schema_version: 1,
+          ...d,
+          migrated_at: new Date().toISOString(),
+          _migration: "v0→v1: added schema envelope",
+        }
+      },
+    })
+  }
+
   registerMigration(migration: SchemaMigration): void {
-    this.migrations.push(migration)
+    const exists = this.migrations.some(m => m.from === migration.from && m.to === migration.to)
+    if (!exists) {
+      this.migrations.push(migration)
+      this.migrations.sort((a, b) => a.from - b.from)
+    }
   }
 
   upgrade<T>(data: T, currentVersion: number): T {
     let result = data
     for (const m of this.migrations) {
-      if (m.from >= currentVersion && m.to > currentVersion) {
+      if (m.from === currentVersion) {
         result = m.apply(result) as T
+        currentVersion = m.to
       }
     }
     return result

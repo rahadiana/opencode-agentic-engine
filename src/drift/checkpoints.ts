@@ -9,17 +9,35 @@ export interface Checkpoint {
 
 export class CheckpointSystem {
   private checkpoints = new Map<string, Checkpoint[]>()
+  private blockEnforcement = true
+
+  enableBlockEnforcement(enabled: boolean): void {
+    this.blockEnforcement = enabled
+  }
+
+  isBlocked(): { blocked: boolean; reason?: string } {
+    if (!this.blockEnforcement) return { blocked: false }
+    const unacknowledged = this.getUnacknowledged()
+    const blocker = unacknowledged.find(c => c.type === "block")
+    if (blocker) {
+      return {
+        blocked: true,
+        reason: `Blocked by checkpoint "${blocker.id}": ${blocker.description}. Acknowledge to proceed.`,
+      }
+    }
+    return { blocked: false }
+  }
 
   evaluate(stepId: string, action: string, filesModified: string[]): Checkpoint[] {
     const results: Checkpoint[] = []
 
     // File deletion
     if (action.includes("delete") || action.includes("remove")) {
-      if (filesModified.some(f => f.endsWith(".ts") || f.endsWith(".js"))) {
+      if (filesModified.some(f => f.endsWith(".ts") || f.endsWith(".js") || f.endsWith(".py") || f.endsWith(".go") || f.endsWith(".rs"))) {
         results.push({
           id: `${stepId}-delete`,
           type: "warning",
-          description: `Deleting source files: ${filesModified.filter(f => f.match(/\.(ts|js|tsx)$/)).join(", ")}`,
+          description: `Deleting source files: ${filesModified.filter(f => f.match(/\.(ts|js|tsx|py|go|rs)$/)).join(", ")}`,
           context: "Deleted files may break imports in other modules.",
           timestamp: new Date().toISOString(),
           acknowledged: false,
@@ -53,20 +71,34 @@ export class CheckpointSystem {
 
     // Critical infrastructure
     for (const file of filesModified) {
-      if (file.includes("config") || file.includes("env") || file.includes("secret")) {
+      if (file.includes("config") || file.includes("env") || file.includes("secret") || file.includes(".env") || file.includes("credentials")) {
         results.push({
-          id: `${stepId}-config`,
+          id: `${stepId}-config-${file.replace(/[^a-zA-Z0-9]/g, "-")}`,
           type: "block",
-          description: `Configuration file changed: ${file}`,
-          context: "⚠️ Manual review required for config/env changes.",
+          description: `Configuration/secret file changed: ${file}`,
+          context: "⚠️ Manual review required for config/env/secret changes. Acknowledge with agentic_execute to proceed.",
           timestamp: new Date().toISOString(),
           acknowledged: false,
         })
       }
+
+      const highRiskPatterns = ["/etc/", "/var/", "/boot/", "/usr/lib", "/lib/systemd", ".ssh/", ".gnupg/", ".aws/credentials", ".kube/config"]
+      for (const risky of highRiskPatterns) {
+        if (file.includes(risky)) {
+          results.push({
+            id: `${stepId}-system-${file.replace(/[^a-zA-Z0-9]/g, "-")}`,
+            type: "block",
+            description: `System-critical path modified: ${file}`,
+            context: "⚠️ System-level file changes require explicit approval.",
+            timestamp: new Date().toISOString(),
+            acknowledged: false,
+          })
+        }
+      }
     }
 
     // Test-only changes without source changes
-    const onlyTests = filesModified.every(f => f.includes(".test.") || f.includes(".spec."))
+    const onlyTests = filesModified.every(f => f.includes(".test.") || f.includes(".spec.") || f.includes("_test."))
     if (onlyTests && filesModified.length > 0) {
       results.push({
         id: `${stepId}-tests-only`,
@@ -76,6 +108,20 @@ export class CheckpointSystem {
         timestamp: new Date().toISOString(),
         acknowledged: false,
       })
+    }
+
+    // Schema or migration files
+    for (const file of filesModified) {
+      if (file.includes("schema") || file.includes("migration") || file.includes(".sql")) {
+        results.push({
+          id: `${stepId}-schema-${file.replace(/[^a-zA-Z0-9]/g, "-")}`,
+          type: "review",
+          description: `Schema/migration file changed: ${file}`,
+          context: "Database or data schema changes should be reviewed for backward compatibility.",
+          timestamp: new Date().toISOString(),
+          acknowledged: false,
+        })
+      }
     }
 
     this.checkpoints.set(stepId, results)
@@ -91,6 +137,19 @@ export class CheckpointSystem {
 
     cp.acknowledged = true
     return true
+  }
+
+  acknowledgeAll(stepId: string): number {
+    const cps = this.checkpoints.get(stepId)
+    if (!cps) return 0
+    let count = 0
+    for (const cp of cps) {
+      if (!cp.acknowledged) {
+        cp.acknowledged = true
+        count++
+      }
+    }
+    return count
   }
 
   getUnacknowledged(): Checkpoint[] {

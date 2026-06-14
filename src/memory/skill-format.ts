@@ -45,7 +45,8 @@ export function createSkillDefinition(
   name: string,
   triggerPattern: string,
   keywords: string[],
-  steps: { action: string; description: string; tool?: string; expectedOutput: string }[],
+  steps: { action: string; description: string; tool?: string; expectedOutput: string; rollback?: string }[],
+  triggerContext?: string[],
 ): SkillDefinition {
   const now = new Date().toISOString()
   return {
@@ -59,7 +60,7 @@ export function createSkillDefinition(
     trigger: {
       pattern: triggerPattern,
       keywords: keywords.slice(0, 10),
-      context: [],
+      context: triggerContext ?? [],
     },
     workflow: {
       steps: steps.map((s, i) => ({
@@ -68,7 +69,7 @@ export function createSkillDefinition(
         description: s.description,
         tool: s.tool,
         expectedOutput: s.expectedOutput,
-        rollback: undefined,
+        rollback: s.rollback ?? inferRollback(s.action, s.description),
       })),
       estimatedDuration: `${steps.length * 2}m`,
       parallelizable: steps.some(s => s.tool === "agentic_parallel"),
@@ -85,6 +86,31 @@ export function createSkillDefinition(
       modifiedBy: "system",
     },
   }
+}
+
+function inferRollback(action: string, description: string): string | undefined {
+  const lower = action.toLowerCase() + " " + description.toLowerCase()
+
+  if (lower.includes("create") || lower.includes("add") || lower.includes("write")) {
+    return "Delete the created file or revert the addition"
+  }
+  if (lower.includes("delete") || lower.includes("remove")) {
+    return "Restore from git: git checkout -- <file>"
+  }
+  if (lower.includes("modify") || lower.includes("update") || lower.includes("edit")) {
+    return "Revert changes: git checkout -- <file> or git revert <commit>"
+  }
+  if (lower.includes("install") || lower.includes("add dep")) {
+    return "Remove dependency: npm uninstall <package>"
+  }
+  if (lower.includes("migrate")) {
+    return "Run down migration: <tool> migrate down"
+  }
+  if (lower.includes("rename") || lower.includes("move")) {
+    return "Move file back to original location"
+  }
+
+  return "Undo changes via git: git stash or git checkout"
 }
 
 export function serializeSkill(skill: SkillDefinition): string {

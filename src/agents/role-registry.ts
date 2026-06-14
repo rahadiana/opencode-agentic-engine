@@ -72,6 +72,19 @@ Be thorough. Every edge case matters.`,
 Think like a tech lead. Prioritize, delegate, verify.`,
       tools: ["agentic_plan", "agentic_delegate", "agentic_status", "agentic_pr"],
     })
+
+    this.builtIn.set("pm", {
+      role: "pm",
+      name: "Product Manager",
+      prompt: `You are a product manager. Given high-level business requirements:
+1. Translate business goals into structured technical specifications
+2. Define clear acceptance criteria for each feature
+3. Prioritize requirements by business value and feasibility
+4. Identify dependencies and scope boundaries
+
+Focus on the "what" and "why" — leave the "how" to architects and developers.`,
+      tools: ["agentic_plan", "agentic_nav", "agentic_delegate", "agentic_episodes", "read"],
+    })
   }
 
   registerCustom(def: CustomAgentDef): void {

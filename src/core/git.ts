@@ -1,4 +1,4 @@
-import { execSync, execFileSync } from "node:child_process"
+import { execFileSync } from "node:child_process"
 
 export interface CommitInfo {
   hash: string
@@ -13,6 +13,13 @@ export interface PRDescription {
   changes: string[]
   testPlan: string
   breakingChanges: boolean
+}
+
+export interface PRCreationResult {
+  url: string
+  number: number
+  title: string
+  branch: string
 }
 
 export class GitIntegration {
@@ -80,6 +87,77 @@ export class GitIntegration {
       return commits
     } catch {
       return []
+    }
+  }
+
+  getCurrentBranch(): string {
+    try {
+      return execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+        cwd: this.cwd, encoding: "utf-8",
+      }).trim()
+    } catch {
+      return "main"
+    }
+  }
+
+  push(branch?: string): boolean {
+    if (!this.isAvailable()) return false
+    try {
+      const args = ["push"]
+      if (branch) args.push("origin", branch)
+      execFileSync("git", args, { cwd: this.cwd, stdio: "ignore" })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  createBranch(name: string): boolean {
+    if (!this.isAvailable()) return false
+    try {
+      execFileSync("git", ["checkout", "-b", name], { cwd: this.cwd, stdio: "ignore" })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  createPR(title: string, body: string, base = "main"): PRCreationResult | null {
+    if (!this.isAvailable()) return null
+    try {
+      const branch = this.getCurrentBranch()
+      this.push(branch)
+
+      const output = execFileSync("gh", [
+        "pr", "create",
+        "--title", title,
+        "--body", body,
+        "--base", base,
+        "--head", branch,
+      ], { cwd: this.cwd, encoding: "utf-8" }).trim()
+
+      const urlMatch = output.match(/https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/(\d+)/)
+      if (urlMatch) {
+        return {
+          url: urlMatch[0],
+          number: parseInt(urlMatch[1], 10),
+          title,
+          branch,
+        }
+      }
+
+      return { url: output, number: 0, title, branch }
+    } catch {
+      return null
+    }
+  }
+
+  getDiff(base = "main"): string {
+    if (!this.isAvailable()) return ""
+    try {
+      return execFileSync("git", ["diff", base], { cwd: this.cwd, encoding: "utf-8" })
+    } catch {
+      return ""
     }
   }
 

@@ -13,7 +13,7 @@ export interface SkillRecord {
 export class SkillStore {
   private skills = new Map<string, SkillRecord>()
 
-  async extract(turn: { role: string; content: string }): Promise<SkillRecord | null> {
+  async extract(turn: { role: string; content: string }, contextTags: string[] = []): Promise<SkillRecord | null> {
     const content = turn.content
 
     if (!this.isExtractablePattern(content)) return null
@@ -38,15 +38,19 @@ export class SkillStore {
     }
 
     const keywords = this.extractKeywords(content)
+    const inferredTools = this.inferTools(content)
+
     const def = createSkillDefinition(
       name,
       this.extractPattern(content),
       keywords,
       steps.map((s, i) => ({
-        action: "execute",
+        action: this.inferAction(s),
         description: s,
+        tool: inferredTools[i] ?? this.inferToolForStep(s),
         expectedOutput: `Step ${i + 1} completed`,
       })),
+      contextTags.length > 0 ? contextTags : undefined,
     )
 
     const record: SkillRecord = {
@@ -159,5 +163,43 @@ export class SkillStore {
 
   private extractKeywords(content: string): string[] {
     return [...new Set(content.match(/\b(\w{3,})\b/g) ?? [])].slice(0, 10)
+  }
+
+  private inferAction(stepDesc: string): string {
+    const lower = stepDesc.toLowerCase()
+    if (lower.includes("create") || lower.includes("add") || lower.includes("write")) return "create"
+    if (lower.includes("delete") || lower.includes("remove")) return "delete"
+    if (lower.includes("modify") || lower.includes("update") || lower.includes("edit") || lower.includes("change")) return "modify"
+    if (lower.includes("install") || lower.includes("setup")) return "install"
+    if (lower.includes("test") || lower.includes("verify") || lower.includes("check")) return "verify"
+    if (lower.includes("run") || lower.includes("exec")) return "execute"
+    if (lower.includes("review") || lower.includes("audit") || lower.includes("inspect")) return "review"
+    return "execute"
+  }
+
+  private inferToolForStep(stepDesc: string): string | undefined {
+    const lower = stepDesc.toLowerCase()
+    if (lower.includes("read") || lower.includes("check file")) return "read"
+    if (lower.includes("write") || lower.includes("create file")) return "write"
+    if (lower.includes("edit") || lower.includes("modify")) return "edit"
+    if (lower.includes("run") || lower.includes("test") || lower.includes("exec")) return "bash"
+    if (lower.includes("install") || lower.includes("npm") || lower.includes("pip")) return "bash"
+    if (lower.includes("search") || lower.includes("find")) return "grep"
+    return undefined
+  }
+
+  private inferTools(content: string): string[] {
+    const tools: string[] = []
+    const toolPatterns: Array<{ pattern: RegExp; tool: string }> = [
+      { pattern: /\b(read|Read)\b/, tool: "read" },
+      { pattern: /\b(edit|Edit)\b/, tool: "edit" },
+      { pattern: /\b(write|Write)\b/, tool: "write" },
+      { pattern: /\b(bash|Bash|exec|run)\b/, tool: "bash" },
+      { pattern: /\b(grep|search|find)\b/, tool: "grep" },
+    ]
+    for (const { pattern, tool } of toolPatterns) {
+      if (pattern.test(content)) tools.push(tool)
+    }
+    return [...new Set(tools)]
   }
 }

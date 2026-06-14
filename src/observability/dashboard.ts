@@ -148,17 +148,51 @@ export class Dashboard {
       }
     }
 
+    // Loop detection: same tool/step repeating without progress
+    const sequence: Array<{ step: string; tool: string; idx: number }> = []
+    for (let i = 0; i < traces.length; i++) {
+      sequence.push({ step: traces[i].step, tool: traces[i].toolUsed, idx: i })
+    }
+
+    for (let cycleLen = 2; cycleLen <= 5; cycleLen++) {
+      for (let start = 0; start + cycleLen * 2 < sequence.length; start++) {
+        const cycle1 = sequence.slice(start, start + cycleLen)
+        const cycle2 = sequence.slice(start + cycleLen, start + cycleLen * 2)
+        const isRepeat = cycle1.every((c, i) =>
+          c.step === cycle2[i].step && c.tool === cycle2[i].tool
+        )
+        if (isRepeat) {
+          const toolNames = [...new Set(cycle1.map(c => c.tool))].join(", ")
+          anomalies.push({
+            type: "loop",
+            description: `Repeating pattern detected: ${toolNames} x ${cycleLen} steps at index ${start}`,
+            detectedAt: traces[start + cycleLen * 2]?.timestamp ?? new Date().toISOString(),
+            tool: toolNames,
+            count: cycleLen,
+          })
+          break
+        }
+      }
+    }
+
     // Silent failures (false success claims with failed verify)
     let lastVerifyFailed = false
+    let lastFailedVerifyStep = ""
     for (const t of traces) {
-      if (t.step.startsWith("verify:") && !t.success) lastVerifyFailed = true
+      if (t.step.startsWith("verify:") && !t.success) {
+        lastVerifyFailed = true
+        lastFailedVerifyStep = t.step
+      }
       if (lastVerifyFailed && t.step.startsWith("execute:") && t.success) {
         anomalies.push({
           type: "silent_failure",
-          description: `Step reported success but verification had previously failed`,
+          description: `Step reported success but verification "${lastFailedVerifyStep}" had previously failed`,
           detectedAt: t.timestamp,
           tool: t.toolUsed,
         })
+        lastVerifyFailed = false
+      }
+      if (t.step.startsWith("execute:") && !t.success) {
         lastVerifyFailed = false
       }
     }

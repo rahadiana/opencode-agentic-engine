@@ -1,29 +1,28 @@
+import type { LLMEngine } from "../core/llm.js"
+
 export interface ContextSummary {
-  /** Condensed version of the plan and execution history */
   planSummary: string
-  /** Key decisions made and why */
   decisions: string[]
-  /** Files changed and what was done to them */
   fileChanges: string[]
-  /** Invariants that must be preserved */
   invariants: string[]
-  /** Open issues or unresolved items */
   openItems: string[]
-  /** Token estimate of the compressed context */
   estimatedTokens: number
 }
 
 export class ContextCompressor {
   private windowSize = 5
   private summaryInterval = 5
+  private llm: LLMEngine | null = null
+
+  setLLM(llm: LLMEngine): void {
+    this.llm = llm
+  }
 
   compress(planSummary: string, turns: Array<{ role: string; content: string }>, decisions: string[], fileChanges: string[]): ContextSummary {
     const relevantTurns = turns.slice(-this.windowSize * 3)
 
-    // Extract key information from turns
     const extracted = this.extractKeyInfo(relevantTurns)
 
-    // Combine with explicit trackers
     const allDecisions = [...new Set([...decisions, ...extracted.decisions])]
     const allFileChanges = [...new Set([...fileChanges, ...extracted.fileChanges])]
     const allInvariants = extracted.invariants
@@ -39,6 +38,28 @@ export class ContextCompressor {
     }
 
     return summary
+  }
+
+  async compressWithLLM(planGoal: string, turns: Array<{ role: string; content: string }>, decisions: string[], fileChanges: string[]): Promise<ContextSummary> {
+    if (!this.llm) return this.compress(planGoal, turns, decisions, fileChanges)
+
+    try {
+      const turnTexts = turns.map(t => `[${t.role}]: ${t.content}`)
+      const llmSummary = await this.llm.summarizeContext(planGoal, turnTexts)
+
+      const extracted = this.extractKeyInfo(turns)
+
+      return {
+        planSummary: `Goal: ${planGoal.slice(0, 200)}\n\nLLM Summary: ${llmSummary.slice(0, 500)}`,
+        decisions: [...new Set([...decisions, ...extracted.decisions])].slice(-10),
+        fileChanges: [...new Set([...fileChanges, ...extracted.fileChanges])].slice(-15),
+        invariants: extracted.invariants,
+        openItems: extracted.openItems,
+        estimatedTokens: Math.ceil(llmSummary.length / 4),
+      }
+    } catch {
+      return this.compress(planGoal, turns, decisions, fileChanges)
+    }
   }
 
   shouldCompress(turnCount: number, currentTokensEstimate: number, maxTokens = 100_000): boolean {
@@ -85,28 +106,24 @@ export class ContextCompressor {
     for (const turn of turns) {
       const content = turn.content ?? ""
 
-      // Extract decisions (heuristic patterns)
-      const decisionMatches = content.match(/(?:decided|chose|opted|will use|using) (.+?)(?:\.|$)/gi)
+      const decisionMatches = content.match(/(?:decided|chose|opted|will use|using|selected|picked) (.+?)(?:\.|$)/gi)
       if (decisionMatches) {
         decisions.push(...decisionMatches.map(d => d.trim()).slice(0, 3))
       }
 
-      // Extract file paths
-      const fileMatches = content.match(/(?:src|lib|test|app)\/[\w/.\-]+/gi)
+      const fileMatches = content.match(/(?:src|lib|test|app|pkg|cmd)\/[\w/.\-]+/gi)
       if (fileMatches) {
         fileChanges.push(...fileMatches)
       }
 
-      // Detect invariants
-      if (content.includes("must not") || content.includes("should never") || content.includes("invariant")) {
+      if (content.includes("must not") || content.includes("should never") || content.includes("invariant") || content.includes("must preserve")) {
         const lines = content.split("\n").filter(l =>
-          l.includes("must not") || l.includes("should never") || l.includes("invariant")
+          l.includes("must not") || l.includes("should never") || l.includes("invariant") || l.includes("must preserve")
         )
         invariants.push(...lines.map(l => l.trim()).slice(0, 3))
       }
 
-      // Detect open items (TODO, FIXME, remaining)
-      if (content.includes("TODO") || content.includes("remaining") || content.includes("still need")) {
+      if (content.includes("TODO") || content.includes("FIXME") || content.includes("remaining") || content.includes("still need") || content.includes("pending")) {
         openItems.push(content.slice(0, 120))
       }
     }

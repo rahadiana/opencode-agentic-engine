@@ -1,4 +1,8 @@
 import { execFileSync } from "node:child_process"
+import { existsSync } from "node:fs"
+import { resolve } from "node:path"
+
+export type SupportedLanguage = "typescript" | "python" | "go" | "rust" | "javascript" | "unknown"
 
 export interface VerificationResult {
   passed: boolean
@@ -13,24 +17,126 @@ export interface CheckResult {
   output: string
 }
 
+export interface LanguageConfig {
+  compileCmd: (projectDir: string) => { bin: string; args: string[]; timeout: number }
+  testCmd: (projectDir: string, testPattern?: string) => { bin: string; args: string[]; timeout: number }
+  fileExts: string[]
+  testFileExts: string[]
+}
+
+const LANGUAGE_CONFIGS: Record<SupportedLanguage, LanguageConfig> = {
+  typescript: {
+    compileCmd: (dir) => ({ bin: "npx", args: ["tsc", "--noEmit", "--pretty", "false"], timeout: 30000 }),
+    testCmd: (dir, pattern) => {
+      const args = ["vitest", "run", "--reporter", "verbose"]
+      if (pattern) args.push("--", pattern)
+      return { bin: "npx", args, timeout: 60000 }
+    },
+    fileExts: [".ts", ".tsx"],
+    testFileExts: [".test.ts", ".spec.ts", ".test.tsx", ".spec.tsx"],
+  },
+  javascript: {
+    compileCmd: (dir) => ({ bin: "node", args: ["-e", "process.exit(0)"], timeout: 5000 }),
+    testCmd: (dir, pattern) => {
+      const args = ["vitest", "run", "--reporter", "verbose"]
+      if (pattern) args.push("--", pattern)
+      return { bin: "npx", args, timeout: 60000 }
+    },
+    fileExts: [".js", ".jsx", ".mjs"],
+    testFileExts: [".test.js", ".spec.js", ".test.jsx", ".spec.jsx"],
+  },
+  python: {
+    compileCmd: (dir) => ({ bin: "python", args: ["-m", "py_compile", "-q", "."], timeout: 30000 }),
+    testCmd: (dir, pattern) => {
+      const args = ["-m", "pytest", "-q"]
+      if (pattern) args.push(pattern)
+      return { bin: "python", args, timeout: 60000 }
+    },
+    fileExts: [".py"],
+    testFileExts: ["test_", "_test.py"],
+  },
+  go: {
+    compileCmd: (dir) => ({ bin: "go", args: ["vet", "./..."], timeout: 30000 }),
+    testCmd: (dir, pattern) => {
+      const args = ["test", "./...", "-count=1"]
+      if (pattern) args.push("-run", pattern)
+      return { bin: "go", args, timeout: 120000 }
+    },
+    fileExts: [".go"],
+    testFileExts: ["_test.go"],
+  },
+  rust: {
+    compileCmd: (dir) => ({ bin: "cargo", args: ["check", "--quiet"], timeout: 120000 }),
+    testCmd: (dir, pattern) => {
+      const args = ["test"]
+      if (pattern) args.push(pattern)
+      return { bin: "cargo", args, timeout: 120000 }
+    },
+    fileExts: [".rs"],
+    testFileExts: ["test.rs"],
+  },
+  unknown: {
+    compileCmd: (dir) => ({ bin: "echo", args: ["no compile step"], timeout: 1000 }),
+    testCmd: (dir) => ({ bin: "echo", args: ["no test step"], timeout: 1000 }),
+    fileExts: [],
+    testFileExts: [],
+  },
+}
+
 export class Verifier {
+  private detectedLang: SupportedLanguage = "unknown"
+
+  detectLanguage(projectDir: string): SupportedLanguage {
+    const checks: Array<{ lang: SupportedLanguage; file: string }> = [
+      { lang: "typescript", file: "tsconfig.json" },
+      { lang: "rust", file: "Cargo.toml" },
+      { lang: "go", file: "go.mod" },
+      { lang: "python", file: "pyproject.toml" },
+      { lang: "python", file: "setup.py" },
+      { lang: "python", file: "requirements.txt" },
+      { lang: "javascript", file: "package.json" },
+    ]
+
+    for (const { lang, file } of checks) {
+      if (existsSync(resolve(projectDir, file))) {
+        if (lang === "javascript" && existsSync(resolve(projectDir, "tsconfig.json"))) {
+          this.detectedLang = "typescript"
+          return "typescript"
+        }
+        this.detectedLang = lang
+        return lang
+      }
+    }
+
+    this.detectedLang = "unknown"
+    return "unknown"
+  }
+
+  getLanguage(): SupportedLanguage {
+    return this.detectedLang
+  }
+
   verifyCompile(projectDir: string): CheckResult {
+    const lang = this.detectedLang === "unknown" ? this.detectLanguage(projectDir) : this.detectedLang
+    const config = LANGUAGE_CONFIGS[lang] ?? LANGUAGE_CONFIGS.unknown
+    const { bin, args, timeout } = config.compileCmd(projectDir)
+
     try {
-      const output = execFileSync("npx", ["tsc", "--noEmit", "--pretty", "false"], {
+      const output = execFileSync(bin, args, {
         cwd: projectDir,
-        timeout: 30000,
+        timeout,
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "pipe"],
       })
       return {
-        name: "compile",
+        name: `compile:${lang}`,
         passed: true,
         output: output || "Compilation successful",
       }
     } catch (e: unknown) {
       const err = e as { stdout?: string; stderr?: string; message?: string }
       return {
-        name: "compile",
+        name: `compile:${lang}`,
         passed: false,
         output: err.stderr || err.stdout || err.message || "Compilation failed",
       }
@@ -38,36 +144,76 @@ export class Verifier {
   }
 
   verifyTests(projectDir: string, testPattern = ""): CheckResult {
-    try {
-      const args = ["vitest", "run", "--reporter", "verbose"]
-      if (testPattern) args.push("--", testPattern)
+    const lang = this.detectedLang === "unknown" ? this.detectLanguage(projectDir) : this.detectedLang
+    const config = LANGUAGE_CONFIGS[lang] ?? LANGUAGE_CONFIGS.unknown
+    const { bin, args, timeout } = config.testCmd(projectDir, testPattern)
 
-      const output = execFileSync("npx", args, {
+    try {
+      const output = execFileSync(bin, args, {
         cwd: projectDir,
-        timeout: 60000,
+        timeout,
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "pipe"],
       })
       return {
-        name: testPattern ? `test:${testPattern}` : "test:all",
+        name: testPattern ? `test:${testPattern}` : `test:all:${lang}`,
         passed: true,
         output: output || "Tests passed",
       }
     } catch (e: unknown) {
       const err = e as { stdout?: string; stderr?: string; message?: string }
       return {
-        name: testPattern ? `test:${testPattern}` : "test:all",
+        name: testPattern ? `test:${testPattern}` : `test:all:${lang}`,
         passed: false,
         output: err.stdout || err.stderr || err.message || "Tests failed",
       }
     }
   }
 
+  verifyLint(projectDir: string): CheckResult {
+    const lang = this.detectedLang === "unknown" ? this.detectLanguage(projectDir) : this.detectedLang
+
+    const lintConfigs: Partial<Record<SupportedLanguage, { bin: string; args: string[] }>> = {
+      typescript: { bin: "npx", args: ["eslint", ".", "--quiet"] },
+      javascript: { bin: "npx", args: ["eslint", ".", "--quiet"] },
+      python: { bin: "python", args: ["-m", "ruff", "check", "."] },
+      go: { bin: "golangci-lint", args: ["run", "./..."] },
+    }
+
+    const config = lintConfigs[lang]
+    if (!config) {
+      return { name: `lint:${lang}`, passed: true, output: "No linter configured for this language" }
+    }
+
+    try {
+      const output = execFileSync(config.bin, config.args, {
+        cwd: projectDir,
+        timeout: 60000,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "pipe"],
+      })
+      return { name: `lint:${lang}`, passed: true, output: output || "Lint passed" }
+    } catch (e: unknown) {
+      const err = e as { stdout?: string; stderr?: string; message?: string }
+      return {
+        name: `lint:${lang}`,
+        passed: false,
+        output: err.stdout || err.stderr || err.message || "Lint failed",
+      }
+    }
+  }
+
   verifyAll(stepId: string, projectDir: string): VerificationResult {
+    if (this.detectedLang === "unknown") this.detectLanguage(projectDir)
+
     const checks = [
       this.verifyCompile(projectDir),
-      this.verifyTests(projectDir),
     ]
+    if (this.detectedLang !== "unknown") {
+      checks.push(this.verifyLint(projectDir))
+    }
+    checks.push(this.verifyTests(projectDir))
+
     const errors = checks.filter(c => !c.passed).map(c => c.output)
 
     return {
@@ -79,26 +225,56 @@ export class Verifier {
   }
 
   verifyRelated(stepId: string, projectDir: string, changedFiles: string[]): VerificationResult {
+    if (this.detectedLang === "unknown") this.detectLanguage(projectDir)
+    const lang = this.detectedLang
+    const config = LANGUAGE_CONFIGS[lang] ?? LANGUAGE_CONFIGS.typescript
+
     const checks: CheckResult[] = [this.verifyCompile(projectDir)]
 
-    const testFiles = changedFiles
-      .filter(f => f.includes(".test.") || f.includes(".spec."))
-      .concat(
-        changedFiles
-          .filter(f => !f.includes(".test.") && !f.includes(".spec."))
-          .map(f => f.replace(/\.(ts|tsx|js)$/, ".test.$1"))
-      )
+    const isTestFile = (f: string): boolean => config.testFileExts.some(ext => {
+      if (ext.startsWith("test_")) {
+        const basename = f.split("/").pop() ?? f
+        return basename.startsWith("test_")
+      }
+      if (ext.startsWith("_test.")) return f.endsWith(ext)
+      return f.endsWith(ext)
+    })
 
-    if (testFiles.length > 0) {
-      checks.push({
-        name: `test:${testFiles.length} related files`,
-        passed: true,
-        output: `Related test files: ${testFiles.join(", ")}`,
+    const testFiles = changedFiles.filter(f => isTestFile(f))
+    const sourceFiles = changedFiles.filter(f =>
+      !isTestFile(f) && config.fileExts.some(ext => f.endsWith(ext))
+    )
+
+    const inferredTestFiles = sourceFiles.flatMap(f => {
+      const base = f.replace(/\.\w+$/, "")
+      const dir = base.replace(/\/[^/]*$/, "")
+      const filename = base.replace(/.*\//, "")
+
+      return config.testFileExts.flatMap(ext => {
+        if (ext.startsWith("test_")) {
+          return [`${dir}/test_${filename}${config.fileExts[0] ?? ".py"}`]
+        }
+        if (ext.endsWith("_")) {
+          return [`${base}${ext}`]
+        }
+        return [`${base}${ext}`]
       })
-      checks.push(this.verifyTests(projectDir))
-    } else {
-      checks.push(this.verifyTests(projectDir))
+    })
+
+    const allTestFiles = [...new Set([...testFiles, ...inferredTestFiles])]
+
+    if (allTestFiles.length > 0) {
+      checks.push({
+        name: `test:${allTestFiles.length} related files`,
+        passed: true,
+        output: `Related test files: ${allTestFiles.join(", ")}`,
+      })
     }
+
+    if (lang !== "unknown") {
+      checks.push(this.verifyLint(projectDir))
+    }
+    checks.push(this.verifyTests(projectDir))
 
     const errors = checks.filter(c => !c.passed).map(c => c.output)
     return {
