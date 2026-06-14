@@ -1,3 +1,5 @@
+import type { LLMEngine } from "../core/llm.js"
+
 export type DocumentType = "episode" | "skill" | "file" | "code"
 
 export interface DocumentMeta {
@@ -44,6 +46,12 @@ export class VectorStore {
   private vocabulary: Map<string, number> = new Map()
   private searchCache: Map<string, SearchResult[]> = new Map()
   private maxCacheSize = 100
+  private llmEngine: LLMEngine | null = null
+  private semanticCache: Map<string, SearchResult[]> = new Map()
+
+  setLLM(llm: LLMEngine): void {
+    this.llmEngine = llm
+  }
 
   addDocument(id: string, content: string, metadata: DocumentMeta): void {
     const tokens = this.tokenize(content)
@@ -67,6 +75,7 @@ export class VectorStore {
     }
 
     this.searchCache.clear()
+    this.semanticCache.clear()
   }
 
   search(query: string, topK = 5): SearchResult[] {
@@ -120,8 +129,68 @@ export class VectorStore {
     return results
   }
 
+  async semanticSearch(query: string, topK = 5): Promise<SearchResult[]> {
+    if (this.documents.size === 0) return []
+
+    const cached = this.semanticCache.get(`${query}::${topK}`)
+    if (cached) return cached
+
+    // TF-IDF retrieval: get 2*t topK candidates
+    const tfidfResults = this.search(query, Math.max(topK * 2, 10))
+
+    // If few docs or no LLM, fall back to TF-IDF
+    if (tfidfResults.length <= topK || !this.llmEngine) {
+      const results = tfidfResults.slice(0, topK)
+      this.semanticCache.set(`${query}::${topK}`, results)
+      return results
+    }
+
+    // LLM semantic rerank
+    try {
+      const docList = tfidfResults.map((r, i) => `[${i}] ${r.content.slice(0, 200)}`).join("\n")
+      const resp = await this.llmEngine.call({
+        systemPrompt: "You are a search relevance ranker. Given a query and a list of documents, rank the documents by relevance to the query. Return ONLY a JSON array of document indices (numbers) in descending relevance order, e.g. [3, 0, 7, 1, 2].",
+        userPrompt: `Query: "${query}"\n\nDocuments:\n${docList}\n\nReturn the indices sorted by relevance (most relevant first) as a JSON array. Include ALL indices.`,
+        jsonMode: true,
+        temperature: 0,
+        maxTokens: 256,
+      })
+
+      const rankings: number[] = JSON.parse(resp.content)
+      const reranked: SearchResult[] = []
+      const seen = new Set<number>()
+
+      for (const idx of rankings) {
+        if (idx >= 0 && idx < tfidfResults.length && !seen.has(idx)) {
+          reranked.push({ ...tfidfResults[idx], score: 1 - reranked.length / rankings.length })
+          seen.add(idx)
+        }
+      }
+
+      // Append any missing docs
+      for (let i = 0; i < tfidfResults.length; i++) {
+        if (!seen.has(i)) reranked.push({ ...tfidfResults[i], score: 0.1 })
+      }
+
+      const results = reranked.slice(0, topK)
+      this.semanticCache.set(`${query}::${topK}`, results)
+      return results
+    } catch {
+      const results = tfidfResults.slice(0, topK)
+      this.semanticCache.set(`${query}::${topK}`, results)
+      return results
+    }
+  }
+
   searchByType(query: string, type: DocumentType, topK = 5): SearchResult[] {
     const results = this.search(query, topK * 2)
+    return results
+      .filter(r => r.metadata.type === type)
+      .slice(0, topK)
+  }
+
+  async semanticSearchByType(query: string, type: DocumentType, topK = 5): Promise<SearchResult[]> {
+    const results = await this.semanticSearch(query, topK * 2)
     return results
       .filter(r => r.metadata.type === type)
       .slice(0, topK)
@@ -137,6 +206,7 @@ export class VectorStore {
 
     this.documents.delete(id)
     this.searchCache.clear()
+    this.semanticCache.clear()
     return true
   }
 
@@ -152,10 +222,12 @@ export class VectorStore {
     this.documents.clear()
     this.vocabulary.clear()
     this.searchCache.clear()
+    this.semanticCache.clear()
   }
 
   clearCache(): void {
     this.searchCache.clear()
+    this.semanticCache.clear()
   }
 
   private tokenize(text: string): string[] {

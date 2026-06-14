@@ -7,6 +7,8 @@ services:
       dockerfile: Dockerfile
     container_name: opencode-agentic
     restart: unless-stopped
+    networks:
+      - agentic-net
     ports:
       - "4096:4096"
     environment:
@@ -17,8 +19,29 @@ services:
     volumes:
       - opencode_data:/root/.opencode
       - agentic_store:/workspace/.agentic
-    # Mount project directories:
-    #   - ./my-project:/workspace/my-project
+    healthcheck:
+      test: ["CMD", "curl", "-s", "http://localhost:4096"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  cloudflared:
+    build:
+      context: .
+      dockerfile: Dockerfile.cloudflared
+    container_name: agentic-tunnel
+    restart: unless-stopped
+    networks:
+      - agentic-net
+    depends_on:
+      opencode:
+        condition: service_healthy
+    environment:
+      - OPENCODE_URL=http://opencode:4096
+
+networks:
+  agentic-net:
 
 volumes:
   opencode_data:

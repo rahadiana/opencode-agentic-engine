@@ -1,0 +1,8 @@
+FROM cloudflare/cloudflared:latest AS cloudflared
+
+FROM alpine:latest
+RUN apk add --no-cache curl bash
+COPY --from=cloudflared /usr/local/bin/cloudflared /usr/local/bin/cloudflared
+COPY entrypoint-cloudflared.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]

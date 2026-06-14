@@ -1,4 +1,4 @@
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin, PluginModule } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin"
 import { readFileSync } from "node:fs"
 import { IntentParser, type TaskIntent } from "./core/intent-parser.js"
@@ -30,7 +30,7 @@ import { AgentLoop } from "./core/agent-loop.js"
 import { PersistenceLayer } from "./memory/persistence.js"
 import { VectorStore } from "./memory/vector-store.js"
 
-export const AgenticEngine: Plugin = async (input, _options) => {
+const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<Plugin>[1]) => {
   const intentParser = new IntentParser()
   const executor = new Executor()
   const verifier = new Verifier()
@@ -58,6 +58,7 @@ export const AgenticEngine: Plugin = async (input, _options) => {
   const agentLoop = new AgentLoop(llmEngine)
   const persistence = new PersistenceLayer(input.worktree)
   const vectorStore = new VectorStore()
+  vectorStore.setLLM(llmEngine)
 
   contextCompressor.setLLM(llmEngine)
   verifier.detectLanguage(input.worktree)
@@ -925,7 +926,7 @@ export const AgenticEngine: Plugin = async (input, _options) => {
                 tags: [],
               })
             }
-            const vectorResults = vectorStore.search(args.query, 5)
+            const vectorResults = await vectorStore.semanticSearch(args.query, 5)
             const episodes = allEpisodes.filter(e => vectorResults.some(r => r.id === `ep:${e.sessionId}`))
             if (episodes.length === 0) return { output: `No episodes found for "${args.query}".` }
             let output = `## 🧠 Episodic Memory (RAG): "${args.query}"\n\n`
@@ -1278,7 +1279,7 @@ export const AgenticEngine: Plugin = async (input, _options) => {
       }),
     },
 
-    "tool.execute.after": async (toolInput, _output) => {
+    "tool.execute.after": async (toolInput: { tool: string; args: unknown; sessionID: string; callID: string }, _output: { title: string; output: string; metadata: unknown }) => {
       traceLogger.log({
         step: "tool",
         input: JSON.stringify(toolInput.args ?? {}),
@@ -1294,3 +1295,11 @@ export const AgenticEngine: Plugin = async (input, _options) => {
     },
   }
 }
+
+export const AgenticEngine: Plugin = createEngine
+
+const pluginModule: PluginModule = {
+  id: "agentic-engine",
+  server: createEngine,
+}
+export default pluginModule

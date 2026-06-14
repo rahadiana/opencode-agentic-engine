@@ -12,12 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install opencode globally
 RUN npm install -g opencode-ai@latest
 
-# Install cloudflared
-RUN curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
-    -o /usr/local/bin/cloudflared \
-    && chmod +x /usr/local/bin/cloudflared \
-    && cloudflared --version
-
 # Work directory
 WORKDIR /workspace
 
@@ -30,14 +24,15 @@ RUN npm run build
 # Install plugin to project-level .opencode/plugins/ directory (auto-loaded by opencode)
 RUN mkdir -p /workspace/.opencode/plugins/agentic-engine
 RUN cp /workspace/dist/index.js /workspace/.opencode/plugins/agentic-engine/index.js
+# Copy package.json for plugin metadata
+RUN echo '{"name":"opencode-agentic-engine","version":"0.1.0","main":"./index.js","type":"module"}' > /workspace/.opencode/plugins/agentic-engine/package.json
 
-# Entrypoint
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-EXPOSE 4096
+# Create opencode config with local plugin reference
+RUN echo '{"plugin": ["/workspace/.opencode/plugins/agentic-engine"]}' > /workspace/.opencode/opencode.json
 
 ENV OPENCODE_SERVER_HOSTNAME=0.0.0.0
 ENV OPENCODE_SERVER_PORT=4096
 
-ENTRYPOINT ["/entrypoint.sh"]
+EXPOSE 4096
+
+CMD ["opencode", "web", "--hostname", "0.0.0.0", "--port", "4096"]
