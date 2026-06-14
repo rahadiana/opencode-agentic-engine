@@ -33,16 +33,16 @@ const STOP_WORDS = new Set([
   "under", "now", "new", "any", "get", "set", "put",
 ])
 
-interface DocumentEntry {
+interface VectorEntry {
   id: string
   content: string
   metadata: DocumentMeta
-  tokens: string[]
-  tokenFreq: Map<string, number>
+  tfidf: Map<string, number>
+  norm: number
 }
 
 export class VectorStore {
-  private documents: Map<string, DocumentEntry> = new Map()
+  private documents: Map<string, VectorEntry> = new Map()
   private vocabulary: Map<string, number> = new Map()
   private searchCache: Map<string, SearchResult[]> = new Map()
   private maxCacheSize = 100
@@ -55,22 +55,38 @@ export class VectorStore {
 
   addDocument(id: string, content: string, metadata: DocumentMeta): void {
     const tokens = this.tokenize(content)
-    const tokenFreq = new Map<string, number>()
+    const tf = new Map<string, number>()
     for (const t of tokens) {
-      tokenFreq.set(t, (tokenFreq.get(t) ?? 0) + 1)
+      tf.set(t, (tf.get(t) ?? 0) + 1)
     }
 
     const existing = this.documents.get(id)
     if (existing) {
-      for (const t of existing.tokens) {
-        this.decrementVocab(t)
+      for (const t of existing.tfidf.keys()) {
+        const prev = this.vocabulary.get(t)
+        if (prev !== undefined) {
+          if (prev <= 1) this.vocabulary.delete(t)
+          else this.vocabulary.set(t, prev - 1)
+        }
       }
     }
 
-    const entry: DocumentEntry = { id, content, metadata, tokens, tokenFreq }
-    this.documents.set(id, entry)
+    const tfs = tokenFreqToTF(tokens, tf)
+    const totalDocs = this.documents.size + 1
+    const tfidf = new Map<string, number>()
+    for (const [term, tfVal] of tfs) {
+      const df = (this.vocabulary.get(term) ?? 0) + 1
+      const idf = Math.log((totalDocs) / df) + 1
+      if (idf > 0) tfidf.set(term, tfVal * idf)
+    }
 
-    for (const t of new Set(entry.tokens)) {
+    let norm = 0
+    for (const v of tfidf.values()) norm += v * v
+    norm = Math.sqrt(norm)
+
+    this.documents.set(id, { id, content, metadata, tfidf, norm })
+
+    for (const t of tokens) {
       this.vocabulary.set(t, (this.vocabulary.get(t) ?? 0) + 1)
     }
 
@@ -84,36 +100,37 @@ export class VectorStore {
     if (cached) return cached
 
     const queryTokens = this.tokenize(query)
-    if (queryTokens.length === 0 || this.documents.size === 0) {
-      return []
-    }
+    if (queryTokens.length === 0 || this.documents.size === 0) return []
 
-    const totalDocs = this.documents.size
     const queryTF = new Map<string, number>()
     for (const t of queryTokens) {
       queryTF.set(t, (queryTF.get(t) ?? 0) + 1)
     }
+    const qTf = tokenFreqToTF(queryTokens, queryTF)
+    const totalDocs = this.documents.size
 
-    const queryWeights = new Map<string, number>()
-    for (const t of queryTokens) {
-      const df = this.vocabulary.get(t) ?? 0
-      if (df > 0) {
-        const tf = (queryTF.get(t) ?? 0) / queryTokens.length
-        const idf = Math.log((totalDocs + 1) / (df + 1)) + 1
-        queryWeights.set(t, tf * idf)
-      }
+    let qNorm = 0
+    const qWeight = new Map<string, number>()
+    for (const [term, tfVal] of qTf) {
+      const df = this.vocabulary.get(term) ?? 0
+      const idf = df > 0 ? Math.log((totalDocs) / df) + 1 : 1
+      const w = tfVal * idf
+      qWeight.set(term, w)
+      qNorm += w * w
     }
+    qNorm = Math.sqrt(qNorm)
+    if (qNorm === 0) return []
 
     const scores: SearchResult[] = []
     for (const doc of this.documents.values()) {
-      const score = this.computeScore(doc, queryTokens, totalDocs, queryWeights)
-      if (score > 0) {
-        scores.push({
-          id: doc.id,
-          content: doc.content,
-          metadata: { ...doc.metadata },
-          score,
-        })
+      let dot = 0
+      for (const [term, qw] of qWeight) {
+        const dw = doc.tfidf.get(term)
+        if (dw) dot += qw * dw
+      }
+      const score = doc.norm > 0 ? dot / (qNorm * doc.norm) : 0
+      if (score > 0.01) {
+        scores.push({ id: doc.id, content: doc.content, metadata: { ...doc.metadata }, score })
       }
     }
 
@@ -135,22 +152,21 @@ export class VectorStore {
     const cached = this.semanticCache.get(`${query}::${topK}`)
     if (cached) return cached
 
-    // TF-IDF retrieval: get 2*t topK candidates
+    // TF-IDF sparse vector cosine similarity retrieval
     const tfidfResults = this.search(query, Math.max(topK * 2, 10))
 
-    // If few docs or no LLM, fall back to TF-IDF
     if (tfidfResults.length <= topK || !this.llmEngine) {
       const results = tfidfResults.slice(0, topK)
       this.semanticCache.set(`${query}::${topK}`, results)
       return results
     }
 
-    // LLM semantic rerank
+    // LLM rerank on top-K results
     try {
       const docList = tfidfResults.map((r, i) => `[${i}] ${r.content.slice(0, 200)}`).join("\n")
       const resp = await this.llmEngine.call({
-        systemPrompt: "You are a search relevance ranker. Given a query and a list of documents, rank the documents by relevance to the query. Return ONLY a JSON array of document indices (numbers) in descending relevance order, e.g. [3, 0, 7, 1, 2].",
-        userPrompt: `Query: "${query}"\n\nDocuments:\n${docList}\n\nReturn the indices sorted by relevance (most relevant first) as a JSON array. Include ALL indices.`,
+        systemPrompt: "You are a search relevance ranker. Given a query and a list of documents, rank the documents by relevance. Return ONLY a JSON array of document indices in descending relevance order (most relevant first), e.g. [3, 0, 7].",
+        userPrompt: `Query: "${query}"\n\nDocuments:\n${docList}\n\nReturn indices sorted by relevance as JSON array.`,
         jsonMode: true,
         temperature: 0,
         maxTokens: 256,
@@ -166,8 +182,6 @@ export class VectorStore {
           seen.add(idx)
         }
       }
-
-      // Append any missing docs
       for (let i = 0; i < tfidfResults.length; i++) {
         if (!seen.has(i)) reranked.push({ ...tfidfResults[i], score: 0.1 })
       }
@@ -184,91 +198,44 @@ export class VectorStore {
 
   searchByType(query: string, type: DocumentType, topK = 5): SearchResult[] {
     const results = this.search(query, topK * 2)
-    return results
-      .filter(r => r.metadata.type === type)
-      .slice(0, topK)
+    return results.filter(r => r.metadata.type === type).slice(0, topK)
   }
 
   async semanticSearchByType(query: string, type: DocumentType, topK = 5): Promise<SearchResult[]> {
     const results = await this.semanticSearch(query, topK * 2)
-    return results
-      .filter(r => r.metadata.type === type)
-      .slice(0, topK)
+    return results.filter(r => r.metadata.type === type).slice(0, topK)
   }
 
   removeDocument(id: string): boolean {
     const entry = this.documents.get(id)
     if (!entry) return false
-
-    for (const t of new Set(entry.tokens)) {
-      this.decrementVocab(t)
+    for (const t of entry.tfidf.keys()) {
+      const prev = this.vocabulary.get(t)
+      if (prev !== undefined) {
+        if (prev <= 1) this.vocabulary.delete(t)
+        else this.vocabulary.set(t, prev - 1)
+      }
     }
-
     this.documents.delete(id)
     this.searchCache.clear()
     this.semanticCache.clear()
     return true
   }
 
-  getVocabulary(): Map<string, number> {
-    return new Map(this.vocabulary)
-  }
-
-  size(): number {
-    return this.documents.size
-  }
-
-  clear(): void {
-    this.documents.clear()
-    this.vocabulary.clear()
-    this.searchCache.clear()
-    this.semanticCache.clear()
-  }
-
-  clearCache(): void {
-    this.searchCache.clear()
-    this.semanticCache.clear()
-  }
+  size(): number { return this.documents.size }
+  clear(): void { this.documents.clear(); this.vocabulary.clear(); this.searchCache.clear(); this.semanticCache.clear() }
+  clearCache(): void { this.searchCache.clear(); this.semanticCache.clear() }
 
   private tokenize(text: string): string[] {
-    return text
-      .toLowerCase()
-      .split(/[^a-z0-9_]+/)
-      .filter(t => t.length > 1 && !STOP_WORDS.has(t))
+    return text.toLowerCase().split(/[^a-z0-9_]+/).filter(t => t.length > 1 && !STOP_WORDS.has(t))
   }
+}
 
-  private decrementVocab(term: string): void {
-    const count = this.vocabulary.get(term)
-    if (count !== undefined) {
-      if (count <= 1) {
-        this.vocabulary.delete(term)
-      } else {
-        this.vocabulary.set(term, count - 1)
-      }
-    }
+function tokenFreqToTF(tokens: string[], tf: Map<string, number>): Map<string, number> {
+  const len = tokens.length
+  const result = new Map<string, number>()
+  for (const [t, c] of tf) {
+    result.set(t, c / len)
   }
-
-  private computeScore(
-    doc: DocumentEntry,
-    queryTokens: string[],
-    totalDocs: number,
-    queryWeights: Map<string, number>,
-  ): number {
-    let score = 0
-    const docLen = doc.tokens.length
-    if (docLen === 0) return 0
-
-    for (const qt of queryTokens) {
-      const tf = (doc.tokenFreq.get(qt) ?? 0) / docLen
-      if (tf === 0) continue
-
-      const df = this.vocabulary.get(qt) ?? 0
-      const idf = Math.log((totalDocs + 1) / (df + 1)) + 1
-      const qw = queryWeights.get(qt) ?? 0
-
-      score += tf * idf * qw
-    }
-
-    return score / Math.sqrt(queryTokens.length)
-  }
+  return result
 }

@@ -11,7 +11,7 @@ const ctx = await esbuild.context({
   format: "esm",
   sourcemap: true,
   banner: {
-    js: "// opencode-agentic-engine v0.1.0 — Stage I: Tool-Augmented\n// Dependencies bundled for zero-install drop-in",
+    js: "// opencode-agentic-engine v0.1.0\n// Bundled for zero-install drop-in",
   },
 })
 
