@@ -12,14 +12,15 @@ services:
     environment:
       - OPENCODE_SERVER_HOSTNAME=0.0.0.0
       - OPENCODE_SERVER_PORT=4096
-      # Change this password for production:
-      - OPENCODE_SERVER_PASSWORD=opencode-agentic-2026
-      - OPENCODE_SERVER_USERNAME=opencode
+      - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD:-opencode-agentic-2026}
+      - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME:-opencode}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     volumes:
       - opencode_data:/root/.opencode
       - agentic_store:/workspace/.agentic
-    # Mount project directories to work on:
-    # - ./my-project:/workspace/my-project
+    # Mount project directories:
+    #   - ./my-project:/workspace/my-project
 
 volumes:
   opencode_data:

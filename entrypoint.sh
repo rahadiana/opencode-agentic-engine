@@ -7,6 +7,13 @@ PORT="${OPENCODE_SERVER_PORT:-4096}"
 TUNNEL_LOG="/tmp/cloudflared.log"
 
 echo "=== Starting OpenCode Web ==="
+if [ -n "${OPENAI_API_KEY:-}" ]; then
+    echo "Provider: OpenAI (OPENAI_API_KEY set)"
+elif [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+    echo "Provider: Anthropic (ANTHROPIC_API_KEY set)"
+else
+    echo "WARNING: No LLM provider configured. Set OPENAI_API_KEY or ANTHROPIC_API_KEY in .env"
+fi
 opencode web --hostname 0.0.0.0 --port "$PORT" &
 OPENCODE_PID=$!
 echo "OpenCode PID: $OPENCODE_PID"

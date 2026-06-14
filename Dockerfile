@@ -27,9 +27,9 @@ RUN npm install --ignore-scripts
 COPY src/ ./src/
 RUN npm run build
 
-# Create opencode config with plugin
-RUN mkdir -p /root/.config/opencode
-RUN echo '{ "plugin": ["/workspace/dist/index.js"] }' > /root/.config/opencode/opencode.json
+# Install plugin to project-level .opencode/plugins/ directory (auto-loaded by opencode)
+RUN mkdir -p /workspace/.opencode/plugins/agentic-engine
+RUN cp /workspace/dist/index.js /workspace/.opencode/plugins/agentic-engine/index.js
 
 # Entrypoint
 COPY entrypoint.sh /entrypoint.sh
