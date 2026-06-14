@@ -34,6 +34,10 @@ export class LLMEngine {
   private config: LLMConfig
   private opencodeClient: unknown = null
   private pluginSessionId: string | null = null
+  private memoryStores?: {
+    searchEpisodes: (query: string) => Array<{ planGoal: string; outcome: string; timestamp: string }>
+    findSkills: (query: string) => Array<{ name: string; successRate: number }>
+  }
 
   constructor(config: Partial<LLMConfig> = {}) {
     this.config = {
@@ -44,6 +48,31 @@ export class LLMEngine {
       maxTokens: config.maxTokens ?? 4096,
       temperature: config.temperature ?? 0.3,
     }
+  }
+
+  setMemoryStores(stores: {
+    searchEpisodes: (query: string) => Array<{ planGoal: string; outcome: string; timestamp: string }>
+    findSkills: (query: string) => Array<{ name: string; successRate: number }>
+  }): void {
+    this.memoryStores = stores
+  }
+
+  private buildMemoryContext(query: string): string {
+    if (!this.memoryStores) return ""
+    const parts: string[] = []
+    try {
+      const episodes = this.memoryStores.searchEpisodes(query).slice(0, 3)
+      if (episodes.length > 0) {
+        parts.push("Relevant past sessions:")
+        parts.push(episodes.map(e => `- ${e.outcome === "success" ? "✅" : e.outcome === "partial" ? "⚠️" : "❌"} ${e.planGoal} (${e.timestamp.slice(0, 10)})`).join("\n"))
+      }
+      const skills = this.memoryStores.findSkills(query).slice(0, 3)
+      if (skills.length > 0) {
+        parts.push("Relevant known skills:")
+        parts.push(skills.map(s => `- ${s.name} (${(s.successRate * 100).toFixed(0)}% success rate)`).join("\n"))
+      }
+    } catch { }
+    return parts.length > 0 ? `\n\n## Memory Context\n${parts.join("\n\n")}` : ""
   }
 
   setOpencodeClient(client: unknown): void {
@@ -79,7 +108,7 @@ export class LLMEngine {
 
   async decomposeTask(goal: string, context: string): Promise<string[]> {
     const resp = await this.call({
-      systemPrompt: "You are a software task decomposer. Break down the given goal into sequential subtasks. Each subtask should be a single, concrete action. Return ONLY a JSON array of strings.",
+      systemPrompt: "You are a software task decomposer. Break down the given goal into sequential subtasks. Each subtask should be a single, concrete action. Return ONLY a JSON array of strings." + this.buildMemoryContext(goal),
       userPrompt: `Goal: ${goal}\n\nContext:\n${context}\n\nBreak this down into 3-7 sequential subtasks. Return as JSON array of strings.`,
       jsonMode: true,
       temperature: 0.2,
@@ -95,7 +124,7 @@ export class LLMEngine {
 
   async summarizeContext(planGoal: string, turns: string[]): Promise<string> {
     const resp = await this.call({
-      systemPrompt: "You are a context compressor. Summarize the following conversation into a compact form that preserves: key decisions made, files changed, invariants that must be preserved, and remaining tasks. Be concise.",
+      systemPrompt: "You are a context compressor. Summarize the following conversation into a compact form that preserves: key decisions made, files changed, invariants that must be preserved, and remaining tasks. Be concise." + this.buildMemoryContext(planGoal),
       userPrompt: `Goal: ${planGoal}\n\nConversation:\n${turns.join("\n")}\n\nProvide a compact summary.`,
       maxTokens: 1024,
       temperature: 0.1,
@@ -109,7 +138,7 @@ export class LLMEngine {
     fix: string
   }> {
     const resp = await this.call({
-      systemPrompt: "You are an error analyst. Given an error message and list of recently modified files, determine: the error category (compile/type/test/import/runtime), the likely root cause, and a specific fix suggestion. Return as JSON with keys: category, rootCause, fix.",
+      systemPrompt: "You are an error analyst. Given an error message and list of recently modified files, determine: the error category (compile/type/test/import/runtime), the likely root cause, and a specific fix suggestion. Return as JSON with keys: category, rootCause, fix." + this.buildMemoryContext(errorText),
       userPrompt: `Error:\n${errorText}\n\nRecently modified files:\n${modifiedFiles.join("\n")}\n\nAnalyze and return JSON.`,
       jsonMode: true,
       temperature: 0.2,
@@ -126,7 +155,7 @@ export class LLMEngine {
     complexity: string
   }> {
     const resp = await this.call({
-      systemPrompt: "You are a software planning assistant. Given a goal, constraints, and codebase summary, generate a structured execution plan. Return as JSON with \"steps\" (array of {id, description, dependsOn}) and \"complexity\" (\"low\"/\"medium\"/\"high\"). Steps should have sequential IDs like \"step-1\", \"step-2\". The dependsOn array should reference earlier step IDs.",
+      systemPrompt: "You are a software planning assistant. Given a goal, constraints, and codebase summary, generate a structured execution plan. Return as JSON with \"steps\" (array of {id, description, dependsOn}) and \"complexity\" (\"low\"/\"medium\"/\"high\"). Steps should have sequential IDs like \"step-1\", \"step-2\". The dependsOn array should reference earlier step IDs." + this.buildMemoryContext(goal),
       userPrompt: `Goal: ${goal}\nConstraints: ${constraints.join(", ")}\nCodebase: ${codebaseSummary}\n\nGenerate a plan as JSON.`,
       jsonMode: true,
       temperature: 0.3,
@@ -134,17 +163,14 @@ export class LLMEngine {
     try {
       return JSON.parse(resp.content)
     } catch {
-      return {
-        steps: [{ id: "step-1", description: goal, dependsOn: [] }],
-        complexity: "low",
-      }
+      return { steps: [], complexity: "low" }
     }
   }
 
   async reviewCode(goal: string, files: Record<string, string>): Promise<string[]> {
     const filesStr = Object.entries(files).map(([path, content]) => `### ${path}\n\`\`\`\n${content.slice(0, 2000)}\n\`\`\``).join("\n\n")
     const resp = await this.call({
-      systemPrompt: "You are a code reviewer. Review the given files for potential issues: type safety, edge cases, error handling, performance, security, and maintainability. Return a JSON array of issue descriptions (strings). If no issues found, return empty array.",
+      systemPrompt: "You are a code reviewer. Review the given files for potential issues: type safety, edge cases, error handling, performance, security, and maintainability. Return a JSON array of issue descriptions (strings). If no issues found, return empty array." + this.buildMemoryContext(goal),
       userPrompt: `Goal: ${goal}\n\nFiles:\n${filesStr}\n\nList issues found as JSON array.`,
       jsonMode: true,
       temperature: 0.2,
@@ -160,7 +186,7 @@ export class LLMEngine {
     steps: Array<{ action: string; description: string; tool?: string; expectedOutput: string; rollback?: string }>
   }> {
     const resp = await this.call({
-      systemPrompt: "You are a skill extractor. Given a task description and its successful output, extract reusable procedural steps. Each step should have: action, description, tool (optional), expectedOutput, and rollback (optional). Return as JSON with \"steps\" array.",
+      systemPrompt: "You are a skill extractor. Given a task description and its successful output, extract reusable procedural steps. Each step should have: action, description, tool (optional), expectedOutput, and rollback (optional). Return as JSON with \"steps\" array." + this.buildMemoryContext(taskDescription),
       userPrompt: `Task: ${taskDescription}\n\nSuccessful output:\n${successOutput}\n\nExtract reusable steps as JSON.`,
       jsonMode: true,
       temperature: 0.3,

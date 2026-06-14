@@ -55,6 +55,10 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
   const selfEvolver = new SelfEvolver()
   const llmEngine = new LLMEngine()
   llmEngine.setOpencodeClient(input.client)
+  llmEngine.setMemoryStores({
+    searchEpisodes: (query: string) => episodicStore.search(query),
+    findSkills: (query: string) => skillStore.find(query).map(s => ({ name: s.definition.meta.name, successRate: s.successRate })),
+  })
   const agentLoop = new AgentLoop(llmEngine)
   const persistence = new PersistenceLayer(input.worktree)
   const vectorStore = new VectorStore()
@@ -91,8 +95,8 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
           goal: tool.schema.string().describe("The overall goal of the task"),
           constraints: tool.schema.array(tool.schema.string()).optional().describe("Constraints or requirements"),
           relevantFiles: tool.schema.array(tool.schema.string()).optional().describe("Files relevant to this task"),
-          autoDecompose: tool.schema.boolean().optional().describe("Auto-decompose the goal into subtasks using built-in templates (default: true if no subtasks provided)"),
-          llmDecompose: tool.schema.boolean().optional().describe("Use LLM for smarter task decomposition (requires LLM config)"),
+          autoDecompose: tool.schema.boolean().optional().describe("Auto-decompose the goal into subtasks (default: true). Uses LLM first, falls back to built-in templates."),
+          llmDecompose: tool.schema.boolean().optional().describe("Use LLM for smarter task decomposition (default: true, falls back to templates if LLM unavailable)"),
           subtasks: tool.schema.array(tool.schema.object({
             id: tool.schema.string().describe("Unique identifier for this subtask"),
             description: tool.schema.string().describe("What this subtask should accomplish"),
@@ -105,7 +109,7 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
           let subtasks = args.subtasks ?? []
 
           if (subtasks.length === 0 && args.autoDecompose !== false) {
-            if (args.llmDecompose) {
+            if (args.llmDecompose !== false) {
               await navigator.scan(input.worktree)
               const codebaseSummary = navigator.getSummary()
               try {
@@ -511,9 +515,9 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
           let output = `## 📊 Execution Dashboard\n\n`
 
           if (progress.total > 0) {
-            const pct = Math.round((progress.completed / progress.total) * 100)
+            const pct = Math.min(100, Math.round((progress.completed / progress.total) * 100))
             const barLen = 20
-            const filled = Math.round((pct / 100) * barLen)
+            const filled = Math.min(barLen, Math.round((pct / 100) * barLen))
             output += `\`\`\`\n[${"█".repeat(filled)}${"░".repeat(barLen - filled)}] ${pct}%\n\`\`\`\n`
           }
 
