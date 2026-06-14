@@ -72,9 +72,9 @@ catch (e) { assert(false, `AgenticEngine() threw: ${e.message}`) }
 assert(hooks && typeof hooks === "object", "hooks is an object")
 assert(typeof hooks.dispose === "function", "dispose hook registered")
 
-// 3. Tool registration (16 tools)
+// 3. Tool registration (18 tools)
 console.log("\n[3] Tool registration")
-for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_skill", "agentic_episodes", "agentic_parallel", "agentic_dashboard", "agentic_guard", "agentic_evolve"]) {
+for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_skill", "agentic_episodes", "agentic_parallel", "agentic_dashboard", "agentic_guard", "agentic_evolve", "agentic_auto"]) {
   const tool = hooks.tool?.[name]
   assert(tool && typeof tool.execute === "function", `"${name}" has execute()`)
   assert(typeof tool.description === "string" && tool.description.length > 0, `"${name}" has description`)

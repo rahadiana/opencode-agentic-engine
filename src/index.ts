@@ -1,6 +1,8 @@
 import type { Plugin, PluginModule } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin"
-import { readFileSync } from "node:fs"
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs"
+import { execFileSync } from "node:child_process"
+import { join, dirname } from "node:path"
 import { IntentParser, type TaskIntent } from "./core/intent-parser.js"
 import { Executor } from "./core/executor.js"
 import { Verifier } from "./core/verifier.js"
@@ -85,6 +87,79 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
 
   function ctxDir(context: { worktree: string; directory?: string }) {
     return context.worktree
+  }
+
+  async function executeAutonomousStep(
+    stepId: string,
+    description: string,
+    goal: string,
+    projectDir: string,
+    context: { worktree: string; directory?: string },
+  ): Promise<{ success: boolean; filesModified: string[]; output: string; error?: string }> {
+    const maxRetries = 3
+    const filesModified: string[] = []
+    const logs: string[] = []
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const prevErrors = logs.filter(l => l.startsWith("Error:")).join("\n")
+      const resp = await llmEngine.call({
+        systemPrompt: `You are an autonomous software engineer implementing a step of a larger plan. Generate implementation as JSON with:
+- "files": [{ "path": "relative/file/path", "content": "file content" }]
+- "commands": ["bash command to run if needed"]
+- "summary": "what was done"
+ONLY valid JSON.` + (prevErrors ? `\nPrevious attempt failed:\n${prevErrors}\nFix the issues and retry.` : "") + llmEngine.getMemoryContext(description),
+        userPrompt: `Goal: ${goal}\nStep (${stepId}): ${description}\nDir: ${projectDir}`,
+        jsonMode: true,
+        temperature: 0.3,
+      })
+
+      let impl: { files?: Array<{ path: string; content: string }>; commands?: string[]; summary?: string }
+      try {
+        impl = JSON.parse(resp.content)
+      } catch {
+        logs.push(`Attempt ${attempt}: LLM response not valid JSON`)
+        continue
+      }
+
+      const stepFiles: string[] = []
+      for (const file of impl.files ?? []) {
+        const fullPath = join(projectDir, file.path)
+        mkdirSync(dirname(fullPath), { recursive: true })
+        writeFileSync(fullPath, file.content, "utf-8")
+        stepFiles.push(file.path)
+      }
+      filesModified.push(...stepFiles)
+
+      for (const cmd of impl.commands ?? []) {
+        try {
+          execFileSync("bash", ["-c", cmd], { cwd: projectDir, timeout: 60000, stdio: "pipe" })
+        } catch (e) {
+          logs.push(`Cmd failed: ${cmd.slice(0, 80)} — ${(e as Error).message}`)
+        }
+      }
+
+      if (stepFiles.length === 0) {
+        return { success: true, filesModified, output: impl.summary ?? description }
+      }
+
+      try {
+        const verifyResult = verifier.verifyRelated(stepId, projectDir, stepFiles)
+        if (verifyResult.passed) {
+          return { success: true, filesModified, output: [impl.summary, ...logs].filter(Boolean).join("\n") }
+        }
+        const errorText = verifyResult.errors.join("\n")
+        logs.push(`Attempt ${attempt}: Verify failed — ${errorText.slice(0, 200)}`)
+      } catch (e) {
+        logs.push(`Attempt ${attempt}: Verify threw — ${(e as Error).message}`)
+      }
+    }
+
+    return {
+      success: false,
+      filesModified,
+      output: logs.join("\n"),
+      error: `Failed after ${maxRetries} attempts`,
+    }
   }
 
   return {
@@ -1274,6 +1349,89 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
             default:
               return { output: `Unknown action: ${args.action}. Available: inspect, register-role, export-skill, memory-schema, evolve.` }
           }
+        },
+      }),
+
+      agentic_auto: tool({
+        description: "Fully autonomous engineering agent. Give it a goal and it plans, implements, verifies, and fixes code automatically — no step-by-step guidance needed.",
+        args: {
+          goal: tool.schema.string().describe("The goal to accomplish autonomously"),
+          constraints: tool.schema.array(tool.schema.string()).optional().describe("Constraints or requirements"),
+        },
+        async execute(args, context) {
+          llmEngine.setSessionId(context.sessionID)
+          const startTime = Date.now()
+          const projectDir = ctxDir(context)
+
+          // 1. Scan codebase for context
+          await navigator.scan(projectDir)
+          const summary = navigator.getSummary()
+
+          // 2. LLM-driven plan
+          const intent = await planner.decomposeWithLLM(llmEngine, args.goal, summary)
+          const plan = intentParser.createPlan({
+            goal: args.goal,
+            constraints: args.constraints ?? [],
+            context: { relevantFiles: [], dependencies: [] },
+            subtasks: intent.subtasks,
+          })
+          executor.initExecution(context.sessionID, plan)
+
+          // 3. Execute each step autonomously
+          const stepResults: Array<{ stepId: string; success: boolean; filesChanged: string[] }> = []
+          const allFiles: string[] = []
+
+          for (const step of intent.subtasks) {
+            const result = await executeAutonomousStep(step.id, step.description, args.goal, projectDir, context)
+            stepResults.push({ stepId: step.id, success: result.success, filesChanged: result.filesModified })
+            allFiles.push(...result.filesModified)
+
+            executor.recordResult(context.sessionID, {
+              stepId: step.id,
+              success: result.success,
+              output: result.output,
+              filesModified: result.filesModified,
+              error: result.error,
+            })
+          }
+
+          // 4. Trace
+          traceLogger.log({
+            step: "auto",
+            input: args.goal,
+            output: JSON.stringify(stepResults),
+            toolUsed: "agentic_auto",
+            success: stepResults.every(r => r.success),
+            durationMs: Date.now() - startTime,
+            metadata: { results: stepResults },
+          })
+
+          // 5. Record episode
+          const allSuccess = stepResults.every(r => r.success)
+          episodicStore.record(
+            context.sessionID,
+            args.goal,
+            allSuccess ? "success" : "partial",
+            stepResults.map(r => r.success ? "completed" : "failed"),
+            allFiles,
+          )
+
+          // 6. Report
+          const successCount = stepResults.filter(r => r.success).length
+          const totalCount = stepResults.length
+          let report = `## 🤖 Autonomous Agent Report\n\n`
+          report += `**Goal:** ${args.goal}\n`
+          report += `**Result:** ${successCount}/${totalCount} steps completed ${allSuccess ? "✅" : "⚠️"}\n`
+          report += `**Duration:** ${((Date.now() - startTime) / 1000).toFixed(1)}s\n\n`
+          report += `### Steps\n`
+          for (const r of stepResults) {
+            report += `- ${r.success ? "✅" : "❌"} **${r.stepId}** — ${r.filesChanged.length > 0 ? `Files: ${r.filesChanged.join(", ")}` : "No changes"}\n`
+          }
+          if (allFiles.length > 0) {
+            report += `\n### Files Modified\n\`\`\`\n${[...new Set(allFiles)].join("\n")}\n\`\`\`\n`
+          }
+
+          return { output: report, metadata: { results: stepResults } }
         },
       }),
     },

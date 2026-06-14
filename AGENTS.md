@@ -49,11 +49,11 @@ src/
     └── dashboard.ts         # Timeline + stats + anomaly detection
 ```
 
-## 17 Tools
+## 18 Tools
 
 | Tool | Stage | Description |
 |---|---|---|
-| agentic_plan | I | Plan + auto-decompose |
+| agentic_plan | I | Plan + auto-decompose (LLM-first) |
 | agentic_execute | I | Execute step + auto-verify + checkpoint |
 | agentic_reflect | I | Error analysis + propagation tracing |
 | agentic_verify | I | Compile + test verification |
@@ -70,6 +70,7 @@ src/
 | agentic_dashboard | III | Timeline + anomaly detection |
 | agentic_guard | III | Hallucination detection |
 | agentic_evolve | IV | Inspect + extend the agent system |
+| agentic_auto | V | Fully autonomous agent loop (plan→execute→verify→retry in one call) |
 
 ## Conventions
 

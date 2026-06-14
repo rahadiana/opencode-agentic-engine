@@ -57,6 +57,10 @@ export class LLMEngine {
     this.memoryStores = stores
   }
 
+  getMemoryContext(query: string): string {
+    return this.buildMemoryContext(query)
+  }
+
   private buildMemoryContext(query: string): string {
     if (!this.memoryStores) return ""
     const parts: string[] = []

@@ -76,7 +76,7 @@ src/
 └── index.ts        # Plugin entry: 17 tool definitions + hooks
 ```
 
-## 17 Tools
+## 18 Tools
 
 | Tool | Description |
 |---|---|
@@ -97,6 +97,7 @@ src/
 | `agentic_dashboard` | Timeline + anomaly detection |
 | `agentic_guard` | Hallucination detection |
 | `agentic_evolve` | Inspect + extend agent system |
+| `agentic_auto` | Fully autonomous agent loop (plan→execute→verify→retry in one call) |
 
 ## Installation
 
