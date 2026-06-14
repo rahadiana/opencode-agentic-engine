@@ -520,8 +520,59 @@ const mrRef = await hooks.tool.agentic_reflect.execute({ stepId: "mx" }, mockCtx
 const mrOut = typeof mrRef === "string" ? mrRef : mrRef.output
 assert(mrOut.includes("No retries") || mrOut.includes("remaining") || mrOut.includes("plan step"), "indicates max retries reached")
 
-// 38. Trace logging
-console.log("\n[38] Trace logging")
+// 38. agentic_evolve — self-evolution analysis
+console.log("\n[38] agentic_evolve — self-evolution")
+const evoCtx = mockCtx(freshSid())
+await hooks.tool.agentic_plan.execute({
+  goal: "Evolve test: complex multi-phase feature",
+  subtasks: [
+    { id: "ev1", description: "Security audit for input sanitizer", dependsOn: [] },
+    { id: "ev2", description: "Database migration performance optimization", dependsOn: [] },
+    { id: "ev3", description: "Simple CRUD endpoint", dependsOn: [] },
+    { id: "ev4", description: "Fix security vulnerability in jwt validation", dependsOn: ["ev1"] },
+    { id: "ev5", description: "Optimize slow performance of query builder", dependsOn: ["ev2"] },
+    { id: "ev6", description: "Security review of password hashing", dependsOn: ["ev4"] },
+  ],
+}, evoCtx)
+
+// Delegate tasks
+for (const tid of ["ev1-d", "ev2-d", "ev4-d", "ev5-d", "ev6-d"]) {
+  await hooks.tool.agentic_delegate.execute({ taskId: tid, role: "developer", description: "security or performance related fix" }, evoCtx)
+}
+
+// Execute with failures: security keywords fail twice, performance twice
+await hooks.tool.agentic_execute.execute({
+  stepId: "ev1", success: false, output: "SQL injection in sanitizer.ts:56", error: "security vulnerability",
+}, evoCtx)
+await hooks.tool.agentic_execute.execute({
+  stepId: "ev2", success: false, output: "Migration timeout on large dataset", error: "performance timeout",
+}, evoCtx)
+await hooks.tool.agentic_execute.execute({
+  stepId: "ev3", success: true, output: "✅ step complete: CRUD endpoint with validation", filesModified: ["src/routes/users.ts"],
+}, evoCtx)
+await hooks.tool.agentic_execute.execute({
+  stepId: "ev4", success: false, output: "JWT security bypass in auth.ts:23", error: "security bug",
+}, evoCtx)
+await hooks.tool.agentic_execute.execute({
+  stepId: "ev5", success: false, output: "O(n^2) performance in query builder loop", error: "performance regression",
+}, evoCtx)
+await hooks.tool.agentic_execute.execute({
+  stepId: "ev6", success: true, output: "✅ step complete: hash verification patched", filesModified: ["src/services/AuthService.ts"],
+}, evoCtx)
+
+// Extract skills
+await hooks.tool.agentic_skill.execute({ action: "extract", query: "ev3" }, evoCtx)
+await hooks.tool.agentic_skill.execute({ action: "extract", query: "ev6" }, evoCtx)
+
+// Run evolve
+const evolveR = await hooks.tool.agentic_evolve.execute({ action: "evolve" }, evoCtx)
+const evolveOut = typeof evolveR === "string" ? evolveR : evolveR.output
+assert(evolveOut.includes("Self-Evolution") || evolveOut.includes("Improvement Score"), "evolve produces report")
+assert(evolveOut.includes("Recommendation") || evolveOut.includes("recommend"), "evolve includes recommendations")
+assert(evolveOut.includes("Success Rate") || evolveOut.includes("success"), "evolve shows metrics")
+
+// 39. Trace logging
+console.log("\n[39] Trace logging")
 await hooks.dispose()
 const tracePath = join(projectDir, ".agentic", "trace.jsonl")
 assert(existsSync(tracePath), "trace file created")

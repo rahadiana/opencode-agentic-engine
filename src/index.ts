@@ -12,7 +12,7 @@ import { ContextCompressor } from "./drift/context-compressor.js"
 import { GitIntegration } from "./core/git.js"
 import { TechDebtScorer } from "./core/tech-debt-scorer.js"
 import { AgentCoordinator } from "./agents/coordinator.js"
-import type { AgentRole } from "./agents/coordinator.js"
+import type { AgentRole, AgentTask } from "./agents/coordinator.js"
 import { SkillStore } from "./memory/skill-store.js"
 import { EpisodicStore } from "./memory/episodic-store.js"
 import { HallucinationGuard } from "./drift/hallucination-guard.js"
@@ -24,6 +24,7 @@ import { TraceLogger } from "./observability/trace-logger.js"
 import { RoleRegistry } from "./agents/role-registry.js"
 import { MemorySchemaVersion, createMemoryEnvelope, parseMemoryEnvelope } from "./memory/schema-version.js"
 import { createSkillDefinition, inspectSkill, serializeSkill, deserializeSkill } from "./memory/skill-format.js"
+import { SelfEvolver } from "./evolution/self-evolver.js"
 
 export const AgenticEngine: Plugin = async (input, _options) => {
   const intentParser = new IntentParser()
@@ -47,6 +48,7 @@ export const AgenticEngine: Plugin = async (input, _options) => {
   const traceLogger = new TraceLogger(input.worktree)
   const roleRegistry = new RoleRegistry()
   const schemaVersion = new MemorySchemaVersion()
+  const selfEvolver = new SelfEvolver()
 
   await traceLogger.init()
 
@@ -976,7 +978,7 @@ export const AgenticEngine: Plugin = async (input, _options) => {
       agentic_evolve: tool({
         description: "Inspect and extend the agent system itself (Stage IV). Register custom agent roles, define versioned memory schemas, and export skills in self-describing format for other agents to consume.",
         args: {
-          action: tool.schema.enum(["inspect", "register-role", "export-skill", "memory-schema"]).describe("What to do: inspect system state, register a custom agent role, export a skill in machine-readable format, or view memory schema info"),
+          action: tool.schema.enum(["inspect", "register-role", "export-skill", "memory-schema", "evolve"]).describe("What to do: inspect system state, register a custom agent role, export a skill in machine-readable format, view memory schema info, or run full self-evolution analysis"),
           name: tool.schema.string().optional().describe("Role name or skill name (for register-role, export-skill)"),
           prompt: tool.schema.string().optional().describe("Agent prompt template (for register-role)"),
           tools: tool.schema.array(tool.schema.string()).optional().describe("Tools available to custom role"),
@@ -1060,8 +1062,106 @@ export const AgenticEngine: Plugin = async (input, _options) => {
               return { output: out }
             }
 
+            case "evolve": {
+              await traceLogger.flush()
+
+              const allSkills = skillStore.getAll()
+              const allEpisodes = episodicStore.getRecent(50)
+
+              const uniqueSessions = new Set(allEpisodes.map(e => e.sessionId))
+              let allTasks: AgentTask[] = []
+              for (const sid of uniqueSessions) {
+                allTasks = allTasks.concat(coordinator.getTasks(sid))
+              }
+
+              const allStepStates: Array<{ stepId: string; success: boolean; output: string }> = []
+              for (const sid of uniqueSessions) {
+                const session = sessionStore.getOrCreate(sid)
+                const subtasks = session.plan?.intent.subtasks ?? []
+                for (const step of subtasks) {
+                  const state = executor.getStepState(sid, step.id)
+                  if (state?.result) {
+                    allStepStates.push({
+                      stepId: step.id,
+                      success: state.result.success,
+                      output: state.result.output,
+                    })
+                  }
+                }
+              }
+
+              let traces: Array<{ toolUsed: string; success: boolean; step: string }> = []
+              const tracePath = `${input.worktree}/.agentic/trace.jsonl`
+              try {
+                const content = readFileSync(tracePath, "utf-8")
+                for (const line of content.trim().split("\n").filter(Boolean)) {
+                  const parsed = JSON.parse(line)
+                  traces.push({
+                    toolUsed: parsed.toolUsed ?? "unknown",
+                    success: parsed.success ?? true,
+                    step: parsed.step ?? "",
+                  })
+                }
+              } catch { /* no traces yet */ }
+
+              selfEvolver.feedSkills(allSkills)
+              selfEvolver.feedEpisodes(allEpisodes)
+              selfEvolver.feedTasks(allTasks)
+              selfEvolver.feedStepStates(allStepStates)
+              selfEvolver.feedTraces(traces)
+
+              const report = selfEvolver.evolve()
+
+              let out = `## 🔮 Self-Evolution Report\n\n`
+              out += `**Improvement Score:** ${report.improvementScore}/100\n`
+              out += `**Sessions Analyzed:** ${report.metrics.totalSessions}\n`
+              out += `**Steps Analyzed:** ${report.metrics.totalSteps}\n`
+              out += `**Overall Success Rate:** ${(report.metrics.successRate * 100).toFixed(0)}%\n`
+              out += `**Retry Rate:** ${(report.metrics.retryRate * 100).toFixed(0)}%\n\n`
+
+              out += `### Recommendations\n`
+              if (report.metrics.recommendations.length === 0) {
+                out += `All metrics within healthy ranges. No changes recommended.\n`
+              } else {
+                for (const rec of report.metrics.recommendations) {
+                  out += `- ${rec}\n`
+                }
+              }
+
+              if (report.skillPatches.length > 0) {
+                out += `\n### 🔧 Skill Patches (${report.skillPatches.length})\n`
+                for (const patch of report.skillPatches) {
+                  out += `\n**${patch.skillName}** — ${patch.failures} failures\n`
+                  for (const change of patch.suggestedChanges) {
+                    out += `- [${change.type}] ${change.description}\n`
+                    out += `  → ${change.detail}\n`
+                  }
+                }
+              }
+
+              if (report.roleSuggestions.length > 0) {
+                out += `\n### 👥 Role Suggestions (${report.roleSuggestions.length})\n`
+                for (const role of report.roleSuggestions) {
+                  out += `\n**${role.name}**\n`
+                  out += `- Trigger: "${role.triggerPattern}"\n`
+                  out += `- Tools: ${role.suggestedTools.map(t => `\`${t}\``).join(", ")}\n`
+                  out += `- Reason: ${role.reason}\n`
+                  out += `\n_Register with:_ \`agentic_evolve register-role name="${role.name}" prompt="..." tools=${JSON.stringify(role.suggestedTools)}\`\n`
+                }
+              }
+
+              if (report.metrics.topErrorCategories.length > 0) {
+                out += `\n### 📊 Top Error Categories\n`
+                for (const err of report.metrics.topErrorCategories) {
+                  out += `- **${err.category}**: ${err.count} occurrence(s)\n`
+                }
+              }
+
+              return { output: out }
+            }
+
             default:
-              return { output: `Unknown action: ${args.action}. Available: inspect, register-role, export-skill, memory-schema.` }
+              return { output: `Unknown action: ${args.action}. Available: inspect, register-role, export-skill, memory-schema, evolve.` }
           }
         },
       }),
