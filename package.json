@@ -1,0 +1,33 @@
+{
+  "name": "opencode-agentic-engine",
+  "version": "0.1.0",
+  "description": "Multi-agent coordination plugin for OpenCode (Stage I: Tool-Augmented)",
+  "type": "module",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./tool": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --emitDeclarationOnly && node esbuild.config.mjs",
+    "dev": "tsc --emitDeclarationOnly --watch & node esbuild.config.mjs --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "node test/run.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.3.3",
+    "zod": "^4.1.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.7.0"
+  }
+}

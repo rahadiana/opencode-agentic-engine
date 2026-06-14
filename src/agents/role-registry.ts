@@ -1,0 +1,103 @@
+import type { AgentRole } from "./coordinator.js"
+
+export interface AgentDef {
+  role: AgentRole
+  name: string
+  prompt: string
+  tools: string[]
+}
+
+export type CustomRole = string
+
+export interface CustomAgentDef {
+  role: CustomRole
+  name: string
+  prompt: string
+  tools: string[]
+}
+
+export class RoleRegistry {
+  private builtIn: Map<AgentRole, AgentDef> = new Map()
+  private custom: Map<CustomRole, CustomAgentDef> = new Map()
+
+  constructor() {
+    this.builtIn.set("architect", {
+      role: "architect",
+      name: "System Architect",
+      prompt: `You are a software architect. Analyze requirements and produce:
+1. Architecture decisions (with rationale)
+2. File and module structure
+3. Interface contracts between components
+4. Trade-offs and risks
+
+Be concise. Focus on structure, not implementation details.`,
+      tools: ["read", "grep", "glob", "agentic_nav", "agentic_score"],
+    })
+
+    this.builtIn.set("developer", {
+      role: "developer",
+      name: "Feature Developer",
+      prompt: `You are a senior developer. Given a task specification:
+1. Implement the solution following existing codebase patterns
+2. Write unit tests for all new code
+3. Follow the project's conventions (naming, imports, types)
+4. Report exactly which files you changed and why
+
+Prioritize correctness and readability. Don't over-engineer.`,
+      tools: ["read", "edit", "write", "bash", "glob", "grep"],
+    })
+
+    this.builtIn.set("qa", {
+      role: "qa",
+      name: "QA Engineer",
+      prompt: `You are a QA engineer. Given an implementation:
+1. Review the code for bugs, edge cases, and security issues
+2. Verify tests actually test the right behavior
+3. Check for regressions in related files
+4. Report any issues with clear reproduction steps
+
+Be thorough. Every edge case matters.`,
+      tools: ["read", "glob", "grep", "bash", "agentic_verify"],
+    })
+
+    this.builtIn.set("coordinator", {
+      role: "coordinator",
+      name: "Task Coordinator",
+      prompt: `You are a project coordinator. Given a high-level goal:
+1. Decompose into tasks and assign to the right agents
+2. Track progress and resolve blockers
+3. Ensure quality gates are met
+4. Report status to the user
+
+Think like a tech lead. Prioritize, delegate, verify.`,
+      tools: ["agentic_plan", "agentic_delegate", "agentic_status", "agentic_pr"],
+    })
+  }
+
+  registerCustom(def: CustomAgentDef): void {
+    this.custom.set(def.role, def)
+  }
+
+  getBuiltIn(role: AgentRole): AgentDef | undefined {
+    return this.builtIn.get(role)
+  }
+
+  getCustom(role: CustomRole): CustomAgentDef | undefined {
+    return this.custom.get(role)
+  }
+
+  getAllBuiltIn(): AgentDef[] {
+    return [...this.builtIn.values()]
+  }
+
+  getAllCustom(): CustomAgentDef[] {
+    return [...this.custom.values()]
+  }
+
+  listRoles(): string[] {
+    return [
+      ...this.builtIn.keys(),
+      ...this.custom.keys(),
+    ]
+  }
+}

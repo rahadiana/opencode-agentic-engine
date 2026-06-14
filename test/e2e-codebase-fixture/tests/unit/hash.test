@@ -1,0 +1,21 @@
+import { describe, it, expect } from "vitest"
+
+describe("hash.test", () => {
+  it("should handle valid input", () => {
+    expect(true).toBe(true)
+  })
+
+  it("should reject empty input", () => {
+    expect(() => { throw new Error("invalid") }).toThrow()
+  })
+
+  it("should handle concurrent calls", async () => {
+    const results = await Promise.all([1, 2, 3].map(async n => n * 2))
+    expect(results).toEqual([2, 4, 6])
+  })
+
+  it("should maintain idempotency", () => {
+    const fn = (x: number) => x + 1
+    expect(fn(fn(0))).toBe(2)
+  })
+})
