@@ -68,6 +68,10 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
   for (const ep of savedEpisodes) {
     episodicStore.record(ep.data.sessionId, ep.data.planGoal, ep.data.outcome as "success" | "partial" | "failed", ep.data.decisions, ep.data.filesChanged)
   }
+  // Auto-save episodes when recorded
+  episodicStore.setPersistenceCallback((episode) => {
+    persistence.save("episodes", episode.sessionId, episode)
+  })
   const savedSkills = persistence.loadAll<import("./memory/skill-format.js").SkillDefinition>("skills")
   for (const sk of savedSkills) {
     skillStore.importFromEnvelope(JSON.stringify(createMemoryEnvelope(sk.data, "skill")))
@@ -372,15 +376,6 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
                 decisions,
                 allFiles,
               )
-              persistence.save("episodes", context.sessionID, {
-                planGoal: session.plan.intent.goal,
-                outcome: allSuccess ? "success" : "partial",
-                decisions,
-                filesChanged: allFiles,
-                sessionId: context.sessionID,
-                timestamp: new Date().toISOString(),
-                tags: [],
-              })
             }
           }
 

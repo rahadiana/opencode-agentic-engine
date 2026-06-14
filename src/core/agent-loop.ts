@@ -53,6 +53,7 @@ export class AgentLoop {
     depTracker: DependencyTracker,
     projectDir: string,
     stepExecutor: (step: Subtask) => Promise<{ success: boolean; output: string; filesModified: string[]; error?: string }>,
+    fixExecutor?: (fix: string) => Promise<boolean>,
   ): Promise<LoopResult> {
     const completedSteps: string[] = []
     const failedSteps: string[] = []
@@ -102,7 +103,7 @@ export class AgentLoop {
 
               if (!this.config.autoRetry) break
 
-              const repairResult = await this.attemptRepair(nextStep, stepOutput, analysis)
+              const repairResult = await this.attemptRepair(nextStep, stepOutput, analysis, fixExecutor)
               if (!repairResult) {
                 retryCount++
                 break
@@ -122,7 +123,7 @@ export class AgentLoop {
         if (!this.config.autoRetry || retryCount > this.config.maxRetries) break
 
         const analysis = errorAnalyzer.analyze(stepOutput, result.filesModified ?? [])
-        const repairResult = await this.attemptRepair(nextStep, stepOutput, analysis)
+        const repairResult = await this.attemptRepair(nextStep, stepOutput, analysis, fixExecutor)
         if (!repairResult) break
       }
 
@@ -147,10 +148,14 @@ export class AgentLoop {
     step: Subtask,
     error: string,
     analysis: ReturnType<ErrorAnalyzer["analyze"]>,
+    fixExecutor?: (fix: string) => Promise<boolean>,
   ): Promise<boolean> {
     try {
       const llmAnalysis = await this.llm.analyzeError(error, [])
       if (llmAnalysis.category !== "unknown" && llmAnalysis.fix) {
+        if (fixExecutor) {
+          return await fixExecutor(llmAnalysis.fix)
+        }
         return true
       }
     } catch {
@@ -161,7 +166,15 @@ export class AgentLoop {
       case "import":
       case "compile":
       case "type":
-        return true
+        if (fixExecutor) {
+          try {
+            const llmAnalysis = await this.llm.analyzeError(error, [])
+            if (llmAnalysis.fix) {
+              return await fixExecutor(llmAnalysis.fix)
+            }
+          } catch {}
+        }
+        return false
       default:
         return false
     }

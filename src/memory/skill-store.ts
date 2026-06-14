@@ -127,10 +127,7 @@ export class SkillStore {
 
   private isExtractablePattern(content: string): boolean {
     const lower = content.toLowerCase()
-    return Boolean(
-      (lower.includes("✅") || lower.includes("success")) && (lower.includes("step") || lower.includes("complete") || lower.includes("done")) ||
-      content.length > 200
-    )
+    return (lower.includes("✅") || lower.includes("success")) && (lower.includes("step") || lower.includes("complete") || lower.includes("done"))
   }
 
   private extractName(content: string): string | null {

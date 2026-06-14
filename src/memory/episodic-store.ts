@@ -22,6 +22,11 @@ export interface EpisodeEnvelope {
 export class EpisodicStore {
   private episodes: Episode[] = []
   private migrator = new MemorySchemaVersion()
+  private onRecord?: (episode: Episode) => void
+
+  setPersistenceCallback(cb: (episode: Episode) => void): void {
+    this.onRecord = cb
+  }
 
   record(sessionId: string, planGoal: string, outcome: Episode["outcome"], decisions: string[], filesChanged: string[]): Episode {
     const episode: Episode = {
@@ -37,6 +42,7 @@ export class EpisodicStore {
     }
 
     this.episodes.push(episode)
+    this.onRecord?.(episode)
     return episode
   }
 
