@@ -282,15 +282,13 @@ export class LLMEngine {
         }
       }
 
-      const combinedPrompt = `${req.systemPrompt}\n\n---\n\n${req.userPrompt}`
-
       const result = await client.session.prompt({
         body: {
           system: req.jsonMode
-            ? `${combinedPrompt}\n\nRespond with ONLY valid JSON. No markdown, no explanation.`
-            : combinedPrompt,
+            ? `${req.systemPrompt}\n\nRespond with ONLY valid JSON. No markdown, no explanation.`
+            : req.systemPrompt,
           noReply: true,
-          parts: [{ type: "text", text: "Generate the requested output." }],
+          parts: [{ type: "text", text: req.userPrompt }],
         },
         path: { id: this.pluginSessionId },
       })
