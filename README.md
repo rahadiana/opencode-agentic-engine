@@ -2,7 +2,7 @@
 
 > Multi-agent software engineering plugin for [OpenCode](https://opencode.ai) — implements the agentic workflow from *"The End of Software Engineering"* (Cao, arXiv:2606.05608).
 
-[![Tests](https://img.shields.io/badge/tests-99%2F99-brightgreen)](test/run.mjs)
+[![Tests](https://img.shields.io/badge/tests-102%2F102-brightgreen)](test/run.mjs)
 [![Docker](https://img.shields.io/badge/docker-7%20layers%20pass-brightgreen)](Dockerfile.test)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -31,6 +31,34 @@ node test/e2e-scenario.mjs  # 50-file codebase, 5 iterations
 
 # Docker pipeline (all 7 layers)
 ./test-container.sh
+```
+
+## Docker Deploy (Production)
+
+```bash
+# One-command deploy: OpenCode + plugin + cloudflared tunnel + Telegram notif
+docker compose up -d
+
+# Cek status
+docker compose logs -f
+
+# Akses OpenCode Web UI via tunnel URL (kirim via Telegram)
+```
+
+**Services:**
+- `opencode` — OpenCode web server (port 4096) + plugin (17 tools)
+- Auto-tunnel via cloudflared → public HTTPS URL
+- Telegram notifikasi saat tunnel ready (bot: `RanaProjectsBot`, chat: `336238760`)
+
+**Volumes persist:**
+- `opencode_data` — OpenCode config, sessions, trace logs
+- `agentic_store` — Plugin state: skills, episodes, session memory
+
+**Env (optional):**
+```bash
+OPENCODE_PASSWORD=opencode-agentic-2026  # Web UI auth
+TELEGRAM_BOT_TOKEN=...                   # Override bot
+TELEGRAM_CHAT_ID=...                     # Override chat
 ```
 
 ## Architecture
