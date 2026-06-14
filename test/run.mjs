@@ -72,9 +72,9 @@ catch (e) { assert(false, `AgenticEngine() threw: ${e.message}`) }
 assert(hooks && typeof hooks === "object", "hooks is an object")
 assert(typeof hooks.dispose === "function", "dispose hook registered")
 
-// 3. Tool registration (18 tools)
+// 3. Tool registration (20 tools)
 console.log("\n[3] Tool registration")
-for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_skill", "agentic_episodes", "agentic_parallel", "agentic_dashboard", "agentic_guard", "agentic_evolve", "agentic_auto"]) {
+for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_episodes", "agentic_parallel", "agentic_dashboard", "agentic_guard", "agentic_evolve", "agentic_auto"]) {
   const tool = hooks.tool?.[name]
   assert(tool && typeof tool.execute === "function", `"${name}" has execute()`)
   assert(typeof tool.description === "string" && tool.description.length > 0, `"${name}" has description`)
@@ -359,8 +359,175 @@ const dl2Result = await hooks.tool.agentic_delegate.execute({
 const dl2Out = typeof dl2Result === "string" ? dl2Result : dl2Result.output
 assert(dl2Out.includes("qa"), "auto-detects QA role")
 
-// 26. agentic_skill — extract + find + list
-console.log("\n[26] agentic_skill — extract")
+// 26. agentic_pipeline — define pipeline
+console.log("\n[26] agentic_pipeline — define")
+const plDef = await hooks.tool.agentic_pipeline.execute({
+  action: "define",
+  pipelineId: "test-feature",
+  name: "Test Feature Pipeline",
+  stages: [
+    { role: "architect", description: "Design the API" },
+    { role: "developer", description: "Implement the API" },
+    { role: "qa", description: "Verify the implementation" },
+  ],
+}, mockCtx(freshSid()))
+const plDefOut = typeof plDef === "string" ? plDef : plDef.output
+assert(plDefOut.includes("Pipeline Defined"), "pipeline defined")
+assert(plDefOut.includes("test-feature"), "pipeline ID shown")
+
+// 27. agentic_pipeline — list pipelines
+console.log("\n[27] agentic_pipeline — list")
+const plList = await hooks.tool.agentic_pipeline.execute({
+  action: "list",
+}, mockCtx(freshSid()))
+const plListOut = typeof plList === "string" ? plList : plList.output
+assert(plListOut.includes("Defined Pipelines") || plListOut.includes("feature-dev"), "shows pipeline list")
+
+// 28. agentic_pipeline — suggest pipeline
+console.log("\n[28] agentic_pipeline — suggest")
+const plSuggest = await hooks.tool.agentic_pipeline.execute({
+  action: "suggest",
+  description: "Add new user login feature",
+}, mockCtx(freshSid()))
+const plSuggestOut = typeof plSuggest === "string" ? plSuggest : plSuggest.output
+assert(plSuggestOut.includes("feature-dev") || plSuggestOut.includes("Pipeline"), "suggests pipeline")
+
+// 29. agentic_pipeline — run pipeline
+console.log("\n[29] agentic_pipeline — run")
+const pRunCtx = mockCtx(freshSid())
+const plRun = await hooks.tool.agentic_pipeline.execute({
+  action: "run",
+  pipelineId: "feature-dev",
+}, pRunCtx)
+const plRunOut = typeof plRun === "string" ? plRun : plRun.output
+assert(plRunOut.includes("Pipeline Run Started") || plRunOut.includes("Stages"), "pipeline run started")
+assert(plRunOut.includes("architect") || plRunOut.includes("pm"), "shows first stage")
+
+// 30. agentic_pipeline — run with invalid pipeline
+console.log("\n[30] agentic_pipeline — run invalid")
+const plBad = await hooks.tool.agentic_pipeline.execute({
+  action: "run",
+  pipelineId: "nonexistent-pipeline",
+}, mockCtx(freshSid()))
+const plBadOut = typeof plBad === "string" ? plBad : plBad.output
+assert(plBadOut.includes("not found"), "handles invalid pipeline")
+
+// 31. agentic_pipeline — pipeline status
+console.log("\n[31] agentic_pipeline — status")
+const plStat = await hooks.tool.agentic_pipeline.execute({
+  action: "status",
+  pipelineId: "feature-dev",
+}, pRunCtx)
+const plStatOut = typeof plStat === "string" ? plStat : plStat.output
+assert(plStatOut.includes("Status") || plStatOut.includes("Pipeline"), "pipeline status shown")
+
+// 32. agentic_message — send message
+console.log("\n[32] agentic_message — send")
+const msgCtx = mockCtx(freshSid())
+const msgSend = await hooks.tool.agentic_message.execute({
+  action: "send",
+  to: "developer",
+  taskId: "task-msg-1",
+  message: "Please implement the login endpoint",
+  type: "clarification",
+}, msgCtx)
+const msgSendOut = typeof msgSend === "string" ? msgSend : msgSend.output
+assert(msgSendOut.includes("Message Sent"), "message sent")
+assert(msgSendOut.includes("developer"), "to correct role")
+
+// 33. agentic_message — inbox
+console.log("\n[33] agentic_message — inbox")
+const msgInbox = await hooks.tool.agentic_message.execute({
+  action: "inbox",
+}, { ...mockCtx(freshSid()), agent: "developer" })
+const msgInboxOut = typeof msgInbox === "string" ? msgInbox : msgInbox.output
+assert(msgInboxOut.includes("Inbox") || msgInboxOut.includes("unread"), "inbox shows messages")
+
+// 34. agentic_message — conversation
+console.log("\n[34] agentic_message — conversation")
+const msgConv = await hooks.tool.agentic_message.execute({
+  action: "conversation",
+  taskId: "task-msg-1",
+}, msgCtx)
+const msgConvOut = typeof msgConv === "string" ? msgConv : msgConv.output
+assert(msgConvOut.includes("Conversation") || msgConvOut.includes("task-msg-1"), "conversation shown")
+
+// 35. agentic_message — mark-read
+console.log("\n[35] agentic_message — mark-read")
+// Send another message first to get a real ID
+const msg2 = await hooks.tool.agentic_message.execute({
+  action: "send",
+  to: "qa",
+  taskId: "task-msg-2",
+  message: "Review the code",
+  type: "review_request",
+}, msgCtx)
+const msg2Out = typeof msg2 === "string" ? msg2 : msg2.output
+
+// Extract message ID from output
+const msgIdMatch = msg2Out.match(/`([^`]+)`/)
+const msgId = msgIdMatch ? msgIdMatch[1] : null
+if (msgId) {
+  const msgRead = await hooks.tool.agentic_message.execute({
+    action: "mark-read",
+    messageId: msgId,
+  }, msgCtx)
+  const msgReadOut = typeof msgRead === "string" ? msgRead : msgRead.output
+  assert(msgReadOut.includes("marked as read"), "message marked read")
+} else {
+  assert(false, "could not extract message ID")
+}
+
+// 36. Enhanced delegate — update task with result
+console.log("\n[36] agentic_delegate — update task with result")
+const enhCtx = mockCtx(freshSid())
+await hooks.tool.agentic_delegate.execute({
+  taskId: "enh1", role: "developer", description: "Implement login",
+}, enhCtx)
+const enhUpdate = await hooks.tool.agentic_delegate.execute({
+  taskId: "enh1", status: "done", result: "Created login endpoint",
+  role: "developer",
+}, enhCtx)
+const enhOut = typeof enhUpdate === "string" ? enhUpdate : enhUpdate.output
+assert(enhOut.includes("Task Updated"), "task status updated")
+assert(enhOut.includes("done") || enhOut.includes("Created"), "shows result")
+
+// 37. Enhanced delegate — pipeline-aware delegation with cross-validation
+console.log("\n[37] agentic_delegate — pipeline aware")
+const plDelCtx = mockCtx(freshSid())
+await hooks.tool.agentic_pipeline.execute({
+  action: "run",
+  pipelineId: "test-feature",
+}, plDelCtx)
+const runId = `run-${plDelCtx.sessionID}-test-feature`
+await hooks.tool.agentic_delegate.execute({
+  taskId: "pl-arch", role: "architect", description: "Design API",
+  pipelineRunId: runId,
+}, plDelCtx)
+const plDel2 = await hooks.tool.agentic_delegate.execute({
+  taskId: "pl-arch", role: "architect", status: "done",
+  result: "Architecture: REST API with 3 endpoints",
+  pipelineRunId: runId,
+}, plDelCtx)
+const plDel2Out = typeof plDel2 === "string" ? plDel2 : plDel2.output
+assert(plDel2Out.includes("Pipeline Advancing") || plDel2Out.includes("Next stage"), "pipeline advanced after task completion")
+
+// 38. Enhanced delegate — request review
+console.log("\n[38] agentic_delegate — request review")
+const rvCtx = mockCtx(freshSid())
+await hooks.tool.agentic_delegate.execute({
+  taskId: "rv1", role: "developer", description: "Implement feature",
+}, rvCtx)
+const rvUpd = await hooks.tool.agentic_delegate.execute({
+  taskId: "rv1", role: "developer", status: "done",
+  result: "Feature implemented with tests",
+  requestReview: true,
+}, rvCtx)
+const rvOut = typeof rvUpd === "string" ? rvUpd : rvUpd.output
+assert(rvOut.includes("Review Requested") || rvOut.includes("review"), "review request sent")
+
+// 39. agentic_skill — extract + find + list
+console.log("\n[39] agentic_skill — extract")
 const skCtx = mockCtx(freshSid())
 await hooks.tool.agentic_plan.execute({
   goal: "Skill test",
@@ -381,8 +548,8 @@ const skList = await hooks.tool.agentic_skill.execute({ action: "list" }, skCtx)
 const skLOut = typeof skList === "string" ? skList : skList.output
 assert(skLOut.includes("Skill") || skLOut.includes("skill"), "skill list works")
 
-// 27. agentic_episodes — search + recent + stats
-console.log("\n[27] agentic_episodes — memory")
+// 40. agentic_episodes — search + recent + stats
+console.log("\n[40] agentic_episodes — memory")
 const epCtx = mockCtx(freshSid())
 await hooks.tool.agentic_plan.execute({
   goal: "Episode test task",
@@ -404,8 +571,8 @@ const epStats = await hooks.tool.agentic_episodes.execute({ action: "stats" }, e
 const epStOut = typeof epStats === "string" ? epStats : epStats.output
 assert(epStOut.includes("stats") || epStOut.includes("Total") || epStOut.includes("Success"), "episode stats works")
 
-// 28. Checkpoint — risky operation detection
-console.log("\n[28] Checkpoint — risk detection")
+// 41. Checkpoint — risky operation detection
+console.log("\n[41] Checkpoint — risk detection")
 const cpCtx = mockCtx(freshSid())
 await hooks.tool.agentic_plan.execute({
   goal: "Config change",
@@ -418,8 +585,8 @@ const cpResult = await hooks.tool.agentic_execute.execute({
 const cpOut = typeof cpResult === "string" ? cpResult : cpResult.output
 assert(cpOut.includes("Checkpoint") || cpOut.includes("BLOCK") || cpOut.includes("REVIEW"), "checkpoint triggered for config change")
 
-// 29. agentic_parallel — analyze concurrency
-console.log("\n[29] agentic_parallel — concurrency analysis")
+// 42. agentic_parallel — analyze concurrency
+console.log("\n[42] agentic_parallel — concurrency analysis")
 const plCtx = mockCtx(freshSid())
 await hooks.tool.agentic_plan.execute({
   goal: "Parallel test",
@@ -441,14 +608,14 @@ const pl2Result = await hooks.tool.agentic_parallel.execute({}, plCtx)
 const pl2Out = typeof pl2Result === "string" ? pl2Result : pl2Result.output
 assert(pl2Out.includes("pl2") || pl2Out.includes("Runnable"), "shows runnable tasks")
 
-// 30. agentic_dashboard — observability
-console.log("\n[30] agentic_dashboard — observability")
+// 43. agentic_dashboard — observability
+console.log("\n[43] agentic_dashboard — observability")
 const dbResult = await hooks.tool.agentic_dashboard.execute({}, mockCtx(freshSid()))
 const dbOut = typeof dbResult === "string" ? dbResult : dbResult.output
 assert(dbOut.length > 0, "dashboard produces output")
 
-// 31. agentic_guard — hallucination check
-console.log("\n[31] agentic_guard — hallucination check")
+// 44. agentic_guard — hallucination check
+console.log("\n[44] agentic_guard — hallucination check")
 const gdCtx = mockCtx(freshSid())
 await hooks.tool.agentic_plan.execute({ goal: "Guard test", subtasks: [{ id: "gd1", description: "Claim check", dependsOn: [] }] }, gdCtx)
 await hooks.tool.agentic_execute.execute({
@@ -459,8 +626,8 @@ const gdResult = await hooks.tool.agentic_guard.execute({ stepId: "gd1" }, gdCtx
 const gdOut = typeof gdResult === "string" ? gdResult : gdResult.output
 assert(gdOut.includes("Hallucination") || gdOut.includes("Verdict"), "guard check produced")
 
-// 32. agentic_guard — false claim detection
-console.log("\n[32] agentic_guard — false claim")
+// 45. agentic_guard — false claim detection
+console.log("\n[45] agentic_guard — false claim")
 const gd2Ctx = mockCtx(freshSid())
 await hooks.tool.agentic_plan.execute({ goal: "Ghost test", subtasks: [{ id: "gd2", description: "Ghost claim", dependsOn: [] }] }, gd2Ctx)
 await hooks.tool.agentic_execute.execute({
@@ -472,16 +639,16 @@ const gd2Result = await hooks.tool.agentic_guard.execute({ stepId: "gd2" }, gd2C
 const gd2Out = typeof gd2Result === "string" ? gd2Result : gd2Result.output
 assert(gd2Out.includes("Unverified") || gd2Out.includes("not found") || gd2Out.includes("hallucin"), "detects unverified claims")
 
-// 33. agentic_evolve — inspect
-console.log("\n[33] agentic_evolve — inspect")
+// 46. agentic_evolve — inspect
+console.log("\n[46] agentic_evolve — inspect")
 const evCtx = mockCtx(freshSid())
 const evI = await hooks.tool.agentic_evolve.execute({ action: "inspect" }, evCtx)
 const evIOut = typeof evI === "string" ? evI : evI.output
 assert(evIOut.includes("Role") || evIOut.includes("role"), "inspect shows roles")
 assert(evIOut.includes("schema") || evIOut.includes("Schema"), "inspect shows schema version")
 
-// 34. agentic_evolve — register custom role
-console.log("\n[34] agentic_evolve — register role")
+// 47. agentic_evolve — register custom role
+console.log("\n[47] agentic_evolve — register role")
 const evR = await hooks.tool.agentic_evolve.execute({
   action: "register-role",
   name: "Security Auditor",
@@ -491,14 +658,14 @@ const evR = await hooks.tool.agentic_evolve.execute({
 const evROut = typeof evR === "string" ? evR : evR.output
 assert(evROut.includes("security-auditor") || evROut.includes("registered"), "registers custom role")
 
-// 35. agentic_evolve — memory schema
-console.log("\n[35] agentic_evolve — memory schema")
+// 48. agentic_evolve — memory schema
+console.log("\n[48] agentic_evolve — memory schema")
 const evM = await hooks.tool.agentic_evolve.execute({ action: "memory-schema" }, evCtx)
 const evMOut = typeof evM === "string" ? evM : evM.output
 assert(evMOut.includes("schema_version") || evMOut.includes("Envelope"), "shows memory schema")
 
-// 36. agentic_evolve — export skill
-console.log("\n[36] agentic_evolve — export skill")
+// 49. agentic_evolve — export skill
+console.log("\n[49] agentic_evolve — export skill")
 const evS = await hooks.tool.agentic_evolve.execute({
   action: "export-skill",
   name: "API endpoint pattern",
@@ -507,8 +674,8 @@ const evS = await hooks.tool.agentic_evolve.execute({
 const evSOut = typeof evS === "string" ? evS : evS.output
 assert(evSOut.includes("agentic-skill/v1") || evSOut.includes("Skill:"), "exports skill in self-describing format")
 
-// 37. Max retry exhaustion + reflect
-console.log("\n[37] Max retry exhaustion")
+// 50. Max retry exhaustion + reflect
+console.log("\n[50] Max retry exhaustion")
 const mrid = freshSid()
 await hooks.tool.agentic_plan.execute({ goal: "Max", subtasks: [{ id: "mx", description: "Fail", dependsOn: [] }] }, mockCtx(mrid))
 for (let i = 0; i < 3; i++) {
@@ -520,8 +687,8 @@ const mrRef = await hooks.tool.agentic_reflect.execute({ stepId: "mx" }, mockCtx
 const mrOut = typeof mrRef === "string" ? mrRef : mrRef.output
 assert(mrOut.includes("No retries") || mrOut.includes("remaining") || mrOut.includes("plan step"), "indicates max retries reached")
 
-// 38. agentic_evolve — self-evolution analysis
-console.log("\n[38] agentic_evolve — self-evolution")
+// 51. agentic_evolve — self-evolution analysis
+console.log("\n[51] agentic_evolve — self-evolution")
 const evoCtx = mockCtx(freshSid())
 await hooks.tool.agentic_plan.execute({
   goal: "Evolve test: complex multi-phase feature",
@@ -571,8 +738,8 @@ assert(evolveOut.includes("Self-Evolution") || evolveOut.includes("Improvement S
 assert(evolveOut.includes("Recommendation") || evolveOut.includes("recommend"), "evolve includes recommendations")
 assert(evolveOut.includes("Success Rate") || evolveOut.includes("success"), "evolve shows metrics")
 
-// 39. Trace logging
-console.log("\n[39] Trace logging")
+// 52. Trace logging
+console.log("\n[52] Trace logging")
 await hooks.dispose()
 const tracePath = join(projectDir, ".agentic", "trace.jsonl")
 assert(existsSync(tracePath), "trace file created")

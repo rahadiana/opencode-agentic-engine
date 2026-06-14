@@ -15,6 +15,7 @@ import { GitIntegration } from "./core/git.js"
 import { TechDebtScorer } from "./core/tech-debt-scorer.js"
 import { AgentCoordinator } from "./agents/coordinator.js"
 import type { AgentRole, AgentTask } from "./agents/coordinator.js"
+import { Orchestrator, type WorkflowPipeline, type CrossValidationResult } from "./agents/orchestrator.js"
 import { SkillStore } from "./memory/skill-store.js"
 import { EpisodicStore } from "./memory/episodic-store.js"
 import { HallucinationGuard } from "./drift/hallucination-guard.js"
@@ -44,6 +45,10 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
   const git = new GitIntegration(input.worktree)
   const debtScorer = new TechDebtScorer()
   const coordinator = new AgentCoordinator()
+  const orchestrator = new Orchestrator()
+  for (const pipeline of orchestrator.getBuiltInPipelines()) {
+    orchestrator.definePipeline(pipeline)
+  }
   const skillStore = new SkillStore()
   const episodicStore = new EpisodicStore()
   const checkpoints = new CheckpointSystem()
@@ -671,6 +676,123 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
         },
       }),
 
+      agentic_pipeline: tool({
+        description: "Define and run multi-agent workflow pipelines. Chain PM → Architect → Developer → QA for complete feature development. Includes cross-validation between stages.",
+        args: {
+          action: tool.schema.enum(["define", "list", "run", "status", "suggest"]).describe("'define' to create a new pipeline; 'list' to show existing; 'run' to start a pipeline; 'status' to check progress; 'suggest' to auto-suggest a pipeline"),
+          pipelineId: tool.schema.string().optional().describe("Pipeline ID (for define/run/status)"),
+          stages: tool.schema.array(tool.schema.object({
+            role: tool.schema.string().describe("Agent role for this stage"),
+            description: tool.schema.string().describe("What this stage should accomplish"),
+            validationCriteria: tool.schema.array(tool.schema.string()).optional().describe("Criteria to validate this stage"),
+          })).optional().describe("Pipeline stages (for define action)"),
+          name: tool.schema.string().optional().describe("Pipeline name (for define action)"),
+          description: tool.schema.string().optional().describe("Task description (for suggest action)"),
+        },
+        async execute(args, context) {
+          switch (args.action) {
+            case "define": {
+              if (!args.pipelineId || !args.stages || args.stages.length === 0) {
+                return { output: "pipelineId and stages (non-empty array) required." }
+              }
+              const pipeline: WorkflowPipeline = {
+                id: args.pipelineId,
+                name: args.name ?? args.pipelineId,
+                stages: args.stages,
+                createdAt: Date.now(),
+              }
+              orchestrator.definePipeline(pipeline)
+              return {
+                output: `## 📋 Pipeline Defined\n\n**ID:** \`${pipeline.id}\`\n**Name:** ${pipeline.name}\n**Stages:** ${pipeline.stages.length}\n\n` +
+                  pipeline.stages.map((s, i) => `${i + 1}. **${s.role}** — ${s.description}`).join("\n"),
+              }
+            }
+
+            case "list": {
+              const pipelines = orchestrator.listPipelines()
+              if (pipelines.length === 0) return { output: "No pipelines defined. Use `action: \"define\"` to create one." }
+              let out = `## 📋 Defined Pipelines (${pipelines.length})\n\n`
+              for (const p of pipelines) {
+                out += `**${p.name}** (\`${p.id}\`) — ${p.stages.length} stages\n`
+                out += p.stages.map(s => `  - ${s.role}: ${s.description}`).join("\n") + "\n\n"
+              }
+              return { output: out }
+            }
+
+            case "suggest": {
+              const suggested = orchestrator.getSuggestedPipeline(args.description ?? "")
+              const pipeline = orchestrator.getPipeline(suggested)
+              if (!pipeline) return { output: `Suggested pipeline: \`${suggested}\`. Run \`action: "run"\` with this pipelineId.` }
+              let out = `## 💡 Suggested Pipeline: **${pipeline.name}**\n\n`
+              out += `Run \`agentic_pipeline\` with \`action: "run"\` and \`pipelineId: "${pipeline.id}"\` to start.\n\n`
+              out += pipeline.stages.map((s, i) => `${i + 1}. **${s.role}** — ${s.description}`).join("\n")
+              return { output: out }
+            }
+
+            case "run": {
+              if (!args.pipelineId) return { output: "pipelineId required." }
+              const pipeline = orchestrator.getPipeline(args.pipelineId)
+              if (!pipeline) return { output: `Pipeline "${args.pipelineId}" not found. Define it first or use one of: ${orchestrator.listPipelines().map(p => p.id).join(", ")}` }
+
+              const runId = `run-${context.sessionID}-${args.pipelineId}`
+              orchestrator.startRun(runId, args.pipelineId)
+
+              coordinator.writeSharedMemory(`pipeline:run:${runId}`, `Started pipeline ${pipeline.name}`, "coordinator")
+
+              let out = `## 🚀 Pipeline Run Started\n\n`
+              out += `**Pipeline:** ${pipeline.name} (\`${args.pipelineId}\`)\n`
+              out += `**Run ID:** \`${runId}\`\n\n`
+              out += `### Stages\n`
+              out += pipeline.stages.map((s, i) => {
+                const prefix = i === 0 ? "▶" : "⏳"
+                return `${prefix} **${s.role}** — ${s.description}`
+              }).join("\n")
+              out += `\n\n### Next Step\nDelegate tasks to each stage. Start with \`agentic_delegate\` for the first role: **${pipeline.stages[0].role}**.`
+
+              return { output: out, metadata: { runId, pipelineId: args.pipelineId } }
+            }
+
+            case "status": {
+              const runId = args.pipelineId
+                ? `run-${context.sessionID}-${args.pipelineId}`
+                : null
+
+              if (!runId) {
+                return { output: "Specify pipelineId to check status." }
+              }
+
+              const current = orchestrator.getCurrentStage(runId)
+              const results = orchestrator.getAllStageResults(runId)
+
+              let out = `## 📊 Pipeline Status\n\n`
+              out += `**Run:** \`${runId}\`\n`
+
+              const pipeline = args.pipelineId ? orchestrator.getPipeline(args.pipelineId) : null
+              if (pipeline) {
+                out += `**Pipeline:** ${pipeline.name}\n\n`
+                out += `| Stage | Status |\n|-------|--------|\n`
+                for (const stage of pipeline.stages) {
+                  const hasResult = results.has(stage.role)
+                  const icon = hasResult ? "✅" : stage.role === current?.role ? "▶" : "⏳"
+                  out += `| ${icon} ${stage.role} | ${hasResult ? "Complete" : stage.role === current?.role ? "Active" : "Pending"} |\n`
+                }
+              }
+
+              if (current) {
+                out += `\n### Current Stage\n**${current.role}** — ${current.description}\n`
+              } else {
+                out += `\n### Pipeline Complete\nAll stages finished.\n`
+              }
+
+              return { output: out }
+            }
+
+            default:
+              return { output: `Unknown action "${args.action}". Available: define, list, run, status, suggest.` }
+          }
+        },
+      }),
+
       agentic_pr: tool({
         description: "Generate a pull request description from the execution plan, all step results, and files changed. Use `action: 'create'` to actually open a PR via GitHub CLI (`gh`).",
         args: {
@@ -812,14 +934,120 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
       }),
 
       agentic_delegate: tool({
-        description: "Assign a task to a specialized agent role (architect/developer/qa/coordinator/pm). The tool auto-suggests the best role based on the task description.",
+        description: "Assign a task to a specialized agent role (architect/developer/qa/coordinator/pm). Supports pipeline-aware delegation with cross-validation between stages and inter-agent messaging.",
         args: {
           taskId: tool.schema.string().describe("Unique ID for this delegated task"),
           description: tool.schema.string().describe("What this agent should do"),
           role: tool.schema.enum(["architect", "developer", "qa", "coordinator", "pm"]).optional().describe("Target role (auto-detected if omitted)"),
           context: tool.schema.string().optional().describe("Additional context or instructions for the agent"),
+          pipelineRunId: tool.schema.string().optional().describe("Pipeline run ID to associate this task with a pipeline stage"),
+          result: tool.schema.string().optional().describe("Task result (set when completing a task to trigger downstream stages and cross-validation)"),
+          status: tool.schema.enum(["pending", "running", "done", "failed"]).optional().describe("Set the task status"),
+          requestReview: tool.schema.boolean().optional().describe("Request review from a downstream role after completing this task"),
         },
         async execute(args, context) {
+          const allTasks = coordinator.getTasks(context.sessionID)
+
+          // If result is provided, we're completing a task
+          if (args.result || args.status) {
+            const updated = coordinator.updateTask(context.sessionID, args.taskId, args.status ?? "done", args.result)
+            if (!updated) return { output: `Task "${args.taskId}" not found.` }
+
+            // Write to shared memory
+            coordinator.writeSharedMemory(`task:${args.taskId}`, (args.result ?? "").slice(0, 500), args.role ?? "unknown")
+
+            let output = `## ✅ Task Updated\n\n`
+            output += `**Task:** \`${args.taskId}\` → **${args.status ?? "done"}**\n`
+            if (args.result) output += `**Result:** ${args.result.slice(0, 300)}\n\n`
+
+            // Pipeline: advance to next stage
+            if (args.pipelineRunId) {
+              const pipelineId = args.pipelineRunId.replace(`run-${context.sessionID}-`, "")
+              const pipeline = orchestrator.getPipeline(pipelineId)
+              if (pipeline) {
+                const stageIssues: string[] = []
+                const nextStage = orchestrator.advanceStage(args.pipelineRunId, args.result ?? "", stageIssues)
+                const allResults = orchestrator.getAllStageResults(args.pipelineRunId)
+
+                if (nextStage) {
+                  const pipelineContext = orchestrator.buildContextForRole(nextStage.role, args.pipelineRunId, coordinator.getAllSharedMemory())
+
+                  output += `### ▶ Pipeline Advancing\n`
+                  output += `**Next stage:** ${nextStage.role} — ${nextStage.description}\n\n`
+
+                  // Auto-send message to next agent
+                  coordinator.sendMessage({
+                    from: args.role ?? "coordinator",
+                    to: nextStage.role,
+                    taskId: args.taskId,
+                    type: "result",
+                    payload: `Stage ${args.role} completed. Next: ${nextStage.role}.\n\nContext:\n${pipelineContext}`,
+                  })
+
+                  output += `**Context forwarded** to \`${nextStage.role}\` via message bus.\n`
+                } else {
+                  output += `### 🎉 Pipeline Complete\nAll stages finished!\n`
+
+                  // Run final cross-validation
+                  const finalValidation = orchestrator.crossValidate(
+                    "coordinator",
+                    "Pipeline completed",
+                    allResults,
+                    coordinator.getAllSharedMemory(),
+                  )
+                  output += `\n### Cross-Validation\n**Status:** ${finalValidation.passed ? "✅ Passed" : "❌ Issues found"}\n`
+                  output += `**Summary:** ${finalValidation.summary}\n`
+                  if (finalValidation.issues.length > 0) {
+                    output += finalValidation.issues.map(i =>
+                      `- [${i.severity}] ${i.description} (from ${i.source})`
+                    ).join("\n")
+                  }
+                }
+
+                // Cross-validate: auto-check against previous stages
+                if (args.status === "done" && allResults.size > 1) {
+                  const validation = orchestrator.crossValidate(
+                    args.role ?? "unknown",
+                    args.result ?? "",
+                    allResults,
+                    coordinator.getAllSharedMemory(),
+                  )
+                  if (validation.issues.length > 0) {
+                    output += `\n### 🔍 Cross-Validation Notes\n`
+                    for (const issue of validation.issues) {
+                      output += `- [${issue.severity}] ${issue.description}\n`
+                    }
+                  }
+                }
+              }
+            }
+
+            // Request review from next logical role
+            if (args.requestReview && args.result) {
+              const reviewRole = args.role === "developer" ? "qa" : args.role === "architect" ? "developer" : "qa"
+              coordinator.sendMessage({
+                from: args.role ?? "developer",
+                to: reviewRole,
+                taskId: args.taskId,
+                type: "review_request",
+                payload: `Review requested for task "${args.taskId}".\n\nResult:\n${args.result.slice(0, 1000)}`,
+              })
+              output += `\n### 📨 Review Requested\n**Reviewer:** ${reviewRole}\n**Message sent** via inter-agent message bus.\n`
+            }
+
+            traceLogger.log({
+              step: "delegate:update",
+              input: args.taskId,
+              output: `→ ${args.status}`,
+              toolUsed: "agentic_delegate",
+              success: true,
+              durationMs: 0,
+            })
+
+            return { output }
+          }
+
+          // Normal delegation flow
           const role: AgentRole = args.role ?? coordinator.getSuggestedRole(args.description)
           const agent = coordinator.getAgent(role)
           if (!agent) {
@@ -832,19 +1060,44 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
             description: args.description,
             input: args.context ?? args.description,
             status: "pending",
+            pipelineRunId: args.pipelineRunId,
           }, context.sessionID)
 
-          const allTasks = coordinator.getTasks(context.sessionID)
+          // Build pipeline context if part of a pipeline run
+          let pipelineContext = ""
+          if (args.pipelineRunId) {
+            pipelineContext = orchestrator.buildContextForRole(role, args.pipelineRunId, coordinator.getAllSharedMemory())
+          }
+
+          // Check for pending messages for this role
+          const pendingMessages = coordinator.getMessages(role, true)
 
           let output = `## 🤖 Task Delegated\n\n`
           output += `**Task:** \`${args.taskId}\`\n`
           output += `**Role:** ${role} (${agent.name})\n`
           output += `**Description:** ${args.description}\n`
-          output += `**Status:** Pending\n\n`
-          output += `### Agent Prompt\n\`\`\`\n${agent.prompt}\n\`\`\`\n\n`
-          output += `### Available Tools\n${agent.tools.map(t => `- \`${t}\``).join("\n")}\n\n`
-          output += `### Active Tasks (${allTasks.length})\n`
-          output += allTasks.map(t =>
+          output += `**Status:** Pending\n`
+
+          if (args.pipelineRunId) {
+            output += `**Pipeline Run:** \`${args.pipelineRunId}\`\n`
+          }
+
+          output += `\n### Agent Prompt\n\`\`\`\n${agent.prompt}\n\`\`\`\n`
+
+          if (pipelineContext) {
+            output += `\n### Pipeline Context\n\`\`\`\n${pipelineContext.slice(0, 800)}\n\`\`\`\n`
+          }
+
+          if (pendingMessages.length > 0) {
+            output += `\n### 📨 Pending Messages (${pendingMessages.length})\n`
+            for (const msg of pendingMessages) {
+              output += `- From **${msg.from}**: ${msg.payload.slice(0, 200)}\n`
+            }
+          }
+
+          output += `\n### Available Tools\n${agent.tools.map(t => `- \`${t}\``).join("\n")}\n\n`
+          output += `### Active Tasks (${allTasks.length + 1})\n`
+          output += [...allTasks, task].map(t =>
             `- ${t.status === "done" ? "✅" : t.status === "failed" ? "❌" : "⏳"} **${t.id}** → ${t.assignedTo}: ${t.description}`
           ).join("\n")
 
@@ -858,6 +1111,72 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
           })
 
           return { output }
+        },
+      }),
+
+      agentic_message: tool({
+        description: "Inter-agent messaging system. Send messages between agent roles, request reviews, check inbox, and view conversation threads. Part of the multi-agent coordination framework.",
+        args: {
+          action: tool.schema.enum(["send", "inbox", "conversation", "mark-read"]).describe("'send' to send a message; 'inbox' to check messages; 'conversation' to view a thread; 'mark-read' to acknowledge a message"),
+          to: tool.schema.string().optional().describe("Recipient role (for send action)"),
+          taskId: tool.schema.string().optional().describe("Task ID this message relates to (for send/conversation)"),
+          message: tool.schema.string().optional().describe("Message content (for send action)"),
+          type: tool.schema.enum(["result", "review_request", "review_response", "clarification", "approval", "revision"]).optional().describe("Message type (for send action)"),
+          messageId: tool.schema.string().optional().describe("Message ID to mark as read (for mark-read action)"),
+        },
+        async execute(args, context) {
+          switch (args.action) {
+            case "send": {
+              if (!args.to || !args.message) return { output: "`to` and `message` required." }
+              const msg = coordinator.sendMessage({
+                from: context.agent ?? "user",
+                to: args.to,
+                taskId: args.taskId ?? "general",
+                type: args.type ?? "clarification",
+                payload: args.message,
+              })
+              return {
+                output: `## 📨 Message Sent\n\n**From:** ${msg.from}\n**To:** ${msg.to}\n**Type:** ${msg.type}\n**ID:** \`${msg.id}\`\n\n${msg.payload.slice(0, 500)}`,
+              }
+            }
+
+            case "inbox": {
+              const role = context.agent ?? "user"
+              const messages = coordinator.getMessages(role, true)
+              if (messages.length === 0) return { output: "📭 No unread messages." }
+
+              let out = `## 📬 Inbox (${messages.length} unread)\n\n`
+              for (const msg of messages) {
+                out += `**${msg.type.toUpperCase()}** from **${msg.from}** [\`${msg.id}\`]\n`
+                out += `Task: \`${msg.taskId}\` | ${new Date(msg.timestamp).toLocaleTimeString()}\n`
+                out += `> ${msg.payload.slice(0, 200)}\n\n`
+              }
+              return { output: out }
+            }
+
+            case "conversation": {
+              if (!args.taskId) return { output: "taskId required." }
+              const thread = coordinator.getConversation(args.taskId)
+              if (thread.length === 0) return { output: `No messages for task "${args.taskId}".` }
+
+              let out = `## 💬 Conversation: \`${args.taskId}\`\n\n`
+              for (const msg of thread) {
+                const icon = msg.type === "approval" ? "✅" : msg.type === "review_request" ? "🔍" : msg.type === "revision" ? "🔄" : "💬"
+                out += `${icon} **${msg.from}** → **${msg.to}** (${msg.type})\n`
+                out += `> ${msg.payload.slice(0, 300)}\n\n`
+              }
+              return { output: out }
+            }
+
+            case "mark-read": {
+              if (!args.messageId) return { output: "messageId required." }
+              const ok = coordinator.markRead(args.messageId)
+              return { output: ok ? `✅ Message \`${args.messageId}\` marked as read.` : `Message \`${args.messageId}\` not found.` }
+            }
+
+            default:
+              return { output: `Unknown action "${args.action}". Available: send, inbox, conversation, mark-read.` }
+          }
         },
       }),
 

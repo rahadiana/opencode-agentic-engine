@@ -64,7 +64,8 @@ try {
 const expected = [
   "agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect",
   "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot",
-  "agentic_pr", "agentic_score", "agentic_delegate", "agentic_parallel",
+  "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline",
+  "agentic_message", "agentic_parallel",
   "agentic_skill", "agentic_episodes", "agentic_dashboard", "agentic_guard",
   "agentic_evolve", "agentic_auto",
 ]

@@ -10,6 +10,8 @@ export interface AgentTask {
   status: "pending" | "running" | "done" | "failed"
   result?: string
   sharedContext?: string
+  validatedBy?: string[]
+  pipelineRunId?: string
 }
 
 export interface SharedMemoryEntry {
@@ -19,26 +21,60 @@ export interface SharedMemoryEntry {
   timestamp: number
 }
 
+export interface AgentMessage {
+  id: string
+  from: string
+  to: string
+  taskId: string
+  type: "result" | "review_request" | "review_response" | "clarification" | "approval" | "revision"
+  payload: string
+  context?: Record<string, string>
+  timestamp: number
+  read: boolean
+}
+
+export type SharedMemoryListener = (entry: SharedMemoryEntry) => void
+
 export class AgentCoordinator {
   private sharedMemory = new Map<string, SharedMemoryEntry>()
+  private memoryListeners: SharedMemoryListener[] = []
+  private messages = new Map<string, AgentMessage[]>()
   private registry: RoleRegistry
   private tasks = new Map<string, AgentTask[]>()
+  private pipelineRuns = new Map<string, string[]>()
 
   constructor() {
     this.registry = new RoleRegistry()
   }
 
-  writeSharedMemory(key: string, value: string, agentRole: string): void {
-    this.sharedMemory.set(key, {
-      key,
-      value,
-      writtenBy: agentRole,
-      timestamp: Date.now(),
-    })
+  onSharedMemoryWrite(listener: SharedMemoryListener): void {
+    this.memoryListeners.push(listener)
+  }
+
+  writeSharedMemory(key: string, value: string, agentRole: string): SharedMemoryEntry {
+    const entry: SharedMemoryEntry = { key, value, writtenBy: agentRole, timestamp: Date.now() }
+    this.sharedMemory.set(key, entry)
+    for (const listener of this.memoryListeners) {
+      try { listener(entry) } catch { }
+    }
+    return entry
+  }
+
+  writeSharedMemoryBatch(entries: Array<{ key: string; value: string; agentRole: string }>): void {
+    for (const e of entries) {
+      this.writeSharedMemory(e.key, e.value, e.agentRole)
+    }
   }
 
   readSharedMemory(key: string): SharedMemoryEntry | undefined {
     return this.sharedMemory.get(key)
+  }
+
+  searchSharedMemory(query: string): SharedMemoryEntry[] {
+    const q = query.toLowerCase()
+    return [...this.sharedMemory.values()].filter(e =>
+      e.key.toLowerCase().includes(q) || e.value.toLowerCase().includes(q)
+    )
   }
 
   getAllSharedMemory(): SharedMemoryEntry[] {
@@ -48,6 +84,49 @@ export class AgentCoordinator {
   getAgent(role: string): AgentDef | CustomAgentDef | undefined {
     return this.registry.getBuiltIn(role as AgentRole) ?? this.registry.getCustom(role)
   }
+
+  registerCustomRole(def: CustomAgentDef): void {
+    this.registry.registerCustom(def)
+  }
+
+  // --- Message Bus ---
+
+  sendMessage(msg: Omit<AgentMessage, "id" | "timestamp" | "read">): AgentMessage {
+    const message: AgentMessage = {
+      ...msg,
+      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: Date.now(),
+      read: false,
+    }
+    const inbox = this.messages.get(msg.to) ?? []
+    inbox.push(message)
+    this.messages.set(msg.to, inbox)
+    return message
+  }
+
+  getMessages(agentRole: string, unreadOnly = false): AgentMessage[] {
+    const inbox = this.messages.get(agentRole) ?? []
+    if (unreadOnly) return inbox.filter(m => !m.read)
+    return inbox
+  }
+
+  markRead(messageId: string): boolean {
+    for (const [, inbox] of this.messages) {
+      const msg = inbox.find(m => m.id === messageId)
+      if (msg) { msg.read = true; return true }
+    }
+    return false
+  }
+
+  getConversation(taskId: string): AgentMessage[] {
+    const all: AgentMessage[] = []
+    for (const [, inbox] of this.messages) {
+      all.push(...inbox.filter(m => m.taskId === taskId))
+    }
+    return all.sort((a, b) => a.timestamp - b.timestamp)
+  }
+
+  // --- Task Management ---
 
   delegate(role: string, task: AgentTask, sessionId: string): AgentTask {
     task.assignedTo = role
@@ -68,12 +147,12 @@ export class AgentCoordinator {
     return task
   }
 
-  registerCustomRole(def: CustomAgentDef): void {
-    this.registry.registerCustom(def)
-  }
-
   getTasks(sessionId: string): AgentTask[] {
     return this.tasks.get(sessionId) ?? []
+  }
+
+  getTasksByRole(sessionId: string, role: string): AgentTask[] {
+    return (this.tasks.get(sessionId) ?? []).filter(t => t.assignedTo === role)
   }
 
   updateTask(sessionId: string, taskId: string, status: AgentTask["status"], result?: string): boolean {
@@ -85,7 +164,39 @@ export class AgentCoordinator {
 
     task.status = status
     if (result) task.result = result
+
+    if (status === "done" && task.assignedTo) {
+      this.writeSharedMemory(`task:${taskId}:result`, result ?? "completed", task.assignedTo)
+    }
+
     return true
+  }
+
+  /** Get downstream tasks that depend on a completed task via the pipeline */
+  getNextInPipeline(taskId: string, sessionId: string): AgentTask | null {
+    const tasks = this.tasks.get(sessionId) ?? []
+    const currentIdx = tasks.findIndex(t => t.id === taskId)
+    if (currentIdx < 0 || currentIdx >= tasks.length - 1) return null
+
+    const current = tasks[currentIdx]
+    if (current.status !== "done") return null
+
+    for (let i = currentIdx + 1; i < tasks.length; i++) {
+      const next = tasks[i]
+      if (next.status === "pending") return next
+    }
+    return null
+  }
+
+  // --- Pipeline Run Tracking ---
+
+  setPipelineRun(sessionId: string, pipelineId: string, taskIds: string[]): void {
+    this.pipelineRuns.set(sessionId, taskIds)
+    this.writeSharedMemory(`pipeline:${sessionId}`, pipelineId, "coordinator")
+  }
+
+  getPipelineRun(sessionId: string): string[] | undefined {
+    return this.pipelineRuns.get(sessionId)
   }
 
   getSuggestedRole(description: string): AgentRole {

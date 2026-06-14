@@ -19,7 +19,7 @@ node test/e2e-scenario.mjs # EvoClaw: 50-file codebase, 5 iterations
 
 ```
 src/
-├── index.ts               # Plugin entry: registers 17 tools + hooks
+├── index.ts               # Plugin entry: registers 20 tools + hooks
 ├── core/
 │   ├── intent-parser.ts    # Parses user intent → Plan structure
 │   ├── planner.ts          # Auto-decompose (create/fix/refactor/test templates)
@@ -31,7 +31,8 @@ src/
 │   ├── tech-debt-scorer.ts # Coupling/size/scope/patterns analysis
 │   └── parallel.ts         # Dependency-based concurrency + conflict detection
 ├── agents/
-│   ├── coordinator.ts      # Delegates to agent roles, auto-suggests role
+│   ├── coordinator.ts      # Delegates to agent roles, auto-suggests role, message bus
+│   ├── orchestrator.ts     # Multi-agent workflow pipelines + cross-validation
 │   └── role-registry.ts    # Built-in + custom agent definitions (extensible)
 ├── drift/
 │   ├── dependency-tracker.ts   # Per-session file change + error propagation
@@ -49,7 +50,7 @@ src/
     └── dashboard.ts         # Timeline + stats + anomaly detection
 ```
 
-## 18 Tools
+## 20 Tools
 
 | Tool | Stage | Description |
 |---|---|---|
@@ -63,7 +64,9 @@ src/
 | agentic_snapshot | II | Save/list execution checkpoints |
 | agentic_pr | II | Generate PR + description |
 | agentic_score | II | Tech debt analysis |
-| agentic_delegate | III | Assign to architect/developer/qa/coordinator |
+| agentic_delegate | III | Assign to architect/developer/qa/coordinator — pipeline-aware with cross-validation |
+| agentic_pipeline | III | Define and run multi-agent workflow pipelines (PM→Arch→Dev→QA) |
+| agentic_message | III | Inter-agent messaging: send, inbox, conversation, review requests |
 | agentic_parallel | III | Dependency-based concurrency |
 | agentic_skill | III | Extract/find/list reusable skills |
 | agentic_episodes | III | Cross-session memory search |
