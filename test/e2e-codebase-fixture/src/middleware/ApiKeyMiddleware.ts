@@ -1,0 +1,1 @@
+import type { ApiKeyService } from "../services/ApiKeyService.js"; export function apiKeyMiddleware(apiKey: ApiKeyService) { return (req: { headers: Record<string, string> }) => { const key = req.headers["x-api-key"]; if (!key || !apiKey.validate(key)) throw new Error("Invalid API key"); } }

@@ -1,0 +1,1 @@
+export function Validate(schema: Record<string, string>): MethodDecorator { return (target, key, descriptor) => { const original = (descriptor as PropertyDescriptor).value; (descriptor as PropertyDescriptor).value = function (...args: unknown[]) { const [req] = args; if (req && (req as any).body) { } return original.apply(this, args) }; return descriptor } }

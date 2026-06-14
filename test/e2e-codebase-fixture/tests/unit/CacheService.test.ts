@@ -1,0 +1,1 @@
+import { CacheService } from "../../src/services/CacheService.js"; export function testCache() { const cache = new CacheService(); cache.set("key", "value"); console.assert(cache.get("key") === "value", "should get value"); cache.invalidate("key"); console.assert(cache.get("key") === undefined, "should invalidate") }

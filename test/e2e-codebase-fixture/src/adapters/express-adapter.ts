@@ -1,0 +1,1 @@
+import type { Request, Response } from "express"; export function adaptHandler(handler: (req: Request) => Promise<unknown>) { return async (req: Request, res: Response) => { try { const result = await handler(req); res.json(result) } catch (e) { res.status(500).json({ error: (e as Error).message }) } } }

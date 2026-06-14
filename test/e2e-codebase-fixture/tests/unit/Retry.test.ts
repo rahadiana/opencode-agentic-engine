@@ -1,0 +1,1 @@
+import { retry } from "../../src/utils/retry.js"; export async function testRetry() { let count = 0; const result = await retry(() => { count++; if (count < 3) throw new Error("fail"); return "ok" }, 3, 1); console.assert(result === "ok", "should succeed after retries") }

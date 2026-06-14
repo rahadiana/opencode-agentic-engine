@@ -1,0 +1,1 @@
+import type { AdminController } from "../controllers/AdminController.js"; export function registerAdminRoutes(ctrl: AdminController, router: { post: (path: string, handler: Function) => void }) { router.post("/admin/flags/toggle", (req: { body: { name: string; enabled: boolean } }) => ctrl.toggleFlag(req.body.name, req.body.enabled)); }

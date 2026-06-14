@@ -1,0 +1,1 @@
+export class AdminController { constructor(private flags: import("../services/FlagsService.js").FlagsService) {} toggleFlag(name: string, enabled: boolean) { this.flags.toggle(name, enabled); return { ok: true } } }

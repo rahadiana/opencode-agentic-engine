@@ -1,0 +1,1 @@
+import { isEmail, isPhone, notEmpty } from "../../src/utils/validation.js"; export function testValidation() { console.assert(isEmail("a@b.com"), "valid email"); console.assert(!isEmail("not-email"), "invalid email") }

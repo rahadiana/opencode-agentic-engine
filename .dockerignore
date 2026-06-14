@@ -5,4 +5,3 @@ dist
 logs
 *.md
 !README.md
-test

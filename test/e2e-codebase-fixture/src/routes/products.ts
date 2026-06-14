@@ -1,0 +1,1 @@
+import type { ProductController } from "../controllers/ProductController.js"; export function registerProductRoutes(ctrl: ProductController, router: { get: (path: string, handler: Function) => void }) { router.get("/products", (req: { query: { q: string } }) => ctrl.search(req.query.q)); }

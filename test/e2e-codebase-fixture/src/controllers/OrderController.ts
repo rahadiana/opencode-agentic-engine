@@ -1,0 +1,1 @@
+export class OrderController { constructor(private orderService: import("../services/OrderService.js").OrderService) {} create(userId: string, items: import("../models/OrderItem.js").OrderItem[]) { return this.orderService.create(userId, items) } }

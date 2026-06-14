@@ -1,0 +1,1 @@
+export class ProductService { private products = new Map<string, import("../models/ProductModel.js").Product>(); find(id: string) { return this.products.get(id) } search(query: string): import("../models/ProductModel.js").Product[] { return [...this.products.values()].filter(p => p.name.includes(query)) } }

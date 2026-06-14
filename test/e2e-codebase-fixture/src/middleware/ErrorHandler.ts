@@ -1,0 +1,1 @@
+export function errorHandler(err: Error, _req: unknown, res: { status: (code: number) => { json: (body: object) => void } }, _next: unknown) { console.error(err.message); res.status(500).json({ error: err.message }); }

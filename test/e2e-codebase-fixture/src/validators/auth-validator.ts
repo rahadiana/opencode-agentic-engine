@@ -1,0 +1,1 @@
+import { isEmail, notEmpty } from "../utils/validation.js"; export function validateLoginInput(email: string, password: string): string[] { const errors: string[] = []; if (!isEmail(email)) errors.push("Invalid email"); if (!notEmpty(password)) errors.push("Password required"); return errors }

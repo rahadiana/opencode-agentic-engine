@@ -1,0 +1,1 @@
+export class FlagsService { private flags = new Map<string, import("../models/FlagsModel.js").FeatureFlag>(); evaluate(name: string, context?: Record<string, unknown>): boolean { return this.flags.get(name)?.enabled ?? false } toggle(name: string, enabled: boolean): void { const flag = this.flags.get(name); if (flag) flag.enabled = enabled } }

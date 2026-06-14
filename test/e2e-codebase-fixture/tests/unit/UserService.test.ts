@@ -1,0 +1,1 @@
+import type { UserService } from "../../src/services/UserService.js"; export function testUserService(svc: UserService) { const user = { id: "1", name: "Test", email: "test@test.com", role: "user" as const, createdAt: new Date(), updatedAt: new Date() }; svc.create(user); console.assert(svc.find("1")?.name === "Test", "should find user") }

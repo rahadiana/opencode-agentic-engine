@@ -1,0 +1,1 @@
+export class OrderService { private orders = new Map<string, import("../models/OrderModel.js").Order>(); create(userId: string, items: import("../models/OrderItem.js").OrderItem[]): import("../models/OrderModel.js").Order { return { id: `ord-${Date.now()}`, userId, items, total: items.reduce((s, i) => s + i.price * i.quantity, 0), status: "pending", createdAt: new Date() } } }

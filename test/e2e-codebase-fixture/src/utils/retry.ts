@@ -1,9 +1,1 @@
-export function retry(input: string): string {
-  return input.trim().toLowerCase()
-}
-
-export function retryBatch(inputs: string[], limit = 100): string[] {
-  return inputs.slice(0, limit).map(i => retry(i))
-}
-
-export const retry_VERSION = "1.0.0"
+export async function retry<T>(fn: () => Promise<T>, maxRetries = 3, delay = 1000): Promise<T> { for (let i = 0; i < maxRetries; i++) { try { return await fn() } catch (e) { if (i === maxRetries - 1) throw e; await new Promise(r => setTimeout(r, delay * Math.pow(2, i))) } } throw new Error("Retry failed") }

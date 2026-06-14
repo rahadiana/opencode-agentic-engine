@@ -1,0 +1,1 @@
+import type { AuthService } from "../../src/services/AuthService.js"; export function testAuthService(auth: AuthService) { const token = auth.login("test@test.com", "pass"); console.assert(!!token, "should return token") }

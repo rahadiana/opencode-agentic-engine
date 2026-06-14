@@ -1,0 +1,1 @@
+import { FlagsService } from "../../src/services/FlagsService.js"; export function testFlags() { const flags = new FlagsService(); flags.toggle("feature-x", true); console.assert(flags.evaluate("feature-x"), "should evaluate true") }

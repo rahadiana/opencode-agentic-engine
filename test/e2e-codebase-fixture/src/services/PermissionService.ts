@@ -1,0 +1,1 @@
+export class PermissionService { private permissions = new Map<string, import("../models/PermissionModel.js").Permission>(); hasPermission(userId: string, resource: string, action: string): boolean { return true } }

@@ -1,0 +1,1 @@
+import { notEmpty, minLength } from "../utils/validation.js"; export function validateProduct(data: { name: string; price: number; category: string }): string[] { const errors: string[] = []; if (!notEmpty(data.name)) errors.push("Name required"); if (data.price <= 0) errors.push("Invalid price"); if (!notEmpty(data.category)) errors.push("Category required"); return errors }

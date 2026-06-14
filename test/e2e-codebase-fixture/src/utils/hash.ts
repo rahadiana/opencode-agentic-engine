@@ -1,9 +1,1 @@
-export function hash(input: string): string {
-  return input.trim().toLowerCase()
-}
-
-export function hashBatch(inputs: string[], limit = 100): string[] {
-  return inputs.slice(0, limit).map(i => hash(i))
-}
-
-export const hash_VERSION = "1.0.0"
+export function hash(str: string): string { let h = 0; for (let i = 0; i < str.length; i++) { h = ((h << 5) - h) + str.charCodeAt(i); h |= 0 } return Math.abs(h).toString(16) }

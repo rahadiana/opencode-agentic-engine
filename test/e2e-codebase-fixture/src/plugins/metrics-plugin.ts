@@ -1,0 +1,1 @@
+export const metricsPlugin = { name: "metrics", version: "1.0.0", hooks: { afterRequest: (req: unknown, res: unknown, duration: number) => { } }, activate() { console.log("Metrics plugin activated") }, deactivate() { console.log("Metrics plugin deactivated") } }

@@ -1,0 +1,1 @@
+export function paginatedResponse<T>(items: T[], total: number, page: number, limit: number) { return { items, total, page, limit, totalPages: Math.ceil(total / limit), hasNext: page * limit < total, hasPrev: page > 1 } }

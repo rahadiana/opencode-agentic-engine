@@ -1,0 +1,1 @@
+export function Get(path: string): MethodDecorator { return (target, key, _desc) => { Reflect.defineMetadata("route:method", "GET", target, key); Reflect.defineMetadata("route:path", path, target, key); } }

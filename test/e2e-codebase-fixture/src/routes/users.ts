@@ -1,16 +1,1 @@
-import type { Result } from "../types"
-
-export const usersRoutes = {
-  prefix: "/api/users",
-  endpoints: [
-    { method: "GET", path: "/", handler: "list" },
-    { method: "GET", path: "/:id", handler: "getById" },
-    { method: "POST", path: "/", handler: "create" },
-    { method: "PATCH", path: "/:id", handler: "update" },
-    { method: "DELETE", path: "/:id", handler: "delete" },
-  ],
-}
-
-export async function registerUsersRoutes(app: unknown): Promise<Result<void>> {
-  return { ok: true, value: undefined }
-}
+import type { UserController } from "../controllers/UserController.js"; export function registerUserRoutes(ctrl: UserController, router: { get: (path: string, handler: Function) => void }) { router.get("/users", () => ctrl.list()); router.get("/users/:id", (req: { params: { id: string } }) => ctrl.get(req.params.id)); }

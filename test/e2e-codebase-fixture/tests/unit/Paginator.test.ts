@@ -1,0 +1,1 @@
+import { paginate } from "../../src/utils/paginator.js"; export function testPaginator() { const items = [1, 2, 3, 4, 5]; const p1 = paginate(items, 1, 2); console.assert(p1.items.length === 2, "first page") }
