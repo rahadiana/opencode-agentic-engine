@@ -1225,12 +1225,82 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
 
               const report = selfEvolver.evolve()
 
+              // Auto-apply role suggestions
+              const appliedRoles: string[] = []
+              for (const role of report.roleSuggestions) {
+                try {
+                  coordinator.registerCustomRole({
+                    role: role.name,
+                    name: role.name,
+                    tools: role.suggestedTools,
+                    prompt: `You are ${role.name}. ${role.reason}\n\nTrigger: ${role.triggerPattern}`,
+                  })
+                  appliedRoles.push(role.name)
+                } catch { }
+              }
+
+              // Auto-apply skill patches
+              const patchedSkills: string[] = []
+              for (const patch of report.skillPatches) {
+                const record = skillStore.getById(patch.skillId)
+                if (!record) continue
+                const def = record.definition
+                let modified = false
+
+                for (const change of patch.suggestedChanges) {
+                  if (change.type === "add_rollback") {
+                    for (const step of def.workflow.steps) {
+                      if (!step.rollback) {
+                        step.rollback = change.detail
+                        modified = true
+                      }
+                    }
+                  }
+                  if (change.type === "add_step") {
+                    const newStep: import("./memory/skill-format.js").SkillStep = {
+                      order: def.workflow.steps.length + 1,
+                      action: "verify",
+                      description: change.detail,
+                      expectedOutput: "Step completed successfully",
+                    }
+                    def.workflow.steps.push(newStep)
+                    modified = true
+                  }
+                }
+
+                if (modified) {
+                  def.quality.usageCount = record.usageCount
+                  def.quality.successRate = record.successRate
+                  def.audit.lastModified = new Date().toISOString()
+                  def.audit.modifiedBy = "system"
+                  def.meta.version++
+                  persistence.save("skills", def.meta.id, def)
+                  patchedSkills.push(patch.skillName)
+                }
+              }
+
               let out = `## 🔮 Self-Evolution Report\n\n`
               out += `**Improvement Score:** ${report.improvementScore}/100\n`
               out += `**Sessions Analyzed:** ${report.metrics.totalSessions}\n`
               out += `**Steps Analyzed:** ${report.metrics.totalSteps}\n`
               out += `**Overall Success Rate:** ${(report.metrics.successRate * 100).toFixed(0)}%\n`
               out += `**Retry Rate:** ${(report.metrics.retryRate * 100).toFixed(0)}%\n\n`
+
+              if (appliedRoles.length > 0) {
+                out += `### ✅ Auto-Registered Roles\n`
+                for (const name of appliedRoles) {
+                  out += `- **${name}** — registered automatically\n`
+                }
+                out += `\n`
+              }
+
+              if (patchedSkills.length > 0) {
+                out += `### ✅ Auto-Patched Skills\n`
+                for (const name of patchedSkills) {
+                  out += `- **${name}** — patched automatically\n`
+                }
+                out += `\n`
+              }
 
               out += `### Recommendations\n`
               if (report.metrics.recommendations.length === 0) {
@@ -1259,7 +1329,6 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
                   out += `- Trigger: "${role.triggerPattern}"\n`
                   out += `- Tools: ${role.suggestedTools.map(t => `\`${t}\``).join(", ")}\n`
                   out += `- Reason: ${role.reason}\n`
-                  out += `\n_Register with:_ \`agentic_evolve register-role name="${role.name}" prompt="..." tools=${JSON.stringify(role.suggestedTools)}\`\n`
                 }
               }
 
