@@ -202,16 +202,25 @@ Tujuan: agent berjalan sebagai tim dengan role berbeda, bisa paralel, punya shar
 
 ---
 
-### Stage IV — Self-Evolving (In Progress) *(2026+)*
+### Stage IV — Self-Evolving ✅ Completed
 > *"Agents gain the ability to improve their own architectures"*
 
 Agent sudah bisa membaca (`read-prompt`), memodifikasi (`edit-prompt`), melihat history (`prompt-history`), dan rollback (`rollback-prompt`) prompt sendiri melalui `agentic_evolve`. Setiap perubahan tercatat dengan source (`agent-self`, `auto-evolve`, `manual`, `initial`) dan versi, serta dipersist ke disk.
+
+Skill bisa diexport ke training data (`agentic_evolve export-training-data` → JSONL / instructions).
+
+**Live evaluation** real-time 5 dimensi (taskSuccess, contextDrift, errorRecovery, multiAgent, skillUsage) dari tool hooks, tampil di `agentic_status`, `agentic_dashboard`, dan `agentic_auto`.
+
+**Test LLM auto-detect** — `swebench-harness.mjs` dan `e2e-llm.mjs` otomatis pake OpenCode Free (https://opencode.ai/zen/v1) tanpa API key. `LLM_OFF=true` untuk mock mode.
 
 Design constraints yang sudah terpenuhi:
 - ✅ Plugin system extensible — agent roles bisa ditambah tanpa ubah core
 - ✅ Memory schema versioned — upgrade tanpa kehilangan episodic history
 - ✅ Skill store self-describing — skill bisa diinspeksi dan dimodifikasi oleh agent lain
 - ✅ Prompt versioning + persistence — perubahan prompt tidak hilang setelah restart
+- ✅ Live evaluator — scoring real-time dari tool hooks
+- ✅ Skill → training data — export ke JSONL / instructions
+- ✅ No-auth LLM default — test langsung pake OpenCode Free endpoint
 
 ---
 
@@ -233,7 +242,7 @@ Design constraints yang sudah terpenuhi:
 | Git integration | ✅ Selesai | Commit + PR generation |
 | Episodic memory | ✅ Selesai | Cross-session search/recent/stats |
 | Tech debt scorer | ✅ Selesai | 4 metrik: coupling/size/scope/patterns |
-| Stage II SWE-bench test | ⬜ Belum | Butuh evaluasi dengan GitHub issues nyata |
+| Stage II SWE-bench test | ✅ Ada harness | `test/swebench-harness.mjs`: 7 scenarios, auto-detect OpenCode Free, score 29% (deepseek-v4-flash-free). Target >60% butuh model lebih besar. |
 | Stage III EvoClaw test | ✅ Ada scoring | `test/e2e-scenario.mjs`: 36 assertions, 4 dimensi (taskSuccess 40%, contextDrift 20%, errorRecovery 20%, multiAgent 20%), composite score >55% target. Mock 100%, real LLM needed untuk actual score. |
 | Stage IV Self-Evolving | ✅ Agent modifikasi prompt sendiri | `agentic_evolve read-prompt\|edit-prompt\|prompt-history\|rollback-prompt` + versioning + persistence |
 | Skill store → training data | ✅ Bisa export | `agentic_evolve export-training-data` — OpenAI JSONL + instructions JSON, filter by minSuccessRate |
@@ -270,9 +279,10 @@ Mengadopsi framework evaluasi dari paper:
 ## Dev TODO (Post-Audit)
 
 ### 🔴 P0 — Critical Path
-- [x] **SWE-bench evaluation harness** — `test/swebench-harness.mjs`: 3 scenarios (config fix, test writing, regex fix) with pass/fail evaluation + category breakdown. Working with Ollama/qwen2.5:0.5b (1/3 pass) — needs larger model for full results
+- [x] **SWE-bench evaluation harness** — `test/swebench-harness.mjs`: 7 scenarios (config fix, test writing, regex fix, import fix, middleware fixes) with pass/fail evaluation + category breakdown. Auto-default ke OpenCode Free (no auth). LLM_OFF=true untuk mock.
 - [x] **EvoClaw continuous test with LLM** — 36/36 passed dengan `qwen2.5:0.5b` via Ollama 🎉
 - [x] **EvoClaw scoring system** — `test/e2e-scenario.mjs` sekarang punya composite score 4 dimensi (taskSuccess 40%, contextDrift 20%, errorRecovery 20%, multiAgent 20%). Target >55% per paper. Mock: 100%.
+- [x] **Test LLM auto-detect** — `swebench-harness.mjs` & `e2e-llm.mjs` otomatis pake OpenCode Free endpoint (https://opencode.ai/zen/v1) tanpa API key. Cukup `node test/swebench-harness.mjs`.
 - [ ] **NPM publish** — `npm publish` biar install via `opencode plugin opencode-agentic-engine`
 
 ### 🟡 P1 — Perbaikan Langsung

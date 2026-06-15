@@ -8,12 +8,13 @@ Plugin OpenCode yang mengimplementasikan agentic software engineering workflow b
 
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
-node test/run.mjs   # 99 unit tests (mock, no LLM needed)
+node test/run.mjs   # 489 unit tests (mock, no LLM needed)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
 node test/e2e-scenario.mjs # EvoClaw: 50-file codebase, 5 iterations
-node test/swebench-harness.mjs # SWE-bench: 3 scenarios (mock mode)
-OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_MODEL=qwen2.5:0.5b node test/swebench-harness.mjs # SWE-bench with LLM
+node test/swebench-harness.mjs # SWE-bench: 7 scenarios (auto: OpenCode Free)
+LLM_OFF=true node test/swebench-harness.mjs # SWE-bench mock mode (no LLM)
+node test/e2e-llm.mjs       # LLM E2E: 19 tests (auto: OpenCode Free)
 ./test-container.sh # Full Docker pipeline (7 layers)
 ```
 
@@ -21,7 +22,7 @@ OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_MODEL=qwen2.5:0.5b node test/sw
 
 ```
 src/
-├── index.ts               # Plugin entry: registers 20 tools + hooks
+├── index.ts               # Plugin entry: registers 21 tools + hooks
 ├── core/
 │   ├── intent-parser.ts    # Parses user intent → Plan structure
 │   ├── planner.ts          # Auto-decompose (create/fix/refactor/test templates)
@@ -47,10 +48,13 @@ src/
 │   ├── skill-format.ts      # Self-describing agentic-skill/v1 schema
 │   ├── episodic-store.ts    # Cross-session memory with versioned schema
 │   └── schema-version.ts    # Memory schema envelope + migration system
+├── evaluation/
+│   └── live-evaluator.ts   # 5-dimensi real-time scoring dari tool hooks
 └── observability/
     ├── trace-logger.ts      # JSONL trace writer (buffered, auto-flush)
     └── dashboard.ts         # Timeline + stats + anomaly detection
 ```
+Note: `memory/skill-training.ts` juga ada — konversi skill → training data (JSONL/instructions).
 
 ## 21 Tools
 
@@ -96,7 +100,8 @@ src/
 3. **LLM E2E** (`test/e2e-llm.mjs`): Tests LLM-dependent features (auto-decompose, delegation, auto-loop). Skips gracefully if no LLM endpoint available.
 4. **EvoClaw** (`test/e2e-scenario.mjs`): 50-file codebase, 5 iterations, 3-agent parallel
 
-All tests are LLM-free — they pass hardcoded results to `agentic_execute`.
+All unit tests (`test/run.mjs`) are LLM-free — they pass hardcoded results to `agentic_execute`.
+LLM-dependent tests (`e2e-llm.mjs`, `swebench-harness.mjs`) auto-detect OpenCode Free (no API key needed).
 
 ## When Adding Features
 
