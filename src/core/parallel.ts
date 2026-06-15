@@ -1,4 +1,8 @@
 import type { Subtask } from "./intent-parser.js"
+import type { LLMEngine } from "./llm.js"
+import { execFileSync } from "node:child_process"
+import { writeFileSync, mkdirSync, existsSync } from "node:fs"
+import { join, dirname } from "node:path"
 
 export interface ParallelPlan {
   phases: Phase[]
@@ -20,6 +24,28 @@ export interface ParallelExecutionResult {
 }
 
 export type StepRunner = (step: Subtask) => Promise<ParallelExecutionResult>
+
+export interface LLMStepRunnerOptions {
+  llmEngine: LLMEngine
+  projectDir: string
+  planGoal: string
+  sessionId: string
+  opencodePath?: string
+  verbose?: boolean
+}
+
+export interface ConcurrentExecutionReport {
+  phaseResults: Array<{
+    phaseIndex: number
+    steps: Array<{ id: string; description: string }>
+    results: ParallelExecutionResult[]
+  }>
+  totalSteps: number
+  completedSteps: number
+  failedSteps: number
+  totalDurationMs: number
+  summary: string
+}
 
 export class ParallelExecutor {
   analyzeParallelism(subtasks: Subtask[]): ParallelPlan {
@@ -153,5 +179,96 @@ export class ParallelExecutor {
     }
 
     return conflicts
+  }
+
+  llmStepRunner(opts: LLMStepRunnerOptions): StepRunner {
+    return async (step: Subtask): Promise<ParallelExecutionResult> => {
+      const startTime = Date.now()
+      try {
+        const resp = await opts.llmEngine.call({
+          systemPrompt: `You are an autonomous software engineer implementing a step of a larger plan. Generate implementation as JSON with:
+- "files": [{ "path": "relative/file/path", "content": "file content" }]
+- "summary": "what was done"
+Only include files that need changing. Return ONLY valid JSON.` + opts.llmEngine.getMemoryContext(step.description),
+          userPrompt: `Goal: ${opts.planGoal}\nStep (${step.id}): ${step.description}\nDir: ${opts.projectDir}\nComplete the step.`,
+          jsonMode: true,
+          temperature: 0.3,
+        })
+
+        let impl: { files?: Array<{ path: string; content: string }>; summary?: string }
+        try { impl = JSON.parse(resp.content) } catch {
+          return { stepId: step.id, success: false, error: "LLM JSON parse error", output: resp.content, filesModified: [] }
+        }
+
+        const files: string[] = []
+        for (const file of impl.files ?? []) {
+          const fullPath = join(opts.projectDir, file.path)
+          mkdirSync(dirname(fullPath), { recursive: true })
+          writeFileSync(fullPath, file.content, "utf-8")
+          files.push(file.path)
+        }
+
+        return {
+          stepId: step.id,
+          success: true,
+          output: impl.summary ?? step.description,
+          filesModified: files,
+        }
+      } catch (e) {
+        return { stepId: step.id, success: false, error: (e as Error).message, output: "", filesModified: [] }
+      }
+    }
+  }
+
+  async executePlanConcurrently(
+    plan: ParallelPlan,
+    stepRunner: StepRunner,
+    abortOnFailure = false,
+  ): Promise<{ results: ParallelExecutionResult[]; durationMs: number }> {
+    const startTime = Date.now()
+    const results = await this.executeAll(plan, stepRunner, abortOnFailure)
+    return { results, durationMs: Date.now() - startTime }
+  }
+
+  async executeWithSubprocessSpawn(
+    step: Subtask,
+    opencodePath: string,
+    projectDir: string,
+    sessionId: string,
+  ): Promise<ParallelExecutionResult> {
+    try {
+      if (!existsSync(opencodePath)) {
+        return { stepId: step.id, success: false, error: `opencode not found at ${opencodePath}`, output: "", filesModified: [] }
+      }
+
+      const taskJson = JSON.stringify({
+        goal: `Implement: ${step.description}`,
+        sessionId,
+        constraints: [],
+      })
+
+      const result = execFileSync(opencodePath, ["eval", "--json", taskJson], {
+        cwd: projectDir,
+        encoding: "utf-8",
+        timeout: 120000,
+        maxBuffer: 10 * 1024 * 1024,
+        stdio: ["pipe", "pipe", "pipe"],
+      })
+
+      return {
+        stepId: step.id,
+        success: true,
+        output: result.trim(),
+        filesModified: [],
+      }
+    } catch (e) {
+      return {
+        stepId: step.id,
+        success: false,
+        error: (e as Error).message,
+        output: "",
+        filesModified: [],
+      }
+    }
   }
 }

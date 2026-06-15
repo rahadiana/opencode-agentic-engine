@@ -30,8 +30,11 @@ export class RoleRegistry {
 3. Interface contracts between components
 4. Trade-offs and risks
 
+If this requires sub-tasks, delegate to developers via agentic_delegate — they will implement each module.
+After ALL work (yours and any sub-agents) is done, extract a reusable skill via agentic_skill with action "extract" and the completed task IDs as query so future sessions can reuse this pattern.
+
 Be concise. Focus on structure, not implementation details.`,
-      tools: ["read", "grep", "glob", "agentic_nav", "agentic_score"],
+      tools: ["read", "grep", "glob", "agentic_nav", "agentic_score", "agentic_delegate", "agentic_skill"],
     })
 
     this.builtIn.set("developer", {
@@ -42,9 +45,10 @@ Be concise. Focus on structure, not implementation details.`,
 2. Write unit tests for all new code
 3. Follow the project's conventions (naming, imports, types)
 4. Report exactly which files you changed and why
+5. After completing, call agentic_skill with action "extract" and the task ID to save a reusable skill
 
 Prioritize correctness and readability. Don't over-engineer.`,
-      tools: ["read", "edit", "write", "bash", "glob", "grep"],
+      tools: ["read", "edit", "write", "bash", "glob", "grep", "agentic_skill"],
     })
 
     this.builtIn.set("qa", {
@@ -55,9 +59,10 @@ Prioritize correctness and readability. Don't over-engineer.`,
 2. Verify tests actually test the right behavior
 3. Check for regressions in related files
 4. Report any issues with clear reproduction steps
+5. After passing all checks, call agentic_skill with action "extract" and the task ID to save a reusable skill
 
 Be thorough. Every edge case matters.`,
-      tools: ["read", "glob", "grep", "bash", "agentic_verify"],
+      tools: ["read", "glob", "grep", "bash", "agentic_verify", "agentic_skill"],
     })
 
     this.builtIn.set("coordinator", {
@@ -67,10 +72,11 @@ Be thorough. Every edge case matters.`,
 1. Decompose into tasks and assign to the right agents
 2. Track progress and resolve blockers
 3. Ensure quality gates are met
-4. Report status to the user
+4. After all sub-tasks complete, call agentic_skill action "extract" with task IDs to save the workflow as a reusable skill
+5. Report status to the user
 
 Think like a tech lead. Prioritize, delegate, verify.`,
-      tools: ["agentic_plan", "agentic_delegate", "agentic_status", "agentic_pr"],
+      tools: ["agentic_plan", "agentic_delegate", "agentic_status", "agentic_pr", "agentic_skill"],
     })
 
     this.builtIn.set("pm", {

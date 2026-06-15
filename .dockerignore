@@ -5,3 +5,4 @@ dist
 logs
 *.md
 !README.md
+!agentic-agent-prompt.md

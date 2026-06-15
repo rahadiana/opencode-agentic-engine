@@ -32,6 +32,7 @@ import { LLMEngine } from "./core/llm.js"
 import { AgentLoop } from "./core/agent-loop.js"
 import { PersistenceLayer } from "./memory/persistence.js"
 import { VectorStore } from "./memory/vector-store.js"
+import { LocalEmbedder } from "./memory/local-embedder.js"
 
 const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<Plugin>[1]) => {
   const intentParser = new IntentParser()
@@ -66,10 +67,14 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
     searchEpisodes: (query: string) => episodicStore.search(query),
     findSkills: (query: string) => skillStore.find(query).map(s => ({ name: s.definition.meta.name, successRate: s.successRate })),
   })
-  const agentLoop = new AgentLoop(llmEngine)
+  const agentLoop = new AgentLoop(llmEngine, { maxIterations: 10, autoRetry: true, maxRetries: 2, verifyAfterEach: false })
   const persistence = new PersistenceLayer(input.worktree)
   const vectorStore = new VectorStore()
   vectorStore.setLLM(llmEngine)
+  const localEmbedder = new LocalEmbedder()
+  localEmbedder.init().then(() => {
+    vectorStore.setEmbedder(localEmbedder)
+  }).catch(() => { /* embedder init failed — falling back to sparse-only */ })
 
   contextCompressor.setLLM(llmEngine)
   verifier.detectLanguage(input.worktree)
@@ -1274,8 +1279,12 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
       }),
 
       agentic_parallel: tool({
-        description: "Analyze the current plan for parallel execution opportunities. Identifies which steps can run concurrently and detects potential file conflicts. Use to speed up multi-step workflows.",
-        args: {},
+        description: "Analyze or execute steps concurrently. Use `analyze` to see parallelism opportunities, or `execute` to run ready steps in parallel with Promise.all. Supports LLM-driven execution and sub-process OpenCode spawn.",
+        args: {
+          action: tool.schema.enum(["analyze", "execute"]).optional().describe("'analyze' (default) shows parallelism plan; 'execute' runs ready steps concurrently"),
+          opencodePath: tool.schema.string().optional().describe("Path to `opencode` binary for sub-process spawn (execute mode)"),
+          abortOnFailure: tool.schema.boolean().optional().describe("Stop all tasks in phase if one fails (default: false)"),
+        },
         async execute(args, context) {
           const session = sessionStore.getOrCreate(context.sessionID)
           if (!session.plan) return { output: "No plan found. Create one with `agentic_plan` first." }
@@ -1284,6 +1293,72 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
           const completed = executor.getCompletedSteps(context.sessionID)
           const plan = parallelExec.analyzeParallelism(subtasks)
 
+          if (args.action === "execute") {
+            const readySteps = subtasks.filter(s =>
+              !completed.includes(s.id) &&
+              s.dependsOn.every(d => completed.includes(d))
+            )
+            if (readySteps.length === 0) {
+              return { output: "No ready steps to execute. All steps are either completed or blocked by dependencies." }
+            }
+
+            const cwd = ctxDir(context)
+
+            let stepRunner: import("./core/parallel.js").StepRunner
+            if (args.opencodePath) {
+              stepRunner = (step) => parallelExec.executeWithSubprocessSpawn(step, args.opencodePath!, cwd, context.sessionID)
+            } else {
+              stepRunner = parallelExec.llmStepRunner({
+                llmEngine,
+                projectDir: cwd,
+                planGoal: session.plan.intent.goal,
+                sessionId: context.sessionID,
+              })
+            }
+
+            const { results, durationMs } = await parallelExec.executePlanConcurrently(
+              plan, stepRunner, args.abortOnFailure ?? false,
+            )
+
+            for (const r of results) {
+              executor.recordResult(context.sessionID, {
+                stepId: r.stepId,
+                success: r.success,
+                output: r.output ?? "",
+                filesModified: r.filesModified,
+                error: r.error,
+              })
+            }
+
+            traceLogger.log({
+              step: "parallel:execute",
+              input: `${readySteps.length} steps`,
+              output: `${results.filter(r => r.success).length}/${results.length} passed`,
+              toolUsed: "agentic_parallel",
+              success: results.every(r => r.success),
+              durationMs,
+              metadata: { total: results.length, passed: results.filter(r => r.success).length },
+            })
+
+            let output = `## ⚡ Parallel Execution Complete (${(durationMs / 1000).toFixed(1)}s)\n\n`
+            output += `**Steps executed:** ${readySteps.length}\n`
+            output += `**Passed:** ${results.filter(r => r.success).length}\n`
+            output += `**Failed:** ${results.filter(r => !r.success).length}\n\n`
+
+            for (const r of results) {
+              const icon = r.success ? "✅" : "❌"
+              output += `${icon} **${r.stepId}** — ${r.output?.slice(0, 120) ?? "no output"}\n`
+              if (r.error) output += `   Error: ${r.error.slice(0, 200)}\n`
+            }
+
+            const progress = executor.getProgress(context.sessionID)
+            output += `\n### Overall Progress\n`
+            output += `✅ ${progress.completed}/${progress.total} | ❌ ${progress.failed} | ⏳ ${progress.total - progress.completed - progress.failed}`
+
+            return { output, metadata: { results, durationMs } }
+          }
+
+          // Analyze mode (default)
           let output = `## ⚡ Parallel Execution Plan\n\n`
           output += `**Max parallelism:** ${plan.maxParallelism}\n`
           output += `**Phases:** ${plan.phases.length}\n\n`
@@ -1297,7 +1372,6 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
           const suggestions = parallelExec.suggestParallelTasks(subtasks, completed)
           if (suggestions.length > 1) {
             output += `\n### Currently Runnable\n`
-            // Group by parallel group
             const groups = new Map<number, string[]>()
             for (const s of suggestions) {
               const list = groups.get(s.parallelGroup) ?? []
@@ -1308,9 +1382,9 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
               const label = tasks.length > 1 ? `🟢 Parallel group ${group}` : `🟡 Sequential`
               output += `- **${label}**: ${tasks.map(t => `\`${t}\``).join(", ")}\n`
             }
+            output += `\nRun \`agentic_parallel\` with \`action: "execute"\` to run these steps concurrently.`
           }
 
-          // Detect conflicts
           const allFiles = new Map<string, string[]>()
           for (const step of subtasks) {
             const stepState = executor.getStepState(context.sessionID, step.id)
@@ -1682,33 +1756,74 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
           await navigator.scan(projectDir)
           const summary = navigator.getSummary()
 
-          // 2. LLM-driven plan
-          const intent = await planner.decomposeWithLLM(llmEngine, args.goal, summary)
+          // 2. LLM-driven plan (fallback to template if LLM returns empty)
+          let subtasks: Subtask[] = []
+          try {
+            const intent = await planner.decomposeWithLLM(llmEngine, args.goal, summary)
+            if (intent.subtasks.length > 0) subtasks = intent.subtasks
+          } catch { /* fall through */ }
+          if (subtasks.length === 0) {
+            const template = planner.decompose(args.goal, [])
+            if (template.autoGenerated) subtasks = template.intent.subtasks
+          }
+          if (subtasks.length === 0) {
+            subtasks = [
+              { id: "step-1", description: args.goal, dependsOn: [], verificationCriteria: ["All code compiles", "Logic is correct"] },
+            ]
+          }
+          if (subtasks.length === 0) {
+            return {
+              output: `## 🤖 Autonomous Agent Report\n\n**Goal:** ${args.goal}\n**Result:** 0/0 steps — could not decompose into subtasks. Try rephrasing the goal or using \`agentic_plan\` manually.`,
+              metadata: { result: { completedSteps: [], failedSteps: [], totalIterations: 0, success: false, summary: "Planning failed: no subtasks generated" } },
+            }
+          }
+
           const plan = intentParser.createPlan({
             goal: args.goal,
             constraints: args.constraints ?? [],
             context: { relevantFiles: [], dependencies: [] },
-            subtasks: intent.subtasks,
+            subtasks,
           })
           executor.initExecution(context.sessionID, plan)
 
           // 3. Execute steps via AgentLoop.runLoop()
+          const parseStepOutput = (content: string): { files?: Array<{ path: string; content: string }>; summary?: string } => {
+            const cleaned = content.trim()
+            try {
+              const parsed = JSON.parse(cleaned)
+              if (parsed && typeof parsed === "object") return parsed
+            } catch { /* try next */ }
+            const jsonBlock = cleaned.match(/```(?:json)?\s*\n?(\{[\s\S]*?\})\s*\n?```/)
+            if (jsonBlock) {
+              try { return JSON.parse(jsonBlock[1]) } catch { /* try next */ }
+            }
+            const jsonMatch = cleaned.match(/\{[\s\S]*?"files"[\s\S]*?"summary"[\s\S]*?\}/)
+            if (jsonMatch) {
+              try {
+                const p = JSON.parse(jsonMatch[0])
+                if (Array.isArray(p.files) || p.summary) return p
+              } catch { /* try next */ }
+            }
+            return { files: [], summary: cleaned.replace(/```[\s\S]*?```/g, "").slice(0, 200).trim() }
+          }
+
           const stepExecutor = async (step: Subtask) => {
             const stepsSoFar = executor.getCompletedSteps(context.sessionID)
+            const prevState = executor.getStepState(context.sessionID, step.id)
+            const retryNote = prevState?.retryCount && prevState.retryCount > 0
+              ? `\nPREVIOUS ATTEMPT FAILED (retry #${prevState.retryCount}/3). Errors:\n${(prevState.errorHistory || []).map(e => `- ${e.error}`).join("\n")}`
+              : ""
             const resp = await llmEngine.call({
               systemPrompt: `You are an autonomous software engineer implementing a step of a larger plan. Generate implementation as JSON with:
 - "files": [{ "path": "relative/file/path", "content": "file content" }]
 - "summary": "what was done"
 Only include files that need changing. Return ONLY valid JSON.` + llmEngine.getMemoryContext(step.description),
-              userPrompt: `Goal: ${args.goal}\nStep (${step.id}): ${step.description}\nDir: ${projectDir}\nCompleted steps: ${stepsSoFar.join(", ") || "none"}`,
-              jsonMode: true,
-              temperature: 0.3,
+              userPrompt: `Goal: ${args.goal}\nStep (${step.id}): ${step.description}\nDir: ${projectDir}\nCompleted steps: ${stepsSoFar.join(", ") || "none"}${retryNote}`,
+              jsonMode: false,
+              temperature: prevState?.retryCount ? 0.4 : 0.3,
             })
 
-            let impl: { files?: Array<{ path: string; content: string }>; summary?: string }
-            try { impl = JSON.parse(resp.content) } catch {
-              return { success: false, output: "LLM response not valid JSON", filesModified: [], error: "Parse error" }
-            }
+            const impl = parseStepOutput(resp.content)
 
             const files: string[] = []
             for (const file of impl.files ?? []) {
@@ -1748,7 +1863,18 @@ Only include files that need changing. Return ONLY valid JSON.` + llmEngine.getM
             allFiles,
           )
 
-          // 5. Report
+          // 5. Auto-extract skill if successful
+          if (result.success && result.completedSteps.length > 0) {
+            const skillResult = await skillStore.extract({
+              role: "tool",
+              content: `✅ Successfully completed: ${args.goal}\nSteps completed: ${result.completedSteps.join(", ")}\nSummary: ${result.summary}`,
+            }, [args.goal, ...(args.constraints ?? [])])
+            if (skillResult) {
+              persistence.save("skills", skillResult.definition.meta.id, skillResult.definition)
+            }
+          }
+
+          // 6. Report
           const totalSteps = result.completedSteps.length + result.failedSteps.length
           let report = `## 🤖 Autonomous Agent Report\n\n`
           report += `**Goal:** ${args.goal}\n`

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TELEGRAM_BOT_TOKEN="8726183460:AAFkcRxiIzsye4nIGSCz9kQx6QkZZohmWQY"
-TELEGRAM_CHAT_ID="336238760"
+TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
+TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
 TUNNEL_LOG="/tmp/cloudflared.log"
 OPECODE_URL="${OPENCODE_URL:-http://opencode:4096}"
 
@@ -12,7 +12,7 @@ TUNNEL_PID=$!
 
 # Wait for tunnel URL
 for i in $(seq 1 30); do
-    TUNNEL_URL=$(grep -oP 'https://\S+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1 || true)
+    TUNNEL_URL=$(grep -oE 'https://[a-zA-Z0-9.-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1 || true)
     if [ -n "$TUNNEL_URL" ]; then
         echo "Tunnel URL: $TUNNEL_URL"
 
@@ -29,12 +29,15 @@ for i in $(seq 1 30); do
 
         MESSAGE="🟢 OpenCode Agentic Engine is live!%0A%0A📡 Web: $TUNNEL_URL%0A🔌 Internal: ${OPECODE_URL}%0A📦 Plugin: opencode-agentic-engine v0.1.0%0A⏰ $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
 
-        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -H "Content-Type: application/json" \
-            -d "{\"chat_id\":\"${TELEGRAM_CHAT_ID}\",\"text\":\"${MESSAGE}\",\"parse_mode\":\"HTML\"}"
-
-        echo ""
-        echo "Telegram notification sent!"
+        if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+                -H "Content-Type: application/json" \
+                -d "{\"chat_id\":\"${TELEGRAM_CHAT_ID}\",\"text\":\"${MESSAGE}\",\"parse_mode\":\"HTML\"}"
+            echo ""
+            echo "Telegram notification sent!"
+        else
+            echo "TELEGRAM_BOT_TOKEN not set — skipping notification"
+        fi
 
         # Keep container alive until cloudflared exits
         wait "$TUNNEL_PID"

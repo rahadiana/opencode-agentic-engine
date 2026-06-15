@@ -152,31 +152,24 @@ export class AgentLoop {
   ): Promise<boolean> {
     try {
       const llmAnalysis = await this.llm.analyzeError(error, [])
-      if (llmAnalysis.category !== "unknown" && llmAnalysis.fix) {
+      if (llmAnalysis && llmAnalysis.category !== "unknown" && llmAnalysis.fix && llmAnalysis.fix !== "Manual investigation needed") {
+        // If a fixExecutor is provided, try it. If it fails, still retry (the step executor
+        // will get another chance with the error context).
         if (fixExecutor) {
-          return await fixExecutor(llmAnalysis.fix)
+          const fixed = await fixExecutor(llmAnalysis.fix).catch(() => false)
+          if (fixed) return true
         }
-        return true
+        return true // retry step execution even if bash fix failed
       }
     } catch {
       // LLM repair failed, but we can still try basic fixes
     }
 
-    switch (analysis.category) {
-      case "import":
-      case "compile":
-      case "type":
-        if (fixExecutor) {
-          try {
-            const llmAnalysis = await this.llm.analyzeError(error, [])
-            if (llmAnalysis.fix) {
-              return await fixExecutor(llmAnalysis.fix)
-            }
-          } catch {}
-        }
-        return false
-      default:
-        return false
+    // Compile/type/import errors are generally retryable - the step executor
+    // will try again with the error signal
+    if (analysis && (analysis.category === "import" || analysis.category === "compile" || analysis.category === "type")) {
+      return true
     }
+    return true // always allow retry for non-fatal errors
   }
 }

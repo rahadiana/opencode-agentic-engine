@@ -117,16 +117,19 @@ export class Planner {
 
   async decomposeWithLLM(llm: LLMEngine, goal: string, codebaseSummary: string): Promise<TaskIntent> {
     const llmPlan = await llm.generatePlan(goal, [], codebaseSummary)
+    const subtasks = Array.isArray(llmPlan.steps)
+      ? llmPlan.steps.map(s => ({
+          id: s.id,
+          description: s.description,
+          dependsOn: s.dependsOn ?? [],
+          verificationCriteria: [],
+        }))
+      : []
     const intent: TaskIntent = {
       goal,
       constraints: [],
       context: { relevantFiles: [], dependencies: [] },
-      subtasks: llmPlan.steps.map(s => ({
-        id: s.id,
-        description: s.description,
-        dependsOn: s.dependsOn ?? [],
-        verificationCriteria: [],
-      })),
+      subtasks,
     }
     return intent
   }

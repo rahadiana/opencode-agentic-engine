@@ -1,4 +1,5 @@
 import type { LLMEngine } from "../core/llm.js"
+import type { LocalEmbedder } from "./local-embedder.js"
 
 export type DocumentType = "episode" | "skill" | "file" | "code"
 
@@ -15,6 +16,8 @@ export interface SearchResult {
   metadata: DocumentMeta
   score: number
 }
+
+export type SearchMode = "sparse" | "dense" | "hybrid" | "llm-rerank"
 
 const STOP_WORDS = new Set([
   "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
@@ -39,6 +42,7 @@ interface VectorEntry {
   metadata: DocumentMeta
   tfidf: Map<string, number>
   norm: number
+  dense?: Float32Array
 }
 
 export class VectorStore {
@@ -48,9 +52,42 @@ export class VectorStore {
   private maxCacheSize = 100
   private llmEngine: LLMEngine | null = null
   private semanticCache: Map<string, SearchResult[]> = new Map()
+  private embedder: LocalEmbedder | null = null
+  private embedQueue: Array<{ id: string; content: string }> = []
+  private embedProcessing = false
 
   setLLM(llm: LLMEngine): void {
     this.llmEngine = llm
+  }
+
+  setEmbedder(embedder: LocalEmbedder): void {
+    this.embedder = embedder
+  }
+
+  private queueDenseEmbed(id: string, content: string): void {
+    if (!this.embedder) return
+    this.embedQueue.push({ id, content })
+    this.processEmbedQueue()
+  }
+
+  private async processEmbedQueue(): Promise<void> {
+    if (this.embedProcessing || !this.embedder) return
+    this.embedProcessing = true
+
+    while (this.embedQueue.length > 0) {
+      const batch = this.embedQueue.splice(0, 5)
+      await Promise.all(batch.map(async ({ id, content }) => {
+        try {
+          const vec = await this.embedder!.embed(content)
+          if (vec) {
+            const doc = this.documents.get(id)
+            if (doc) doc.dense = vec
+          }
+        } catch { /* skip failed embeddings */ }
+      }))
+    }
+
+    this.embedProcessing = false
   }
 
   addDocument(id: string, content: string, metadata: DocumentMeta): void {
@@ -92,15 +129,48 @@ export class VectorStore {
 
     this.searchCache.clear()
     this.semanticCache.clear()
+
+    this.queueDenseEmbed(id, content)
   }
 
   search(query: string, topK = 5): SearchResult[] {
-    const cacheKey = `${query}::${topK}`
+    return this.sparseSearch(query, topK)
+  }
+
+  async searchWithMode(query: string, topK = 5, mode: SearchMode = "hybrid"): Promise<SearchResult[]> {
+    const cacheKey = `${mode}::${query}::${topK}`
     const cached = this.searchCache.get(cacheKey)
     if (cached) return cached
 
+    if (this.documents.size === 0) return []
+
+    let results: SearchResult[]
+
+    switch (mode) {
+      case "dense":
+        results = await this.denseSearch(query, topK)
+        break
+      case "hybrid":
+        results = await this.hybridSearch(query, topK)
+        break
+      case "sparse":
+      default:
+        results = this.sparseSearch(query, topK)
+        break
+    }
+
+    if (this.searchCache.size >= this.maxCacheSize) {
+      const firstKey = this.searchCache.keys().next().value
+      if (firstKey !== undefined) this.searchCache.delete(firstKey)
+    }
+    this.searchCache.set(cacheKey, results)
+
+    return results
+  }
+
+  private sparseSearch(query: string, topK: number): SearchResult[] {
     const queryTokens = this.tokenize(query)
-    if (queryTokens.length === 0 || this.documents.size === 0) return []
+    if (queryTokens.length === 0) return []
 
     const queryTF = new Map<string, number>()
     for (const t of queryTokens) {
@@ -135,13 +205,73 @@ export class VectorStore {
     }
 
     scores.sort((a, b) => b.score - a.score)
-    const results = scores.slice(0, topK)
+    return scores.slice(0, topK)
+  }
 
-    if (this.searchCache.size >= this.maxCacheSize) {
-      const firstKey = this.searchCache.keys().next().value
-      if (firstKey !== undefined) this.searchCache.delete(firstKey)
+  private async denseSearch(query: string, topK: number): Promise<SearchResult[]> {
+    if (!this.embedder || !this.embedder.ready) {
+      return this.sparseSearch(query, topK)
     }
-    this.searchCache.set(cacheKey, results)
+
+    const hasDense = [...this.documents.values()].some(d => d.dense)
+    if (!hasDense) return this.sparseSearch(query, topK)
+
+    const qVec = await this.embedder.embed(query)
+    if (!qVec) return this.sparseSearch(query, topK)
+
+    const results: SearchResult[] = []
+    for (const doc of this.documents.values()) {
+      if (!doc.dense) continue
+      let dot = 0, nA = 0, nB = 0
+      for (let i = 0; i < doc.dense.length; i++) {
+        const qv = qVec[i] ?? 0
+        const dv = doc.dense[i] ?? 0
+        dot += qv * dv
+        nA += qv * qv
+        nB += dv * dv
+      }
+      const sim = Math.sqrt(nA) * Math.sqrt(nB)
+      const score = sim === 0 ? 0 : dot / sim
+      if (score > 0.1) {
+        results.push({ id: doc.id, content: doc.content, metadata: { ...doc.metadata }, score })
+      }
+    }
+
+    results.sort((a, b) => b.score - a.score)
+    return results.slice(0, topK)
+  }
+
+  private async hybridSearch(query: string, topK: number): Promise<SearchResult[]> {
+    const [denseResults, sparseResults] = await Promise.all([
+      this.denseSearch(query, Math.max(topK * 3, 15)),
+      Promise.resolve(this.sparseSearch(query, Math.max(topK * 3, 15))),
+    ])
+
+    const combined = new Map<string, { sparseScore: number; denseScore: number; result: SearchResult }>()
+
+    const maxSparse = sparseResults[0]?.score ?? 1
+    for (const r of sparseResults) {
+      combined.set(r.id, { sparseScore: r.score / maxSparse, denseScore: 0, result: r })
+    }
+
+    const maxDense = denseResults[0]?.score ?? 1
+    for (const r of denseResults) {
+      const existing = combined.get(r.id)
+      if (existing) {
+        existing.denseScore = r.score / maxDense
+      } else {
+        combined.set(r.id, { sparseScore: 0, denseScore: r.score / maxDense, result: r })
+      }
+    }
+
+    const alpha = 0.6
+    const results = [...combined.values()]
+      .map(({ sparseScore, denseScore, result }) => ({
+        ...result,
+        score: alpha * sparseScore + (1 - alpha) * denseScore,
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, topK)
 
     return results
   }
@@ -152,18 +282,17 @@ export class VectorStore {
     const cached = this.semanticCache.get(`${query}::${topK}`)
     if (cached) return cached
 
-    // TF-IDF sparse vector cosine similarity retrieval
-    const tfidfResults = this.search(query, Math.max(topK * 2, 10))
+    const candidateCount = Math.max(topK * 2, 10)
+    const hybridResults = await this.hybridSearch(query, candidateCount)
 
-    if (tfidfResults.length <= topK || !this.llmEngine) {
-      const results = tfidfResults.slice(0, topK)
+    if (!this.llmEngine || hybridResults.length <= topK) {
+      const results = hybridResults.slice(0, topK)
       this.semanticCache.set(`${query}::${topK}`, results)
       return results
     }
 
-    // LLM rerank on top-K results
     try {
-      const docList = tfidfResults.map((r, i) => `[${i}] ${r.content.slice(0, 200)}`).join("\n")
+      const docList = hybridResults.map((r, i) => `[${i}] ${r.content.slice(0, 200)}`).join("\n")
       const resp = await this.llmEngine.call({
         systemPrompt: "You are a search relevance ranker. Given a query and a list of documents, rank the documents by relevance. Return ONLY a JSON array of document indices in descending relevance order (most relevant first), e.g. [3, 0, 7].",
         userPrompt: `Query: "${query}"\n\nDocuments:\n${docList}\n\nReturn indices sorted by relevance as JSON array.`,
@@ -177,20 +306,20 @@ export class VectorStore {
       const seen = new Set<number>()
 
       for (const idx of rankings) {
-        if (idx >= 0 && idx < tfidfResults.length && !seen.has(idx)) {
-          reranked.push({ ...tfidfResults[idx], score: 1 - reranked.length / rankings.length })
+        if (idx >= 0 && idx < hybridResults.length && !seen.has(idx)) {
+          reranked.push({ ...hybridResults[idx], score: 1 - reranked.length / rankings.length })
           seen.add(idx)
         }
       }
-      for (let i = 0; i < tfidfResults.length; i++) {
-        if (!seen.has(i)) reranked.push({ ...tfidfResults[i], score: 0.1 })
+      for (let i = 0; i < hybridResults.length; i++) {
+        if (!seen.has(i)) reranked.push({ ...hybridResults[i], score: 0.1 })
       }
 
       const results = reranked.slice(0, topK)
       this.semanticCache.set(`${query}::${topK}`, results)
       return results
     } catch {
-      const results = tfidfResults.slice(0, topK)
+      const results = hybridResults.slice(0, topK)
       this.semanticCache.set(`${query}::${topK}`, results)
       return results
     }

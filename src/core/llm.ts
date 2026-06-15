@@ -42,9 +42,9 @@ export class LLMEngine {
   constructor(config: Partial<LLMConfig> = {}) {
     this.config = {
       provider: config.provider ?? this.detectProvider(),
-      apiKey: config.apiKey,
-      baseURL: config.baseURL,
-      model: config.model,
+      apiKey: config.apiKey ?? process.env.OPENAI_API_KEY,
+      baseURL: config.baseURL ?? process.env.OPENAI_BASE_URL,
+      model: config.model ?? process.env.OPENAI_MODEL,
       maxTokens: config.maxTokens ?? 4096,
       temperature: config.temperature ?? 0.3,
     }
@@ -111,19 +111,34 @@ export class LLMEngine {
   }
 
   async decomposeTask(goal: string, context: string): Promise<string[]> {
-    const resp = await this.call({
-      systemPrompt: "You are a software task decomposer. Break down the given goal into sequential subtasks. Each subtask should be a single, concrete action. Return ONLY a JSON array of strings." + this.buildMemoryContext(goal),
-      userPrompt: `Goal: ${goal}\n\nContext:\n${context}\n\nBreak this down into 3-7 sequential subtasks. Return as JSON array of strings.`,
-      jsonMode: true,
-      temperature: 0.2,
-    })
     try {
-      const parsed = JSON.parse(resp.content)
-      return Array.isArray(parsed) ? parsed : []
-    } catch {
-      const lines = resp.content.match(/["'](.+?)["']/g)
-      return (lines ?? []).map(l => l.replace(/['"]/g, ""))
-    }
+      const resp = await this.call({
+        systemPrompt: "You are a software task decomposer. Break down the given goal into sequential subtasks. Each subtask should be a single, concrete action. Return as JSON array of strings." + this.buildMemoryContext(goal),
+        userPrompt: `Goal: ${goal}\n\nContext:\n${context}\n\nBreak this down into 3-7 sequential subtasks. Return JSON array of strings.`,
+        jsonMode: false,
+        temperature: 0.2,
+      })
+
+      const cleaned = resp.content.trim()
+      try {
+        const parsed = JSON.parse(cleaned)
+        if (Array.isArray(parsed)) return parsed
+        if (parsed.subtasks && Array.isArray(parsed.subtasks)) return parsed.subtasks
+        if (parsed.steps && Array.isArray(parsed.steps)) return parsed.steps
+      } catch { /* try extraction */ }
+
+      const codeBlock = cleaned.match(/```(?:json)?\s*\n?(\[[\s\S]*?\])\s*\n?```/)
+      if (codeBlock) {
+        try { const arr = JSON.parse(codeBlock[1]); if (Array.isArray(arr)) return arr } catch {}
+      }
+
+      const arrMatch = cleaned.match(/\[[\s\S]*?\]/)
+      if (arrMatch) {
+        try { const arr = JSON.parse(arrMatch[0]); if (Array.isArray(arr)) return arr } catch {}
+      }
+    } catch { /* fall through */ }
+
+    return []
   }
 
   async summarizeContext(planGoal: string, turns: string[]): Promise<string> {
@@ -141,34 +156,87 @@ export class LLMEngine {
     rootCause: string
     fix: string
   }> {
-    const resp = await this.call({
-      systemPrompt: "You are an error analyst. Given an error message and list of recently modified files, determine: the error category (compile/type/test/import/runtime), the likely root cause, and a specific fix suggestion. Return as JSON with keys: category, rootCause, fix." + this.buildMemoryContext(errorText),
-      userPrompt: `Error:\n${errorText}\n\nRecently modified files:\n${modifiedFiles.join("\n")}\n\nAnalyze and return JSON.`,
-      jsonMode: true,
-      temperature: 0.2,
-    })
     try {
-      return JSON.parse(resp.content)
-    } catch {
-      return { category: "unknown", rootCause: "Unable to analyze", fix: "Manual investigation needed" }
+      const resp = await this.call({
+        systemPrompt: "You are an error analyst. Given an error message and list of recently modified files, determine: the error category (compile/type/test/import/runtime), the likely root cause, and a specific fix suggestion. Return as JSON with keys: category, rootCause, fix." + this.buildMemoryContext(errorText),
+        userPrompt: `Error:\n${errorText}\n\nRecently modified files:\n${modifiedFiles.join("\n")}\n\nAnalyze and return JSON.`,
+        jsonMode: false,
+        temperature: 0.2,
+      })
+
+      const cleaned = resp.content.trim()
+      try {
+        const parsed = JSON.parse(cleaned)
+        if (parsed.category || parsed.rootCause) return parsed
+      } catch { /* try extraction */ }
+
+      const codeBlock = cleaned.match(/```(?:json)?\s*\n?(\{[\s\S]*?\})\s*\n?```/)
+      if (codeBlock) {
+        try {
+          const parsed = JSON.parse(codeBlock[1])
+          if (parsed.category) return parsed
+        } catch { /* try next */ }
+      }
+
+      const jsonMatch = cleaned.match(/\{[\s\S]*?"category"[\s\S]*?"rootCause"[\s\S]*?"fix"[\s\S]*?\}/)
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[0])
+          if (parsed.category) return parsed
+        } catch { /* fall through */ }
+      }
+    } catch { /* fall through */ }
+
+    return { category: "unknown", rootCause: "Unable to analyze", fix: "Manual investigation needed" }
+  }
+
+  private extractJSON<T>(content: string, requiredKey?: string): T | null {
+    const cleaned = content.trim()
+    try {
+      const parsed = JSON.parse(cleaned)
+      if (!requiredKey || (parsed && typeof parsed === "object" && requiredKey in parsed)) return parsed as T
+    } catch { /* try next */ }
+    const codeBlock = cleaned.match(/```(?:json)?\s*\n?(\{[\s\S]*?\})\s*\n?```/)
+    if (codeBlock) {
+      try {
+        const parsed = JSON.parse(codeBlock[1])
+        if (!requiredKey || (parsed && typeof parsed === "object" && requiredKey in parsed)) return parsed as T
+      } catch { /* try next */ }
     }
+    if (requiredKey) {
+      const loose = cleaned.match(new RegExp(`\\{[\s\S]*?"${requiredKey}"[\\s\\S]*?\\}`))
+      if (loose) {
+        try {
+          const parsed = JSON.parse(loose[0])
+          if (requiredKey in parsed) return parsed as T
+        } catch { /* try next */ }
+      }
+      const arrMatch = cleaned.match(/\[[\s\S]*?\]/)
+      if (requiredKey === "steps" && arrMatch) {
+        try {
+          const arr = JSON.parse(arrMatch[0])
+          if (Array.isArray(arr)) return { steps: arr, complexity: "medium" } as unknown as T
+        } catch { /* fall through */ }
+      }
+    }
+    return null
   }
 
   async generatePlan(goal: string, constraints: string[], codebaseSummary: string): Promise<{
     steps: Array<{ id: string; description: string; dependsOn: string[] }>
     complexity: string
   }> {
-    const resp = await this.call({
-      systemPrompt: "You are a software planning assistant. Given a goal, constraints, and codebase summary, generate a structured execution plan. Return as JSON with \"steps\" (array of {id, description, dependsOn}) and \"complexity\" (\"low\"/\"medium\"/\"high\"). Steps should have sequential IDs like \"step-1\", \"step-2\". The dependsOn array should reference earlier step IDs." + this.buildMemoryContext(goal),
-      userPrompt: `Goal: ${goal}\nConstraints: ${constraints.join(", ")}\nCodebase: ${codebaseSummary}\n\nGenerate a plan as JSON.`,
-      jsonMode: true,
-      temperature: 0.3,
-    })
     try {
-      return JSON.parse(resp.content)
-    } catch {
-      return { steps: [], complexity: "low" }
-    }
+      const resp = await this.call({
+        systemPrompt: `You are a software planning assistant. Generate a plan as JSON with "steps" (array of {id, description, dependsOn}) and "complexity" ("low"/"medium"/"high"). Steps IDs like "step-1", "step-2".` + this.buildMemoryContext(goal),
+        userPrompt: `Goal: ${goal}\nCodebase: ${codebaseSummary}\n\nGenerate plan JSON.`,
+        jsonMode: false,
+        temperature: 0.3,
+      })
+      const parsed = this.extractJSON<{ steps: Array<{ id: string; description: string; dependsOn: string[] }>; complexity: string }>(resp.content, "steps")
+      if (parsed && Array.isArray(parsed.steps) && parsed.steps.length > 0) return parsed
+    } catch { /* fall through */ }
+    return { steps: [], complexity: "low" }
   }
 
   async reviewCode(goal: string, files: Record<string, string>): Promise<string[]> {

@@ -12,6 +12,7 @@ export interface AgentTask {
   sharedContext?: string
   validatedBy?: string[]
   pipelineRunId?: string
+  delegationDepth?: number
 }
 
 export interface SharedMemoryEntry {
@@ -128,9 +129,10 @@ export class AgentCoordinator {
 
   // --- Task Management ---
 
-  delegate(role: string, task: AgentTask, sessionId: string): AgentTask {
+  delegate(role: string, task: AgentTask, sessionId: string, parentDepth = 0): AgentTask {
     task.assignedTo = role
     task.status = "pending"
+    task.delegationDepth = parentDepth + 1
 
     const entries = this.getAllSharedMemory()
     if (entries.length > 0) {

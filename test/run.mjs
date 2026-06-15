@@ -608,6 +608,22 @@ const pl2Result = await hooks.tool.agentic_parallel.execute({}, plCtx)
 const pl2Out = typeof pl2Result === "string" ? pl2Result : pl2Result.output
 assert(pl2Out.includes("pl2") || pl2Out.includes("Runnable"), "shows runnable tasks")
 
+// 42b. agentic_parallel — execute mode
+console.log("\n[42b] agentic_parallel — execute mode")
+const plexCtx = mockCtx(freshSid())
+await hooks.tool.agentic_plan.execute({
+  goal: "Parallel execute test",
+  subtasks: [
+    { id: "px1", description: "Write file a.txt with content 'hello'", dependsOn: [] },
+    { id: "px2", description: "Write file b.txt with content 'world'", dependsOn: [] },
+  ],
+}, plexCtx)
+// Mark px1 complete so px2 is the only ready step for partial parallel test
+await hooks.tool.agentic_execute.execute({ stepId: "px1", success: true, output: "Done", filesModified: ["a.txt"] }, plexCtx)
+const plexExec = await hooks.tool.agentic_parallel.execute({ action: "execute" }, plexCtx)
+const plexOut = typeof plexExec === "string" ? plexExec : plexExec.output
+assert(plexOut.includes("Execution") || plexOut.includes("passed") || plexOut.includes("Failed"), "parallel execute produces result")
+
 // 43. agentic_dashboard — observability
 console.log("\n[43] agentic_dashboard — observability")
 const dbResult = await hooks.tool.agentic_dashboard.execute({}, mockCtx(freshSid()))

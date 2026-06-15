@@ -21,18 +21,22 @@ RUN npm install --ignore-scripts
 COPY src/ ./src/
 RUN npm run build
 
-# Install plugin to project-level .opencode/plugins/ directory (auto-loaded by opencode)
-RUN mkdir -p /workspace/.opencode/plugins/agentic-engine
-RUN cp /workspace/dist/index.js /workspace/.opencode/plugins/agentic-engine/index.js
-# Copy package.json for plugin metadata
-RUN echo '{"name":"opencode-agentic-engine","version":"0.1.0","main":"./index.js","type":"module"}' > /workspace/.opencode/plugins/agentic-engine/package.json
+# Install plugin as auto-loaded local file in .opencode/plugins/ (no subfolder)
+RUN mkdir -p /workspace/.opencode/plugins
+RUN cp /workspace/dist/index.js /workspace/.opencode/plugins/agentic-engine.js
+RUN echo '{"name":"opencode-agentic-engine","version":"0.1.0"}' > /workspace/.opencode/package.json
 
-# Create opencode config with local plugin reference
-RUN echo '{"plugin": ["/workspace/.opencode/plugins/agentic-engine"]}' > /workspace/.opencode/opencode.json
+# Copy agentic-engine prompt for default agent config
+COPY agentic-agent-prompt.md /workspace/agentic-agent-prompt.md
+
+# Entrypoint to generate opencode.json with dynamic provider config
+COPY entrypoint-opencode.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 ENV OPENCODE_SERVER_HOSTNAME=0.0.0.0
 ENV OPENCODE_SERVER_PORT=4096
 
 EXPOSE 4096
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["opencode", "web", "--hostname", "0.0.0.0", "--port", "4096"]
