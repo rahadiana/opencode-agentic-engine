@@ -107,6 +107,7 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
   const llmEngine = new LLMEngine()
   llmEngine.setOpencodeClient(input.client)
   llmEngine.setModelRegistry(modelRegistry)
+  orchestrator.setLLMEngine(llmEngine)
 
   // Discover models from OpenCode client + env vars
   ;(async () => {
@@ -1127,7 +1128,7 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
                   output += `### 🎉 Pipeline Complete\nAll stages finished!\n`
 
                   // Run final cross-validation
-                  const finalValidation = orchestrator.crossValidate(
+                  const finalValidation = await orchestrator.crossValidate(
                     "coordinator",
                     "Pipeline completed",
                     allResults,
@@ -1144,7 +1145,7 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
 
                 // Cross-validate: auto-check against previous stages
                 if (args.status === "done" && allResults.size > 1) {
-                  const validation = orchestrator.crossValidate(
+                  const validation = await orchestrator.crossValidate(
                     args.role ?? "unknown",
                     args.result ?? "",
                     allResults,
@@ -1306,7 +1307,7 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
                 output += `\n### Pipeline: Next Stage\n▶ **${nextStage.role}** — ${nextStage.description}\n`
               } else {
                 output += `\n### 🎉 Pipeline Complete\nAll stages finished!\n`
-                const finalValidation = orchestrator.crossValidate("coordinator", "Pipeline completed", allResults, coordinator.getAllSharedMemory())
+                const finalValidation = await orchestrator.crossValidate("coordinator", "Pipeline completed", allResults, coordinator.getAllSharedMemory())
                 output += `**Cross-Validation:** ${finalValidation.passed ? "✅ Passed" : "❌ Issues"}\n`
               }
             }

@@ -1,5 +1,6 @@
 import type { AgentRole, AgentTask, SharedMemoryEntry } from "./coordinator.js"
 import type { AgentDef, CustomAgentDef } from "./role-registry.js"
+import type { LLMEngine } from "../core/llm.js"
 
 export interface PipelineStage {
   role: string
@@ -34,6 +35,11 @@ export class Orchestrator {
     currentStageIndex: number
     stageResults: Map<string, { output: string; issues: string[]; validatedBy: string[] }>
   }>()
+  private llmEngine: LLMEngine | null = null
+
+  setLLMEngine(engine: LLMEngine): void {
+    this.llmEngine = engine
+  }
 
   definePipeline(pipeline: WorkflowPipeline): void {
     this.pipelines.set(pipeline.id, pipeline)
@@ -91,25 +97,66 @@ export class Orchestrator {
     return this.activeRuns.get(runId)?.stageResults ?? new Map()
   }
 
-  crossValidate(
+  async crossValidate(
     targetRole: string,
     output: string,
     allStageResults: Map<string, { output: string; issues: string[]; validatedBy: string[] }>,
     sharedMemory: SharedMemoryEntry[],
-  ): CrossValidationResult {
+  ): Promise<CrossValidationResult> {
     const issues: CrossValidationResult["issues"] = []
 
+    // Basic structural checks
     for (const [role, result] of allStageResults) {
       if (role === targetRole) continue
-
-      const containsKeyIdea = result.output.length > 0
-      if (!containsKeyIdea) {
-        issues.push({
-          severity: "warning",
-          description: `Output from ${role} stage appears empty or incomplete`,
-          source: role,
-        })
+      if (!result.output || result.output.trim().length === 0) {
+        issues.push({ severity: "warning", description: `Output from ${role} stage appears empty or incomplete`, source: role })
       }
+    }
+
+    // Semantic validation via LLM (if available)
+    if (this.llmEngine && allStageResults.size >= 2) {
+      const previousStages = [...allStageResults].filter(([r]) => r !== targetRole)
+      const previousOutputs = previousStages.map(([r, res]) => `### ${r}\n${res.output.slice(0, 1000)}`).join("\n\n")
+
+      const validationPrompt = `You are a cross-validator. Compare the outputs of different stages in a software engineering pipeline. Identify any inconsistencies, contradictions, or missing pieces between stages.
+
+Previous stage outputs:
+${previousOutputs}
+
+Current stage (${targetRole}) output:
+${output.slice(0, 1500)}
+
+Check:
+1. Does the current output contradict any previous stage?
+2. Are there requirements from earlier stages that are not addressed?
+3. Are there any gaps or missing pieces?
+
+Return your analysis as JSON with:
+- "passed": boolean
+- "issues": array of { "severity": "error"|"warning"|"info", "description": string, "source": string }
+- "summary": string`
+
+      try {
+        const llmResp = await this.llmEngine.call({
+          systemPrompt: "You are a strict cross-validator. Compare pipeline stage outputs for consistency.",
+          userPrompt: validationPrompt,
+          jsonMode: true,
+          temperature: 0.1,
+          maxTokens: 1024,
+        })
+        const parsed = JSON.parse(llmResp.content)
+        if (parsed.issues && Array.isArray(parsed.issues)) {
+          for (const issue of parsed.issues) {
+            if (issue.severity && issue.description && !issues.some(i => i.description === issue.description)) {
+              issues.push({
+                severity: issue.severity as "error" | "warning" | "info",
+                description: issue.description,
+                source: issue.source ?? "llm-validator",
+              })
+            }
+          }
+        }
+      } catch { /* LLM call failed, fall through */ }
     }
 
     const passed = issues.filter(i => i.severity === "error").length === 0
