@@ -284,7 +284,7 @@ Mengadopsi framework evaluasi dari paper:
 - [x] **Skill persist** — `skill-store.ts` sudah terhubung ke `PersistenceLayer` (load on init, save on extract/execute/evolve)
 - [x] **ErrorAnalyzer LLM fallback** — `error-analyzer.ts` sudah punya `analyzeDeep()` + `setLLM()` + full test coverage
 - [x] **`agentic_evolve` auto-execute** — `agentic_auto`, `agentic_execute`, `agentic_status` auto-run self-evolution saat degradasi terdeteksi
-- [ ] **Config hot-reload propagate** — masih ada gap: session store / trace retention belum subscribe ke onChange
+- [x] **Config hot-reload propagate** — session store (`forgetAfterDays` → `pruneExpired()`) + trace retention (`traceRetentionDays` → `pruneOldTraces()`) subscribe via `onChange` in index.ts. Also added `unsubscribe` return from `onChange()` + listener cleanup on `stopWatch()`
 
 ### 🔵 Stage IV — Self-Evolving (Future)
 - [x] **Cross-session pattern discovery** — `pattern-discovery.ts` menganalisis pola error/file/session/skill otomatis

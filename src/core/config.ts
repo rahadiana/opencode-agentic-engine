@@ -157,17 +157,22 @@ export class ConfigLoader {
     }
   }
 
-  /** Stop watching */
+  /** Stop watching and clear all listeners */
   stopWatch(): void {
     if (this.watcher) {
       this.watcher.close()
       this.watcher = null
     }
+    this.listeners = []
   }
 
-  /** Listen for config changes */
-  onChange(listener: (config: AgenticConfigSchema) => void): void {
+  /** Listen for config changes. Returns an unsubscribe function. */
+  onChange(listener: (config: AgenticConfigSchema) => void): () => void {
     this.listeners.push(listener)
+    return () => {
+      const idx = this.listeners.indexOf(listener)
+      if (idx !== -1) this.listeners.splice(idx, 1)
+    }
   }
 
   /** Check if full embedding is configured */

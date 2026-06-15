@@ -22,6 +22,28 @@ export class SessionStore {
   private executorSnapshots = new Map<string, ExecutorSnapshot>()
   /** Per-session model preferences: role → model name */
   private modelPreferences = new Map<string, Map<string, string>>()
+  /** TTL in days for session expiry (0 = never expire). Config-hot-reloadable. */
+  private forgetAfterDays = 30
+
+  /** Set the TTL for session expiry — called on config hot-reload. */
+  setForgetAfterDays(days: number): void {
+    this.forgetAfterDays = Math.max(0, days)
+  }
+
+  /** Remove sessions that haven't been touched since TTL. */
+  pruneExpired(): number {
+    if (this.forgetAfterDays <= 0) return 0
+    const cutoff = Date.now() - this.forgetAfterDays * 24 * 60 * 60 * 1000
+    let removed = 0
+    for (const [id, session] of this.sessions) {
+      const lastTurn = session.turns[session.turns.length - 1]
+      if (lastTurn && lastTurn.timestamp < cutoff) {
+        this.removeSession(id)
+        removed++
+      }
+    }
+    return removed
+  }
 
   getOrCreate(sessionId: string): SessionState {
     let session = this.sessions.get(sessionId)

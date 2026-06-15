@@ -238,6 +238,18 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
     if (maxDepth > 0) {
       coordinator.setMaxDepth(maxDepth)
     }
+
+    // 4. Session store TTL — propagate ke session store untuk expired session cleanup
+    const forgetDays = newConfig.memory.forgetAfterDays
+    if (forgetDays > 0) {
+      sessionStore.setForgetAfterDays(forgetDays)
+    }
+
+    // 5. Trace retention — propagate ke trace logger untuk pruning
+    const retentionDays = newConfig.storage.traceRetentionDays
+    if (retentionDays > 0) {
+      traceLogger.setRetentionDays(retentionDays)
+    }
   })
 
   /** Helper: run the full self-evolution cycle and return a summary */
