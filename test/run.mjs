@@ -808,6 +808,9 @@ const defaultCfg = JSON.parse(readFileSync(cfgPath, "utf-8"))
 assert(defaultCfg.$schema === "v1", "default config has schema v1")
 assert(defaultCfg.embedding === null, "default embedding is null (lightweight mode)")
 assert(defaultCfg.memory.mode === "lightweight", "default memory mode is lightweight")
+assert(Array.isArray(defaultCfg.memory.stopWordsLanguages), "default stopWordsLanguages is array")
+assert(defaultCfg.memory.stopWordsLanguages.includes("ind"), "default stopWordsLanguages includes ind")
+assert(defaultCfg.memory.stopWordsLanguages.includes("eng"), "default stopWordsLanguages includes eng")
 assert(defaultCfg.memory.search.keywordWeight === 0.3, "default keyword weight 0.3")
 assert(defaultCfg.memory.search.vectorWeight === 0.7, "default vector weight 0.7")
 assert(defaultCfg.agent.maxDelegationDepth === 3, "default max delegation depth 3")
@@ -823,7 +826,7 @@ mkdirSync(join(cfgWorktreeB, ".agentic"), { recursive: true })
 writeFileSync(join(cfgWorktreeB, ".agentic", "config.json"), JSON.stringify({
   $schema: "v1",
   embedding: { model: "text-embedding-3-small", endpoint: "https://custom/v1/embeddings", apiKey: "sk-test" },
-  memory: { enabled: true, mode: "full", maxEntries: 500, compressThreshold: 200, forgetAfterDays: 14, search: { keywordWeight: 0.4, vectorWeight: 0.6 } },
+  memory: { enabled: true, mode: "full", maxEntries: 500, compressThreshold: 200, forgetAfterDays: 14, stopWordsLanguages: ["eng", "msa"], search: { keywordWeight: 0.4, vectorWeight: 0.6 } },
   agent: { maxDelegationDepth: 7, autoSkillExtract: false, defaultRole: "qa" },
   storage: { traceRetentionDays: 30, skillMaxCount: 999 },
 }))
@@ -834,6 +837,7 @@ const customCfg = JSON.parse(readFileSync(join(cfgWorktreeB, ".agentic", "config
 assert(customCfg.embedding.model === "text-embedding-3-small", "custom embedding model loaded")
 assert(customCfg.embedding.endpoint === "https://custom/v1/embeddings", "custom embedding endpoint loaded")
 assert(customCfg.memory.mode === "full", "custom memory mode loaded")
+assert(customCfg.memory.stopWordsLanguages.includes("msa"), "custom stopWordsLanguages loaded")
 assert(customCfg.memory.search.keywordWeight === 0.4, "custom keyword weight loaded")
 assert(customCfg.agent.maxDelegationDepth === 7, "custom delegation depth loaded")
 assert(customCfg.agent.autoSkillExtract === false, "custom autoSkillExtract loaded")

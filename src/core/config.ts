@@ -21,6 +21,8 @@ export interface MemoryConfig {
   maxEntries: number
   compressThreshold: number
   forgetAfterDays: number
+  /** ISO 639-3 language codes for stop word filtering */
+  stopWordsLanguages: string[]
   search: {
     keywordWeight: number
     vectorWeight: number
@@ -60,6 +62,7 @@ export const DEFAULT_CONFIG: AgenticConfigSchema = {
     maxEntries: 1000,
     compressThreshold: 500,
     forgetAfterDays: 30,
+    stopWordsLanguages: ["ind", "eng"],
     search: {
       keywordWeight: 0.3,
       vectorWeight: 0.7,

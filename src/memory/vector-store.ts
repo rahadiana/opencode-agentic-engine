@@ -1,5 +1,8 @@
 import type { LLMEngine } from "../core/llm.js"
 import type { LocalEmbedder } from "./local-embedder.js"
+import { createRequire } from "node:module"
+
+const _require = createRequire(import.meta.url)
 
 export type DocumentType = "episode" | "skill" | "file" | "code"
 
@@ -19,43 +22,59 @@ export interface SearchResult {
 
 export type SearchMode = "sparse" | "dense" | "hybrid" | "llm-rerank"
 
-const STOP_WORDS = new Set([
-  // English
-  "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
-  "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
-  "being", "have", "has", "had", "do", "does", "did", "will", "would",
-  "could", "should", "may", "might", "shall", "can", "need", "dare",
-  "ought", "used", "it", "its", "this", "that", "these", "those",
-  "i", "me", "my", "we", "our", "you", "your", "he", "him", "his",
-  "she", "her", "they", "them", "their", "what", "which", "who",
-  "whom", "when", "where", "why", "how", "all", "each", "every",
-  "both", "few", "more", "most", "other", "some", "such", "no",
-  "not", "only", "own", "same", "so", "than", "too", "very", "just",
-  "about", "above", "after", "again", "also", "as", "before",
-  "between", "into", "through", "during", "while", "if", "then",
-  "else", "there", "here", "up", "down", "out", "off", "over",
-  "under", "now", "new", "any", "get", "set", "put",
+/**
+ * Stop words dari package `stopword` (62 bahasa, zero deps).
+ * Di-load lazy via require — esbuild akan bundle seluruh package.
+ */
+let stopWordModule: Record<string, string[]> | null = null
+let stopWordLoadAttempted = false
 
-  // Bahasa Indonesia
-  "dan", "atau", "tetapi", "namun", "sedangkan", "sementara",
-  "lalu", "kemudian", "maka", "sehingga", "agar", "supaya",
-  "di", "ke", "dari", "pada", "kepada", "bagi", "untuk",
-  "oleh", "dengan", "tanpa", "sejak", "sampai", "hingga",
-  "yang", "ini", "itu", "sana", "sini", "situ",
-  "saya", "kamu", "dia", "kami", "kita", "mereka",
-  "nya", "ku", "mu",
-  "tidak", "bukan", "jangan", "belum",
-  "apa", "siapa", "mengapa", "kenapa", "bagaimana", "berapa", "kapan",
-  "ada", "adalah", "ialah", "merupakan", "menjadi",
-  "bisa", "dapat", "harus", "ingin", "mau",
-  "sudah", "telah", "akan", "sedang", "lagi",
-  "pun", "saja", "juga", "selalu", "sering", "pernah",
-  "si", "sang", "para",
-  "hal", "halnya", "secara", "seperti", "tentang",
-  "dalam", "antar", "antara", "sebagai",
-  "karena", "sebab", "meski", "walaupun", "biar",
-  "kalau", "jika", "bila", "apabila",
-])
+function loadStopWords(): Record<string, string[]> | null {
+  if (stopWordLoadAttempted) return stopWordModule
+  stopWordLoadAttempted = true
+  try {
+    stopWordModule = _require("stopword") as Record<string, string[]>
+  } catch {
+    stopWordModule = null
+  }
+  return stopWordModule
+}
+
+const combinedStopCache = new Map<string, Set<string>>()
+
+function getStopWordSet(langs: string[]): Set<string> {
+  const key = [...langs].sort().join(",")
+  const cached = combinedStopCache.get(key)
+  if (cached) return cached
+
+  const mod = loadStopWords()
+  const words = new Set<string>()
+
+  if (mod) {
+    for (const lang of langs) {
+      const arr = mod[lang]
+      if (Array.isArray(arr)) {
+        for (const w of arr) words.add(w)
+      }
+    }
+  }
+
+  // Fallback: minimal English + Indonesian stop words built-in
+  if (words.size === 0) {
+    const FALLBACK = new Set([
+      "yang", "dan", "di", "ke", "dari", "ini", "itu", "dan", "atau",
+      "tidak", "adalah", "akan", "dengan", "untuk", "pada", "dalam",
+      "the", "and", "is", "are", "was", "were", "be", "been",
+      "a", "an", "to", "for", "of", "in", "on", "at", "by", "with",
+      "this", "that", "these", "those", "it", "its", "we", "our",
+      "you", "your", "they", "them", "their", "i", "me", "my",
+    ])
+    for (const w of FALLBACK) words.add(w)
+  }
+
+  combinedStopCache.set(key, words)
+  return words
+}
 
 interface VectorEntry {
   id: string
@@ -69,10 +88,10 @@ interface VectorEntry {
 export class VectorStore {
   private documents: Map<string, VectorEntry> = new Map()
   private vocabulary: Map<string, number> = new Map()
-  private searchCache: Map<string, SearchResult[]> = new Map()
   private maxCacheSize = 100
-  private llmEngine: LLMEngine | null = null
+  private searchCache: Map<string, SearchResult[]> = new Map()
   private semanticCache: Map<string, SearchResult[]> = new Map()
+  private llmEngine: LLMEngine | null = null
   private embedder: LocalEmbedder | null = null
   private embedQueue: Array<{ id: string; content: string }> = []
   private embedProcessing = false
@@ -83,6 +102,8 @@ export class VectorStore {
   private remoteEmbedModel: string | null = null
   private remoteEmbedEndpoint: string | null = null
   private remoteEmbedApiKey: string | null = null
+  /** ISO 639-3 language codes for stop word filtering */
+  private stopWordsLanguages: string[] = ["ind", "eng"]
 
   setLLM(llm: LLMEngine): void {
     this.llmEngine = llm
@@ -103,6 +124,11 @@ export class VectorStore {
     this.remoteEmbedModel = model
     this.remoteEmbedEndpoint = endpoint
     this.remoteEmbedApiKey = apiKey
+  }
+
+  /** Set stop word languages — dari config */
+  setStopWordsLanguages(langs: string[]): void {
+    if (langs.length > 0) this.stopWordsLanguages = langs
   }
 
   /** Get remote embedding config */
@@ -403,7 +429,10 @@ export class VectorStore {
   clearCache(): void { this.searchCache.clear(); this.semanticCache.clear() }
 
   private tokenize(text: string): string[] {
-    return text.toLowerCase().split(/[^a-z0-9_]+/).filter(t => t.length > 1 && !STOP_WORDS.has(t))
+    const stopWords = getStopWordSet(this.stopWordsLanguages)
+    return text.toLowerCase()
+      .split(/[^a-z0-9_]+/)
+      .filter(t => t.length > 1 && !stopWords.has(t))
   }
 }
 

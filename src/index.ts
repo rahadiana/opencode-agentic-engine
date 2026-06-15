@@ -135,6 +135,8 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
   vectorStore.setLLM(llmEngine)
   // Set search weights from config
   vectorStore.setSearchWeights(config.memory.search.keywordWeight, config.memory.search.vectorWeight)
+  // Set stop word languages from config
+  vectorStore.setStopWordsLanguages(config.memory.stopWordsLanguages)
 
   // Embedding: dari config — kalau ada endpoint, pake remote embedding
   // Kalau null → lightweight mode (TF-IDF sparse-only, zero dep)
