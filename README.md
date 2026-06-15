@@ -1,166 +1,147 @@
-# opencode-agentic-engine
+# OpenCode Agentic Engine
 
-> Multi-agent software engineering plugin for [OpenCode](https://opencode.ai) — implements the agentic workflow from *"The End of Software Engineering"* (Cao, arXiv:2606.05608).
+> **Plugin OpenCode** yang mengimplementasikan *agentic software engineering* workflow — autonomous planning, multi-agent collaboration, skill-based learning, dan self-evolution.
 
-[![Tests](https://img.shields.io/badge/tests-102%2F102-brightgreen)](test/run.mjs)
-[![Docker](https://img.shields.io/badge/docker-7%20layers%20pass-brightgreen)](Dockerfile.test)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+Berdasarkan konsep dari paper **"The End of Software Engineering"** (arXiv:2606.05608).
 
-## Overview
+## Fitur
 
-A plugin that transforms OpenCode from a simple LLM tool-calling interface into a **self-coordinating engineering team**. It implements the four-stage roadmap from the paper:
-
-| Stage | Capability | Tools |
+| Stage | Fitur | Deskripsi |
 |---|---|---|
-| **I** — Tool-Augmented | Self-correction loop, intent parsing, trace logging | plan, execute, reflect, verify, status |
-| **II** — Single-Task Autonomous | Auto-decompose, codebase nav, context compression, git | nav, context, snapshot, pr, score |
-| **III** — Multi-Agent Teams | Role delegation, parallel exec, skills, episodic memory | delegate, parallel, skill, episodes, dashboard, guard |
-| **IV** — Design Constraints | Extensible roles, versioned memory, self-describing skills | evolve |
+| **I** | Agentic Workflow | Plan → Execute → Verify → Retry dalam satu siklus otomatis |
+| **II** | Codebase Intelligence | Navigasi kode, error propagation analysis, tech debt scoring |
+| **III** | Multi-Agent | Delegasi ke arsitek/developer/QA, pipeline lintas-role, message bus |
+| **IV** | Self-Evolution | Skill extraction & reuse, cross-session memory, auto-improvement |
+| **V** | Autonomous Mode | `agentic_auto` — satu perintah, dari rencana sampai deploy |
+
+### 20 Tools
+
+`agentic_plan` `agentic_execute` `agentic_reflect` `agentic_verify` `agentic_status` `agentic_nav` `agentic_context` `agentic_snapshot` `agentic_pr` `agentic_score` `agentic_delegate` `agentic_pipeline` `agentic_message` `agentic_skill` `agentic_episodes` `agentic_parallel` `agentic_dashboard` `agentic_guard` `agentic_evolve` `agentic_auto`
 
 ## Quick Start
 
+### Instalasi Plugin
+
 ```bash
-# Build
-npm install && npm run build
+# Di project OpenCode, simpan file ke:
+.opencode/plugins/agentic-engine.js
 
-# Run tests (no LLM needed — all mock)
-node test/run.mjs          # 99 unit tests
-node test/dropin.mjs        # Plugin auto-discovery
-node test/load-samedir.mjs  # Full E2E workflow
-node test/e2e-scenario.mjs  # 50-file codebase, 5 iterations
-
-# Docker pipeline (all 7 layers)
-./test-container.sh
+# Pastikan .opencode/package.json:
+{"name":"project","type":"module"}
 ```
 
-## Docker Deploy (Production)
+OpenCode auto-load plugin dari folder `.opencode/plugins/` — tidak perlu konfigurasi tambahan.
+
+### Docker Deployment
 
 ```bash
-# One-command deploy: OpenCode + plugin + cloudflared tunnel + Telegram notif
+cp .env.example .env
+# Isi .env dengan API key LLM dan kredensial lainnya
+
 docker compose up -d
-
-# Cek status
-docker compose logs -f
-
-# Akses OpenCode Web UI via tunnel URL (kirim via Telegram)
 ```
 
-**Services:**
-- `opencode` — OpenCode web server (port 4096) + plugin (17 tools)
-- Auto-tunnel via cloudflared → public HTTPS URL
-- Telegram notifikasi saat tunnel ready (bot: `RanaProjectsBot`, chat: `336238760`)
+Akses web di `http://localhost:4096` atau via tunnel URL dari cloudflared.
 
-**Volumes persist:**
-- `opencode_data` — OpenCode config, sessions, trace logs
-- `agentic_store` — Plugin state: skills, episodes, session memory
+## Cara Pakai
 
-**Env (optional):**
-```bash
-OPENCODE_PASSWORD=opencode-agentic-2026  # Web UI auth
-TELEGRAM_BOT_TOKEN=...                   # Override bot
-TELEGRAM_CHAT_ID=...                     # Override chat
+### Autonomous Mode (Rekomendasi)
+
+Cukup ketik perintah di agent "Agentic":
+
+```
+buat aplikasi POS dengan Express, Vue 3, dan SQLite
 ```
 
-## Architecture
+Plugin akan otomatis: plan → implementasi → verify → retry → extract skill.
+
+### Manual Mode
+
+Panggil tools langsung untuk kontrol lebih:
+
+```
+@agentic_auto goal="refactor src/core/executor.ts agar lebih modular"
+```
+
+Atau pipeline multi-agent:
+
+```
+@agentic_delegate role="architect" description="Desain arsitektur sistem billing"
+@agentic_delegate role="developer" description="Implementasi sesuai desain arsitek"
+@agentic_delegate role="qa" description="Review dan test hasil implementasi"
+```
+
+## Provider LLM
+
+Kompatibel dengan provider OpenAI-compatible. Contoh konfigurasi di `.env`:
+
+```env
+LLM_API_KEY=sk-your-key
+LLM_BASE_URL=https://your-provider/v1
+LLM_MODEL=your-model
+```
+
+Atau via `opencode.json`:
+
+```json
+{
+  "provider": {
+    "custom-llm": {
+      "name": "Provider Saya",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": { "baseURL": "...", "apiKey": "..." },
+      "models": { "model-name": {} }
+    }
+  }
+}
+```
+
+## Arsitektur
 
 ```
 src/
-├── core/           # intent-parser, planner, executor, verifier, error-analyzer,
-│                   # navigator, git, tech-debt-scorer, parallel
-├── agents/         # coordinator, role-registry (extensible)
-├── drift/          # context-compressor, dependency-tracker, checkpoints,
-│                   # hallucination-guard
-├── memory/         # session-store, skill-store, episodic-store,
-│                   # schema-version, skill-format
-├── observability/  # trace-logger (JSONL), dashboard
-└── index.ts        # Plugin entry: 17 tool definitions + hooks
-```
-
-## 18 Tools
-
-| Tool | Description |
-|---|---|
-| `agentic_plan` | Create + auto-decompose execution plan |
-| `agentic_nav` | Scan codebase, search files |
-| `agentic_execute` | Record step completion, auto-verify |
-| `agentic_reflect` | Error analysis + propagation tracing |
-| `agentic_verify` | Compile + test verification |
-| `agentic_status` | Dashboard + blocked steps |
-| `agentic_context` | View/compress context window |
-| `agentic_snapshot` | Save/list checkpoints |
-| `agentic_pr` | Generate PR description |
-| `agentic_score` | Tech debt analysis (coupling/size/scope/patterns) |
-| `agentic_delegate` | Assign task to architect/developer/qa/coordinator |
-| `agentic_parallel` | Dependency-based concurrency |
-| `agentic_skill` | Extract/find/reuse skills |
-| `agentic_episodes` | Cross-session memory search |
-| `agentic_dashboard` | Timeline + anomaly detection |
-| `agentic_guard` | Hallucination detection |
-| `agentic_evolve` | Inspect + extend agent system |
-| `agentic_auto` | Fully autonomous agent loop (plan→execute→verify→retry in one call) |
-
-## Installation
-
-Add to `opencode.json`:
-
-```json
-{
-  "plugin": ["./dist/index.js"]
-}
-```
-
-Or reference from npm:
-```json
-{
-  "plugin": ["opencode-agentic-engine"]
-}
+├── index.ts               # Entry: registrasi 20 tools + hooks
+├── core/                  # Engine inti
+│   ├── intent-parser.ts   # Parse intent → Plan
+│   ├── planner.ts         # Auto-decompose task
+│   ├── executor.ts        # Eksekusi step + retry
+│   ├── verifier.ts        # Compile + test verification
+│   └── navigator.ts       # Codebase scanner
+├── agents/                # Multi-agent system
+│   ├── coordinator.ts     # Delegasi, shared memory, message bus
+│   ├── orchestrator.ts    # Pipeline workflow
+│   └── role-registry.ts   # Definisi role (architect/dev/qa/pm)
+├── drift/                 # Context & safety
+│   ├── dependency-tracker.ts
+│   ├── context-compressor.ts
+│   └── hallucination-guard.ts
+├── memory/                # Persistent memory
+│   ├── skill-store.ts     # Skill extraction & search
+│   ├── episodic-store.ts  # Cross-session memory
+│   └── vector-store.ts    # Sparse retrieval (TF-IDF)
+└── observability/
+    ├── trace-logger.ts    # JSONL tracing
+    └── dashboard.ts       # Timeline & stats
 ```
 
 ## Testing
 
-All tests are **LLM-free** — they pass hardcoded results to `agentic_execute`. This means:
-
-- No API keys needed
-- No network calls
-- Fully deterministic
-- Runs in Docker isolation
-
 ```bash
-test/run.mjs              # 99 unit tests (mock context)
-test/dropin.mjs           # Plugin auto-discovery verification
-test/load-samedir.mjs     # Same-directory load + plan→execute→fail→reflect→retry
-test/e2e-scenario.mjs     # 50-file codebase × 5 iterations × 3-agent parallel
-./test-container.sh       # All 7 Docker layers
+# Unit tests (99 test, mock, tanpa LLM)
+node test/run.mjs
+
+# E2E workflow test
+node test/load-samedir.mjs
+
+# Multi-iterasi EvoClaw
+node test/e2e-scenario.mjs
+
+# Real LLM E2E (perlu API key)
+node test/e2e-real.mjs
+
+# Docker pipeline (7 layer)
+./test-container.sh
 ```
-
-## Configuration
-
-The plugin requires minimal configuration — it inherits the LLM provider from OpenCode:
-
-```jsonc
-// opencode.json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["./dist/index.js"]
-  // model: auto-detected from OpenCode
-}
-```
-
-## Design Principles
-
-From the paper:
-
-1. **Intent-first, code-second** — Accept *what* is desired, not *how*
-2. **Agent in the driver's seat, human in the loop** — Agents execute, humans approve at checkpoints
-3. **Observability is not optional** — Every reasoning step is traced to `~/.agentic/trace.jsonl`
-4. **Fail loudly, recover gracefully** — Errors exposed with root cause analysis + propagated impact
-
-## References
-
-- [The End of Software Engineering](https://arxiv.org/abs/2606.05608) — Cao (2026)
-- [Agents in Software Engineering: Survey](https://arxiv.org/abs/2409.09030) — Wang et al. (2024)
-- [EvoClaw: Evaluating AI Agents on Continuous Software Evolution](https://arxiv.org/abs/2603.13428) — Deng et al. (2026)
-- [Hermes Agent: The Self-Improving AI Agent](https://github.com/NousResearch/Hermes-Function-Calling) — Nous Research
 
 ## License
 
