@@ -29,5 +29,9 @@ jobs:
       - run: node test/load-samedir.mjs
       - run: LLM_OFF=true node test/swebench-harness.mjs
       - run: node test/e2e-scenario.mjs
+      - run: LLM_OFF=true node test/swebench-harness.mjs
+      - name: Setup EvoClaw fixture
+        run: cp -r test/e2e-codebase-fixture /tmp/e2e-codebase
+      - run: node test/e2e-scenario.mjs
       - run: node test/e2e-llm.mjs
         continue-on-error: true
