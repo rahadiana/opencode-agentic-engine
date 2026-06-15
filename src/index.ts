@@ -1400,6 +1400,12 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
           output += `**Role:** ${role} (${agent.name})\n`
           output += `**Description:** ${args.description}\n`
           output += `**Status:** ${agentResult ? "✅ Done" : executionError ? "❌ Failed" : "⚠️ Unknown"}\n`
+          if (agentResult) {
+            output += `**Result:** ${agentResult.slice(0, 500)}\n`
+          } else if (executionError) {
+            output += `**Error:** ${executionError.slice(0, 200)}\n`
+          }
+          output += `**Agent Prompt:**\n\`\`\`\n${(agent.prompt ?? "No prompt available").slice(0, 400)}\n\`\`\`\n\n`
 
           // Model suggestion — check session preference first, then fall through
           const sessionModelPref = sessionStore.getModelPreference(context.sessionID, role)

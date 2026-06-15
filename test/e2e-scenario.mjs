@@ -318,7 +318,7 @@ async function main() {
       role,
       description: `Feature flags: ${role} role for flags system`,
     }, ctx(sid5))
-    assert(dl.output.includes("prompt") || dl.output.includes("Agent"), `${role} delegated`)
+    assert(dl.output.includes("Agent Prompt") || dl.output.includes("Role:"), `${role} delegated`)
   }
 
   // Execute f1—f6 with extractable outputs

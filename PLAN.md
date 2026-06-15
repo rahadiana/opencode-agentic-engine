@@ -273,22 +273,23 @@ Mengadopsi framework evaluasi dari paper:
 - [ ] **NPM publish** — `npm publish` biar install via `opencode plugin opencode-agentic-engine`
 
 ### 🟡 P1 — Perbaikan Langsung
-- [ ] **Docker pipeline** — `test-container.sh` layer 6-7: EvoClaw test proper
-- [ ] **E2E test real LLM** — `test/e2e-scenario.mjs` tambah mode `if (process.env.OPENAI_API_KEY)`
+- [x] **E2E test real LLM** — `test/e2e-llm.mjs` added with 5 test areas, auto-skip when no LLM available
+- [x] **Session-seeded model preference** — `agentic_model` tool (#21), per-role model assignment, delegate integration
+- [x] **Docker pipeline** — `test-container.sh` 7 layers: install, build, dist check, unit tests, drop-in, same-dir E2E, EvoClaw scenario (113 files, 5 iterations)
 - [ ] **Agent prompt spesifik** — `role-registry.ts` tambah few-shot contoh konkret per role
-- [ ] **Session-seeded model preference** — `model-registry.ts` biarkan user pilih model per agent role
+- [ ] **Cross-session pattern discovery** — `pattern-discovery.ts` integrated into dashboard + evolve
 
 ### 🟢 P2 — Polishing
+- [x] **Test coverage** — `test/run.mjs` 382 tests, semua tool ≥5 test cases
 - [ ] **Skill persist** — `skill-store.ts` sambungkan ke `PersistenceLayer` (sekarang in-memory)
 - [ ] **ErrorAnalyzer LLM fallback** — `error-analyzer.ts` tambah LLM untuk kasus ambiguity
 - [ ] **Config hot-reload propagate** — `config.ts` watcher sudah ada, tapi belum ke semua module
 - [ ] **`agentic_evolve` auto-execute** — `self-evolver.ts` action items yang bisa jalan sendiri
-- [ ] **Test coverage** — `test/run.mjs` tambah edge cases (tiap tool minimal 5 test)
 
 ### 🔵 Stage IV — Self-Evolving (Future)
+- [x] **Cross-session pattern discovery** — `pattern-discovery.ts` menganalisis pola error/file/session/skill otomatis
 - [ ] Agent modifikasi prompt sendiri
 - [ ] Skill store → training data fine-tune
-- [ ] Cross-session pattern discovery otomatis
 
 ---
 
