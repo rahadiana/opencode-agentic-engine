@@ -730,7 +730,10 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
               if (!pipeline) return { output: `Suggested pipeline: \`${suggested}\`. Run \`action: "run"\` with this pipelineId.` }
               let out = `## 💡 Suggested Pipeline: **${pipeline.name}**\n\n`
               out += `Run \`agentic_pipeline\` with \`action: "run"\` and \`pipelineId: "${pipeline.id}"\` to start.\n\n`
-              out += pipeline.stages.map((s, i) => `${i + 1}. **${s.role}** — ${s.description}`).join("\n")
+              out += pipeline.stages.map((s, i) => {
+                const model = s.model ?? roleRegistry.suggestModel(s.role)
+                return `${i + 1}. **${s.role}** — ${s.description} (model: ${model})`
+              }).join("\n")
               return { output: out }
             }
 
@@ -750,7 +753,8 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
               out += `### Stages\n`
               out += pipeline.stages.map((s, i) => {
                 const prefix = i === 0 ? "▶" : "⏳"
-                return `${prefix} **${s.role}** — ${s.description}`
+                const model = s.model ?? roleRegistry.suggestModel(s.role)
+                return `${prefix} **${s.role}** — ${s.description} (model: ${model})`
               }).join("\n")
               out += `\n\n### Next Step\nDelegate tasks to each stage. Start with \`agentic_delegate\` for the first role: **${pipeline.stages[0].role}**.`
 
@@ -1082,6 +1086,11 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
           output += `**Role:** ${role} (${agent.name})\n`
           output += `**Description:** ${args.description}\n`
           output += `**Status:** Pending\n`
+
+          // Model suggestion
+          const suggestedModel = roleRegistry.suggestModel(role)
+          output += `**Suggested Model:** ${suggestedModel}\n`
+          if (agent.model) output += `**Configured Model:** ${agent.model}\n`
 
           if (args.pipelineRunId) {
             output += `**Pipeline Run:** \`${args.pipelineRunId}\`\n`

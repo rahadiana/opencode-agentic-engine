@@ -5,6 +5,7 @@ export interface PipelineStage {
   role: string
   description: string
   validationCriteria?: string[]
+  model?: string
 }
 
 export interface WorkflowPipeline {

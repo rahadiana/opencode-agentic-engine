@@ -5,6 +5,7 @@ export interface AgentDef {
   name: string
   prompt: string
   tools: string[]
+  model?: string
 }
 
 export type CustomRole = string
@@ -14,11 +15,23 @@ export interface CustomAgentDef {
   name: string
   prompt: string
   tools: string[]
+  model?: string
 }
+
+/** Complexity level for model suggestion */
+export type TaskComplexity = "simple" | "moderate" | "complex"
 
 export class RoleRegistry {
   private builtIn: Map<AgentRole, AgentDef> = new Map()
   private custom: Map<CustomRole, CustomAgentDef> = new Map()
+
+  private defaultModels: Record<AgentRole, string> = {
+    architect: "fast",        // analisis — cukup model cepat
+    developer: "capable",     // implementasi — model paling capable
+    qa: "fast",               // review — model cepat sudah cukup
+    coordinator: "capable",   // koordinasi — perlu reasoning baik
+    pm: "fast",               // requirement — model cepat
+  }
 
   constructor() {
     this.builtIn.set("architect", {
@@ -118,5 +131,26 @@ Focus on the "what" and "why" — leave the "how" to architects and developers.`
       ...this.builtIn.keys(),
       ...this.custom.keys(),
     ]
+  }
+
+  suggestModel(role: string, complexity: TaskComplexity = "moderate"): string {
+    // 1. Custom role? check its model
+    const custom = this.custom.get(role)
+    if (custom?.model) return custom.model
+
+    // 2. Built-in role? check if user set a model
+    const builtIn = this.builtIn.get(role as AgentRole)
+    if (builtIn?.model) return builtIn.model
+
+    // 3. Auto-suggest based on role + complexity
+    const base = this.defaultModels[role as AgentRole] ?? "capable"
+    if (complexity === "simple" && base === "capable") return "fast"
+    if (complexity === "complex" && base === "fast") return "capable"
+    return base
+  }
+
+  setModel(role: AgentRole, model: string): void {
+    const def = this.builtIn.get(role)
+    if (def) def.model = model
   }
 }
