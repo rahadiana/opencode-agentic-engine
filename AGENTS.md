@@ -50,7 +50,7 @@ src/
     └── dashboard.ts         # Timeline + stats + anomaly detection
 ```
 
-## 20 Tools
+## 21 Tools
 
 | Tool | Stage | Description |
 |---|---|---|
@@ -72,6 +72,7 @@ src/
 | agentic_episodes | III | Cross-session memory search |
 | agentic_dashboard | III | Timeline + anomaly detection |
 | agentic_guard | III | Hallucination detection |
+| agentic_model | II | Configure per-role LLM model preferences per session |
 | agentic_evolve | IV | Inspect + extend the agent system |
 | agentic_auto | V | Fully autonomous agent loop (plan→execute→verify→retry in one call) |
 

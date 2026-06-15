@@ -799,6 +799,13 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
           const modelSummary = modelRegistry.getSummary()
           output += modelSummary + "\n"
 
+          // Session model preferences (Gap: per-role model selection)
+          const modelPrefs = sessionStore.getAllModelPreferences(context.sessionID)
+          if (modelPrefs.length > 0) {
+            output += `\n### 🎯 Per-Role Model Preferences\n`
+            output += modelPrefs.map(p => `- **${p.role}** → \`${p.model}\``).join("\n") + "\n"
+          }
+
           // Evolution trend
           const trend = continuousEvolution.getTrend()
           if (trend.overall.total > 0) {
@@ -1392,11 +1399,22 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
           output += `**Description:** ${args.description}\n`
           output += `**Status:** ${agentResult ? "✅ Done" : executionError ? "❌ Failed" : "⚠️ Unknown"}\n`
 
-          // Model suggestion — prefer healthy models, avoid hallucinating ones
-          const suggestedCategory = roleRegistry.suggestModel(role)
-          const suggestedModels = modelRegistry.suggestWithFallback(role, [suggestedCategory])
-          const suggestedModel = suggestedModels.length > 0 ? suggestedModels[0] : suggestedCategory
-          const modelLabel = suggestedModel !== suggestedCategory ? `${suggestedModel} (${suggestedCategory})` : suggestedModel
+          // Model suggestion — check session preference first, then fall through
+          const sessionModelPref = sessionStore.getModelPreference(context.sessionID, role)
+          let suggestedModel: string
+          let modelLabel: string
+
+          if (sessionModelPref) {
+            // Session-seeded model preference (Gap: per-role model selection)
+            suggestedModel = sessionModelPref
+            modelLabel = `${suggestedModel} (session preference)`
+            modelRegistry.addModel(suggestedModel)
+          } else {
+            const suggestedCategory = roleRegistry.suggestModel(role)
+            const suggestedModels = modelRegistry.suggestWithFallback(role, [suggestedCategory])
+            suggestedModel = suggestedModels.length > 0 ? suggestedModels[0] : suggestedCategory
+            modelLabel = suggestedModel !== suggestedCategory ? `${suggestedModel} (${suggestedCategory})` : suggestedModel
+          }
           output += `**Model Used:** ${modelLabel}\n`
           if (agent.model) output += `**Configured Model:** ${agent.model}\n`
 
@@ -1579,6 +1597,64 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
           let output = `## 🧠 Skill Library (${skills.length})\n\n`
           output += skills.map(s => `- **${s.definition.meta.name}** — ${(s.successRate * 100).toFixed(0)}% (${s.usageCount} uses)`).join("\n")
           return { output }
+        },
+      }),
+
+      agentic_model: tool({
+        description: "Configure per-role LLM model preferences for the current session. Use 'set' to assign a model to an agent role. Use 'get' to see current assignment. Use 'list' to view all preferences. Use 'clear' to remove a preference.",
+        args: {
+          action: tool.schema.enum(["set", "get", "list", "clear"]).describe("Action: set/get/list/clear per-role model preference"),
+          role: tool.schema.string().optional().describe("Agent role (architect, developer, qa, coordinator, pm)"),
+          model: tool.schema.string().optional().describe("Model name (e.g. 'gpt-4o', 'claude-sonnet-4-20250514')"),
+        },
+        async execute(args, context) {
+          const VALID_ROLES = ["architect", "developer", "qa", "coordinator", "pm"]
+
+          if (args.action === "list") {
+            const prefs = sessionStore.getAllModelPreferences(context.sessionID)
+            if (prefs.length === 0) {
+              return { output: "No model preferences configured for this session. Use `action: \"set\"` to assign models to agent roles." }
+            }
+            let output = "## 🎯 Session Model Preferences\n\n"
+            output += "| Role | Model |\n"
+            output += "|------|-------|\n"
+            output += prefs.map(p => `| **${p.role}** | \`${p.model}\` |`).join("\n")
+            output += "\n\nThese preferences override the default model selection during delegation."
+            return { output }
+          }
+
+          if (args.action === "set") {
+            if (!args.role) return { output: "Provide a `role` (e.g. 'architect', 'developer', 'qa', 'coordinator', 'pm')." }
+            if (!args.model) return { output: "Provide a `model` name (e.g. 'gpt-4o', 'claude-sonnet-4-20250514')." }
+            const roleLower = args.role.toLowerCase()
+            if (!VALID_ROLES.includes(roleLower)) {
+              return { output: `Invalid role "${args.role}". Valid roles: ${VALID_ROLES.join(", ")}` }
+            }
+            sessionStore.setModelPreference(context.sessionID, roleLower, args.model)
+            // Also register in model registry so it's tracked
+            modelRegistry.addModel(args.model)
+            modelRegistry.registerAlias(roleLower, [args.model])
+            return { output: `✅ Model preference set: **${roleLower}** → \`${args.model}\`\nThis model will be used when delegating tasks to the ${roleLower} role in this session.` }
+          }
+
+          if (args.action === "get") {
+            if (!args.role) return { output: "Provide a `role` to check (e.g. 'architect')." }
+            const model = sessionStore.getModelPreference(context.sessionID, args.role)
+            if (!model) {
+              return { output: `No model preference set for role "${args.role}". Delegation will use default model selection.` }
+            }
+            return { output: `**${args.role}** → \`${model}\`` }
+          }
+
+          if (args.action === "clear") {
+            sessionStore.clearModelPreference(context.sessionID, args.role)
+            if (args.role) {
+              return { output: `Cleared model preference for role "${args.role}".` }
+            }
+            return { output: "Cleared all model preferences for this session." }
+          }
+
+          return { output: "Unknown action. Use 'set', 'get', 'list', or 'clear'." }
         },
       }),
 

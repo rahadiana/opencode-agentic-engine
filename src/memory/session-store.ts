@@ -20,6 +20,8 @@ export interface ExecutorSnapshot {
 export class SessionStore {
   private sessions = new Map<string, SessionState>()
   private executorSnapshots = new Map<string, ExecutorSnapshot>()
+  /** Per-session model preferences: role → model name */
+  private modelPreferences = new Map<string, Map<string, string>>()
 
   getOrCreate(sessionId: string): SessionState {
     let session = this.sessions.get(sessionId)
@@ -73,5 +75,42 @@ export class SessionStore {
   removeSession(sessionId: string): void {
     this.sessions.delete(sessionId)
     this.executorSnapshots.delete(sessionId)
+    this.modelPreferences.delete(sessionId)
+  }
+
+  // ── Session-Seeded Model Preference (Gap: per-role model selection) ──
+
+  /** Set preferred model for a given agent role in this session. */
+  setModelPreference(sessionId: string, role: string, model: string): void {
+    let prefs = this.modelPreferences.get(sessionId)
+    if (!prefs) {
+      prefs = new Map()
+      this.modelPreferences.set(sessionId, prefs)
+    }
+    prefs.set(role.toLowerCase(), model)
+  }
+
+  /** Get preferred model for a given agent role, or undefined. */
+  getModelPreference(sessionId: string, role: string): string | undefined {
+    const prefs = this.modelPreferences.get(sessionId)
+    return prefs?.get(role.toLowerCase())
+  }
+
+  /** Get all model preferences for a session. Returns array of { role, model }. */
+  getAllModelPreferences(sessionId: string): Array<{ role: string; model: string }> {
+    const prefs = this.modelPreferences.get(sessionId)
+    if (!prefs) return []
+    return [...prefs.entries()].map(([role, model]) => ({ role, model }))
+  }
+
+  /** Clear model preference for a specific role, or all roles if omitted. */
+  clearModelPreference(sessionId: string, role?: string): void {
+    const prefs = this.modelPreferences.get(sessionId)
+    if (!prefs) return
+    if (role) {
+      prefs.delete(role.toLowerCase())
+    } else {
+      this.modelPreferences.delete(sessionId)
+    }
   }
 }

@@ -72,9 +72,9 @@ catch (e) { assert(false, `AgenticEngine() threw: ${e.message}`) }
 assert(hooks && typeof hooks === "object", "hooks is an object")
 assert(typeof hooks.dispose === "function", "dispose hook registered")
 
-// 3. Tool registration (20 tools)
+// 3. Tool registration (21 tools)
 console.log("\n[3] Tool registration")
-for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_episodes", "agentic_parallel", "agentic_dashboard", "agentic_guard", "agentic_evolve", "agentic_auto"]) {
+for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_model", "agentic_episodes", "agentic_parallel", "agentic_dashboard", "agentic_guard", "agentic_evolve", "agentic_auto"]) {
   const tool = hooks.tool?.[name]
   assert(tool && typeof tool.execute === "function", `"${name}" has execute()`)
   assert(typeof tool.description === "string" && tool.description.length > 0, `"${name}" has description`)
@@ -1298,6 +1298,83 @@ assert(true, "Predictive Degradation Forecast tests passed")
 console.log("\n[65] agentic_execute — feedback parameter")
 assert(typeof hooks.tool.agentic_execute.args.feedback === "object", "agentic_execute tool has feedback arg")
 assert(true, "agentic_execute feedback parameter tests passed")
+
+// 66. agentic_model — session-seeded model preference
+console.log("\n[66] agentic_model — session model preference")
+const modelSid = freshSid()
+const modelCtx = mockCtx(modelSid)
+
+// Tool exists and has correct actions
+assert(typeof hooks.tool.agentic_model === "object", "agentic_model tool registered")
+assert(typeof hooks.tool.agentic_model.execute === "function", "agentic_model has execute")
+assert(typeof hooks.tool.agentic_model.args.action === "object", "agentic_model has action arg")
+
+// List empty
+const listEmpty = await hooks.tool.agentic_model.execute({ action: "list" }, modelCtx)
+const listEmptyOut = typeof listEmpty === "string" ? listEmpty : listEmpty.output
+assert(listEmptyOut.includes("No model preferences"), "list shows empty when no preferences set")
+
+// Set preference
+const setResult = await hooks.tool.agentic_model.execute({ action: "set", role: "architect", model: "gpt-4o" }, modelCtx)
+const setOut = typeof setResult === "string" ? setResult : setResult.output
+assert(setOut.includes("gpt-4o"), "set confirms model name")
+assert(setOut.includes("architect"), "set confirms role")
+
+// Get preference
+const getResult = await hooks.tool.agentic_model.execute({ action: "get", role: "architect" }, modelCtx)
+const getOut = typeof getResult === "string" ? getResult : getResult.output
+assert(getOut.includes("gpt-4o"), "get returns correct model")
+
+// List shows preferences
+const listResult = await hooks.tool.agentic_model.execute({ action: "list" }, modelCtx)
+const listOut = typeof listResult === "string" ? listResult : listResult.output
+assert(listOut.includes("architect"), "list shows role")
+assert(listOut.includes("gpt-4o"), "list shows model")
+
+// Set another role
+await hooks.tool.agentic_model.execute({ action: "set", role: "developer", model: "claude-sonnet-4-20250514" }, modelCtx)
+const list2 = await hooks.tool.agentic_model.execute({ action: "list" }, modelCtx)
+const list2Out = typeof list2 === "string" ? list2 : list2.output
+assert(list2Out.includes("developer"), "list shows second role")
+assert(list2Out.includes("claude-sonnet"), "list shows second model")
+
+// Get non-existent preference
+const getNone = await hooks.tool.agentic_model.execute({ action: "get", role: "pm" }, modelCtx)
+const getNoneOut = typeof getNone === "string" ? getNone : getNone.output
+assert(getNoneOut.includes("No model preference"), "get for unset role shows no preference")
+
+// Set with invalid role
+const invalidRole = await hooks.tool.agentic_model.execute({ action: "set", role: "invalid", model: "gpt-4o" }, modelCtx)
+const invalidOut = typeof invalidRole === "string" ? invalidRole : invalidRole.output
+assert(invalidOut.includes("Invalid role"), "set with invalid role returns error")
+
+// Set without role
+const noRole = await hooks.tool.agentic_model.execute({ action: "set", model: "gpt-4o" }, modelCtx)
+const noRoleOut = typeof noRole === "string" ? noRole : noRole.output
+assert(noRoleOut.includes("Provide a `role`"), "set without role returns error")
+
+// Set without model
+const noModel = await hooks.tool.agentic_model.execute({ action: "set", role: "architect" }, modelCtx)
+const noModelOut = typeof noModel === "string" ? noModel : noModel.output
+assert(noModelOut.includes("Provide a `model`"), "set without model returns error")
+
+// Clear specific role
+await hooks.tool.agentic_model.execute({ action: "clear", role: "developer" }, modelCtx)
+const afterClear = await hooks.tool.agentic_model.execute({ action: "get", role: "developer" }, modelCtx)
+const afterClearOut = typeof afterClear === "string" ? afterClear : afterClear.output
+assert(afterClearOut.includes("No model preference"), "clear removes specific role preference")
+
+// Clear all
+const clearAllRes = await hooks.tool.agentic_model.execute({ action: "clear" }, modelCtx)
+const clearAllOut = typeof clearAllRes === "string" ? clearAllRes : clearAllRes.output
+assert(clearAllOut.includes("Cleared all"), "clear all removes all preferences")
+
+// After clear all, list shows empty
+const listAfterClear = await hooks.tool.agentic_model.execute({ action: "list" }, modelCtx)
+const listAfterClearOut = typeof listAfterClear === "string" ? listAfterClear : listAfterClear.output
+assert(listAfterClearOut.includes("No model preferences"), "list shows empty after clear all")
+
+assert(true, "agentic_model session model preference tests passed")
 
 // 54. Trace logging
 console.log("\n[54] Trace logging")
