@@ -35,14 +35,26 @@ if (apiKey && baseURL && model) {
   };
   config.model = model;
 
-  // Global permissions — allow everything so agent works without human intervention
+  // Global permissions — allow within project, deny external/system access
   config.permission = {
-    read: 'allow',
-    edit: 'allow',
-    glob: 'allow',
-    grep: 'allow',
-    list: 'allow',
-    bash: 'allow',
+    external_directory: 'deny',
+    read: { '*': 'allow' },
+    edit: { '*': 'allow' },
+    glob: { '*': 'allow' },
+    grep: { '*': 'allow' },
+    list: { '*': 'allow' },
+    bash: {
+      '*': 'allow',
+      'rm -rf /*': 'deny',
+      'rm -rf /': 'deny',
+      'chmod 777': 'deny',
+      '> /dev/*': 'deny',
+      'dd *': 'deny',
+      'mkfs*': 'deny',
+      'fdisk*': 'deny',
+      'mount*': 'deny',
+      ':(){ :|&: };:': 'deny',
+    },
     task: 'allow',
     webfetch: 'allow',
     websearch: 'allow',
@@ -57,13 +69,11 @@ if (apiKey && baseURL && model) {
       mode: 'primary',
       model: model,
       prompt: '{file:./prompts/agentic.txt}',
-      permission: { read: 'allow', edit: 'allow', glob: 'allow', grep: 'allow', list: 'allow', bash: 'allow', task: 'allow', webfetch: 'allow', websearch: 'allow', question: 'allow', skill: 'allow' }
     },
-    // Default build agent — same full permissions
+    // Default build agent
     build: {
       mode: 'primary',
       model: model,
-      permission: { read: 'allow', edit: 'allow', glob: 'allow', grep: 'allow', list: 'allow', bash: 'allow', task: 'allow', webfetch: 'allow', websearch: 'allow', question: 'allow', skill: 'allow' }
     }
   };
 }
