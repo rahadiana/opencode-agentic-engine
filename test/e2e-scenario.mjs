@@ -20,7 +20,7 @@ const WORKTREE = "/tmp/e2e-worktree"
 // ── LLM Detection ──
 // Auto-default: OpenCode Free (https://opencode.ai/zen/v1) — no auth needed
 const OPENCODE_FREE_BASE = "https://opencode.ai/zen/v1"
-const OPENCODE_FREE_MODEL = "deepseek-v4-flash-free"
+const OPENCODE_FREE_MODEL = "mimo-v2.5-free"
 const LLM_OFF = process.env.LLM_OFF === "true"
 if (!LLM_OFF && !process.env.OPENAI_BASE_URL && !process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
   process.env.OPENAI_BASE_URL = OPENCODE_FREE_BASE
