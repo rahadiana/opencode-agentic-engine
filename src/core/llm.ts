@@ -7,6 +7,7 @@ export interface LLMConfig {
   model?: string
   maxTokens?: number
   temperature?: number
+  variant?: string
 }
 
 export interface LLMRequest {
@@ -50,6 +51,7 @@ export class LLMEngine {
       model: config.model ?? process.env.OPENAI_MODEL,
       maxTokens: config.maxTokens ?? 4096,
       temperature: config.temperature ?? 0.3,
+      variant: config.variant ?? process.env.OPENAI_VARIANT,
     }
   }
 
@@ -335,6 +337,10 @@ export class LLMEngine {
       ],
       max_tokens: req.maxTokens ?? this.config.maxTokens,
       temperature: req.temperature ?? this.config.temperature,
+    }
+
+    if (this.config.variant) {
+      body.variant = this.config.variant
     }
 
     if (req.jsonMode) {

@@ -25,6 +25,7 @@ const LLM_OFF = process.env.LLM_OFF === "true"
 if (!LLM_OFF && !process.env.OPENAI_BASE_URL && !process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
   process.env.OPENAI_BASE_URL = OPENCODE_FREE_BASE
   if (!process.env.OPENAI_MODEL) process.env.OPENAI_MODEL = OPENCODE_FREE_MODEL
+  if (!process.env.OPENAI_VARIANT) process.env.OPENAI_VARIANT = "max"
 }
 const CAN_USE_LLM = !LLM_OFF
 
