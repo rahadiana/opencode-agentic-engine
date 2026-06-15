@@ -276,15 +276,15 @@ Mengadopsi framework evaluasi dari paper:
 - [x] **E2E test real LLM** — `test/e2e-llm.mjs` added with 5 test areas, auto-skip when no LLM available
 - [x] **Session-seeded model preference** — `agentic_model` tool (#21), per-role model assignment, delegate integration
 - [x] **Docker pipeline** — `test-container.sh` 7 layers: install, build, dist check, unit tests, drop-in, same-dir E2E, EvoClaw scenario (113 files, 5 iterations)
-- [ ] **Agent prompt spesifik** — `role-registry.ts` tambah few-shot contoh konkret per role
-- [ ] **Cross-session pattern discovery** — `pattern-discovery.ts` integrated into dashboard + evolve
+- [x] **Agent prompt spesifik** — `role-registry.ts` sudah ada few-shot contoh konkret untuk seluruh 5 role
+- [x] **Cross-session pattern discovery** — `pattern-discovery.ts` integrated into dashboard + evolve dengan error/file/session/skill analysis
 
 ### 🟢 P2 — Polishing
-- [x] **Test coverage** — `test/run.mjs` 382 tests, semua tool ≥5 test cases
-- [ ] **Skill persist** — `skill-store.ts` sambungkan ke `PersistenceLayer` (sekarang in-memory)
-- [ ] **ErrorAnalyzer LLM fallback** — `error-analyzer.ts` tambah LLM untuk kasus ambiguity
-- [ ] **Config hot-reload propagate** — `config.ts` watcher sudah ada, tapi belum ke semua module
-- [x] **`agentic_evolve` auto-execute** — `self-evolver.ts` action items diterapkan otomatis saat degradasi terdeteksi di `agentic_execute`, `agentic_status`, dan `agentic_auto`
+- [x] **Test coverage** — `test/run.mjs` 386 tests, semua tool ≥5 test cases
+- [x] **Skill persist** — `skill-store.ts` sudah terhubung ke `PersistenceLayer` (load on init, save on extract/execute/evolve)
+- [x] **ErrorAnalyzer LLM fallback** — `error-analyzer.ts` sudah punya `analyzeDeep()` + `setLLM()` + full test coverage
+- [x] **`agentic_evolve` auto-execute** — `agentic_auto`, `agentic_execute`, `agentic_status` auto-run self-evolution saat degradasi terdeteksi
+- [ ] **Config hot-reload propagate** — masih ada gap: session store / trace retention belum subscribe ke onChange
 
 ### 🔵 Stage IV — Self-Evolving (Future)
 - [x] **Cross-session pattern discovery** — `pattern-discovery.ts` menganalisis pola error/file/session/skill otomatis
