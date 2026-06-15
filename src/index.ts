@@ -66,6 +66,14 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
   const llmEngine = new LLMEngine()
   llmEngine.setOpencodeClient(input.client)
   llmEngine.setModelRegistry(modelRegistry)
+
+  // Register current model into ModelRegistry for alias resolution
+  const currentModel = llmEngine.getCurrentModel()
+  if (currentModel !== "unknown") {
+    modelRegistry.addModel(currentModel)
+    modelRegistry.registerAlias("capable", [currentModel])
+    modelRegistry.registerAlias("fast", [currentModel])
+  }
   llmEngine.setMemoryStores({
     searchEpisodes: (query: string) => episodicStore.search(query),
     findSkills: (query: string) => skillStore.find(query).map(s => ({ name: s.definition.meta.name, successRate: s.successRate })),
@@ -738,8 +746,10 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
               let out = `## 💡 Suggested Pipeline: **${pipeline.name}**\n\n`
               out += `Run \`agentic_pipeline\` with \`action: "run"\` and \`pipelineId: "${pipeline.id}"\` to start.\n\n`
               out += pipeline.stages.map((s, i) => {
-                const model = s.model ?? roleRegistry.suggestModel(s.role)
-                return `${i + 1}. **${s.role}** — ${s.description} (model: ${model})`
+                const category = s.model ?? roleRegistry.suggestModel(s.role)
+                const resolved = modelRegistry.resolveAlias(category)
+                const modelLabel = resolved.length > 0 ? `${resolved[0]} (${category})` : category
+                return `${i + 1}. **${s.role}** — ${s.description} (model: ${modelLabel})`
               }).join("\n")
               return { output: out }
             }
@@ -760,8 +770,10 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
               out += `### Stages\n`
               out += pipeline.stages.map((s, i) => {
                 const prefix = i === 0 ? "▶" : "⏳"
-                const model = s.model ?? roleRegistry.suggestModel(s.role)
-                return `${prefix} **${s.role}** — ${s.description} (model: ${model})`
+                const category = s.model ?? roleRegistry.suggestModel(s.role)
+                const resolved = modelRegistry.resolveAlias(category)
+                const modelLabel = resolved.length > 0 ? `${resolved[0]} (${category})` : category
+                return `${prefix} **${s.role}** — ${s.description} (model: ${modelLabel})`
               }).join("\n")
               out += `\n\n### Next Step\nDelegate tasks to each stage. Start with \`agentic_delegate\` for the first role: **${pipeline.stages[0].role}**.`
 
@@ -1094,9 +1106,11 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
           output += `**Description:** ${args.description}\n`
           output += `**Status:** Pending\n`
 
-          // Model suggestion
-          const suggestedModel = roleRegistry.suggestModel(role)
-          output += `**Suggested Model:** ${suggestedModel}\n`
+          // Model suggestion — resolve alias ke nama model sebenarnya
+          const suggestedCategory = roleRegistry.suggestModel(role)
+          const resolvedModels = modelRegistry.resolveAlias(suggestedCategory)
+          const suggestedModel = resolvedModels.length > 0 ? resolvedModels[0] : suggestedCategory
+          output += `**Suggested Model:** ${suggestedModel} (${suggestedCategory})\n`
           if (agent.model) output += `**Configured Model:** ${agent.model}\n`
 
           // Model reliability info

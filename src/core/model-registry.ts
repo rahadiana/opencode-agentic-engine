@@ -104,13 +104,16 @@ export class ModelRegistry {
     return [...models].map(m => this.getScore(m)!).sort((a, b) => b.reliability - a.reliability)
   }
 
+  resolveAlias(alias: string): string[] {
+    return this.modelAliases.get(alias) ?? (alias ? [alias] : [])
+  }
+
   suggestWithFallback(role: string, preferredModels: string[] = []): string[] {
     const candidates = new Set<string>()
 
-    for (const m of preferredModels) if (m) candidates.add(m)
-
-    for (const [, aliases] of this.modelAliases) {
-      for (const m of aliases) candidates.add(m)
+    for (const m of preferredModels) {
+      const resolved = this.resolveAlias(m)
+      for (const r of resolved) if (r) candidates.add(r)
     }
 
     for (const key of this.stats.keys()) candidates.add(key)
