@@ -14,6 +14,7 @@ import { ContextCompressor } from "./drift/context-compressor.js"
 import { GitIntegration } from "./core/git.js"
 import { TechDebtScorer } from "./core/tech-debt-scorer.js"
 import { AgentCoordinator } from "./agents/coordinator.js"
+import { AgentRuntime } from "./agents/agent-runtime.js"
 import type { AgentRole, AgentTask } from "./agents/coordinator.js"
 import { Orchestrator, type WorkflowPipeline, type CrossValidationResult } from "./agents/orchestrator.js"
 import { SkillStore } from "./memory/skill-store.js"
@@ -108,6 +109,10 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
   llmEngine.setOpencodeClient(input.client)
   llmEngine.setModelRegistry(modelRegistry)
   orchestrator.setLLMEngine(llmEngine)
+
+  const agentRuntime = new AgentRuntime()
+  agentRuntime.setOpencodeClient(input.client)
+  agentRuntime.setModelRegistry(modelRegistry)
 
   // Discover models from OpenCode client + env vars
   ;(async () => {
@@ -1212,27 +1217,19 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
           // Check for pending messages for this role
           const pendingMessages = coordinator.getMessages(role, true)
 
-          // ── Actual Agent Execution via LLM ──
-          llmEngine.setSessionId(context.sessionID)
-          let agentResult = ""
-          let executionError: string | null = null
-
-          try {
-            const systemPrompt = `${agent.prompt}\n\n${args.pipelineRunId ? `## Pipeline Context\n${pipelineContext}` : ""}\n\n${pendingMessages.length > 0 ? `## Pending Messages\n${pendingMessages.map(m => `- From ${m.from}: ${m.payload}`).join("\n")}` : ""}\n\nTask "${args.taskId}" assigned to you (${role}). Execute this task and provide your output. Be specific and actionable.`
-            const llmResp = await llmEngine.call({
-              systemPrompt,
-              userPrompt: contextWithMemory,
-              temperature: 0.3,
-              maxTokens: 4096,
-            })
-            agentResult = llmResp.content
-            if (agentResult.startsWith("LLM error") || agentResult.startsWith("[NO_LLM]")) {
-              executionError = agentResult
-              agentResult = ""
-            }
-          } catch (e) {
-            executionError = (e as Error).message
+          // ── Actual Agent Execution via Isolated AgentRuntime ──
+          const agentCtx = {
+            systemPrompt: agent.prompt ?? `You are a ${role} in a software engineering team.`,
+            sessionId: context.sessionID,
+            role,
+            taskDescription: contextWithMemory,
+            pipelineContext: pipelineContext || undefined,
+            pendingMessages: pendingMessages.length > 0 ? pendingMessages.map(m => ({ from: m.from, payload: m.payload })) : undefined,
+            sharedMemory: coordinator.getAllSharedMemory().map(e => ({ key: e.key, value: e.value, writtenBy: e.writtenBy })),
           }
+          const agentResultObj = await agentRuntime.execute(agentCtx)
+          const agentResult = agentResultObj.success ? agentResultObj.output : ""
+          const executionError = agentResultObj.success ? null : (agentResultObj.error ?? "Agent execution failed")
 
           if (agentResult) {
             coordinator.updateTask(context.sessionID, args.taskId, "done", agentResult)
