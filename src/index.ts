@@ -34,8 +34,14 @@ import { PersistenceLayer } from "./memory/persistence.js"
 import { VectorStore } from "./memory/vector-store.js"
 import { LocalEmbedder } from "./memory/local-embedder.js"
 import { ModelRegistry } from "./core/model-registry.js"
+import { ConfigLoader, type AgenticConfigSchema } from "./core/config.js"
 
 const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<Plugin>[1]) => {
+  // ── Config (load first, everything else depends on it) ──
+  const configLoader = new ConfigLoader(input.worktree)
+  const config = configLoader.load()
+  configLoader.startWatch()
+
   const intentParser = new IntentParser()
   const executor = new Executor()
   const verifier = new Verifier()
@@ -128,10 +134,23 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
   const persistence = new PersistenceLayer(input.worktree)
   const vectorStore = new VectorStore()
   vectorStore.setLLM(llmEngine)
-  const localEmbedder = new LocalEmbedder()
-  localEmbedder.init().then(() => {
-    vectorStore.setEmbedder(localEmbedder)
-  }).catch(() => { /* embedder init failed — falling back to sparse-only */ })
+  // Set search weights from config
+  vectorStore.setSearchWeights(config.memory.search.keywordWeight, config.memory.search.vectorWeight)
+
+  // Embedding: if config has embedding endpoint → gunakan remote embedding
+  // Kalau lightweight → coba local embedder (TF-IDF tetap jalan walau gagal)
+  const embedConfig = config.embedding
+  if (embedConfig && embedConfig.model) {
+    // Full vector mode — gunakan embedding dari endpoint yang dikonfigurasi
+    vectorStore.setEmbeddingConfig(embedConfig.model, embedConfig.endpoint, embedConfig.apiKey)
+    vectorStore.setLLM(llmEngine)
+  } else {
+    // Lightweight mode — coba local embedder (@xenova/transformers)
+    const localEmbedder = new LocalEmbedder()
+    localEmbedder.init().then(() => {
+      vectorStore.setEmbedder(localEmbedder)
+    }).catch(() => { /* embedder init failed — falling back to sparse-only */ })
+  }
 
   contextCompressor.setLLM(llmEngine)
   verifier.detectLanguage(input.worktree)
@@ -2013,6 +2032,7 @@ Only include files that need changing. Return ONLY valid JSON.` + llmEngine.getM
     },
 
     dispose: async () => {
+      configLoader.stopWatch()
       persistence.save("models", "registry", modelRegistry.toJSON())
       await traceLogger.dispose()
     },

@@ -55,6 +55,13 @@ export class VectorStore {
   private embedder: LocalEmbedder | null = null
   private embedQueue: Array<{ id: string; content: string }> = []
   private embedProcessing = false
+  /** Search weights — from config */
+  private keywordWeight = 0.3
+  private vectorWeight = 0.7
+  /** Remote embedding config — dari config, bukan local embedder */
+  private remoteEmbedModel: string | null = null
+  private remoteEmbedEndpoint: string | null = null
+  private remoteEmbedApiKey: string | null = null
 
   setLLM(llm: LLMEngine): void {
     this.llmEngine = llm
@@ -62,6 +69,25 @@ export class VectorStore {
 
   setEmbedder(embedder: LocalEmbedder): void {
     this.embedder = embedder
+  }
+
+  /** Set search weights from config — menggantikan hardcoded alpha */
+  setSearchWeights(keyword: number, vector: number): void {
+    this.keywordWeight = keyword
+    this.vectorWeight = vector
+  }
+
+  /** Set remote embedding config — untuk full vector mode */
+  setEmbeddingConfig(model: string, endpoint: string | null, apiKey: string | null): void {
+    this.remoteEmbedModel = model
+    this.remoteEmbedEndpoint = endpoint
+    this.remoteEmbedApiKey = apiKey
+  }
+
+  /** Get remote embedding config */
+  getEmbeddingConfig(): { model: string; endpoint: string | null; apiKey: string | null } | null {
+    if (!this.remoteEmbedModel) return null
+    return { model: this.remoteEmbedModel, endpoint: this.remoteEmbedEndpoint, apiKey: this.remoteEmbedApiKey }
   }
 
   private queueDenseEmbed(id: string, content: string): void {
@@ -264,11 +290,11 @@ export class VectorStore {
       }
     }
 
-    const alpha = 0.6
+    const alpha = this.keywordWeight
     const results = [...combined.values()]
       .map(({ sparseScore, denseScore, result }) => ({
         ...result,
-        score: alpha * sparseScore + (1 - alpha) * denseScore,
+        score: (this.keywordWeight) * sparseScore + (this.vectorWeight) * denseScore,
       }))
       .sort((a, b) => b.score - a.score)
       .slice(0, topK)
