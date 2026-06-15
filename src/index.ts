@@ -32,9 +32,8 @@ import { LLMEngine } from "./core/llm.js"
 import { AgentLoop } from "./core/agent-loop.js"
 import { PersistenceLayer } from "./memory/persistence.js"
 import { VectorStore } from "./memory/vector-store.js"
-import { LocalEmbedder } from "./memory/local-embedder.js"
 import { ModelRegistry } from "./core/model-registry.js"
-import { ConfigLoader, type AgenticConfigSchema } from "./core/config.js"
+import { ConfigLoader } from "./core/config.js"
 
 const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<Plugin>[1]) => {
   // ── Config (load first, everything else depends on it) ──
@@ -137,20 +136,14 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
   // Set search weights from config
   vectorStore.setSearchWeights(config.memory.search.keywordWeight, config.memory.search.vectorWeight)
 
-  // Embedding: if config has embedding endpoint → gunakan remote embedding
-  // Kalau lightweight → coba local embedder (TF-IDF tetap jalan walau gagal)
+  // Embedding: dari config — kalau ada endpoint, pake remote embedding
+  // Kalau null → lightweight mode (TF-IDF sparse-only, zero dep)
   const embedConfig = config.embedding
   if (embedConfig && embedConfig.model) {
-    // Full vector mode — gunakan embedding dari endpoint yang dikonfigurasi
     vectorStore.setEmbeddingConfig(embedConfig.model, embedConfig.endpoint, embedConfig.apiKey)
     vectorStore.setLLM(llmEngine)
-  } else {
-    // Lightweight mode — coba local embedder (@xenova/transformers)
-    const localEmbedder = new LocalEmbedder()
-    localEmbedder.init().then(() => {
-      vectorStore.setEmbedder(localEmbedder)
-    }).catch(() => { /* embedder init failed — falling back to sparse-only */ })
   }
+  // Lightweight mode: tanpa embedder → VectorStore fallback ke sparse search otomatis
 
   contextCompressor.setLLM(llmEngine)
   verifier.detectLanguage(input.worktree)

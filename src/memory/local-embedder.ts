@@ -1,49 +1,30 @@
-type PipelineFn = (text: string, opts: { pooling: string; normalize: boolean }) => Promise<{ data: Float32Array; dims: number[] }>
+/**
+ * LocalEmbedder — stub untuk local embedding.
+ *
+ * @xenova/transformers sudah dihapus dari dependency.
+ * Local embedding sekarang hanya fallback sparse TF-IDF.
+ * Kalau mau full vector, set `embedding.endpoint` di config.json
+ * untuk pake remote embedding via provider.
+ */
 
 export class LocalEmbedder {
-  private piped: PipelineFn | null = null
-  private initialized = false
-  private initPromise: Promise<void> | null = null
-  private initError: string | null = null
+  private _ready = false
 
   async init(): Promise<void> {
-    if (this.initialized) return
-    if (this.initPromise) return this.initPromise
-
-    this.initPromise = (async () => {
-      try {
-        const mod = await import("@xenova/transformers")
-        this.piped = (await mod.pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", {
-          quantized: true,
-        })) as unknown as PipelineFn
-        this.initialized = true
-      } catch (e) {
-        this.initialized = false
-        this.initError = (e as Error).message
-      }
-    })()
-
-    return this.initPromise
+    this._ready = false
+    // No-op — local embedding dihapus, pake remote endpoint aja
   }
 
   get ready(): boolean {
-    return this.initialized
+    return this._ready
   }
 
   get error(): string | null {
-    return this.initError
+    return "Local embedding disabled. Set embedding.endpoint in .agentic/config.json for vector search."
   }
 
-  async embed(text: string): Promise<Float32Array | null> {
-    if (!this.initialized) await this.init()
-    if (!this.piped) return null
-
-    try {
-      const result = await this.piped(text.slice(0, 8192), { pooling: "mean", normalize: true })
-      return result.data
-    } catch {
-      return null
-    }
+  async embed(_text: string): Promise<Float32Array | null> {
+    return null
   }
 }
 

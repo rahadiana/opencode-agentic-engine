@@ -10,7 +10,7 @@ const ctx = await esbuild.context({
   target: "node22",
   format: "esm",
   sourcemap: true,
-  external: ["@xenova/transformers", "onnxruntime-node", "onnxruntime-common", "sharp"],
+  external: [],
   banner: {
     js: "// opencode-agentic-engine v0.1.0\n// Bundled for zero-install drop-in",
   },
