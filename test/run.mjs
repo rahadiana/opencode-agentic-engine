@@ -851,6 +851,66 @@ assert(evolveOut.includes("Self-Evolution") || evolveOut.includes("Improvement S
 assert(evolveOut.includes("Recommendation") || evolveOut.includes("recommend"), "evolve includes recommendations")
 assert(evolveOut.includes("Success Rate") || evolveOut.includes("success"), "evolve shows metrics")
 
+// 51b. agentic_evolve — read-prompt
+console.log("\n[51b] agentic_evolve — read-prompt")
+const rpCtx = mockCtx(freshSid())
+const rpR = await hooks.tool.agentic_evolve.execute({ action: "read-prompt", role: "developer" }, rpCtx)
+const rpOut = typeof rpR === "string" ? rpR : rpR.output
+assert(rpOut.includes("developer") || rpOut.includes("senior developer"), "read-prompt returns developer prompt content")
+const rpR2 = await hooks.tool.agentic_evolve.execute({ action: "read-prompt", role: "nonexistent" }, rpCtx)
+const rpOut2 = typeof rpR2 === "string" ? rpR2 : rpR2.output
+assert(rpOut2.includes("not found"), "read-prompt returns error for unknown role")
+
+// 51c. agentic_evolve — edit-prompt
+console.log("\n[51c] agentic_evolve — edit-prompt")
+const editCtx = mockCtx(freshSid())
+const epR = await hooks.tool.agentic_evolve.execute({ action: "edit-prompt", role: "developer", prompt: "Always verify types before committing." }, editCtx)
+const epOut = typeof epR === "string" ? epR : epR.output
+assert(epOut.includes("updated") || epOut.includes("v") || epOut.includes("version"), "edit-prompt appends new instruction")
+assert(epOut.includes("2") || epOut.includes("v2"), "prompt version incremented to v2")
+
+// Verify the prompt was actually appended
+const rpR3 = await hooks.tool.agentic_evolve.execute({ action: "read-prompt", role: "developer" }, editCtx)
+const rpOut3 = typeof rpR3 === "string" ? rpR3 : rpR3.output
+assert(rpOut3.includes("Always verify types before committing"), "edited prompt contains new instruction")
+
+const epR2 = await hooks.tool.agentic_evolve.execute({ action: "edit-prompt", role: "qa", prompt: "Check for null safety in all code paths." }, editCtx)
+const epOut2 = typeof epR2 === "string" ? epR2 : epR2.output
+assert(epOut2.includes("updated"), "edit-prompt works on qa role")
+
+// 51d. agentic_evolve — prompt-history
+console.log("\n[51d] agentic_evolve — prompt-history")
+const phCtx = mockCtx(freshSid())
+// First make a few edits to build history
+await hooks.tool.agentic_evolve.execute({ action: "edit-prompt", role: "developer", prompt: "Edit 1" }, phCtx)
+await hooks.tool.agentic_evolve.execute({ action: "edit-prompt", role: "developer", prompt: "Edit 2" }, phCtx)
+await hooks.tool.agentic_evolve.execute({ action: "edit-prompt", role: "developer", prompt: "Edit 3" }, phCtx)
+const phR = await hooks.tool.agentic_evolve.execute({ action: "prompt-history", role: "developer" }, phCtx)
+const phOut = typeof phR === "string" ? phR : phR.output
+assert(phOut.includes("v1") || phOut.includes("version"), "prompt-history shows versions")
+assert(phOut.includes("agent-self") || phOut.includes("source"), "prompt-history shows source")
+assert(phOut.includes("Edit 1") && phOut.includes("Edit 3"), "prompt-history lists all entries")
+
+// 51e. agentic_evolve — rollback-prompt
+console.log("\n[51e] agentic_evolve — rollback-prompt")
+const rbCtx = mockCtx(freshSid())
+// Build history
+await hooks.tool.agentic_evolve.execute({ action: "edit-prompt", role: "architect", prompt: "Focus on modular design." }, rbCtx)
+await hooks.tool.agentic_evolve.execute({ action: "edit-prompt", role: "architect", prompt: "Prefer microservices architecture." }, rbCtx)
+// Read current to confirm v3
+const rbBefore = await hooks.tool.agentic_evolve.execute({ action: "read-prompt", role: "architect" }, rbCtx)
+const rbBeforeOut = typeof rbBefore === "string" ? rbBefore : rbBefore.output
+assert(rbBeforeOut.includes("microservices"), "v3 has microservices instruction")
+// Rollback to v2
+const rbR = await hooks.tool.agentic_evolve.execute({ action: "rollback-prompt", role: "architect", version: 2 }, rbCtx)
+const rbOut = typeof rbR === "string" ? rbR : rbR.output
+assert(rbOut.includes("rolled back") || rbOut.includes("v2") || rbOut.includes("version"), "rollback-prompt succeeds")
+// Verify rollback
+const rbAfter = await hooks.tool.agentic_evolve.execute({ action: "read-prompt", role: "architect" }, rbCtx)
+const rbAfterOut = typeof rbAfter === "string" ? rbAfter : rbAfter.output
+assert(!rbAfterOut.includes("microservices"), "after rollback, microservices instruction removed")
+assert(rbAfterOut.includes("modular design"), "after rollback, modular design instruction restored")
+
 // 52. Model registry with client-based discovery
 console.log("\n[52] Model registry with client discovery")
 const modelCtx52 = mockCtx(freshSid())
@@ -1127,6 +1187,73 @@ assert(nonExistent === false, "updatePrompt returns false for invalid role")
 rr.registerCustom({ role: "custom-dev", name: "Custom Dev", prompt: "Custom prompt", tools: ["read"] })
 assert(rr.getPrompt("custom-dev") === "Custom prompt", "getPrompt works for custom roles")
 assert(true, "RoleRegistry updatePrompt tests passed")
+
+// 59b. RoleRegistry — prompt versioning + history + rollback
+console.log("\n[59b] RoleRegistry — prompt versioning")
+const rr2 = new mod.RoleRegistry()
+const devOriginal = rr2.getPrompt("developer")
+
+// Initial state: version 1 with source "initial"
+const hist1 = rr2.getPromptHistory("developer")
+assert(hist1.length === 1, "initial prompt history has 1 entry")
+assert(hist1[0].version === 1, "first version is 1")
+assert(hist1[0].source === "initial", "first source is 'initial'")
+
+// Update with source tracking
+const updated1 = rr2.updatePrompt("developer", devOriginal + "\n\n## Patch 1\nBe thorough.", "auto-evolve", "Compile error fix")
+assert(updated1 === true, "updatePrompt with source returns true")
+const hist2 = rr2.getPromptHistory("developer")
+assert(hist2.length === 2, "history has 2 entries after update")
+assert(hist2[1].version === 2, "second version is 2")
+assert(hist2[1].source === "auto-evolve", "second source is 'auto-evolve'")
+assert(hist2[1].description === "Compile error fix", "description matches")
+
+// Agent self-edit
+const updated2 = rr2.updatePrompt("developer", devOriginal + "\n\n## Patch 1\nBe thorough.\n\n## Patch 2\nCheck types.", "agent-self", "Agent requested improvement")
+assert(updated2 === true, "agent-self update returns true")
+const hist3 = rr2.getPromptHistory("developer")
+assert(hist3.length === 3, "history has 3 entries")
+assert(hist3[2].source === "agent-self", "third source is 'agent-self'")
+assert(hist3[2].version === 3, "third version is 3")
+
+// getPromptState
+const state = rr2.getPromptState("developer")
+assert(state !== undefined, "getPromptState returns state")
+assert(state.currentVersion === 3, "current version is 3")
+assert(state.history.length === 3, "state has 3 entries")
+
+// getAllPromptStates
+const allStates = rr2.getAllPromptStates()
+assert(allStates.length >= 5, "all 5 built-in roles have prompt states")
+const devState = allStates.find(s => s.role === "developer")
+assert(devState !== undefined, "developer state in all states")
+assert(devState.history.length === 3, "developer has 3 history entries")
+
+// Rollback to v1
+assert(devOriginal !== undefined, "devOriginal defined")
+const rolledBack = rr2.rollbackPrompt("developer", 1)
+assert(rolledBack === true, "rollbackPrompt returns true")
+const afterRollback = rr2.getPrompt("developer")
+assert(afterRollback === devOriginal, "after rollback, prompt matches v1")
+const hist4 = rr2.getPromptHistory("developer")
+assert(hist4.length === 4, "rollback adds new history entry")
+assert(hist4[3].version === 4, "rollback entry is version 4")
+
+// Rollback to nonexistent version
+const badRollback = rr2.rollbackPrompt("developer", 99)
+assert(badRollback === false, "rollback to unknown version returns false")
+
+// rollback custom role
+rr2.registerCustom({ role: "my-custom", name: "My Role", prompt: "Custom v1", tools: ["read"] })
+assert(rr2.getPrompt("my-custom") === "Custom v1", "custom role prompt is v1")
+rr2.updatePrompt("my-custom", "Custom v2", "manual", "v2 update")
+// For custom roles, updatePrompt returns false (built-in only), so use registerCustom again
+assert(rr2.getPromptHistory("my-custom").length === 1, "custom role history has only initial entry")
+const rbCustom = rr2.rollbackPrompt("my-custom", 1)
+assert(rbCustom === true, "rollbackPrompt works on custom roles")
+assert(rr2.getPrompt("my-custom") === "Custom v1", "custom role rollback to v1 works")
+
+assert(true, "RoleRegistry prompt versioning tests passed")
 
 // 60. SelfEvolver — prompt patches from error patterns
 console.log("\n[60] SelfEvolver — prompt patches from error patterns")
@@ -1781,6 +1908,179 @@ const aevAuto = await hooks.tool.agentic_auto.execute({
 const aevAutoOut = typeof aevAuto === "string" ? aevAuto : (aevAuto.output || "")
 assert(aevAutoOut.length > 0, "auto-evolution auto run produces output")
 assert(true, "auto-evolution tests passed")
+
+// 83. Skill → Training Data conversion
+console.log("\n[83] Skill → Training Data conversion")
+const { skillToTrainingExample, skillsToTrainingData, exportOpenAIJSONL, exportInstructionsJSON, trainingDatasetSummary } = mod
+
+// Create a mock skill record
+const mockSkillRecord = {
+  definition: {
+    meta: { format: "agentic-skill/v1", id: "test-skill-1", name: "Add Unit Test", version: 1, author: "agent" },
+    trigger: { pattern: "Add unit tests for new function", keywords: ["test", "unit", "jest"], context: [] },
+    workflow: {
+      steps: [
+        { order: 1, action: "create", description: "Create test file next to source", tool: "write", expectedOutput: "test file created", rollback: "Delete test file" },
+        { order: 2, action: "verify", description: "Run jest on test file", tool: "bash", expectedOutput: "all tests pass", rollback: undefined },
+      ],
+      estimatedDuration: "4m",
+      parallelizable: false,
+    },
+    quality: { successRate: 0.9, usageCount: 10, failureScenarios: ["Timeout on large dataset"] },
+    audit: { createdAt: "2024-01-01", lastUsed: "2024-06-01", lastModified: "2024-06-01", modifiedBy: "agent" },
+  },
+  usageCount: 10,
+  successRate: 0.9,
+  lastUsed: "2024-06-01",
+}
+
+const example = skillToTrainingExample(mockSkillRecord)
+assert(typeof example.instruction === "string" && example.instruction.length > 0, "training example has instruction")
+assert(typeof example.response === "string" && example.response.length > 0, "training example has response")
+assert(example.skillName === "Add Unit Test", "training example has skillName")
+assert(example.quality === 0.9, "training example has quality score")
+assert(example.response.includes("Add Unit Test"), "response contains skill name")
+assert(example.response.includes("Create test file"), "response contains step descriptions")
+assert(example.response.includes("Rollback"), "response includes rollback strategies")
+
+// OpenAI format
+const openaiData = exportOpenAIJSONL([example])
+const openaiLines = openaiData.trim().split("\n")
+assert(openaiLines.length === 1, "OpenAI format produces 1 line per example")
+const openaiParsed = JSON.parse(openaiLines[0])
+assert(openaiParsed.messages.length === 3, "OpenAI format has 3 messages")
+assert(openaiParsed.messages[0].role === "system", "OpenAI format starts with system")
+assert(openaiParsed.messages[1].role === "user", "OpenAI format has user message")
+assert(openaiParsed.messages[2].role === "assistant", "OpenAI format has assistant message")
+
+// Instructions JSON format
+const jsonData = exportInstructionsJSON([example])
+const jsonParsed = JSON.parse(jsonData)
+assert(Array.isArray(jsonParsed), "instructions format is an array")
+assert(jsonParsed.length === 1, "instructions format has 1 entry")
+assert(jsonParsed[0].instruction === example.instruction, "instructions format preserves instruction")
+assert(jsonParsed[0].output === example.response, "instructions format preserves response")
+assert(jsonParsed[0].source === "Add Unit Test", "instructions format preserves source")
+
+// skillsToTrainingData with filter
+const dataset1 = skillsToTrainingData([mockSkillRecord], "openai", 0.5)
+assert(dataset1.format === "openai", "format preserved")
+assert(dataset1.totalExamples === 1, "skill included when success rate >= minSuccessRate")
+assert(dataset1.data.length > 0, "training data has content")
+
+const dataset2 = skillsToTrainingData([mockSkillRecord], "openai", 0.95)
+assert(dataset2.totalExamples === 0, "skill excluded when success rate < minSuccessRate")
+
+const lowQualitySkill = { ...mockSkillRecord, successRate: 0.3 }
+const dataset3 = skillsToTrainingData([lowQualitySkill], "instructions", 0.4)
+assert(dataset3.totalExamples === 0, "low quality skill excluded")
+
+// Empty skills
+const dataset4 = skillsToTrainingData([], "openai", 0.5)
+assert(dataset4.totalExamples === 0, "empty skills produces 0 examples")
+assert(dataset4.data.length === 0, "empty skills produces empty data")
+
+// trainingDatasetSummary
+const summary = trainingDatasetSummary([example, { ...example, skillName: "Refactor Module", quality: 0.7 }])
+assert(summary.includes("Summary") || summary.includes("Total examples"), "summary shows total")
+assert(summary.includes("2"), "summary counts correctly")
+assert(summary.includes("Add Unit Test"), "summary lists skill names")
+
+const emptySummary = trainingDatasetSummary([])
+assert(emptySummary.includes("No training examples"), "empty summary handled")
+
+assert(true, "Skill Training Data conversion tests passed")
+
+// 84. agentic_evolve — export-training-data action
+console.log("\n[84] agentic_evolve — export-training-data")
+const trCtx = mockCtx(freshSid())
+const trR = await hooks.tool.agentic_evolve.execute({ action: "export-training-data" }, trCtx)
+const trOut = typeof trR === "string" ? trR : (trR.output || "")
+assert(trOut.includes("Training Data") || trOut.includes("training"), "export-training-data produces output")
+assert(trOut.includes("Total examples") || trOut.includes("total") || trOut.includes("No training"), "export-training-data shows count or empty message")
+assert(trOut.includes("openai") || trOut.includes("OpenAI"), "export-training-data shows format")
+
+// Specific format
+const trR2 = await hooks.tool.agentic_evolve.execute({ action: "export-training-data", format: "instructions" }, trCtx)
+const trOut2 = typeof trR2 === "string" ? trR2 : (trR2.output || "")
+assert(trOut2.includes("instructions") || trOut2.includes("instruction"), "export-training-data with instructions format works")
+
+// With minSuccessRate filter
+const trR3 = await hooks.tool.agentic_evolve.execute({ action: "export-training-data", minSuccessRate: 0.9 }, trCtx)
+const trOut3 = typeof trR3 === "string" ? trR3 : (trR3.output || "")
+assert(typeof trOut3 === "string" && trOut3.length > 0, "export-training-data with minSuccessRate works")
+
+assert(true, "agentic_evolve export-training-data tests passed")
+
+// 85. LiveEvaluator
+console.log("\n[85] LiveEvaluator")
+const ev = new mod.LiveEvaluator()
+
+// Fresh evaluator — no data
+const fresh = ev.computeScore()
+assert(fresh.overall > 0, "fresh evaluator score > 0 (neutral defaults)")
+assert(fresh.sweBenchScore === 0, "fresh SWE-bench score is 0 (no steps)")
+assert(fresh.evoClawScore > 0, "fresh EvoClaw score > 0 (neutral defaults)")
+assert(Object.keys(fresh.dimensions).length === 5, "5 evaluation dimensions")
+
+// Feed successes
+ev.feedStepResult({ stepId: "s1", success: true })
+ev.feedStepResult({ stepId: "s2", success: true })
+ev.feedStepResult({ stepId: "s3", success: true })
+ev.feedStepResult({ stepId: "s4", success: false })
+const after4 = ev.computeScore()
+assert(after4.sweBenchScore === 75, "75% task success after 3/4")
+assert(after4.totalSteps === 4, "tracks 4 steps")
+
+// Error recovery
+ev.feedErrorRecovery("e1", true)
+ev.feedErrorRecovery("e2", false)
+const afterRecovery = ev.computeScore()
+assert(afterRecovery.totalErrors === 2, "tracks 2 errors")
+assert(afterRecovery.recoveredErrors === 1, "1 recovered")
+
+// Navigation
+ev.feedNavigation("find auth middleware", 3)
+ev.feedNavigation("find all files", 50)
+const afterNav = ev.computeScore()
+assert(afterNav.dimensions.contextStability.score === 0.5, "1/2 navigations focused")
+
+// Delegation
+ev.feedDelegation("t1", "developer", true)
+ev.feedDelegation("t2", "qa", false)
+const afterDel = ev.computeScore()
+assert(afterDel.dimensions.multiAgent.score === 0.5, "1/2 delegations successful")
+
+// Skill lookup
+ev.feedSkillLookup(true)
+const afterSkill = ev.computeScore()
+assert(afterSkill.dimensions.skillReuse.score === 1, "1/1 skill found")
+assert(afterSkill.totalDelegations === 2, "2 delegations")
+assert(afterSkill.successfulDelegations === 1, "1 successful")
+
+// Format report
+const report = ev.formatReport(true)
+assert(report.includes("Evaluation") || report.includes("Score"), "report includes score")
+assert(report.includes("taskSuccess"), "report includes taskSuccess dimension")
+assert(report.includes("errorRecovery"), "report includes errorRecovery")
+assert(report.includes("contextStability"), "report includes contextStability")
+assert(report.includes("multiAgent"), "report includes multiAgent")
+assert(report.includes("skillReuse"), "report includes skillReuse")
+
+// Report without tips
+const reportNoTips = ev.formatReport(false)
+assert(reportNoTips.includes("Score"), "report without tips still shows score")
+
+// Edge cases
+const ev2 = new mod.LiveEvaluator()
+const empty = ev2.computeScore()
+assert(empty.sweBenchScore === 0, "empty evaluator SWE-bench score 0")
+assert(empty.dimensions.errorRecovery.score === 1, "no errors = perfect recovery")
+assert(empty.dimensions.contextStability.score === 1, "no nav = stable")
+assert(empty.dimensions.multiAgent.score === 1, "no delegation = not relevant")
+assert(empty.dimensions.skillReuse.score === 0.5, "no skill lookups = neutral")
+
+assert(true, "LiveEvaluator tests passed")
 
 // 54. Trace logging
 console.log("\n[54] Trace logging")

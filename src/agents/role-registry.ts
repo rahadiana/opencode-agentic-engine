@@ -21,9 +21,25 @@ export interface CustomAgentDef {
 /** Complexity level for model suggestion */
 export type TaskComplexity = "simple" | "moderate" | "complex"
 
+export type PromptSource = "auto-evolve" | "agent-self" | "manual" | "initial"
+
+export interface PromptEntry {
+  version: number
+  prompt: string
+  timestamp: string
+  source: PromptSource
+  description?: string
+}
+
+export interface PromptState {
+  currentVersion: number
+  history: PromptEntry[]
+}
+
 export class RoleRegistry {
   private builtIn: Map<AgentRole, AgentDef> = new Map()
   private custom: Map<CustomRole, CustomAgentDef> = new Map()
+  private promptHistory: Map<string, PromptState> = new Map()
 
   private defaultModels: Record<AgentRole, string> = {
     architect: "fast",        // analisis — cukup model cepat
@@ -33,7 +49,13 @@ export class RoleRegistry {
     pm: "fast",               // requirement — model cepat
   }
 
-  constructor() {
+  constructor(initialPrompts?: Array<{ role: string; history: PromptEntry[] }>) {
+    if (initialPrompts) {
+      for (const entry of initialPrompts) {
+        const latest = entry.history.reduce((a, b) => a.version > b.version ? a : b)
+        this.promptHistory.set(entry.role, { currentVersion: latest.version, history: entry.history })
+      }
+    }
     this.builtIn.set("architect", {
       role: "architect",
       name: "System Architect",
@@ -387,27 +409,88 @@ For each feature:
 Focus on the "what" and "why". Leave the "how" to architects and developers.`,
       tools: ["agentic_plan", "agentic_nav", "agentic_delegate", "agentic_episodes", "read"],
     })
+    // Initialize prompt history for all built-in roles (if not already loaded from persistence)
+    const builtInRoles: AgentRole[] = ["architect", "developer", "qa", "coordinator", "pm"]
+    for (const role of builtInRoles) {
+      if (!this.promptHistory.has(role)) {
+        this.addHistoryEntry(role, this.builtIn.get(role)!.prompt, "initial", "Built-in prompt")
+      }
+    }
   }
 
   registerCustom(def: CustomAgentDef): void {
     this.custom.set(def.role, def)
+    if (!this.promptHistory.has(def.role)) {
+      this.addHistoryEntry(def.role, def.prompt, "manual", `Custom role: ${def.name}`)
+    }
+  }
+
+  private addHistoryEntry(role: string, prompt: string, source: PromptSource, description?: string): void {
+    const existing = this.promptHistory.get(role)
+    const version = existing ? existing.currentVersion + 1 : 1
+    const entry: PromptEntry = { version, prompt, timestamp: new Date().toISOString(), source, description }
+    if (existing) {
+      existing.history.push(entry)
+      existing.currentVersion = version
+    } else {
+      this.promptHistory.set(role, { currentVersion: version, history: [entry] })
+    }
   }
 
   /**
-   * Update the system prompt for a built-in role.
+   * Update the system prompt for a built-in role with version tracking.
    * Returns true if the role was found and updated.
-   * Gap #1: enables prompt auto-patching from SelfEvolver.
    */
-  updatePrompt(role: AgentRole, newPrompt: string): boolean {
+  updatePrompt(role: AgentRole, newPrompt: string, source: PromptSource = "manual", description?: string): boolean {
     const existing = this.builtIn.get(role)
     if (!existing) return false
     this.builtIn.set(role, { ...existing, prompt: newPrompt })
+    this.addHistoryEntry(role, newPrompt, source, description)
     return true
   }
 
   /** Get the current prompt for a role (built-in or custom) */
   getPrompt(role: string): string | undefined {
     return this.builtIn.get(role as AgentRole)?.prompt ?? this.custom.get(role)?.prompt
+  }
+
+  /** Get prompt version history for a role */
+  getPromptHistory(role: string): PromptEntry[] {
+    return this.promptHistory.get(role)?.history ?? []
+  }
+
+  /** Get the full prompt state for a role (current version + history) */
+  getPromptState(role: string): PromptState | undefined {
+    return this.promptHistory.get(role)
+  }
+
+  /** Get all prompt states (for persistence) */
+  getAllPromptStates(): Array<{ role: string; history: PromptEntry[] }> {
+    return [...this.promptHistory.entries()].map(([role, state]) => ({ role, history: state.history }))
+  }
+
+  /**
+   * Rollback a role's prompt to a specific version.
+   * Returns true if the rollback succeeded.
+   */
+  rollbackPrompt(role: string, version: number): boolean {
+    const state = this.promptHistory.get(role)
+    if (!state) return false
+    const entry = state.history.find(e => e.version === version)
+    if (!entry) return false
+
+    const def = this.builtIn.get(role as AgentRole)
+    if (def) {
+      this.builtIn.set(role as AgentRole, { ...def, prompt: entry.prompt })
+    }
+    const custom = this.custom.get(role)
+    if (custom) {
+      this.custom.set(role, { ...custom, prompt: entry.prompt })
+    }
+    if (!def && !custom) return false
+
+    this.addHistoryEntry(role, entry.prompt, "manual", `Rollback to version ${version}`)
+    return true
   }
 
   getBuiltIn(role: AgentRole): AgentDef | undefined {

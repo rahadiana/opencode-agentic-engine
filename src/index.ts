@@ -25,9 +25,10 @@ import { Dashboard } from "./observability/dashboard.js"
 import { CheckpointSystem } from "./drift/checkpoints.js"
 import { SessionStore } from "./memory/session-store.js"
 import { TraceLogger } from "./observability/trace-logger.js"
-import { RoleRegistry } from "./agents/role-registry.js"
+import { RoleRegistry, type PromptEntry } from "./agents/role-registry.js"
 import { MemorySchemaVersion, createMemoryEnvelope, parseMemoryEnvelope } from "./memory/schema-version.js"
 import { createSkillDefinition, inspectSkill, serializeSkill, deserializeSkill } from "./memory/skill-format.js"
+import { skillsToTrainingData, trainingDatasetSummary, skillToTrainingExample } from "./memory/skill-training.js"
 import { SelfEvolver } from "./evolution/self-evolver.js"
 import { ContinuousEvolution } from "./evolution/continuous-evolution.js"
 import { LLMEngine } from "./core/llm.js"
@@ -37,6 +38,7 @@ import { VectorStore } from "./memory/vector-store.js"
 import { ModelRegistry } from "./core/model-registry.js"
 import { ConfigLoader } from "./core/config.js"
 import { PatternDiscovery } from "./drift/pattern-discovery.js"
+import { LiveEvaluator } from "./evaluation/live-evaluator.js"
 
 const createEngine: Plugin = async (input, _options) => {
   // ── Config (load first, everything else depends on it) ──
@@ -108,6 +110,7 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
   const selfEvolver = new SelfEvolver()
   const continuousEvolution = new ContinuousEvolution()
   const patternDiscovery = new PatternDiscovery()
+  const liveEvaluator = new LiveEvaluator()
   const modelRegistry = new ModelRegistry()
   const llmEngine = new LLMEngine()
   llmEngine.setOpencodeClient(input.client)
@@ -216,6 +219,32 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
   const savedSkills = persistence.loadAll<import("./memory/skill-format.js").SkillDefinition>("skills")
   for (const sk of savedSkills) {
     skillStore.importFromEnvelope(JSON.stringify(createMemoryEnvelope(sk.data, "skill")))
+  }
+
+  // Restore persisted prompt states (Stage IV: versioned prompt history)
+  const savedPrompts = persistence.loadAll<Array<{ role: string; history: PromptEntry[] }>>("prompts")
+  if (savedPrompts.length > 0) {
+    // Find the latest state and pass to RoleRegistry constructor
+    const latest = savedPrompts.reduce((a, b) => {
+      const aTime = new Date(a.updatedAt).getTime()
+      const bTime = new Date(b.updatedAt).getTime()
+      return aTime > bTime ? a : b
+    })
+    const promptData = latest.data
+    for (const entry of promptData) {
+      const state = roleRegistry.getPromptState(entry.role)
+      if (state) {
+        // Role already has initial history — skip
+        continue
+      }
+      // Replay history into RoleRegistry (construct already set initial prompts)
+      for (const hist of entry.history) {
+        let currentPrompt = roleRegistry.getPrompt(entry.role)
+        if (currentPrompt && hist.prompt !== currentPrompt) {
+          roleRegistry.updatePrompt(entry.role as "architect" | "developer" | "qa" | "coordinator" | "pm", hist.prompt, hist.source, hist.description)
+        }
+      }
+    }
   }
 
   await traceLogger.init()
@@ -357,14 +386,15 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
       }
     }
 
-    // Auto-apply prompt patches
+    // Auto-apply prompt patches (Stage IV: versioned, source-tracked)
     const appliedPatches: string[] = []
     for (const patch of report.promptPatches) {
       try {
         const existingPrompt = roleRegistry.getPrompt(patch.role)
         if (existingPrompt && !existingPrompt.includes(patch.instruction.slice(0, 40))) {
           const newPrompt = existingPrompt + `\n\n## Auto-Patched Instruction (from ${patch.errorCategory} errors)\n${patch.instruction}`
-          roleRegistry.updatePrompt(patch.role as "architect" | "developer" | "qa" | "coordinator" | "pm", newPrompt)
+          roleRegistry.updatePrompt(patch.role as "architect" | "developer" | "qa" | "coordinator" | "pm", newPrompt, "auto-evolve", `Patch from ${patch.errorCategory} errors (${patch.occurrences}x)`)
+          persistence.save("prompts", "state", roleRegistry.getAllPromptStates())
           appliedPatches.push(`${patch.role}: "${patch.instruction.slice(0, 60)}..."`)
         }
       } catch { /* non-fatal */ }
@@ -986,6 +1016,20 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
               output += `**Tips:**\n`
               output += trend.recommendations.map(r => `- ${r}`).join("\n") + "\n"
             }
+          }
+
+          // Live evaluation score
+          const liveScore = liveEvaluator.computeScore()
+          if (liveScore.totalSteps > 0 || liveScore.totalDelegations > 0) {
+            output += `\n### 📊 Live Evaluation Score\n`
+            const bar = "█".repeat(Math.round(liveScore.overall / 5))
+            output += `**Overall:** ${liveScore.overall}/100 ${bar.padEnd(20, "░")}\n`
+            for (const [name, dim] of Object.entries(liveScore.dimensions)) {
+              if (dim.weight > 0) {
+                output += `- **${name}:** ${(dim.score * 100).toFixed(0)}% (target ${(dim.target * 100).toFixed(0)}%)\n`
+              }
+            }
+            output += `\n`
           }
 
           return { output, metadata: { progress, nextStep: nextStep?.id, blockedSteps, isComplete, isHealthy } }
@@ -2063,6 +2107,13 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
             }
           }
 
+          // Live evaluation score
+          const liveScore = liveEvaluator.computeScore()
+          if (liveScore.totalSteps > 0 || liveScore.totalDelegations > 0) {
+            output += `\n### 📊 Live Evaluation Score\n`
+            output += liveEvaluator.formatReport(false)
+          }
+
           return { output }
         },
       }),
@@ -2131,11 +2182,16 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
       agentic_evolve: tool({
         description: "Inspect and extend the agent system itself (Stage IV). Register custom agent roles, define versioned memory schemas, and export skills in self-describing format for other agents to consume.",
         args: {
-          action: tool.schema.enum(["inspect", "register-role", "export-skill", "memory-schema", "evolve"]).describe("What to do: inspect system state, register a custom agent role, export a skill in machine-readable format, view memory schema info, or run full self-evolution analysis"),
+          action: tool.schema.enum(["inspect", "register-role", "export-skill", "memory-schema", "evolve", "read-prompt", "edit-prompt", "prompt-history", "rollback-prompt", "export-training-data"]).describe("What to do: inspect system state, register a custom agent role, export a skill, view memory schema, run self-evolution, manage agent prompts (Stage IV), or export skills as training data for fine-tuning"),
           name: tool.schema.string().optional().describe("Role name or skill name (for register-role, export-skill)"),
-          prompt: tool.schema.string().optional().describe("Agent prompt template (for register-role)"),
+          prompt: tool.schema.string().optional().describe("Agent prompt template (for register-role) or new instruction to append (for edit-prompt)"),
           tools: tool.schema.array(tool.schema.string()).optional().describe("Tools available to custom role"),
           skillId: tool.schema.string().optional().describe("Skill ID to export or inspect"),
+          role: tool.schema.string().optional().describe("Agent role (for read-prompt, edit-prompt, prompt-history, rollback-prompt)"),
+          version: tool.schema.number().optional().describe("Version number (for rollback-prompt)"),
+          description: tool.schema.string().optional().describe("Description for the prompt change (for edit-prompt)"),
+          format: tool.schema.enum(["openai", "instructions"]).optional().describe("Output format for training data (for export-training-data, default: openai)"),
+          minSuccessRate: tool.schema.number().optional().describe("Minimum skill success rate to include (for export-training-data, default: 0.5)"),
         },
         async execute(args, _context) {
           switch (args.action) {
@@ -2334,14 +2390,15 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
                 out += `\n`
               }
 
-              // Auto-apply prompt patches (Gap #1)
+              // Auto-apply prompt patches (Stage IV: versioned, source-tracked)
               const appliedPatches: string[] = []
               for (const patch of report.promptPatches) {
                 try {
                   const existingPrompt = roleRegistry.getPrompt(patch.role)
                   if (existingPrompt && !existingPrompt.includes(patch.instruction.slice(0, 40))) {
                     const newPrompt = existingPrompt + `\n\n## Auto-Patched Instruction (from ${patch.errorCategory} errors)\n${patch.instruction}`
-                    roleRegistry.updatePrompt(patch.role as "architect" | "developer" | "qa" | "coordinator" | "pm", newPrompt)
+                    roleRegistry.updatePrompt(patch.role as "architect" | "developer" | "qa" | "coordinator" | "pm", newPrompt, "auto-evolve", `Patch from ${patch.errorCategory} errors (${patch.occurrences}x)`)
+                    persistence.save("prompts", "state", roleRegistry.getAllPromptStates())
                     appliedPatches.push(`${patch.role}: "${patch.instruction.slice(0, 60)}..."`)
                   }
                 } catch { /* non-fatal */ }
@@ -2462,8 +2519,82 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
               return { output: out }
             }
 
+            case "read-prompt": {
+              const targetRole = args.role ?? "developer"
+              const prompt = roleRegistry.getPrompt(targetRole)
+              if (!prompt) return { output: `Role "${targetRole}" not found.` }
+              const state = roleRegistry.getPromptState(targetRole)
+              const ver = state?.currentVersion ?? 1
+              return {
+                output: `## 📖 Prompt for \`${targetRole}\` (v${ver})\n\n\`\`\`\n${prompt}\n\`\`\``,
+              }
+            }
+
+            case "edit-prompt": {
+              const targetRole = args.role ?? "developer"
+              if (!args.prompt) return { output: "`prompt` (instruction to append) is required for edit-prompt." }
+              const existingPrompt = roleRegistry.getPrompt(targetRole)
+              if (!existingPrompt) return { output: `Role "${targetRole}" not found.` }
+              const newPrompt = existingPrompt + `\n\n## Self-Patched Instruction (agent-driven)\n${args.prompt}`
+              const updated = roleRegistry.updatePrompt(targetRole as "architect" | "developer" | "qa" | "coordinator" | "pm", newPrompt, "agent-self", args.description ?? "Agent self-modification")
+              if (!updated) return { output: `Failed to update prompt for role "${targetRole}". Only built-in roles can be edited.` }
+              persistence.save("prompts", "state", roleRegistry.getAllPromptStates())
+              return {
+                output: `✅ Prompt for \`${targetRole}\` updated (v${roleRegistry.getPromptState(targetRole)?.currentVersion}). New instruction appended at the end.`,
+              }
+            }
+
+            case "prompt-history": {
+              const targetRole = args.role ?? "developer"
+              const history = roleRegistry.getPromptHistory(targetRole)
+              if (history.length === 0) return { output: `No prompt history for "${targetRole}".` }
+              let out = `## 📜 Prompt History for \`${targetRole}\`\n\n`
+              for (const entry of history) {
+                const preview = entry.prompt.slice(-200).replace(/\n/g, " ")
+                out += `**v${entry.version}** — ${entry.timestamp} — source: ${entry.source}`
+                if (entry.description) out += ` — ${entry.description}`
+                out += `\n\`\`\`\n...${preview.slice(-200)}\n\`\`\`\n\n`
+              }
+              return { output: out }
+            }
+
+            case "rollback-prompt": {
+              const targetRole = args.role ?? "developer"
+              const version = args.version
+              if (!version) return { output: "`version` is required for rollback-prompt." }
+              const history = roleRegistry.getPromptHistory(targetRole)
+              if (history.length === 0) return { output: `No prompt history for "${targetRole}".` }
+              const target = history.find(e => e.version === version)
+              if (!target) return { output: `Version ${version} not found for "${targetRole}". Available versions: ${history.map(e => `v${e.version}`).join(", ")}` }
+              const ok = roleRegistry.rollbackPrompt(targetRole, version)
+              if (!ok) return { output: `Failed to rollback prompt for "${targetRole}".` }
+              persistence.save("prompts", "state", roleRegistry.getAllPromptStates())
+              return {
+                output: `✅ Prompt for \`${targetRole}\` rolled back to v${version} (from ${target.timestamp}).`,
+              }
+            }
+
+            case "export-training-data": {
+              const allSkills = skillStore.getAll()
+              const fmt = args.format ?? "openai"
+              const minRate = args.minSuccessRate ?? 0.5
+              const dataset = skillsToTrainingData(allSkills, fmt, minRate)
+
+              const filteredSkills = allSkills.filter(s => s.successRate >= minRate)
+              const examples = filteredSkills.map(s => skillToTrainingExample(s))
+              const summary = trainingDatasetSummary(examples)
+
+              let out = summary
+              out += `\n\n### Training Data (${dataset.format})\n`
+              out += `\`\`\`\n${dataset.data.slice(0, 2000)}${dataset.data.length > 2000 ? "\n… (truncated)" : ""}\n\`\`\``
+              if (dataset.data.length > 2000) {
+                out += `\n\n**Full dataset:** ${dataset.data.length} characters, ${dataset.totalExamples} examples`
+              }
+              return { output: out }
+            }
+
             default:
-              return { output: `Unknown action: ${args.action}. Available: inspect, register-role, export-skill, memory-schema, evolve.` }
+              return { output: `Unknown action: ${args.action}. Available: inspect, register-role, export-skill, memory-schema, evolve, read-prompt, edit-prompt, prompt-history, rollback-prompt, export-training-data.` }
           }
         },
       }),
@@ -2661,12 +2792,17 @@ Only include files that need changing. Return ONLY valid JSON.` + llmEngine.getM
             }
           }
 
+          // Live evaluation score
+          if (liveEvaluator.computeScore().totalSteps > 0 || liveEvaluator.computeScore().totalDelegations > 0) {
+            report += `\n\n${liveEvaluator.formatReport(false)}`
+          }
+
           return { output: report, metadata: { result } }
         },
       }),
     },
 
-    "tool.execute.after": async (toolInput: { tool: string; args: unknown; sessionID: string; callID: string }, _output: { title: string; output: string; metadata: unknown }) => {
+    "tool.execute.after": async (toolInput: { tool: string; args: Record<string, unknown>; sessionID: string; callID: string }, _output: { title: string; output: string; metadata: unknown }) => {
       traceLogger.log({
         step: "tool",
         input: JSON.stringify(toolInput.args ?? {}),
@@ -2675,11 +2811,61 @@ Only include files that need changing. Return ONLY valid JSON.` + llmEngine.getM
         success: true,
         durationMs: 0,
       })
+
+      // Feed LiveEvaluator from tool execution
+      try {
+        const args = toolInput.args ?? {}
+        switch (toolInput.tool) {
+          case "agentic_execute": {
+            const success = args.success === true
+            if (args.stepId) {
+              liveEvaluator.feedStepResult({ stepId: String(args.stepId), success, sessionId: toolInput.sessionID })
+              // Error recovery tracking: if retry succeeded after an error
+              if (success && args.error && String(args.error).length > 0) {
+                liveEvaluator.feedErrorRecovery(`exec-${args.stepId}`, true)
+              } else if (!success && args.error && String(args.error).length > 0) {
+                liveEvaluator.feedErrorRecovery(`exec-${args.stepId}`, false)
+              }
+            }
+            break
+          }
+          case "agentic_reflect": {
+            // Each reflect call counts as error recovery attempt
+            if (args.stepId) {
+              liveEvaluator.feedErrorRecovery(`reflect-${args.stepId}`, true)
+            }
+            break
+          }
+          case "agentic_nav": {
+            if (args.query) {
+              const outputText = _output?.output || ""
+              const fileMatches = (outputText.match(/\.ts/g) ?? []).length
+              liveEvaluator.feedNavigation(String(args.query), fileMatches)
+            }
+            break
+          }
+          case "agentic_delegate": {
+            if (args.taskId && args.role) {
+              const outputOk = (_output?.output || "").includes("delegated") || (_output?.output || "").includes("Delegated")
+              liveEvaluator.feedDelegation(String(args.taskId), String(args.role), outputOk)
+            }
+            break
+          }
+          case "agentic_skill": {
+            if (args.action === "find" || args.action === "search") {
+              const found = (_output?.output || "").includes("Skill") || (_output?.output || "").includes("skill")
+              liveEvaluator.feedSkillLookup(found)
+            }
+            break
+          }
+        }
+      } catch { /* non-fatal */ }
     },
 
     dispose: async () => {
       configLoader.stopWatch()
       persistence.save("models", "registry", modelRegistry.toJSON())
+      persistence.save("prompts", "state", roleRegistry.getAllPromptStates())
       await traceLogger.dispose()
     },
   }
@@ -2703,3 +2889,5 @@ export { SelfEvolver } from "./evolution/self-evolver.js"
 export { AgentCoordinator } from "./agents/coordinator.js"
 export { Executor } from "./core/executor.js"
 export { PatternDiscovery } from "./drift/pattern-discovery.js"
+export { skillToTrainingExample, skillsToTrainingData, exportOpenAIJSONL, exportInstructionsJSON, trainingDatasetSummary } from "./memory/skill-training.js"
+export { LiveEvaluator } from "./evaluation/live-evaluator.js"

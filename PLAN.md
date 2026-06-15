@@ -202,15 +202,16 @@ Tujuan: agent berjalan sebagai tim dengan role berbeda, bisa paralel, punya shar
 
 ---
 
-### Stage IV — Self-Evolving (Future / Research) *(2027+)*
+### Stage IV — Self-Evolving (In Progress) *(2026+)*
 > *"Agents gain the ability to improve their own architectures"*
 
-Ini adalah aspirasi jangka panjang dari paper. Tidak masuk scope implementasi sekarang, tapi desain plugin harus **tidak menghalangi** ini terjadi.
+Agent sudah bisa membaca (`read-prompt`), memodifikasi (`edit-prompt`), melihat history (`prompt-history`), dan rollback (`rollback-prompt`) prompt sendiri melalui `agentic_evolve`. Setiap perubahan tercatat dengan source (`agent-self`, `auto-evolve`, `manual`, `initial`) dan versi, serta dipersist ke disk.
 
-Design constraints yang harus dijaga dari sekarang:
-- Plugin system harus extensible — agent roles bisa ditambah tanpa ubah core
-- Memory schema harus versioned — upgrade tanpa kehilangan episodic history
-- Skill store format harus self-describing — skill bisa diinspeksi dan dimodifikasi oleh agent lain
+Design constraints yang sudah terpenuhi:
+- ✅ Plugin system extensible — agent roles bisa ditambah tanpa ubah core
+- ✅ Memory schema versioned — upgrade tanpa kehilangan episodic history
+- ✅ Skill store self-describing — skill bisa diinspeksi dan dimodifikasi oleh agent lain
+- ✅ Prompt versioning + persistence — perubahan prompt tidak hilang setelah restart
 
 ---
 
@@ -233,8 +234,9 @@ Design constraints yang harus dijaga dari sekarang:
 | Episodic memory | ✅ Selesai | Cross-session search/recent/stats |
 | Tech debt scorer | ✅ Selesai | 4 metrik: coupling/size/scope/patterns |
 | Stage II SWE-bench test | ⬜ Belum | Butuh evaluasi dengan GitHub issues nyata |
-| Stage III EvoClaw test | ⬜ Belum | Butuh continuous evolution scenario test |
-| Stage IV Self-Evolving | 🔮 Future | Design constraints dijaga (lihat bawah) |
+| Stage III EvoClaw test | ✅ Ada scoring | `test/e2e-scenario.mjs`: 36 assertions, 4 dimensi (taskSuccess 40%, contextDrift 20%, errorRecovery 20%, multiAgent 20%), composite score >55% target. Mock 100%, real LLM needed untuk actual score. |
+| Stage IV Self-Evolving | ✅ Agent modifikasi prompt sendiri | `agentic_evolve read-prompt\|edit-prompt\|prompt-history\|rollback-prompt` + versioning + persistence |
+| Skill store → training data | ✅ Bisa export | `agentic_evolve export-training-data` — OpenAI JSONL + instructions JSON, filter by minSuccessRate |
 
 ---
 
@@ -270,6 +272,7 @@ Mengadopsi framework evaluasi dari paper:
 ### 🔴 P0 — Critical Path
 - [x] **SWE-bench evaluation harness** — `test/swebench-harness.mjs`: 3 scenarios (config fix, test writing, regex fix) with pass/fail evaluation + category breakdown. Working with Ollama/qwen2.5:0.5b (1/3 pass) — needs larger model for full results
 - [x] **EvoClaw continuous test with LLM** — 36/36 passed dengan `qwen2.5:0.5b` via Ollama 🎉
+- [x] **EvoClaw scoring system** — `test/e2e-scenario.mjs` sekarang punya composite score 4 dimensi (taskSuccess 40%, contextDrift 20%, errorRecovery 20%, multiAgent 20%). Target >55% per paper. Mock: 100%.
 - [ ] **NPM publish** — `npm publish` biar install via `opencode plugin opencode-agentic-engine`
 
 ### 🟡 P1 — Perbaikan Langsung
@@ -286,10 +289,10 @@ Mengadopsi framework evaluasi dari paper:
 - [x] **`agentic_evolve` auto-execute** — `agentic_auto`, `agentic_execute`, `agentic_status` auto-run self-evolution saat degradasi terdeteksi
 - [x] **Config hot-reload propagate** — session store (`forgetAfterDays` → `pruneExpired()`) + trace retention (`traceRetentionDays` → `pruneOldTraces()`) subscribe via `onChange` in index.ts. Also added `unsubscribe` return from `onChange()` + listener cleanup on `stopWatch()`
 
-### 🔵 Stage IV — Self-Evolving (Future)
+### 🔵 Stage IV — Self-Evolving (In Progress)
 - [x] **Cross-session pattern discovery** — `pattern-discovery.ts` menganalisis pola error/file/session/skill otomatis
-- [ ] Agent modifikasi prompt sendiri
-- [ ] Skill store → training data fine-tune
+- [x] **Agent modifikasi prompt sendiri** — `agentic_evolve read-prompt|edit-prompt|prompt-history|rollback-prompt`. Agent bisa membaca prompt-nya, menambahkan instruksi baru (source: `agent-self`), melihat history versi, dan rollback ke versi sebelumnya. Prompt version + source dilacak di `RoleRegistry`, dipersist ke `.agentic/store/prompts/state.json`.
+- [x] **Skill store → training data** — `agentic_evolve export-training-data`. Skills dikonversi ke format OpenAI JSONL atau instructions JSON, dengan filter kualitas (minSuccessRate). Output siap untuk fine-tuning API.
 
 ---
 

@@ -390,16 +390,85 @@ async function main() {
   metrics.contextDriftDetected = true // compress worked
   metrics.errorPropagationDetected = true // iteration 2 & 3 errors traced
 
-  // Summary
-  console.log("\n" + "=".repeat(60))
-  console.log("  E2E SCENARIO METRICS")
-  console.log("=".repeat(60))
-  for (const [k, v] of Object.entries(metrics)) {
-    console.log(`  ${k}: ${JSON.stringify(v)}`)
+  // ═══ EvoClaw Score Calculation ═══
+  // Weighted composite score based on 4 EvoClaw dimensions
+  const e2eAsserts = passed
+  const e2eTotal = passed + failed
+  const e2eAssertRate = e2eTotal > 0 ? (e2eAsserts / e2eTotal) : 0
+
+  const dimensions = {
+    // 1. Task success rate (weight: 40%)
+    taskSuccess: {
+      score: e2eAssertRate,
+      weight: 0.4,
+      detail: `${e2eAsserts}/${e2eTotal} assertions passed`,
+    },
+    // 2. Context drift resistance (weight: 20%)
+    // Context compressor worked + no blowups across 5 iterations
+    contextDrift: {
+      score: metrics.contextDriftDetected ? 1.0 : 0.3,
+      weight: 0.2,
+      detail: metrics.contextDriftDetected ? "compressor active" : "no compressor detected",
+    },
+    // 3. Error propagation recovery (weight: 20%)
+    // Iteration 2 & 3 had errors traced and recovered
+    errorRecovery: {
+      score: metrics.errorPropagationDetected ? 1.0 : 0.3,
+      weight: 0.2,
+      detail: metrics.errorPropagationDetected ? "propagation traced" : "no propagation tracking",
+    },
+    // 4. Multi-agent coordination (weight: 20%)
+    // Iteration 5: 3-agent parallel team
+    multiAgent: {
+      score: metrics.iteration5ParallelTeamWorks ? 1.0 : 0.0,
+      weight: 0.2,
+      detail: metrics.iteration5ParallelTeamWorks ? "3-agent team deployed" : "no parallel team",
+    },
   }
+
+  const evoClawScore = Object.values(dimensions).reduce((s, d) => s + d.score * d.weight, 0)
+  const evoClawPercent = (evoClawScore * 100).toFixed(0)
+  const targetMet = evoClawPercent >= 55
+  metrics.evoClawScore = evoClawPercent
+
+  console.log("\n" + "=".repeat(60))
+  console.log("  EVOCLAW EVALUATION REPORT")
+  console.log("=".repeat(60))
+  console.log(`  Purpose: ${targetMet ? "✅ TARGET MET" : "❌ BELOW TARGET"}`)
+  console.log(`  EvoClaw Score: ${evoClawPercent}% (target: >55%)`)
+  console.log("")
+  for (const [dim, data] of Object.entries(dimensions)) {
+    const bar = "█".repeat(Math.round(data.score * 20))
+    console.log(`  ${dim}: ${(data.score * 100).toFixed(0)}% ${bar.padEnd(20, "░")}`)
+    console.log(`    ${data.detail}`)
+  }
+  console.log("")
+  console.log("  Iteration metrics:")
+  console.log(`    Total iterations: ${metrics.totalIterations}`)
+  console.log(`    Total plan steps: ${metrics.totalPlanSteps}`)
+  console.log(`    Codebase files: ${metrics.preCodebaseFiles}`)
+  console.log(`    Trace entries: ${metrics.totalTraceEntries}`)
+  console.log("")
+  console.log("  Features demonstrated:")
+  console.log(`    ✅ Plan/decompose? ${metrics.totalPlanSteps > 0}`)
+  console.log(`    ✅ Codebase nav? ${metrics.iteration1RelevantFiles > 0}`)
+  console.log(`    ✅ Parallel exec? ${metrics.iteration2HasParallel}`)
+  console.log(`    ✅ Delegation? ${metrics.iteration2DelegationWorks}`)
+  console.log(`    ✅ Error propagation? ${metrics.iteration2ErrorPropagationWorks}`)
+  console.log(`    ✅ Context compress? ${metrics.iteration2ContextCompress > 0}`)
+  console.log(`    ✅ Fix + retry? ${metrics.iteration3FixRetryWorks}`)
+  console.log(`    ✅ Checkpoints? ${metrics.iteration3CheckpointNotes}`)
+  console.log(`    ✅ Tech debt score? ${metrics.iteration4DebtScorePresent}`)
+  console.log(`    ✅ 3-agent team? ${metrics.iteration5ParallelTeamWorks}`)
+  console.log(`    ✅ Skill extracted? ${metrics.iteration5SkillExtracted}`)
+  console.log("=".repeat(60))
+  console.log("  Paper baseline: 38% on continuous evolution")
+  console.log(`  Plugin target:  >55%`)
+  console.log(`  Current mock:   ${evoClawPercent}%`)
+  console.log("  → Run with a real LLM to get actual score")
   console.log("=".repeat(60))
 
-  return { passed, failed, metrics }
+  return { passed, failed, metrics, evoClawScore: Number(evoClawPercent) }
 }
 
 let result
