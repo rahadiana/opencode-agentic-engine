@@ -35,11 +35,27 @@ import { VectorStore } from "./memory/vector-store.js"
 import { ModelRegistry } from "./core/model-registry.js"
 import { ConfigLoader } from "./core/config.js"
 
-const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<Plugin>[1]) => {
+const createEngine: Plugin = async (input, _options) => {
   // ── Config (load first, everything else depends on it) ──
   const configLoader = new ConfigLoader(input.worktree)
   const config = configLoader.load()
   configLoader.startWatch()
+
+  // ── Auto-register "agentic" agent if not present ──
+  const agentsDir = join(input.worktree, ".opencode", "agents")
+  const agenticAgentPath = join(agentsDir, "agentic.md")
+  if (!existsSync(agenticAgentPath)) {
+    try {
+      mkdirSync(agentsDir, { recursive: true })
+      writeFileSync(agenticAgentPath, `---
+description: Multi-agent software engineering assistant (20 tools: plan, execute, reflect, verify, nav, delegate, etc.)
+mode: all
+---
+
+You are an AI assistant with access to 20 agentic engineering tools (agentic_plan, agentic_execute, agentic_reflect, agentic_verify, agentic_nav, agentic_delegate, etc.). Use these tools to help the user plan, implement, verify, and manage software engineering tasks.
+`, "utf-8")
+    } catch { /* non-fatal: agent file is optional */ }
+  }
 
   const intentParser = new IntentParser()
   const executor = new Executor()
