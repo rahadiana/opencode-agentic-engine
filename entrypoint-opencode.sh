@@ -35,13 +35,34 @@ if (apiKey && baseURL && model) {
   };
   config.model = model;
 
-  // Register a custom primary agent that uses the agentic-engine tools
+  // Global permissions — allow everything so agent works without human intervention
+  config.permission = {
+    read: 'allow',
+    edit: 'allow',
+    glob: 'allow',
+    grep: 'allow',
+    list: 'allow',
+    bash: 'allow',
+    task: 'allow',
+    webfetch: 'allow',
+    websearch: 'allow',
+    question: 'allow',
+    skill: 'allow',
+  };
+
+  // Agentic agent — fully autonomous
   config.agent = {
     agentic: {
       description: 'Autonomous software engineer using agentic-engine pipeline',
       mode: 'primary',
       model: model,
       prompt: '{file:./prompts/agentic.txt}',
+      permission: { read: 'allow', edit: 'allow', glob: 'allow', grep: 'allow', list: 'allow', bash: 'allow', task: 'allow', webfetch: 'allow', websearch: 'allow', question: 'allow', skill: 'allow' }
+    },
+    // Default build agent — same full permissions
+    build: {
+      mode: 'primary',
+      model: model,
       permission: { read: 'allow', edit: 'allow', glob: 'allow', grep: 'allow', list: 'allow', bash: 'allow', task: 'allow', webfetch: 'allow', websearch: 'allow', question: 'allow', skill: 'allow' }
     }
   };
