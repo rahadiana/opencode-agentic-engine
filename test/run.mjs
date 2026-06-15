@@ -754,7 +754,42 @@ assert(evolveOut.includes("Self-Evolution") || evolveOut.includes("Improvement S
 assert(evolveOut.includes("Recommendation") || evolveOut.includes("recommend"), "evolve includes recommendations")
 assert(evolveOut.includes("Success Rate") || evolveOut.includes("success"), "evolve shows metrics")
 
-// 52. Trace logging
+// 52. Model registry with client-based discovery
+console.log("\n[52] Model registry with client discovery")
+const modelCtx52 = mockCtx(freshSid())
+const modelCtx52Input = {
+  ...mockInput,
+  client: {
+    config: {
+      providers: async () => ({
+        200: {
+          providers: [
+            { name: "openai", id: "openai", models: { "gpt-4o": {}, "gpt-4o-mini": {} } },
+            { name: "9router", id: "9router", models: { "claude-3-opus": {}, "claude-3-sonnet": {} } },
+          ],
+          default: { "default": "openai/gpt-4o" },
+        },
+      }),
+    },
+  },
+}
+const modelHooks52 = await plugin(modelCtx52Input, mockOptions)
+const modelProto52 = Object.getPrototypeOf(modelHooks52)
+let     modelRegistryRef52 = null
+// Extract model registry via tool execution
+const statusResp52 = await modelHooks52.tool.agentic_status.execute({}, modelCtx52)
+const statusOut52 = typeof statusResp52 === "string" ? statusResp52 : statusResp52.output || JSON.stringify(statusResp52)
+assert(statusOut52.includes("gpt") || statusOut52.includes("claude") || statusOut52.includes("Fast") || statusOut52.includes("Capable"), "status dashboard client-discovered models appear")
+assert(statusOut52.includes("gpt-4o") || statusOut52.includes("gpt-4o-mini"), "specific client-discovered model gpt-4o present")
+assert(statusOut52.includes("claude-3-opus") || statusOut52.includes("claude-3-sonnet"), "specific client-discovered model claude present")
+
+// Verify dashboard at least loads (no trace data expected, but must not crash)
+const dashResp52 = await modelHooks52.tool.agentic_dashboard.execute({}, modelCtx52)
+const dashOut52 = typeof dashResp52 === "string" ? dashResp52 : dashResp52.output || JSON.stringify(dashResp52)
+assert(typeof dashOut52 === "string" && dashOut52.length > 0, "dashboard returns output without error")
+await modelHooks52.dispose()
+
+// 53. Trace logging
 console.log("\n[52] Trace logging")
 await hooks.dispose()
 const tracePath = join(projectDir, ".agentic", "trace.jsonl")
