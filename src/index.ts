@@ -388,6 +388,14 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
 
           if (args.filesModified && args.filesModified.length > 0) {
             depTracker.recordChange(context.sessionID, args.stepId, args.filesModified)
+            // Update file-level dependency graph for modified/created files
+            for (const f of args.filesModified) {
+              const absPath = join(projectDir, f)
+              try {
+                const content = readFileSync(absPath, "utf-8")
+                depTracker.updateFile(absPath, content, projectDir)
+              } catch { /* non-fatal: file may have been deleted */ }
+            }
           }
 
           executor.recordResult(context.sessionID, {

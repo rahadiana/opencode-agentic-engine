@@ -153,6 +153,25 @@ export class DependencyTracker {
   }
 
   /**
+   * Incrementally update the file graph for a single file (e.g., after creation/modification).
+   * Re-parses imports and replaces the entry in the graph.
+   */
+  updateFile(absPath: string, content: string, projectDir: string): void {
+    const relPath = relative(projectDir, absPath).replace(/\\/g, "/")
+    // Remove old entries for this file
+    this.fileGraph.delete(relPath)
+    this.dependencies.delete(relPath)
+    // Remove old edges where this file was the target
+    for (const [src, targets] of this.fileGraph) {
+      if (targets.has(relPath)) {
+        targets.delete(relPath)
+      }
+    }
+    // Re-scan
+    this.scanFiles({ [absPath]: content }, projectDir)
+  }
+
+  /**
    * Get files that a given file directly imports (via file-level graph).
    */
   getFileImports(filePath: string): string[] {
