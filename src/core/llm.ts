@@ -366,42 +366,52 @@ export class LLMEngine {
   }
 
   private async callOpenCode(req: LLMRequest): Promise<LLMResponse> {
-    if (!this.opencodeClient || !this.pluginSessionId) {
-      return this.fallbackResponse(req)
+    // Try direct HTTP call first if we have credentials for any provider
+    const openaiKey = this.config.apiKey ?? process.env.OPENAI_API_KEY
+    const anthropicKey = process.env.ANTHROPIC_API_KEY
+    if (openaiKey) {
+      return this.callOpenAI(req)
+    }
+    if (anthropicKey) {
+      return this.callAnthropic(req)
     }
 
-    try {
-      const client = this.opencodeClient as {
-        session: {
-          prompt: (opts: {
-            body: { system?: string; noReply?: boolean; parts: Array<{ type: string; text: string }> }
-            path: { id: string }
-          }) => Promise<{ data?: { parts?: Array<{ type: string; text?: string }> }; parts?: Array<{ type: string; text?: string }> }>
+    // Fall back to OpenCode SDK client (noReply must be false to get a response)
+    if (this.opencodeClient && this.pluginSessionId) {
+      try {
+        const client = this.opencodeClient as {
+          session: {
+            prompt: (opts: {
+              body: { system?: string; noReply?: boolean; parts: Array<{ type: string; text: string }> }
+              path: { id: string }
+            }) => Promise<{ data?: { parts?: Array<{ type: string; text?: string }> }; parts?: Array<{ type: string; text?: string }> }>
+          }
         }
+
+        const result = await client.session.prompt({
+          body: {
+            system: req.jsonMode
+              ? `${req.systemPrompt}\n\nRespond with ONLY valid JSON. No markdown, no explanation.`
+              : req.systemPrompt,
+            noReply: false,
+            parts: [{ type: "text", text: req.userPrompt }],
+          },
+          path: { id: this.pluginSessionId },
+        })
+
+        const parts = result.data?.parts ?? result.parts ?? []
+        const textPart = parts.find((p: { type: string; text?: string }) => p.type === "text")
+        const text = textPart?.text ?? ""
+
+        if (text.trim()) {
+          return { content: text.trim(), finishReason: "stop" }
+        }
+      } catch {
+        // fall through to fallback
       }
-
-      const result = await client.session.prompt({
-        body: {
-          system: req.jsonMode
-            ? `${req.systemPrompt}\n\nRespond with ONLY valid JSON. No markdown, no explanation.`
-            : req.systemPrompt,
-          noReply: true,
-          parts: [{ type: "text", text: req.userPrompt }],
-        },
-        path: { id: this.pluginSessionId },
-      })
-
-      const parts = result.data?.parts ?? result.parts ?? []
-      const textPart = parts.find((p: { type: string; text?: string }) => p.type === "text")
-      const text = textPart?.text ?? ""
-
-      return {
-        content: text.trim(),
-        finishReason: "stop",
-      }
-    } catch (e) {
-      return { content: `OpenCode LLM call failed: ${(e as Error).message}. Falling back to heuristic.` }
     }
+
+    return this.fallbackResponse(req)
   }
 
   private async httpCall(url: string, apiKey: string, body: unknown, extraHeaders: Record<string, string> = {}): Promise<LLMResponse> {

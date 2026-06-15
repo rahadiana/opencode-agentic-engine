@@ -1164,12 +1164,13 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
             return { output: `Unknown role "${role}". Available: architect, developer, qa, coordinator.` }
           }
 
+          const contextWithMemory = args.context ?? args.description
           const task = coordinator.delegate(role, {
             id: args.taskId,
             assignedTo: role,
             description: args.description,
-            input: args.context ?? args.description,
-            status: "pending",
+            input: contextWithMemory,
+            status: "running",
             pipelineRunId: args.pipelineRunId,
           }, context.sessionID)
 
@@ -1182,18 +1183,48 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
           // Check for pending messages for this role
           const pendingMessages = coordinator.getMessages(role, true)
 
+          // ── Actual Agent Execution via LLM ──
+          llmEngine.setSessionId(context.sessionID)
+          let agentResult = ""
+          let executionError: string | null = null
+
+          try {
+            const systemPrompt = `${agent.prompt}\n\n${args.pipelineRunId ? `## Pipeline Context\n${pipelineContext}` : ""}\n\n${pendingMessages.length > 0 ? `## Pending Messages\n${pendingMessages.map(m => `- From ${m.from}: ${m.payload}`).join("\n")}` : ""}\n\nTask "${args.taskId}" assigned to you (${role}). Execute this task and provide your output. Be specific and actionable.`
+            const llmResp = await llmEngine.call({
+              systemPrompt,
+              userPrompt: contextWithMemory,
+              temperature: 0.3,
+              maxTokens: 4096,
+            })
+            agentResult = llmResp.content
+            if (agentResult.startsWith("LLM error") || agentResult.startsWith("[NO_LLM]")) {
+              executionError = agentResult
+              agentResult = ""
+            }
+          } catch (e) {
+            executionError = (e as Error).message
+          }
+
+          if (agentResult) {
+            coordinator.updateTask(context.sessionID, args.taskId, "done", agentResult)
+            coordinator.writeSharedMemory(`task:${args.taskId}`, agentResult.slice(0, 500), role)
+            coordinator.writeSharedMemory(`task:${args.taskId}:full`, agentResult, role)
+          } else {
+            coordinator.updateTask(context.sessionID, args.taskId, "failed", executionError ?? "LLM unavailable")
+          }
+
           let output = `## 🤖 Task Delegated\n\n`
           output += `**Task:** \`${args.taskId}\`\n`
           output += `**Role:** ${role} (${agent.name})\n`
           output += `**Description:** ${args.description}\n`
-          output += `**Status:** Pending\n`
+          output += `**Status:** ${agentResult ? "✅ Done" : executionError ? "❌ Failed" : "⚠️ Unknown"}\n`
 
           // Model suggestion — resolve alias ke nama model sebenarnya
           const suggestedCategory = roleRegistry.suggestModel(role)
           const resolvedModels = modelRegistry.resolveAlias(suggestedCategory)
           const suggestedModel = resolvedModels.length > 0 ? resolvedModels[0] : suggestedCategory
           const modelLabel = suggestedModel !== suggestedCategory ? `${suggestedModel} (${suggestedCategory})` : suggestedModel
-          output += `**Suggested Model:** ${modelLabel}\n`
+          output += `**Model Used:** ${modelLabel}\n`
           if (agent.model) output += `**Configured Model:** ${agent.model}\n`
 
           // Model reliability info
@@ -1211,10 +1242,10 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
             output += `**Pipeline Run:** \`${args.pipelineRunId}\`\n`
           }
 
-          output += `\n### Agent Prompt\n\`\`\`\n${agent.prompt}\n\`\`\`\n`
-
-          if (pipelineContext) {
-            output += `\n### Pipeline Context\n\`\`\`\n${pipelineContext.slice(0, 800)}\n\`\`\`\n`
+          if (agentResult) {
+            output += `\n### Agent Output\n\`\`\`\n${agentResult.slice(0, 2000)}\n\`\`\`\n`
+          } else if (executionError) {
+            output += `\n### Execution Error\n${executionError}\n`
           }
 
           if (pendingMessages.length > 0) {
@@ -1224,18 +1255,41 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
             }
           }
 
-          output += `\n### Available Tools\n${agent.tools.map(t => `- \`${t}\``).join("\n")}\n\n`
-          output += `### Active Tasks (${allTasks.length + 1})\n`
-          output += [...allTasks, task].map(t =>
+          output += `\n### Active Tasks (${allTasks.length + 1})\n`
+          output += [...coordinator.getTasks(context.sessionID)].map(t =>
             `- ${t.status === "done" ? "✅" : t.status === "failed" ? "❌" : "⏳"} **${t.id}** → ${t.assignedTo}: ${t.description}`
           ).join("\n")
+
+          // Pipeline: auto-advance if part of pipeline
+          if (agentResult && args.pipelineRunId) {
+            const pipelineId = args.pipelineRunId.replace(`run-${context.sessionID}-`, "")
+            const pipeline = orchestrator.getPipeline(pipelineId)
+            if (pipeline) {
+              const stageIssues: string[] = []
+              const nextStage = orchestrator.advanceStage(args.pipelineRunId, agentResult, stageIssues)
+              const allResults = orchestrator.getAllStageResults(args.pipelineRunId)
+              if (nextStage) {
+                const nextCtx = orchestrator.buildContextForRole(nextStage.role, args.pipelineRunId, coordinator.getAllSharedMemory())
+                coordinator.sendMessage({
+                  from: role, to: nextStage.role, taskId: args.taskId,
+                  type: "result",
+                  payload: `Stage ${role} completed. Next: ${nextStage.role}.\n\nContext:\n${nextCtx}`,
+                })
+                output += `\n### Pipeline: Next Stage\n▶ **${nextStage.role}** — ${nextStage.description}\n`
+              } else {
+                output += `\n### 🎉 Pipeline Complete\nAll stages finished!\n`
+                const finalValidation = orchestrator.crossValidate("coordinator", "Pipeline completed", allResults, coordinator.getAllSharedMemory())
+                output += `**Cross-Validation:** ${finalValidation.passed ? "✅ Passed" : "❌ Issues"}\n`
+              }
+            }
+          }
 
           traceLogger.log({
             step: "delegate",
             input: args.taskId,
-            output: `→ ${role}`,
+            output: `→ ${role}: ${agentResult ? "done" : "failed"}`,
             toolUsed: "agentic_delegate",
-            success: true,
+            success: !!agentResult,
             durationMs: 0,
           })
 
