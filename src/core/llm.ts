@@ -317,14 +317,15 @@ export class LLMEngine {
   }
 
   private detectProvider(): LLMConfig["provider"] {
-    if (process.env.OPENAI_API_KEY) return "openai"
+    if (process.env.OPENAI_API_KEY || process.env.OPENAI_BASE_URL) return "openai"
     if (process.env.ANTHROPIC_API_KEY) return "anthropic"
     return "opencode"
   }
 
   private async callOpenAI(req: LLMRequest): Promise<LLMResponse> {
-    const apiKey = this.config.apiKey ?? process.env.OPENAI_API_KEY
-    if (!apiKey) return this.fallbackResponse(req)
+    const apiKey = this.config.apiKey ?? process.env.OPENAI_API_KEY ?? ""
+    const baseUrl = this.config.baseURL ?? process.env.OPENAI_BASE_URL
+    if (!apiKey && !baseUrl) return this.fallbackResponse(req)
 
     const body: Record<string, unknown> = {
       model: this.config.model ?? DEFAULT_MODELS.openai,
@@ -384,8 +385,9 @@ export class LLMEngine {
   private async callOpenCode(req: LLMRequest): Promise<LLMResponse> {
     // Try direct HTTP call first if we have credentials for any provider
     const openaiKey = this.config.apiKey ?? process.env.OPENAI_API_KEY
+    const openaiBaseUrl = this.config.baseURL ?? process.env.OPENAI_BASE_URL
     const anthropicKey = process.env.ANTHROPIC_API_KEY
-    if (openaiKey) {
+    if (openaiKey || openaiBaseUrl) {
       return this.callOpenAI(req)
     }
     if (anthropicKey) {
@@ -482,7 +484,7 @@ export class LLMEngine {
     if (req.jsonMode) {
       return { content: `{"_no_llm": true}`, finishReason: "no_llm" }
     }
-    return { content: `[NO_LLM] No LLM configured. Set OPENAI_API_KEY or ANTHROPIC_API_KEY env var, or run within OpenCode for native LLM access.`, finishReason: "no_llm" }
+    return { content: `[NO_LLM] No LLM configured. Set OPENAI_API_KEY (OpenAI/compatible), ANTHROPIC_API_KEY (Claude), or OPENAI_BASE_URL (local LLM), or run within OpenCode for native LLM access.`, finishReason: "no_llm" }
   }
 }
 
