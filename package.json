@@ -1,6 +1,8 @@
 {
   "name": "opencode-agentic-engine",
   "version": "0.1.0",
+  "homepage": "https://github.com/rahadiana/opencode-agentic-engine#readme",
+  "engines": { "node": ">=20" },
   "description": "Multi-agent software engineering plugin for OpenCode — implements Stages I-IV from \"The End of Software Engineering\" (arXiv:2606.05608)",
   "type": "module",
   "license": "MIT",

@@ -17,9 +17,31 @@ Berdasarkan konsep dari paper **"The End of Software Engineering"** (arXiv:2606.
 | — | **Model Registry** | Auto-discover model dari provider, tracking reliability & hallucination rate |
 | — | **Dashboard** | Timeline, anomaly detection, model reliability stats |
 
-### 20 Tools
+### 21 Tools
 
-`agentic_plan` `agentic_execute` `agentic_reflect` `agentic_verify` `agentic_status` `agentic_nav` `agentic_context` `agentic_snapshot` `agentic_pr` `agentic_score` `agentic_delegate` `agentic_pipeline` `agentic_message` `agentic_skill` `agentic_episodes` `agentic_parallel` `agentic_dashboard` `agentic_guard` `agentic_evolve` `agentic_auto`
+| Tool | Stage | Description |
+|---|---|---|
+| `agentic_plan` | I | Plan + auto-decompose (LLM-first) |
+| `agentic_execute` | I | Execute step + auto-verify + checkpoint |
+| `agentic_reflect` | I | Error analysis + propagation tracing |
+| `agentic_verify` | I | Compile + test verification |
+| `agentic_status` | I | Dashboard + blocked steps |
+| `agentic_nav` | II | Codebase scan + file search |
+| `agentic_context` | II | Context view + compress |
+| `agentic_snapshot` | II | Save/list execution checkpoints |
+| `agentic_pr` | II | Generate PR + description |
+| `agentic_score` | II | Tech debt analysis |
+| `agentic_model` | II | Configure per-role LLM model preferences per session |
+| `agentic_delegate` | III | Assign to architect/developer/qa/coordinator — pipeline-aware with cross-validation |
+| `agentic_pipeline` | III | Define and run multi-agent workflow pipelines (PM→Arch→Dev→QA) |
+| `agentic_message` | III | Inter-agent messaging: send, inbox, conversation, review requests |
+| `agentic_parallel` | III | Dependency-based concurrency |
+| `agentic_skill` | III | Extract/find/list reusable skills |
+| `agentic_episodes` | III | Cross-session memory search |
+| `agentic_dashboard` | III | Timeline + anomaly detection |
+| `agentic_guard` | III | Hallucination detection |
+| `agentic_evolve` | IV | Inspect + extend the agent system |
+| `agentic_auto` | V | Fully autonomous agent loop (plan→execute→verify→retry in one call) |
 
 ## Quick Start
 
@@ -169,58 +191,73 @@ File ini di-watch — perubahan langsung diterapkan tanpa restart plugin.
 
 ```
 src/
-├── index.ts               # Entry: registrasi 20 tools + hooks
-├── core/                  # Engine inti
-│   ├── config.ts          # Config loader + file watcher
-│   ├── intent-parser.ts   # Parse intent → Plan
-│   ├── planner.ts         # Auto-decompose task
-│   ├── executor.ts        # Eksekusi step + retry + error propagation
-│   ├── verifier.ts        # Compile + test verification
-│   ├── navigator.ts       # Codebase scanner + relevance scoring
-│   ├── llm.ts             # LLM engine + model registry integration
-│   ├── model-registry.ts  # Tracking model reliability & hallucination
-│   ├── git.ts             # Git commit + PR generation
-│   ├── tech-debt-scorer.ts# Coupling/size/pattern analysis
-│   └── parallel.ts        # Dependency-based concurrency
+├── index.ts               # Plugin entry: registers 21 tools + hooks
+├── core/                  # Core engine
+│   ├── intent-parser.ts   # Parses user intent → Plan structure
+│   ├── planner.ts         # Auto-decompose (create/fix/refactor/test templates)
+│   ├── executor.ts        # Step execution state, retry tracking
+│   ├── verifier.ts        # Compile + test verification (execFileSync)
+│   ├── error-analyzer.ts  # Categorizes errors (import/type/compile/test/runtime)
+│   ├── navigator.ts       # Codebase file scanning + relevance scoring
+│   ├── git.ts             # Git commit, history, PR description generation
+│   ├── tech-debt-scorer.ts# Coupling/size/scope/patterns analysis
+│   └── parallel.ts        # Dependency-based concurrency + conflict detection
 ├── agents/                # Multi-agent system
-│   ├── coordinator.ts     # Delegasi, shared memory, message bus
-│   ├── orchestrator.ts    # Pipeline workflow + cross-validation
-│   └── role-registry.ts   # Definisi role + model suggestion
+│   ├── coordinator.ts     # Delegates to agent roles, auto-suggests role, message bus
+│   ├── orchestrator.ts    # Multi-agent workflow pipelines + cross-validation
+│   └── role-registry.ts   # Built-in + custom agent definitions (extensible)
 ├── drift/                 # Context & safety
-│   ├── dependency-tracker.ts
-│   ├── context-compressor.ts
-│   └── hallucination-guard.ts
+│   ├── dependency-tracker.ts   # Per-session file change + error propagation
+│   ├── context-compressor.ts   # Sliding window + key info extraction
+│   ├── checkpoints.ts          # Risk evaluation: BLOCK/REVIEW/WARNING
+│   └── hallucination-guard.ts  # File/func/import claim verification
 ├── memory/                # Persistent memory
-│   ├── skill-store.ts     # Skill extraction & search
-│   ├── skill-format.ts    # Self-describing skill schema
-│   ├── episodic-store.ts  # Cross-session memory
-│   ├── session-store.ts   # Conversation turns
-│   ├── vector-store.ts    # Sparse retrieval (TF-IDF)
-│   ├── persistence.ts     # Model stats persistence
-│   └── schema-version.ts  # Memory schema migration
+│   ├── session-store.ts     # Conversation turns + plan + progress
+│   ├── skill-store.ts       # Skill extraction, search, failure reporting
+│   ├── skill-format.ts      # Self-describing agentic-skill/v1 schema
+│   ├── episodic-store.ts    # Cross-session memory with versioned schema
+│   ├── schema-version.ts    # Memory schema envelope + migration system
+│   ├── skill-training.ts    # Skill → training data conversion (JSONL/instructions)
+│   ├── vector-store.ts      # Sparse retrieval (TF-IDF)
+│   ├── local-embedder.ts    # Local embedding for vector search
+│   └── persistence.ts       # Model stats persistence
+├── evaluation/
+│   └── live-evaluator.ts   # 5-dimensi real-time scoring dari tool hooks
 ├── evolution/
-│   └── self-evolver.ts    # Auto-improvement analysis
+│   ├── self-evolver.ts     # Auto-improvement analysis
+│   └── continuous-evolution.ts # Continuous self-evolution pipeline
 └── observability/
-    ├── trace-logger.ts    # JSONL tracing (buffered, auto-flush)
-    └── dashboard.ts       # Timeline, stats, anomaly detection
+    ├── trace-logger.ts     # JSONL trace writer (buffered, auto-flush)
+    └── dashboard.ts        # Timeline + stats + anomaly detection
 ```
+
+> **Note:** Selain diagram di atas, `memory/skill-training.ts` menyediakan konversi skill → training data (JSONL/instructions) dan `evaluation/live-evaluator.ts` menyediakan 5-dimensi real-time scoring dari tool hooks.
 
 ## Testing
 
 ```bash
-# Unit tests (150+ tests, mock-based, tanpa LLM)
+# Unit tests (489 tests, mock-based, no LLM needed)
 node test/run.mjs
 
-# E2E workflow test (load plugin + full round-trip)
+# Simulates opencode auto-discovery
+node test/dropin.mjs
+
+# Same-directory load + E2E workflow
 node test/load-samedir.mjs
 
-# Multi-iterasi EvoClaw (50-file codebase, 3 agent parallel)
+# EvoClaw: 50-file codebase, 5 iterations, 3-agent parallel
 node test/e2e-scenario.mjs
 
-# Real LLM E2E (perlu API key)
-node test/e2e-real.mjs
+# SWE-bench: 7 scenarios (auto: OpenCode Free)
+node test/swebench-harness.mjs
 
-# Docker pipeline (7 layer, 150 unit + 36 E2E)
+# LLM E2E: 19 tests (auto: OpenCode Free)
+node test/e2e-llm.mjs
+
+# SWE-bench mock mode (no LLM)
+LLM_OFF=true node test/swebench-harness.mjs
+
+# Docker pipeline (7 layers, 489 unit + E2E tests)
 ./test-container.sh
 ```
 

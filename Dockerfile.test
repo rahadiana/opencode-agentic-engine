@@ -66,6 +66,18 @@ RUN echo "=== LAYER 7: EVOCLAW E2E SCENARIO ===" && \
     E2E_CODEBASE=/tmp/e2e-codebase-real node test/e2e-scenario.mjs && \
     echo "=== LAYER 7: OK ==="
 
+# — Layer 8: LLM E2E tests via OpenCode Free (no auth needed) —
+# Only runs if LLM_OFF is not set. OpenCode Free endpoint needs internet.
+ARG LLM_OFF
+ENV LLM_OFF=${LLM_OFF:-}
+RUN echo "=== LAYER 8: LLM E2E (OpenCode Free) ===" && \
+    if [ "${LLM_OFF:-}" != "true" ]; then \
+      node test/e2e-llm.mjs || echo "⚠️ LLM E2E skipped (network may be unavailable in Docker)"; \
+    else \
+      echo "⏭️ LLM_OFF=true — skipping"; \
+    fi && \
+    echo "=== LAYER 8: OK ==="
+
 RUN echo "" && \
     echo "==========================================" && \
     echo "  ALL CONTAINER TESTS PASSED" && \

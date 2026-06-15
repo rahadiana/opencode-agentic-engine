@@ -6,6 +6,7 @@
 // 4. 3-agent parallel coordination
 // 5. Checkpoints trigger on risky operations
 // 6. Skill extraction + reuse
+// LLM: auto-detect OpenCode Free (no auth). Set LLM_OFF=true for mock mode.
 
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs"
 import { resolve, dirname, join } from "node:path"
@@ -15,6 +16,17 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const PLUGIN_DIST = resolve(__dirname, "..", "dist", "index.js")
 const CODEBASE = process.env.E2E_CODEBASE || "/tmp/e2e-codebase"
 const WORKTREE = "/tmp/e2e-worktree"
+
+// ── LLM Detection ──
+// Auto-default: OpenCode Free (https://opencode.ai/zen/v1) — no auth needed
+const OPENCODE_FREE_BASE = "https://opencode.ai/zen/v1"
+const OPENCODE_FREE_MODEL = "deepseek-v4-flash-free"
+const LLM_OFF = process.env.LLM_OFF === "true"
+if (!LLM_OFF && !process.env.OPENAI_BASE_URL && !process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+  process.env.OPENAI_BASE_URL = OPENCODE_FREE_BASE
+  if (!process.env.OPENAI_MODEL) process.env.OPENAI_MODEL = OPENCODE_FREE_MODEL
+}
+const CAN_USE_LLM = !LLM_OFF
 
 let passed = 0
 let failed = 0
@@ -464,8 +476,8 @@ async function main() {
   console.log("=".repeat(60))
   console.log("  Paper baseline: 38% on continuous evolution")
   console.log(`  Plugin target:  >55%`)
-  console.log(`  Current mock:   ${evoClawPercent}%`)
-  console.log("  → Run with a real LLM to get actual score")
+  console.log(`  Current score:  ${evoClawPercent}%`)
+  console.log(`  LLM mode:       ${CAN_USE_LLM ? "REAL (OpenCode Free)" : "MOCK (LLM_OFF=true)"}`)
   console.log("=".repeat(60))
 
   return { passed, failed, metrics, evoClawScore: Number(evoClawPercent) }

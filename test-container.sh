@@ -4,6 +4,10 @@
 # Build plugin locally, then build + run Docker test container.
 # All crashes are isolated inside the container.
 #
+# Usage:
+#   ./test-container.sh           # mock mode (default)
+#   ./test-container.sh --llm     # real LLM via OpenCode Free (no auth)
+#
 # LOGS:
 #   - Build logs: printed to terminal (docker build --progress=plain)
 #   - Trace logs:  persisted to ./logs/.agentic/trace.jsonl (volume mount)
@@ -15,12 +19,19 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 IMAGE_NAME="opencode-agentic-test"
 LOG_DIR="$SCRIPT_DIR/logs"
 
+# Parse flags
+LLM_MODE=false
+if [ "${1:-}" = "--llm" ]; then
+  LLM_MODE=true
+fi
+
 # Ensure log directory exists
 mkdir -p "$LOG_DIR"
 
 echo "╔══════════════════════════════════════════════════════════╗"
 echo "║  Agentic Plugin — Docker Test Pipeline                  ║"
 echo "╚══════════════════════════════════════════════════════════╝"
+echo "  Mode: $($LLM_MODE && echo 'LLM (OpenCode Free)' || echo 'MOCK')"
 echo ""
 
 # Step 1: Build plugin locally
@@ -47,6 +58,7 @@ docker build \
   --tag "$IMAGE_NAME" \
   --file "$SCRIPT_DIR/Dockerfile.test" \
   --progress=plain \
+  $($LLM_MODE && echo "" || echo "--build-arg LLM_OFF=true") \
   "$SCRIPT_DIR" 2>&1 | tee "$LOG_DIR/build.log"
 
 BUILD_EXIT=${PIPESTATUS[0]}
@@ -73,7 +85,14 @@ echo ""
 echo "  Run log also saved to: $LOG_DIR/run.log"
 echo ""
 
+# Set LLM mode env var for Docker
+DOCKER_ENV=""
+if [ "$LLM_MODE" = false ]; then
+  DOCKER_ENV="-e LLM_OFF=true"
+fi
+
 docker run --rm \
+  $DOCKER_ENV \
   -v "$LOG_DIR:/tmp/test-project/.agentic" \
   "$IMAGE_NAME" 2>&1 | tee "$LOG_DIR/run.log"
 
