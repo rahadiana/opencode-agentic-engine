@@ -1502,29 +1502,29 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
       }),
 
       agentic_dashboard: tool({
-        description: "Generate an observability dashboard from execution traces. Shows timeline, statistics, tool usage, and anomaly detection (timeouts, retry storms, silent failures).",
+        description: "Generate an observability dashboard from execution traces. Shows timeline, statistics, tool usage, anomaly detection, and model reliability (timeouts, retry storms, silent failures).",
         args: {},
         async execute(args, _context) {
-          // Read traces from file (the trace-logger writes asynchronously, flush first)
-          await traceLogger.flush()
+          // Always show model reliability regardless of trace data
+          const modelReliability = modelRegistry.getSummary()
+          let traceSection = ""
 
+          // Read traces from file
+          await traceLogger.flush()
           const tracePath = `${input.worktree}/.agentic/trace.jsonl`
           let traces = []
           try {
             const content = readFileSync(tracePath, "utf-8")
             traces = content.trim().split("\n").filter(Boolean).map(l => JSON.parse(l))
-          } catch {
-            return { output: "No trace data available yet. Execute some steps first to generate traces." }
+          } catch { /* no traces yet */ }
+
+          if (traces.length > 0) {
+            const data = dashboard.generate(traces, Date.now())
+            traceSection = dashboard.formatForDisplay(data)
           }
 
-          if (traces.length === 0) {
-            return { output: "No trace data available yet." }
-          }
-
-          const data = dashboard.generate(traces, Date.now())
-          let output = dashboard.formatForDisplay(data)
-
-          output += `\n### 🤖 Model Reliability\n${modelRegistry.getSummary()}\n`
+          let output = traceSection || "### 📊 Execution Overview\n\nNo trace data available yet. Execute some steps first.\n"
+          output += `\n### 🤖 Model Reliability\n${modelReliability}\n`
 
           return { output }
         },

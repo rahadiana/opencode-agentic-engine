@@ -773,9 +773,9 @@ const modelCtx52Input = {
     },
   },
 }
-const modelHooks52 = await plugin(modelCtx52Input, mockOptions)
-const modelProto52 = Object.getPrototypeOf(modelHooks52)
-let     modelRegistryRef52 = null
+const modelHooks52 = await mod.AgenticEngine(modelCtx52Input)
+// Wait for async model discovery
+await new Promise(r => setTimeout(r, 100))
 // Extract model registry via tool execution
 const statusResp52 = await modelHooks52.tool.agentic_status.execute({}, modelCtx52)
 const statusOut52 = typeof statusResp52 === "string" ? statusResp52 : statusResp52.output || JSON.stringify(statusResp52)
@@ -783,14 +783,16 @@ assert(statusOut52.includes("gpt") || statusOut52.includes("claude") || statusOu
 assert(statusOut52.includes("gpt-4o") || statusOut52.includes("gpt-4o-mini"), "specific client-discovered model gpt-4o present")
 assert(statusOut52.includes("claude-3-opus") || statusOut52.includes("claude-3-sonnet"), "specific client-discovered model claude present")
 
-// Verify dashboard at least loads (no trace data expected, but must not crash)
+// Verify dashboard always shows model reliability (even without trace data)
 const dashResp52 = await modelHooks52.tool.agentic_dashboard.execute({}, modelCtx52)
 const dashOut52 = typeof dashResp52 === "string" ? dashResp52 : dashResp52.output || JSON.stringify(dashResp52)
 assert(typeof dashOut52 === "string" && dashOut52.length > 0, "dashboard returns output without error")
+assert(dashOut52.includes("Model Reliability"), "dashboard shows model reliability section")
+assert(dashOut52.includes("gpt-4o") || dashOut52.includes("gpt-4o-mini"), "dashboard shows client-discovered models")
 await modelHooks52.dispose()
 
 // 53. Trace logging
-console.log("\n[52] Trace logging")
+console.log("\n[53] Trace logging")
 await hooks.dispose()
 const tracePath = join(projectDir, ".agentic", "trace.jsonl")
 assert(existsSync(tracePath), "trace file created")
