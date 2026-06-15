@@ -20,6 +20,7 @@ export interface SearchResult {
 export type SearchMode = "sparse" | "dense" | "hybrid" | "llm-rerank"
 
 const STOP_WORDS = new Set([
+  // English
   "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
   "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
   "being", "have", "has", "had", "do", "does", "did", "will", "would",
@@ -34,6 +35,26 @@ const STOP_WORDS = new Set([
   "between", "into", "through", "during", "while", "if", "then",
   "else", "there", "here", "up", "down", "out", "off", "over",
   "under", "now", "new", "any", "get", "set", "put",
+
+  // Bahasa Indonesia
+  "dan", "atau", "tetapi", "namun", "sedangkan", "sementara",
+  "lalu", "kemudian", "maka", "sehingga", "agar", "supaya",
+  "di", "ke", "dari", "pada", "kepada", "bagi", "untuk",
+  "oleh", "dengan", "tanpa", "sejak", "sampai", "hingga",
+  "yang", "ini", "itu", "sana", "sini", "situ",
+  "saya", "kamu", "dia", "kami", "kita", "mereka",
+  "nya", "ku", "mu",
+  "tidak", "bukan", "jangan", "belum",
+  "apa", "siapa", "mengapa", "kenapa", "bagaimana", "berapa", "kapan",
+  "ada", "adalah", "ialah", "merupakan", "menjadi",
+  "bisa", "dapat", "harus", "ingin", "mau",
+  "sudah", "telah", "akan", "sedang", "lagi",
+  "pun", "saja", "juga", "selalu", "sering", "pernah",
+  "si", "sang", "para",
+  "hal", "halnya", "secara", "seperti", "tentang",
+  "dalam", "antar", "antara", "sebagai",
+  "karena", "sebab", "meski", "walaupun", "biar",
+  "kalau", "jika", "bila", "apabila",
 ])
 
 interface VectorEntry {
