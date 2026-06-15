@@ -1376,6 +1376,97 @@ assert(listAfterClearOut.includes("No model preferences"), "list shows empty aft
 
 assert(true, "agentic_model session model preference tests passed")
 
+// 67. PatternDiscovery — cross-session pattern analysis
+console.log("\n[67] PatternDiscovery — cross-session patterns")
+const pd = new mod.PatternDiscovery()
+assert(typeof pd.analyze === "function", "PatternDiscovery has analyze method")
+
+// Empty data
+const emptyPdReport = pd.analyze([], [], [])
+assert(emptyPdReport.totalSessions === 0, "empty report has 0 sessions")
+assert(Array.isArray(emptyPdReport.recommendations), "empty report has recommendations array")
+assert(emptyPdReport.recommendations.length === 0, "empty report has no recommendations")
+
+// Create test episodes
+const testEpisodes = [
+  { sessionId: "sess-a", planGoal: "Add user authentication with JWT", summary: "", outcome: "failed", decisions: ["Used bcrypt", "Created auth middleware"], filesChanged: ["src/auth.ts", "src/middleware.ts", "config/auth.json"], timestamp: "2026-06-01T00:00:00Z", tags: ["auth", "security", "jwt"] },
+  { sessionId: "sess-b", planGoal: "Fix import error in auth module", summary: "", outcome: "failed", decisions: ["Fixed import path"], filesChanged: ["src/auth.ts", "src/utils/helpers.ts"], timestamp: "2026-06-02T00:00:00Z", tags: ["auth", "fix", "import"] },
+  { sessionId: "sess-c", planGoal: "Add rate limiting middleware", summary: "", outcome: "success", decisions: ["Used express-rate-limit"], filesChanged: ["src/middleware.ts", "src/app.ts"], timestamp: "2026-06-03T00:00:00Z", tags: ["middleware", "security"] },
+  { sessionId: "sess-d", planGoal: "Refactor auth to use shared validation", summary: "", outcome: "partial", decisions: ["Extracted validators"], filesChanged: ["src/auth.ts", "src/middleware.ts", "src/utils/validation.ts"], timestamp: "2026-06-04T00:00:00Z", tags: ["auth", "refactor", "validation"] },
+  { sessionId: "sess-e", planGoal: "Add API documentation", summary: "", outcome: "success", decisions: ["Added swagger docs"], filesChanged: ["docs/api.md"], timestamp: "2026-06-05T00:00:00Z", tags: ["docs", "api"] },
+  { sessionId: "sess-f", planGoal: "Fix import resolution in module loader", summary: "", outcome: "failed", decisions: ["Fixed webpack alias"], filesChanged: ["webpack.config.js", "src/utils/helpers.ts"], timestamp: "2026-06-06T00:00:00Z", tags: ["import", "build"] },
+]
+// Ensure proper typing
+const typedEpisodes = testEpisodes.map(e => ({ ...e, id: `ep-${e.sessionId}` }))
+
+// Test with episodes only
+const epReport = pd.analyze(typedEpisodes, [], [])
+assert(epReport.totalSessions === 6, "report has 6 sessions")
+assert(epReport.errorPatterns.length >= 1, "error patterns detected from failed episodes")
+assert(epReport.filePatterns.length >= 1, "file patterns detected")
+
+// Check that src/auth.ts is a hot spot (changed in 3 sessions)
+const authFilePattern = epReport.filePatterns.find(f => f.filePath === "src/auth.ts")
+assert(authFilePattern !== undefined, "src/auth.ts appears in file patterns")
+assert(authFilePattern.sessionCount >= 2, "src/auth.ts changed in 2+ sessions")
+assert(authFilePattern.isHotSpot === true, "src/auth.ts is a hot spot (3 sessions)")
+assert(authFilePattern.coChangedFiles.length >= 1, "src/auth.ts has co-changed files")
+const hasMiddlewareCoChange = authFilePattern.coChangedFiles.some(c => c.filePath === "src/middleware.ts")
+assert(hasMiddlewareCoChange, "src/auth.ts co-changes with src/middleware.ts")
+
+// Check session outcome patterns
+assert(epReport.sessionPatterns.length >= 1, "session patterns detected")
+const authPattern = epReport.sessionPatterns.find(p => p.commonTags.includes("auth"))
+assert(authPattern !== undefined, "auth tag group found")
+assert(authPattern.matchingSessions >= 2, "at least 2 auth-tagged sessions")
+
+// Test with skills
+const testSkills = [
+  { name: "jwt-auth-setup", successRate: 0.9, usageCount: 5 },
+  { name: "import-fix", successRate: 0.3, usageCount: 4 },
+  { name: "middleware-create", successRate: 0.75, usageCount: 2 },
+]
+const skillReport = pd.analyze(typedEpisodes, [], testSkills)
+assert(skillReport.skillEffectiveness.length === 3, "3 skills analyzed")
+const importFixSkill = skillReport.skillEffectiveness.find(s => s.skillName === "import-fix")
+assert(importFixSkill !== undefined, "import-fix skill found")
+assert(importFixSkill.status === "underperforming", "import-fix skill is underperforming (30%)")
+assert(importFixSkill.suggestion.length > 10, "import-fix has suggestion")
+
+const jwtSkill = skillReport.skillEffectiveness.find(s => s.skillName === "jwt-auth-setup")
+assert(jwtSkill !== undefined, "jwt-auth-setup skill found")
+assert(jwtSkill.status === "highly_effective", "jwt-auth-setup skill is highly effective (90%)")
+
+// Test recommendations
+assert(skillReport.recommendations.length >= 1, "recommendations generated")
+const hasHighPriority = skillReport.recommendations.some(r => r.priority === "high")
+assert(hasHighPriority, "at least one high priority recommendation")
+const hasSkillCategory = skillReport.recommendations.some(r => r.category === "skill")
+assert(hasSkillCategory, "at least one skill category recommendation")
+
+// Test with step results (error data from ContinuousEvolution)
+const testStepResults = [
+  { stepId: "s1", success: false, output: "ImportError: cannot find module 'fs-extra'", sessionId: "sess-a", timestamp: Date.now() - 50000, category: "import" },
+  { stepId: "s2", success: false, output: "TypeError: Cannot read property 'x' of undefined", sessionId: "sess-a", timestamp: Date.now() - 40000, category: "runtime" },
+  { stepId: "s3", success: false, output: "Type 'string' not assignable to 'number'", sessionId: "sess-b", timestamp: Date.now() - 30000, category: "type" },
+  { stepId: "s4", success: false, output: "Test failed: expected 5 got 3", sessionId: "sess-c", timestamp: Date.now() - 20000, category: "test" },
+  { stepId: "s5", success: false, output: "Module not found: './missing'", sessionId: "sess-d", timestamp: Date.now() - 10000, category: "import" },
+]
+const stepReport = pd.analyze(typedEpisodes, testStepResults, testSkills)
+assert(stepReport.totalSessions === 6, "step report has 6 sessions")
+const importPattern = stepReport.errorPatterns.find(p => p.category === "import")
+assert(importPattern !== undefined, "import error pattern found")
+assert(importPattern.totalOccurrences >= 2, "import error occurred 2+ times")
+assert(importPattern.sessionCount >= 2, "import error in 2+ sessions")
+
+// Test recommendation quality
+assert(stepReport.recommendations.length >= 2, "recommendations from combined analysis")
+const hasErrorRec = stepReport.recommendations.some(r => r.category === "error_prevention")
+assert(hasErrorRec, "has error prevention recommendations")
+assert(stepReport.timestamp.length > 0, "report has timestamp")
+
+assert(true, "PatternDiscovery cross-session pattern tests passed")
+
 // 54. Trace logging
 console.log("\n[54] Trace logging")
 await hooks.dispose()

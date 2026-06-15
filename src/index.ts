@@ -36,6 +36,7 @@ import { PersistenceLayer } from "./memory/persistence.js"
 import { VectorStore } from "./memory/vector-store.js"
 import { ModelRegistry } from "./core/model-registry.js"
 import { ConfigLoader } from "./core/config.js"
+import { PatternDiscovery } from "./drift/pattern-discovery.js"
 
 const createEngine: Plugin = async (input, _options) => {
   // ── Config (load first, everything else depends on it) ──
@@ -106,6 +107,7 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
   const schemaVersion = new MemorySchemaVersion()
   const selfEvolver = new SelfEvolver()
   const continuousEvolution = new ContinuousEvolution()
+  const patternDiscovery = new PatternDiscovery()
   const modelRegistry = new ModelRegistry()
   const llmEngine = new LLMEngine()
   llmEngine.setOpencodeClient(input.client)
@@ -1859,6 +1861,50 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
           let output = traceSection || "### 📊 Execution Overview\n\nNo trace data available yet. Execute some steps first.\n"
           output += `\n### 🤖 Model Reliability\n${modelReliability}\n`
 
+          // Cross-session pattern discovery
+          const allEpisodes = episodicStore.getRecent(200)
+          if (allEpisodes.length >= 3) {
+            const allStepResults = [] // No direct access to CE's internal results; use episodes instead
+            const allSkills = skillStore.getAll().map(s => ({
+              name: s.definition.meta.name,
+              successRate: s.successRate,
+              usageCount: s.usageCount,
+            }))
+            const report = patternDiscovery.analyze(allEpisodes, [], allSkills)
+
+            if (report.errorPatterns.length > 0 || report.recommendations.length > 0) {
+              output += `\n### 🔍 Cross-Session Patterns (${report.totalSessions} sessions)\n`
+
+              if (report.errorPatterns.length > 0) {
+                output += `\n**Recurring Errors:**\n`
+                for (const ep of report.errorPatterns.slice(0, 3)) {
+                  output += `- \`${ep.category}\`: ${ep.sessionCount}/${report.totalSessions} sessions (${(ep.sessionAffinity * 100).toFixed(0)}%)\n`
+                }
+              }
+
+              if (report.filePatterns.some(f => f.isHotSpot)) {
+                output += `\n**Hot Spot Files:**\n`
+                for (const fp of report.filePatterns.filter(f => f.isHotSpot).slice(0, 3)) {
+                  output += `- \`${fp.filePath}\`: modified in ${fp.sessionCount} sessions`
+                  if (fp.coChangedFiles.length > 0) {
+                    output += ` (co-changes: ${fp.coChangedFiles.slice(0, 2).map(c => `\`${c.filePath}\``).join(", ")})`
+                  }
+                  output += "\n"
+                }
+              }
+
+              if (report.recommendations.length > 0) {
+                const highRecs = report.recommendations.filter(r => r.priority === "high")
+                if (highRecs.length > 0) {
+                  output += `\n**⚠️ High Priority Recommendations:**\n`
+                  for (const rec of highRecs.slice(0, 3)) {
+                    output += `- ${rec.description}\n`
+                  }
+                }
+              }
+            }
+          }
+
           return { output }
         },
       }),
@@ -2205,6 +2251,56 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
                 }
               }
 
+              // Cross-session pattern discovery (Gap #3)
+              const allSkillsForPd = skillStore.getAll().map(s => ({
+                name: s.definition.meta.name,
+                successRate: s.successRate,
+                usageCount: s.usageCount,
+              }))
+              const patternReport = patternDiscovery.analyze(allEpisodes, [], allSkillsForPd)
+              if (patternReport.recommendations.length > 0) {
+                out += `\n### 🔍 Cross-Session Patterns\n`
+                out += `**Total sessions analyzed:** ${patternReport.totalSessions}\n\n`
+
+                const highRecs = patternReport.recommendations.filter(r => r.priority === "high")
+                if (highRecs.length > 0) {
+                  out += `**⚠️ High Priority (${highRecs.length})**\n`
+                  for (const rec of highRecs) {
+                    out += `- ${rec.description}\n`
+                    out += `  → ${rec.action}\n`
+                  }
+                  out += "\n"
+                }
+
+                const medRecs = patternReport.recommendations.filter(r => r.priority === "medium")
+                if (medRecs.length > 0) {
+                  out += `**Medium Priority (${medRecs.length})**\n`
+                  for (const rec of medRecs) {
+                    out += `- ${rec.description}\n`
+                  }
+                  out += "\n"
+                }
+
+                if (patternReport.errorPatterns.length > 0) {
+                  out += `**Error Patterns:**\n`
+                  for (const ep of patternReport.errorPatterns) {
+                    out += `- \`${ep.category}\`: ${ep.sessionCount}/${patternReport.totalSessions} sessions (${(ep.sessionAffinity * 100).toFixed(0)}%)\n`
+                  }
+                  out += "\n"
+                }
+
+                if (patternReport.filePatterns.some(f => f.isHotSpot)) {
+                  out += `**Hot Spot Files:**\n`
+                  for (const fp of patternReport.filePatterns.filter(f => f.isHotSpot).slice(0, 5)) {
+                    out += `- \`${fp.filePath}\` → ${fp.sessionCount} sessions`
+                    if (fp.coChangedFiles.length > 0) {
+                      out += ` (co-changed: ${fp.coChangedFiles.map(c => `\`${c.filePath}\``).join(", ")}`
+                    }
+                    out += ")\n"
+                  }
+                }
+              }
+
               return { output: out }
             }
 
@@ -2442,3 +2538,4 @@ export { ContinuousEvolution } from "./evolution/continuous-evolution.js"
 export { SelfEvolver } from "./evolution/self-evolver.js"
 export { AgentCoordinator } from "./agents/coordinator.js"
 export { Executor } from "./core/executor.js"
+export { PatternDiscovery } from "./drift/pattern-discovery.js"
