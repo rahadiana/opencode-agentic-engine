@@ -20,6 +20,11 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: node test/run.mjs
+      - name: Setup dropin test
+        run: |
+          mkdir -p /tmp/dropin-project/.opencode/plugins/agentic-engine
+          cp dist/index.js /tmp/dropin-project/.opencode/plugins/agentic-engine/index.js
+          echo '{"name":"dropin-test"}' > /tmp/dropin-project/package.json
       - run: node test/dropin.mjs
       - run: node test/load-samedir.mjs
       - run: LLM_OFF=true node test/swebench-harness.mjs
