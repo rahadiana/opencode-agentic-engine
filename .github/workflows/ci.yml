@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
       - run: npm ci
       - run: npm run build
@@ -27,11 +27,9 @@ jobs:
           echo '{"name":"dropin-test"}' > /tmp/dropin-project/package.json
       - run: node test/dropin.mjs
       - run: node test/load-samedir.mjs
-      - run: LLM_OFF=true node test/swebench-harness.mjs
-      - run: node test/e2e-scenario.mjs
-      - run: LLM_OFF=true node test/swebench-harness.mjs
       - name: Setup EvoClaw fixture
         run: cp -r test/e2e-codebase-fixture /tmp/e2e-codebase
+      - run: node test/swebench-harness.mjs
       - run: node test/e2e-scenario.mjs
       - run: node test/e2e-llm.mjs
         continue-on-error: true
