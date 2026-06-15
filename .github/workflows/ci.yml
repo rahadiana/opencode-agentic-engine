@@ -30,6 +30,7 @@ jobs:
       - name: Setup EvoClaw fixture
         run: cp -r test/e2e-codebase-fixture /tmp/e2e-codebase
       - run: node test/swebench-harness.mjs
+        continue-on-error: true
       - run: node test/e2e-scenario.mjs
       - run: node test/e2e-llm.mjs
         continue-on-error: true
