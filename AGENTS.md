@@ -91,7 +91,7 @@ src/
 
 1. **Unit tests** (`test/run.mjs`): Mock context, test tool registration + behavior
 2. **Drop-in** (`test/dropin.mjs`): Verify plugin auto-discovery
-3. **Same-dir** (`test/load-samedir.mjs`): Full E2E plan→execute→fail→reflect→retry
+3. **LLM E2E** (`test/e2e-llm.mjs`): Tests LLM-dependent features (auto-decompose, delegation, auto-loop). Skips gracefully if no LLM endpoint available.
 4. **EvoClaw** (`test/e2e-scenario.mjs`): 50-file codebase, 5 iterations, 3-agent parallel
 
 All tests are LLM-free — they pass hardcoded results to `agentic_execute`.

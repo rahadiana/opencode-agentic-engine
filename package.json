@@ -36,6 +36,8 @@
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "node test/run.mjs",
+    "test:e2e": "node test/e2e-scenario.mjs",
+    "test:e2e-llm": "node test/e2e-llm.mjs",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
