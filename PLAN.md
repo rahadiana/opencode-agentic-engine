@@ -265,6 +265,33 @@ Mengadopsi framework evaluasi dari paper:
 
 ---
 
+## Dev TODO (Post-Audit)
+
+### 🔴 P0 — Critical Path
+- [ ] **SWE-bench evaluation** — GitHub issue nyata, ukur % solved. Butuh `OPENAI_API_KEY`
+- [ ] **EvoClaw continuous test** — 50-file codebase, 5 iterasi, ukur performance drop
+- [ ] **NPM publish** — `npm publish` biar install via `opencode plugin opencode-agentic-engine`
+
+### 🟡 P1 — Perbaikan Langsung
+- [ ] **Docker pipeline** — `test-container.sh` layer 6-7: EvoClaw test proper
+- [ ] **E2E test real LLM** — `test/e2e-scenario.mjs` tambah mode `if (process.env.OPENAI_API_KEY)`
+- [ ] **Agent prompt spesifik** — `role-registry.ts` tambah few-shot contoh konkret per role
+- [ ] **Session-seeded model preference** — `model-registry.ts` biarkan user pilih model per agent role
+
+### 🟢 P2 — Polishing
+- [ ] **Skill persist** — `skill-store.ts` sambungkan ke `PersistenceLayer` (sekarang in-memory)
+- [ ] **ErrorAnalyzer LLM fallback** — `error-analyzer.ts` tambah LLM untuk kasus ambiguity
+- [ ] **Config hot-reload propagate** — `config.ts` watcher sudah ada, tapi belum ke semua module
+- [ ] **`agentic_evolve` auto-execute** — `self-evolver.ts` action items yang bisa jalan sendiri
+- [ ] **Test coverage** — `test/run.mjs` tambah edge cases (tiap tool minimal 5 test)
+
+### 🔵 Stage IV — Self-Evolving (Future)
+- [ ] Agent modifikasi prompt sendiri
+- [ ] Skill store → training data fine-tune
+- [ ] Cross-session pattern discovery otomatis
+
+---
+
 ## Referensi
 
 - Cao, Z. (2026). *The End of Software Engineering: How AI Agents Are Fundamentally Restructuring the Software Paradigm*. arXiv:2606.05608
