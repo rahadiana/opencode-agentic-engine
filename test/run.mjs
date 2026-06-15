@@ -791,8 +791,90 @@ assert(dashOut52.includes("Model Reliability"), "dashboard shows model reliabili
 assert(dashOut52.includes("gpt-4o") || dashOut52.includes("gpt-4o-mini"), "dashboard shows client-discovered models")
 await modelHooks52.dispose()
 
-// 53. Trace logging
-console.log("\n[53] Trace logging")
+// 53. Config file auto-create + custom config
+console.log("\n[53] Config file system")
+const cfgWorktree = join(projectDir, "config-test")
+try { rmSync(cfgWorktree, { recursive: true, force: true }) } catch {}
+mkdirSync(cfgWorktree, { recursive: true })
+mkdirSync(join(cfgWorktree, ".agentic"), { recursive: true })
+
+// Test A: auto-create default config
+const cfgInputA = { ...mockInput, worktree: cfgWorktree, directory: cfgWorktree, client: {} }
+const cfgHooksA = await mod.AgenticEngine(cfgInputA)
+await new Promise(r => setTimeout(r, 100))
+const cfgPath = join(cfgWorktree, ".agentic", "config.json")
+assert(existsSync(cfgPath), "default config auto-created on first run")
+const defaultCfg = JSON.parse(readFileSync(cfgPath, "utf-8"))
+assert(defaultCfg.$schema === "v1", "default config has schema v1")
+assert(defaultCfg.embedding === null, "default embedding is null (lightweight mode)")
+assert(defaultCfg.memory.mode === "lightweight", "default memory mode is lightweight")
+assert(defaultCfg.memory.search.keywordWeight === 0.3, "default keyword weight 0.3")
+assert(defaultCfg.memory.search.vectorWeight === 0.7, "default vector weight 0.7")
+assert(defaultCfg.agent.maxDelegationDepth === 3, "default max delegation depth 3")
+assert(defaultCfg.agent.autoSkillExtract === true, "default autoSkillExtract true")
+assert(defaultCfg.storage.traceRetentionDays === 7, "default trace retention 7 days")
+await cfgHooksA.dispose()
+
+// Test B: custom config loaded correctly
+const cfgWorktreeB = join(projectDir, "config-test-custom")
+try { rmSync(cfgWorktreeB, { recursive: true, force: true }) } catch {}
+mkdirSync(cfgWorktreeB, { recursive: true })
+mkdirSync(join(cfgWorktreeB, ".agentic"), { recursive: true })
+writeFileSync(join(cfgWorktreeB, ".agentic", "config.json"), JSON.stringify({
+  $schema: "v1",
+  embedding: { model: "text-embedding-3-small", endpoint: "https://custom/v1/embeddings", apiKey: "sk-test" },
+  memory: { enabled: true, mode: "full", maxEntries: 500, compressThreshold: 200, forgetAfterDays: 14, search: { keywordWeight: 0.4, vectorWeight: 0.6 } },
+  agent: { maxDelegationDepth: 7, autoSkillExtract: false, defaultRole: "qa" },
+  storage: { traceRetentionDays: 30, skillMaxCount: 999 },
+}))
+const cfgInputB = { ...mockInput, worktree: cfgWorktreeB, directory: cfgWorktreeB, client: {} }
+const cfgHooksB = await mod.AgenticEngine(cfgInputB)
+await new Promise(r => setTimeout(r, 100))
+const customCfg = JSON.parse(readFileSync(join(cfgWorktreeB, ".agentic", "config.json"), "utf-8"))
+assert(customCfg.embedding.model === "text-embedding-3-small", "custom embedding model loaded")
+assert(customCfg.embedding.endpoint === "https://custom/v1/embeddings", "custom embedding endpoint loaded")
+assert(customCfg.memory.mode === "full", "custom memory mode loaded")
+assert(customCfg.memory.search.keywordWeight === 0.4, "custom keyword weight loaded")
+assert(customCfg.agent.maxDelegationDepth === 7, "custom delegation depth loaded")
+assert(customCfg.agent.autoSkillExtract === false, "custom autoSkillExtract loaded")
+assert(customCfg.storage.traceRetentionDays === 30, "custom trace retention loaded")
+assert(customCfg.storage.skillMaxCount === 999, "custom skill max count loaded")
+await cfgHooksB.dispose()
+
+// Test C: config file watch — write a change and verify reload
+const cfgWorktreeC = join(projectDir, "config-test-watch")
+try { rmSync(cfgWorktreeC, { recursive: true, force: true }) } catch {}
+mkdirSync(cfgWorktreeC, { recursive: true })
+mkdirSync(join(cfgWorktreeC, ".agentic"), { recursive: true })
+writeFileSync(join(cfgWorktreeC, ".agentic", "config.json"), JSON.stringify({
+  $schema: "v1", embedding: null,
+  memory: { enabled: true, mode: "lightweight", maxEntries: 100, compressThreshold: 50, forgetAfterDays: 7, search: { keywordWeight: 0.3, vectorWeight: 0.7 } },
+  agent: { maxDelegationDepth: 3, autoSkillExtract: true, defaultRole: "developer" },
+  storage: { traceRetentionDays: 7, skillMaxCount: 200 },
+}))
+const cfgInputC = { ...mockInput, worktree: cfgWorktreeC, directory: cfgWorktreeC, client: {} }
+const cfgHooksC = await mod.AgenticEngine(cfgInputC)
+await new Promise(r => setTimeout(r, 100))
+
+// Simulate external config change
+writeFileSync(join(cfgWorktreeC, ".agentic", "config.json"), JSON.stringify({
+  $schema: "v1", embedding: null,
+  memory: { enabled: true, mode: "lightweight", maxEntries: 100, compressThreshold: 50, forgetAfterDays: 7, search: { keywordWeight: 0.9, vectorWeight: 0.1 } },
+  agent: { maxDelegationDepth: 3, autoSkillExtract: true, defaultRole: "developer" },
+  storage: { traceRetentionDays: 7, skillMaxCount: 200 },
+}))
+// Wait for watcher to fire
+await new Promise(r => setTimeout(r, 300))
+const reloadedCfg = JSON.parse(readFileSync(join(cfgWorktreeC, ".agentic", "config.json"), "utf-8"))
+assert(reloadedCfg.memory.search.keywordWeight === 0.9, "config watch detects external changes")
+await cfgHooksC.dispose()
+// Cleanup
+try { rmSync(cfgWorktree, { recursive: true, force: true }) } catch {}
+try { rmSync(cfgWorktreeB, { recursive: true, force: true }) } catch {}
+try { rmSync(cfgWorktreeC, { recursive: true, force: true }) } catch {}
+
+// 54. Trace logging
+console.log("\n[54] Trace logging")
 await hooks.dispose()
 const tracePath = join(projectDir, ".agentic", "trace.jsonl")
 assert(existsSync(tracePath), "trace file created")
