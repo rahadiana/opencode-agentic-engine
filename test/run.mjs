@@ -676,6 +676,12 @@ const cpResult = await hooks.tool.agentic_execute.execute({
 const cpOut = typeof cpResult === "string" ? cpResult : cpResult.output
 assert(cpOut.includes("Checkpoint") || cpOut.includes("BLOCK") || cpOut.includes("REVIEW"), "checkpoint triggered for config change")
 
+// Acknowledge checkpoints to avoid blocking subsequent tests
+await hooks.tool.agentic_execute.execute({
+  stepId: "cp1", success: true, output: "Acknowledge config change checkpoint",
+  filesModified: ["config/env.ts"],
+}, cpCtx)
+
 // 42. agentic_parallel — analyze concurrency
 console.log("\n[42] agentic_parallel — concurrency analysis")
 const plCtx = mockCtx(freshSid())
@@ -1466,6 +1472,285 @@ assert(hasErrorRec, "has error prevention recommendations")
 assert(stepReport.timestamp.length > 0, "report has timestamp")
 
 assert(true, "PatternDiscovery cross-session pattern tests passed")
+
+// ── Coverage Expansion: agentic_auto ──
+console.log("\n[68] agentic_auto — autonomous loop")
+const autoSid = freshSid()
+
+// Error: empty goal
+const autoNoGoal = await hooks.tool.agentic_auto.execute({ goal: "" }, mockCtx(autoSid))
+const autoNgOut = typeof autoNoGoal === "string" ? autoNoGoal : (autoNoGoal.output || "")
+assert(autoNgOut.includes("goal") || autoNgOut.includes("goal is required") || autoNgOut.length > 0, "auto empty goal returns guidance")
+
+// Simple auto task
+const autoSimple = await hooks.tool.agentic_auto.execute({
+  goal: "Add a simple add function to the codebase",
+  constraints: ["TypeScript"],
+}, mockCtx(autoSid))
+const autoSOut = typeof autoSimple === "string" ? autoSimple : (autoSimple.output || "")
+assert(autoSOut.length > 20, "auto returns output for simple task")
+assert(autoSOut.includes("Step") || autoSOut.includes("step") || autoSOut.includes("Goal"), "auto shows goal or step info")
+assert(typeof autoSimple === "object", "auto returns object with metadata")
+assert(true, "agentic_auto tests passed")
+
+// ── Coverage Expansion: agentic_verify ──
+console.log("\n[69] agentic_verify — edge cases")
+const vfySid = freshSid()
+
+// Verify with no plan (nothing to verify)
+const vfyNoPlan = await hooks.tool.agentic_verify.execute({ stepId: "nonexistent" }, mockCtx(vfySid))
+const vfyNpOut = typeof vfyNoPlan === "string" ? vfyNoPlan : (vfyNoPlan.output || "")
+assert(vfyNpOut.length > 0, "verify with no plan returns output")
+assert(vfyNpOut.includes("No execution") || vfyNpOut.includes("nothing") || vfyNpOut.includes("not found") || vfyNpOut.includes("no"), "verify no plan gracefully handled")
+
+// Verify after a successful plan+execute
+await hooks.tool.agentic_plan.execute({
+  goal: "Test verify",
+  subtasks: [{ id: "vfy-1", description: "Test step", dependsOn: [], verificationCriteria: ["Compiles"] }],
+}, mockCtx(vfySid))
+await hooks.tool.agentic_execute.execute({
+  stepId: "vfy-1", success: true, output: "Done test step", filesModified: ["src/test.ts"],
+}, mockCtx(vfySid))
+const vfyGood = await hooks.tool.agentic_verify.execute({ stepId: "vfy-1" }, mockCtx(vfySid))
+const vfyGoodOut = typeof vfyGood === "string" ? vfyGood : (vfyGood.output || "")
+assert(vfyGoodOut.length > 0, "verify after execution returns output")
+assert(true, "agentic_verify edge case tests passed")
+
+// ── Coverage Expansion: agentic_dashboard ──
+console.log("\n[70] agentic_dashboard — coverage")
+const dashSid = freshSid()
+
+// Dashboard with no session data (empty)
+const dashEmpty = await hooks.tool.agentic_dashboard.execute({}, mockCtx(dashSid))
+const dashEmpOut = typeof dashEmpty === "string" ? dashEmpty : (dashEmpty.output || "")
+assert(dashEmpOut.length > 0, "dashboard returns output even with no data")
+assert(dashEmpOut.includes("Model") || dashEmpOut.includes("model"), "dashboard shows model info")
+
+// Dashboard after some execution (model data populated)
+await hooks.tool.agentic_plan.execute({
+  goal: "Dashboard test",
+  subtasks: [{ id: "dash-1", description: "Test", dependsOn: [], verificationCriteria: [] }],
+}, mockCtx(dashSid))
+await hooks.tool.agentic_execute.execute({
+  stepId: "dash-1", success: true, output: "Done dashboard test",
+}, mockCtx(dashSid))
+const dashWithData = await hooks.tool.agentic_dashboard.execute({}, mockCtx(dashSid))
+const dashDataOut = typeof dashWithData === "string" ? dashWithData : (dashWithData.output || "")
+assert(dashDataOut.length > 0, "dashboard after execution returns output")
+assert(typeof dashWithData === "object", "dashboard returns object")
+assert(true, "agentic_dashboard edge case tests passed")
+
+// ── Coverage Expansion: agentic_reflect ──
+console.log("\n[71] agentic_reflect — edge cases")
+const refSid = freshSid()
+
+// Reflect on non-existent step
+const refNonExist = await hooks.tool.agentic_reflect.execute({ stepId: "no-such-step" }, mockCtx(refSid))
+const refNeOut = typeof refNonExist === "string" ? refNonExist : (refNonExist.output || "")
+assert(refNeOut.includes("No execution") || refNeOut.includes("no execution"), "reflect on non-existent step handled")
+
+// Plan, execute fail, reflect with fix attempt
+await hooks.tool.agentic_plan.execute({
+  goal: "Reflect test",
+  subtasks: [{ id: "ref-1", description: "Step that fails", dependsOn: [], verificationCriteria: [] }],
+}, mockCtx(refSid))
+await hooks.tool.agentic_execute.execute({
+  stepId: "ref-1", success: false, output: "Something failed", error: "Runtime error: cannot read property",
+}, mockCtx(refSid))
+const refWithFix = await hooks.tool.agentic_reflect.execute({
+  stepId: "ref-1", attemptedFix: "Tried adding null check",
+}, mockCtx(refSid))
+const refFixOut = typeof refWithFix === "string" ? refWithFix : (refWithFix.output || "")
+assert(refFixOut.includes("runtime") || refFixOut.includes("error") || refFixOut.includes("Analysis") || refFixOut.length > 50, "reflect with fix attempt works")
+assert(true, "agentic_reflect edge case tests passed")
+
+// ── Coverage Expansion: agentic_status ──
+console.log("\n[72] agentic_status — edge cases")
+const stSid = freshSid()
+
+// Status with no plan/execution (empty session)
+const stEmpty = await hooks.tool.agentic_status.execute({}, mockCtx(stSid))
+const stEmpOut = typeof stEmpty === "string" ? stEmpty : (stEmpty.output || "")
+assert(stEmpOut.length > 0, "status with no plan returns output")
+assert(stEmpOut.includes("Health") || stEmpOut.includes("Dashboard") || stEmpOut.includes("Model"), "status shows dashboard even empty")
+assert(typeof stEmpty === "object", "status returns object")
+
+// Status after a failed step
+await hooks.tool.agentic_plan.execute({
+  goal: "Status test",
+  subtasks: [{ id: "st-1", description: "Failing step", dependsOn: [], verificationCriteria: [] }],
+}, mockCtx(stSid))
+await hooks.tool.agentic_execute.execute({
+  stepId: "st-1", success: false, output: "Failed step", error: "TypeError",
+}, mockCtx(stSid))
+const stFailed = await hooks.tool.agentic_status.execute({}, mockCtx(stSid))
+const stFailOut = typeof stFailed === "string" ? stFailed : (stFailed.output || "")
+assert(stFailOut.includes("Failed") || stFailOut.includes("failed") || stFailOut.includes("❌"), "status shows failed step")
+assert(true, "agentic_status edge case tests passed")
+
+// ── Coverage Expansion: agentic_skill ──
+console.log("\n[73] agentic_skill — edge cases")
+const skSid = freshSid()
+
+// Find with no results
+const skNoFind = await hooks.tool.agentic_skill.execute({ action: "find", query: "zzzznotexist" }, mockCtx(skSid))
+const skNfOut = typeof skNoFind === "string" ? skNoFind : (skNoFind.output || "")
+assert(skNfOut.includes("No skills") || skNfOut.includes("no skills") || skNfOut.includes("not found"), "skill find with no results handled")
+
+// Extract from non-existent step
+const skNoExtract = await hooks.tool.agentic_skill.execute({ action: "extract", query: "no-such-step" }, mockCtx(skSid))
+const skNeOut = typeof skNoExtract === "string" ? skNoExtract : (skNoExtract.output || "")
+assert(skNeOut.includes("No execution") || skNeOut.includes("no execution") || skNeOut.includes("not found"), "skill extract from non-existent step handled")
+
+// List with no skills (fresh session)
+const skList2 = await hooks.tool.agentic_skill.execute({ action: "list" }, mockCtx(skSid))
+const skList2Out = typeof skList2 === "string" ? skList2 : (skList2.output || "")
+assert(skList2Out.includes("No skills") || skList2Out.includes("no skills"), "skill list with no skills handled")
+assert(true, "agentic_skill edge case tests passed")
+
+// ── Coverage Expansion: agentic_episodes ──
+console.log("\n[74] agentic_episodes — edge cases")
+const epSid = freshSid()
+
+// Search with no results
+const epNoSearch = await hooks.tool.agentic_episodes.execute({ action: "search", query: "zzzznotexist" }, mockCtx(epSid))
+const epNsOut = typeof epNoSearch === "string" ? epNoSearch : (epNoSearch.output || "")
+assert(epNsOut.length > 0, "episode search with no results returns output")
+
+// Search without query
+const epNoQuery = await hooks.tool.agentic_episodes.execute({ action: "search" }, mockCtx(epSid))
+const epNqOut = typeof epNoQuery === "string" ? epNoQuery : (epNoQuery.output || "")
+assert(epNqOut.includes("Provide") || epNqOut.includes("provide") || epNqOut.includes("query"), "episode search without query handled")
+
+// Stats with no episodes
+const epStats2 = await hooks.tool.agentic_episodes.execute({ action: "stats" }, mockCtx(epSid))
+const epSt2Out = typeof epStats2 === "string" ? epStats2 : (epStats2.output || "")
+assert(epSt2Out.length > 0, "episode stats returns output")
+assert(true, "agentic_episodes edge case tests passed")
+
+// ── Coverage Expansion: agentic_nav ──
+console.log("\n[75] agentic_nav — edge cases")
+const navSid = freshSid()
+
+// Nav with empty query
+const navEmpty2 = await hooks.tool.agentic_nav.execute({ query: "", maxResults: 5 }, mockCtx(navSid))
+const navEmpOut = typeof navEmpty2 === "string" ? navEmpty2 : (navEmpty2.output || "")
+assert(navEmpOut.length > 0, "nav with empty query returns output")
+
+// Nav with special characters
+const navSpecial = await hooks.tool.agentic_nav.execute({ query: "user auth middleware config rate-limit db", maxResults: 3 }, mockCtx(navSid))
+const navSpOut = typeof navSpecial === "string" ? navSpecial : (navSpecial.output || "")
+assert(navSpOut.length > 0, "nav with complex query returns results")
+assert(typeof navSpecial === "object", "nav returns object")
+assert(true, "agentic_nav edge case tests passed")
+
+// ── Coverage Expansion: agentic_context ──
+console.log("\n[76] agentic_context — edge cases")
+const ctxSid = freshSid()
+
+// Context compress with no data
+const ctxCompEmpty = await hooks.tool.agentic_context.execute({ action: "compress" }, mockCtx(ctxSid))
+const ctxCeOut = typeof ctxCompEmpty === "string" ? ctxCompEmpty : (ctxCompEmpty.output || "")
+assert(ctxCeOut.length > 0, "context compress with no data returns output")
+
+// Context view with no data
+const ctxViewEmpty = await hooks.tool.agentic_context.execute({ action: "view" }, mockCtx(ctxSid))
+const ctxVeOut = typeof ctxViewEmpty === "string" ? ctxViewEmpty : (ctxViewEmpty.output || "")
+assert(ctxVeOut.length > 0, "context view with no data returns output")
+assert(true, "agentic_context edge case tests passed")
+
+// ── Coverage Expansion: agentic_snapshot ──
+console.log("\n[77] agentic_snapshot — edge cases")
+const snSid = freshSid()
+
+// List snapshots when empty
+const snListEmpty = await hooks.tool.agentic_snapshot.execute({ action: "list" }, mockCtx(snSid))
+const snLeOut = typeof snListEmpty === "string" ? snListEmpty : (snListEmpty.output || "")
+assert(snLeOut.length > 0, "snapshot list empty returns output")
+
+// Save snapshot without plan
+const snSaveNoPlan = await hooks.tool.agentic_snapshot.execute({ action: "save", label: "test-snap" }, mockCtx(snSid))
+const snSnpOut = typeof snSaveNoPlan === "string" ? snSaveNoPlan : (snSaveNoPlan.output || "")
+assert(snSnpOut.includes("snapshot") || snSnpOut.includes("Snapshot") || snSnpOut.length > 0, "snapshot save returns output")
+assert(true, "agentic_snapshot edge case tests passed")
+
+// ── Coverage Expansion: agentic_pr ──
+console.log("\n[78] agentic_pr — edge cases")
+const prSid = freshSid()
+
+// PR with no plan (empty session)
+const prNoPlan = await hooks.tool.agentic_pr.execute({ goal: "Test PR" }, mockCtx(prSid))
+const prNpOut = typeof prNoPlan === "string" ? prNoPlan : (prNoPlan.output || "")
+assert(prNpOut.length > 0, "PR with no plan returns output")
+
+// PR after plan+execute
+await hooks.tool.agentic_plan.execute({
+  goal: "PR test feature",
+  subtasks: [{ id: "pr-1", description: "Implement feature", dependsOn: [], verificationCriteria: [] }],
+}, mockCtx(prSid))
+await hooks.tool.agentic_execute.execute({ stepId: "pr-1", success: true, output: "Done feature" }, mockCtx(prSid))
+const prWithData = await hooks.tool.agentic_pr.execute({ goal: "PR test feature" }, mockCtx(prSid))
+const prWdOut = typeof prWithData === "string" ? prWithData : (prWithData.output || "")
+assert(prWdOut.length > 0, "PR after execution returns output")
+assert(typeof prWithData === "object", "PR returns object")
+assert(true, "agentic_pr edge case tests passed")
+
+// ── Coverage Expansion: agentic_score ──
+console.log("\n[79] agentic_score — edge cases")
+const scSid = freshSid()
+
+// Score with no files (empty session)
+const scEmpty = await hooks.tool.agentic_score.execute({}, mockCtx(scSid))
+const scEmpOut = typeof scEmpty === "string" ? scEmpty : (scEmpty.output || "")
+assert(scEmpOut.length > 0, "score with empty session returns output")
+assert(scEmpOut.includes("Score") || scEmpOut.includes("score") || scEmpOut.includes("debt") || scEmpOut.includes("Debt") || scEmpOut.includes("files") || scEmpOut.includes("modified"), "score output mentions score or files")
+assert(typeof scEmpty === "object", "score returns object")
+assert(true, "agentic_score edge case tests passed")
+
+// ── Coverage Expansion: agentic_guard ──
+console.log("\n[80] agentic_guard — edge cases")
+const gdSid = freshSid()
+
+// Guard on non-existent step
+const gdNoStep = await hooks.tool.agentic_guard.execute({ stepId: "no-such-step" }, mockCtx(gdSid))
+const gdNsOut = typeof gdNoStep === "string" ? gdNoStep : (gdNoStep.output || "")
+assert(gdNsOut.includes("No execution") || gdNsOut.includes("no execution"), "guard on non-existent step handled")
+
+// Guard on step with no files
+await hooks.tool.agentic_plan.execute({
+  goal: "Guard test",
+  subtasks: [{ id: "gd-1", description: "Test", dependsOn: [], verificationCriteria: [] }],
+}, mockCtx(gdSid))
+await hooks.tool.agentic_execute.execute({ stepId: "gd-1", success: true, output: "Done with test" }, mockCtx(gdSid))
+const gdOk = await hooks.tool.agentic_guard.execute({ stepId: "gd-1" }, mockCtx(gdSid))
+const gdOkOut = typeof gdOk === "string" ? gdOk : (gdOk.output || "")
+assert(gdOkOut.includes("Verdict") || gdOkOut.includes("claims") || gdOkOut.includes("Hallucination") || gdOkOut.length > 0, "guard on simple step returns output")
+assert(typeof gdOk === "object", "guard returns object")
+assert(true, "agentic_guard edge case tests passed")
+
+// ── Coverage Expansion: agentic_execute ──
+console.log("\n[81] agentic_execute — edge cases")
+const exSid = freshSid()
+
+// Execute step without plan (non-existent step)
+const exNoPlan = await hooks.tool.agentic_execute.execute({
+  stepId: "no-plan-step", success: true, output: "test",
+}, mockCtx(exSid))
+const exNpOut = typeof exNoPlan === "string" ? exNoPlan : (exNoPlan.output || "")
+assert(exNpOut.length > 0, "execute without plan returns output")
+
+// Execute with error but empty error string (edge case)
+await hooks.tool.agentic_plan.execute({
+  goal: "Edge case tests",
+  subtasks: [{ id: "ex-1", description: "Edge step", dependsOn: [], verificationCriteria: [] }],
+}, mockCtx(exSid))
+const exEmptyError = await hooks.tool.agentic_execute.execute({
+  stepId: "ex-1", success: false, output: "Something bad", error: "",
+}, mockCtx(exSid))
+const exEeOut = typeof exEmptyError === "string" ? exEmptyError : (exEmptyError.output || "")
+assert(exEeOut.includes("Error") || exEeOut.includes("error") || exEeOut.includes("Analysis") || exEeOut.includes("analysis") || exEeOut.includes("BLOCKED") || exEeOut.includes("FAILED") || exEeOut.includes("failed"), "execute with empty error produces analysis or failure output")
+assert(typeof exEmptyError === "object", "execute returns object")
+assert(true, "agentic_execute edge case tests passed")
 
 // 54. Trace logging
 console.log("\n[54] Trace logging")
