@@ -1,7 +1,7 @@
 // test/e2e-llm.mjs — Real LLM E2E test
 // Tests core LLM-dependent features: auto-decompose, delegation, auto-loop
-// Auto-detects LLM availability: OPENAI_API_KEY, ANTHROPIC_API_KEY, OPENAI_BASE_URL, or opencode.json config
-// Skips gracefully if no LLM available — no API key required for CI
+// Auto-detects LLM: defaults to OpenCode Free (https://opencode.ai/zen/v1) — no API key needed
+// Set LLM_OFF=true to skip (mock mode)
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs"
 import { resolve, dirname, join } from "node:path"
@@ -12,11 +12,21 @@ const PLUGIN_DIST = resolve(__dirname, "..", "dist", "index.js")
 const WORKTREE = "/tmp/e2e-llm-worktree"
 
 // ── LLM Detection ──
+// Auto-default: OpenCode Free (https://opencode.ai/zen/v1) — no auth needed
+const OPENCODE_FREE_BASE = "https://opencode.ai/zen/v1"
+const OPENCODE_FREE_MODEL = "deepseek-v4-flash-free"
 const HAS_OPENAI_KEY = !!(process.env.OPENAI_API_KEY || process.env.OPENAI_BASE_URL)
 const HAS_ANTHROPIC_KEY = !!process.env.ANTHROPIC_API_KEY
+const LLM_OFF = process.env.LLM_OFF === "true"
 const HAS_ANY_KEY = HAS_OPENAI_KEY || HAS_ANTHROPIC_KEY
 
-// Check opencode.json for local endpoint config
+// If no explicit LLM config, use OpenCode Free as default
+if (!LLM_OFF && !process.env.OPENAI_BASE_URL && !process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+  process.env.OPENAI_BASE_URL = OPENCODE_FREE_BASE
+  if (!process.env.OPENAI_MODEL) process.env.OPENAI_MODEL = OPENCODE_FREE_MODEL
+}
+
+// Check opencode.json for local endpoint config (only if no env var set)
 let opencodeConfig = null
 const opencodeJsonPaths = [
   join(process.env.HOME || "/root", ".config", "opencode", "opencode.json"),
@@ -35,7 +45,7 @@ for (const p of opencodeJsonPaths) {
   } catch { /* not found or invalid JSON */ }
 }
 
-const CAN_USE_LLM = HAS_ANY_KEY || opencodeConfig !== null
+const CAN_USE_LLM = !LLM_OFF && (HAS_ANY_KEY || opencodeConfig !== null || true) // default: OpenCode Free
 
 let passed = 0
 let failed = 0
@@ -90,13 +100,13 @@ async function setupWorktree() {
 async function main() {
   if (!CAN_USE_LLM) {
     console.log("\n⚠️  No LLM available. Skipping real LLM E2E test.")
-    console.log("   To enable, set one of these env vars:")
+    console.log("   Auto-detection tried: OpenCode Free → no response")
+    console.log("   To force mock mode, set LLM_OFF=true")
+    console.log("   To use a different LLM, set one of these env vars:")
     console.log("     • OPENAI_API_KEY     — OpenAI / any OpenAI-compatible provider")
     console.log("     • ANTHROPIC_API_KEY  — Anthropic Claude")
     console.log("     • OPENAI_BASE_URL    — Local LLM (Ollama, vLLM, Together, Groq, etc.)")
-    console.log("   Or run inside OpenCode for native LLM access (no env vars needed).")
-    console.log("   Set OPENAI_API_KEY, ANTHROPIC_API_KEY, or OPENAI_BASE_URL to enable.")
-    console.log("   Or configure opencode.json with a baseUrl for local LLM endpoint.\n")
+    console.log("   Default (no env): OpenCode Free (https://opencode.ai/zen/v1) — no API key needed\n")
     console.log("E2E LLM TEST: SKIPPED (no LLM)")
     return { passed: 0, failed: 0, skipped: true }
   }

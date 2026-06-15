@@ -2,14 +2,20 @@
 // Evaluates agent performance on coding tasks with measurable outcomes.
 //
 // Usage:
-//   node test/swebench-harness.mjs                          # mock mode (no LLM)
+//   node test/swebench-harness.mjs                          # auto: OpenCode Free (no auth needed)
 //   OPENAI_BASE_URL=http://localhost:11434/v1 node test/swebench-harness.mjs
 //   OPENAI_API_KEY=sk-... node test/swebench-harness.mjs
+//   LLM_OFF=true node test/swebench-harness.mjs             # mock mode (skip LLM)
 //
 // Scoring:
 //   Each scenario = 1 point for pass, 0 for fail.
 //   Total score = points / scenarios * 100.
 //   Target: >60% per SWE-bench Verified standard.
+//
+// LLM auto-detection:
+//   By default uses OpenCode Free (opencode.ai/zen/v1) — no API key needed.
+//   Set OPENAI_API_KEY, ANTHROPIC_API_KEY, OPENAI_BASE_URL to override.
+//   Set LLM_OFF=true to force mock mode (no LLM calls).
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, cpSync } from "node:fs"
 import { resolve, dirname, join } from "node:path"
@@ -22,9 +28,19 @@ const CODEBASE_FIXTURE = resolve(__dirname, "e2e-codebase-fixture")
 const WORKTREE_BASE = "/tmp/swebench-worktree"
 
 // ── LLM Detection ──
+// Auto-default: OpenCode Free (https://opencode.ai/zen/v1) — no auth needed
+const OPENCODE_FREE_BASE = "https://opencode.ai/zen/v1"
+const OPENCODE_FREE_MODEL = "deepseek-v4-flash-free"
 const HAS_OPENAI = !!(process.env.OPENAI_API_KEY || process.env.OPENAI_BASE_URL)
 const HAS_ANTHROPIC = !!process.env.ANTHROPIC_API_KEY
-const CAN_USE_LLM = HAS_OPENAI || HAS_ANTHROPIC
+const LLM_OFF = process.env.LLM_OFF === "true"
+const CAN_USE_LLM = !LLM_OFF && (HAS_OPENAI || HAS_ANTHROPIC || true) // default: OpenCode Free
+
+// If no explicit LLM config, set OpenCode Free as default
+if (!LLM_OFF && !process.env.OPENAI_BASE_URL && !process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+  process.env.OPENAI_BASE_URL = OPENCODE_FREE_BASE
+  if (!process.env.OPENAI_MODEL) process.env.OPENAI_MODEL = OPENCODE_FREE_MODEL
+}
 
 // ── Results ──
 let passed = 0
@@ -496,7 +512,14 @@ async function main() {
   console.log(`Fixture: ${CODEBASE_FIXTURE} (${scenarios.length} scenarios)`)
   console.log(`LLM: ${CAN_USE_LLM ? "AVAILABLE" : "NOT AVAILABLE (mock mode)"}`)
   if (CAN_USE_LLM) {
-    console.log(`  Using: ${HAS_OPENAI ? "OpenAI-compatible" : ""} ${HAS_ANTHROPIC ? "Anthropic" : ""}`)
+    const llmSource = LLM_OFF ? "mock (LLM_OFF=true)" :
+      process.env.ANTHROPIC_API_KEY ? "Anthropic" :
+      process.env.OPENAI_API_KEY ? "OpenAI-compatible API key" :
+      process.env.OPENAI_BASE_URL === OPENCODE_FREE_BASE ? "OpenCode Free (auto, no auth)" :
+      "OpenAI-compatible"
+    console.log(`  Endpoint: ${process.env.OPENAI_BASE_URL || "N/A"}`)
+    console.log(`  Model: ${process.env.OPENAI_MODEL || "N/A"}`)
+    console.log(`  Source: ${llmSource}`)
   }
 
   for (const scenario of scenarios) {
