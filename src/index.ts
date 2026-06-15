@@ -33,6 +33,7 @@ import { AgentLoop } from "./core/agent-loop.js"
 import { PersistenceLayer } from "./memory/persistence.js"
 import { VectorStore } from "./memory/vector-store.js"
 import { LocalEmbedder } from "./memory/local-embedder.js"
+import { ModelRegistry } from "./core/model-registry.js"
 
 const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<Plugin>[1]) => {
   const intentParser = new IntentParser()
@@ -61,8 +62,10 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
   const roleRegistry = new RoleRegistry()
   const schemaVersion = new MemorySchemaVersion()
   const selfEvolver = new SelfEvolver()
+  const modelRegistry = new ModelRegistry()
   const llmEngine = new LLMEngine()
   llmEngine.setOpencodeClient(input.client)
+  llmEngine.setModelRegistry(modelRegistry)
   llmEngine.setMemoryStores({
     searchEpisodes: (query: string) => episodicStore.search(query),
     findSkills: (query: string) => skillStore.find(query).map(s => ({ name: s.definition.meta.name, successRate: s.successRate })),
@@ -556,6 +559,10 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
             output += `\n### 📁 Files Modified\n`
             output += allFiles.map(f => `- \`${f}\``).join("\n") + "\n"
           }
+
+          output += `\n### 🤖 Model Reliability\n`
+          const modelSummary = modelRegistry.getSummary()
+          output += modelSummary + "\n"
 
           return { output, metadata: { progress, nextStep: nextStep?.id, blockedSteps, isComplete, isHealthy } }
         },
@@ -1092,6 +1099,17 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
           output += `**Suggested Model:** ${suggestedModel}\n`
           if (agent.model) output += `**Configured Model:** ${agent.model}\n`
 
+          // Model reliability info
+          const modelScore = modelRegistry.getScore(suggestedModel)
+          if (modelScore) {
+            if (modelScore.totalCalls > 0) {
+              const icon = modelScore.status === "healthy" ? "✅" : modelScore.status === "degraded" ? "⚠️" : "❌"
+              output += `**Model Status:** ${icon} ${modelScore.status} (reliability: ${(modelScore.reliability * 100).toFixed(0)}%, hallucinations: ${(modelScore.hallucinationRate * 100).toFixed(0)}%)\n`
+            } else {
+              output += `**Model Status:** No reliability data yet (new model)\n`
+            }
+          }
+
           if (args.pipelineRunId) {
             output += `**Pipeline Run:** \`${args.pipelineRunId}\`\n`
           }
@@ -1455,6 +1473,10 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
           const files = executor.getAllFilesModified(context.sessionID)
           const check = hallucinationGuard.check(output, files)
 
+          if (!check.passed) {
+            modelRegistry.recordHallucination(llmEngine.getCurrentModel())
+          }
+
           let response = `## 🛡️ Hallucination Check: Step "${args.stepId}"\n\n`
           response += `**Verdict:** ${check.passed ? "✅ All claims verified" : "❌ Unverified claims found"}\n\n`
           response += `**Summary:** ${check.summary}\n\n`
@@ -1475,6 +1497,15 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
               response += `- "${c.claim}" — expected ${c.expected} but got ${c.actual}\n`
             }
             response += `\nDouble-check these before proceeding. The agent may be hallucinating about files/functions that don't exist.`
+          }
+
+          response += `\n### 🤖 Model Reliability\n`
+          const modelScore = modelRegistry.getScore(llmEngine.getCurrentModel())
+          if (modelScore && modelScore.totalCalls > 0) {
+            const icon = modelScore.status === "healthy" ? "✅" : modelScore.status === "degraded" ? "⚠️" : "❌"
+            response += `${icon} **${modelScore.model}** — reliability: ${(modelScore.reliability * 100).toFixed(0)}%, hallucinations: ${(modelScore.hallucinationRate * 100).toFixed(0)}%, calls: ${modelScore.totalCalls}\n`
+          } else {
+            response += `No data yet for current model.\n`
           }
 
           traceLogger.log({

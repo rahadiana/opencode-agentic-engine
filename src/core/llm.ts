@@ -30,10 +30,13 @@ const DEFAULT_MODELS: Record<string, string> = {
   opencode: "opencode-default",
 }
 
+import type { ModelRegistry } from "./model-registry.js"
+
 export class LLMEngine {
   private config: LLMConfig
   private opencodeClient: unknown = null
   private pluginSessionId: string | null = null
+  private modelRegistry?: ModelRegistry
   private memoryStores?: {
     searchEpisodes: (query: string) => Array<{ planGoal: string; outcome: string; timestamp: string }>
     findSkills: (query: string) => Array<{ name: string; successRate: number }>
@@ -90,24 +93,51 @@ export class LLMEngine {
     this.pluginSessionId = sessionId
   }
 
+  setModelRegistry(registry: ModelRegistry): void {
+    this.modelRegistry = registry
+  }
+
   updateConfig(config: Partial<LLMConfig>): void {
     Object.assign(this.config, config)
   }
 
+  getCurrentModel(): string {
+    return this.config.model ?? "unknown"
+  }
+
   async call(req: LLMRequest): Promise<LLMResponse> {
-    switch (this.config.provider) {
-      case "openai":
-        return this.callOpenAI(req)
-      case "anthropic":
-        return this.callAnthropic(req)
-      case "local":
-        return this.callLocal(req)
-      case "opencode":
-        return this.callOpenCode(req)
-      default:
-        if (this.opencodeClient) return this.callOpenCode(req)
-        return this.callOpenAI(req)
+    const startTime = Date.now()
+    let success = false
+    let response: LLMResponse
+
+    try {
+      switch (this.config.provider) {
+        case "openai":
+          response = await this.callOpenAI(req)
+          break
+        case "anthropic":
+          response = await this.callAnthropic(req)
+          break
+        case "local":
+          response = await this.callLocal(req)
+          break
+        case "opencode":
+          response = await this.callOpenCode(req)
+          break
+        default:
+          if (this.opencodeClient) response = await this.callOpenCode(req)
+          else response = await this.callOpenAI(req)
+      }
+      success = !response.content.startsWith("LLM error") && !response.content.startsWith("[NO_LLM]") && !response.content.startsWith("LLM call failed")
+    } catch {
+      response = { content: "LLM call threw an exception", finishReason: "error" }
+      success = false
     }
+
+    const latency = Date.now() - startTime
+    this.modelRegistry?.recordCall(this.getCurrentModel(), success, latency)
+
+    return response
   }
 
   async decomposeTask(goal: string, context: string): Promise<string[]> {
