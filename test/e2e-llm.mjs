@@ -90,6 +90,11 @@ async function setupWorktree() {
 async function main() {
   if (!CAN_USE_LLM) {
     console.log("\n⚠️  No LLM available. Skipping real LLM E2E test.")
+    console.log("   To enable, set one of these env vars:")
+    console.log("     • OPENAI_API_KEY     — OpenAI / any OpenAI-compatible provider")
+    console.log("     • ANTHROPIC_API_KEY  — Anthropic Claude")
+    console.log("     • OPENAI_BASE_URL    — Local LLM (Ollama, vLLM, Together, Groq, etc.)")
+    console.log("   Or run inside OpenCode for native LLM access (no env vars needed).")
     console.log("   Set OPENAI_API_KEY, ANTHROPIC_API_KEY, or OPENAI_BASE_URL to enable.")
     console.log("   Or configure opencode.json with a baseUrl for local LLM endpoint.\n")
     console.log("E2E LLM TEST: SKIPPED (no LLM)")

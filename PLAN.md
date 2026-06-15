@@ -268,8 +268,8 @@ Mengadopsi framework evaluasi dari paper:
 ## Dev TODO (Post-Audit)
 
 ### 🔴 P0 — Critical Path
-- [ ] **SWE-bench evaluation** — GitHub issue nyata, ukur % solved. Butuh `OPENAI_API_KEY`
-- [ ] **EvoClaw continuous test** — 50-file codebase, 5 iterasi, ukur performance drop
+- [ ] **SWE-bench evaluation** — GitHub issue nyata, ukur % solved. Butuh LLM (OpenAI / Anthropic / OpenCode native — `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_BASE_URL`, atau jalankan di dalam OpenCode)
+- [ ] **EvoClaw continuous test with LLM** — 50-file codebase, 5 iterasi + LLM untuk delegasi & eksekusi nyata. Butuh LLM (sama seperti di atas)
 - [ ] **NPM publish** — `npm publish` biar install via `opencode plugin opencode-agentic-engine`
 
 ### 🟡 P1 — Perbaikan Langsung
