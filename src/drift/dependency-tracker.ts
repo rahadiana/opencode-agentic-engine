@@ -1,3 +1,6 @@
+import { readFileSync, existsSync } from "node:fs"
+import { join, relative, dirname, resolve } from "node:path"
+
 export interface FileChange {
   file: string
   stepId: string
@@ -30,6 +33,147 @@ export class DependencyTracker {
   private fileChanges = new Map<string, FileChange[]>()
   private dependencies = new Map<string, DependencyEdge[]>()
   private stepFiles = new Map<string, Map<string, string[]>>()
+  private fileGraph = new Map<string, Set<string>>()
+
+  // ── File-level import parsing ──
+
+  /**
+   * Parse import/require statements from file content.
+   * Supports: import x from "y", import { x } from "y", import * as x from "y",
+   *           const x = require("y"), dynamic import(), re-exports.
+   */
+  parseImports(content: string): string[] {
+    const imports: string[] = []
+    const seen = new Set<string>()
+
+    // ESM import + export from
+    const importRegex = /(?:import\s+(?:(?:\{[^}]*\}|[^;{]+?)\s+from\s+|)\s*["'`]|export\s+(?:\{[^}]*\}|\*)\s+from\s+["'`])([^"'`]+)["'`]/g
+    // require() calls
+    const requireRegex = /(?:require|import)\s*\(\s*["'`]([^"'`]+)["'`]\s*\)/g
+    // dynamic import()
+    const dynamicImportRegex = /import\s*\(\s*["'`]([^"'`]+)["'`]\s*\)/g
+
+    for (const match of content.matchAll(importRegex)) {
+      const raw = match[1]
+      if (raw && !seen.has(raw)) { seen.add(raw); imports.push(raw) }
+    }
+    for (const match of content.matchAll(requireRegex)) {
+      const raw = match[1]
+      if (raw && !seen.has(raw)) { seen.add(raw); imports.push(raw) }
+    }
+    for (const match of content.matchAll(dynamicImportRegex)) {
+      const raw = match[1]
+      if (raw && !seen.has(raw)) { seen.add(raw); imports.push(raw) }
+    }
+
+    return imports
+  }
+
+  /**
+   * Resolve a relative import specifier to possible filesystem paths.
+   */
+  resolveImportPath(sourceFile: string, specifier: string): string[] {
+    if (!specifier.startsWith(".")) return [] // skip npm packages
+    const sourceDir = dirname(sourceFile)
+    const base = join(sourceDir, specifier).replace(/\\/g, "/")
+
+    // Remove known extension if present
+    const withoutExt = base.replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/, "")
+    const extensions = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]
+
+    const candidates: string[] = []
+    // Try exact path first
+    candidates.push(base)
+    // Try with/extensions
+    for (const ext of extensions) {
+      if (!base.endsWith(ext)) candidates.push(withoutExt + ext)
+    }
+    // Try as index file in directory
+    for (const ext of extensions) {
+      candidates.push(join(withoutExt, "index") + ext)
+    }
+
+    return candidates
+  }
+
+  /**
+   * Scan a batch of files and build the file-level dependency graph.
+   * Only processes relative imports (local files), skips npm packages.
+   *
+   * @param files  Record<absoluteFilePath, fileContent>
+   * @param projectDir  Project root for computing relative paths
+   */
+  scanFiles(files: Record<string, string>, projectDir: string): void {
+    for (const [absPath, content] of Object.entries(files)) {
+      const allImportSpecifiers = this.parseImports(content)
+      const localSpecifiers = allImportSpecifiers.filter(s => s.startsWith("."))
+
+      if (localSpecifiers.length === 0) continue
+
+      const sourceRel = relative(projectDir, absPath).replace(/\\/g, "/")
+      const resolvedTargets: string[] = []
+
+      for (const spec of localSpecifiers) {
+        const candidates = this.resolveImportPath(absPath, spec)
+        for (const cand of candidates) {
+          if (existsSync(cand)) {
+            const targetRel = relative(projectDir, cand).replace(/\\/g, "/")
+            resolvedTargets.push(targetRel)
+            break // first existing resolution wins
+          }
+        }
+      }
+
+      if (resolvedTargets.length > 0) {
+        const existing = this.fileGraph.get(sourceRel) ?? new Set()
+        for (const t of resolvedTargets) {
+          existing.add(t)
+          this.addDependency(sourceRel, t, "imports")
+        }
+        this.fileGraph.set(sourceRel, existing)
+      }
+    }
+  }
+
+  /**
+   * Get files that directly import the given file (via file-level graph).
+   */
+  getFileDependents(filePath: string): string[] {
+    const normalized = filePath.replace(/\\/g, "/")
+    const result: string[] = []
+    for (const [source, targets] of this.fileGraph) {
+      for (const t of targets) {
+        if (t === normalized || t.endsWith("/" + normalized) || normalized.endsWith("/" + t)) {
+          result.push(source)
+          break
+        }
+      }
+    }
+    return [...new Set(result)]
+  }
+
+  /**
+   * Get files that a given file directly imports (via file-level graph).
+   */
+  getFileImports(filePath: string): string[] {
+    const normalized = filePath.replace(/\\/g, "/")
+    return [...(this.fileGraph.get(normalized) ?? [])]
+  }
+
+  /**
+   * Traverse transitive dependents (A imports B imports C → change C impacts A).
+   */
+  private getTransitiveDependents(file: string, visited?: Set<string>): string[] {
+    const visitedSet = visited ?? new Set<string>()
+    if (visitedSet.has(file)) return []
+    visitedSet.add(file)
+    const direct = this.getFileDependents(file)
+    const all = [...direct]
+    for (const d of direct) {
+      all.push(...this.getTransitiveDependents(d, visitedSet))
+    }
+    return all
+  }
 
   recordChange(sessionId: string, stepId: string, files: string[]): void {
     const changes = this.fileChanges.get(sessionId) ?? []
@@ -75,20 +219,27 @@ export class DependencyTracker {
   analyzeImpact(sessionId: string, changedFiles: string[]): ImpactAnalysis[] {
     const results: ImpactAnalysis[] = []
     for (const file of changedFiles) {
-      const impactedFiles = this.getDependents(file).map(e => e.from)
+      // Combine step-level + file-level dependents
+      const stepDeps = this.getDependents(file).map(e => e.from)
+      const fileDeps = this.getFileDependents(file)
+      const transitiveDeps = this.getTransitiveDependents(file)
+      const combinedFiles = [...new Set([...stepDeps, ...fileDeps, ...transitiveDeps])]
+
+      // Map back to steps
       const sessionFiles = this.stepFiles.get(sessionId)
       const impactedSteps: string[] = []
       if (sessionFiles) {
         for (const [stepId, files] of sessionFiles) {
-          const overlap = files.some(f => impactedFiles.includes(f) || f === file)
+          const overlap = files.some(f => combinedFiles.includes(f) || f === file)
           if (overlap) impactedSteps.push(stepId)
         }
       }
+
       results.push({
         file,
-        impactedFiles: [...new Set(impactedFiles)],
+        impactedFiles: combinedFiles,
         impactedSteps: [...new Set(impactedSteps)],
-        risk: impactedFiles.length > 5 ? "high" : impactedFiles.length > 2 ? "medium" : "low",
+        risk: combinedFiles.length > 5 ? "high" : combinedFiles.length > 2 ? "medium" : "low",
       })
     }
     return results
@@ -188,9 +339,14 @@ export class DependencyTracker {
         ...stepImpact.map(e => e.from),
       ])]
 
+      // Include file-level dependents in suggestion
+      const fileLevelDeps = this.getFileDependents(likelyCulprit)
       suggestion = `Error likely originates from changes to ${likelyCulprit} (confidence: ${(confidence * 100).toFixed(0)}%).`
       if (combinedImpact.length > 0) {
-        suggestion += ` Impacts: ${combinedImpact.join(", ")}.`
+        suggestion += ` Step impacts: ${combinedImpact.join(", ")}.`
+      }
+      if (fileLevelDeps.length > 0) {
+        suggestion += ` File-level dependents: ${fileLevelDeps.join(", ")}.`
       }
       suggestion += ` Review this file first, then check propagation.`
     } else if (propagationPath.length > 0) {
@@ -210,6 +366,7 @@ export class DependencyTracker {
       this.fileChanges.clear()
       this.dependencies.clear()
       this.stepFiles.clear()
+      this.fileGraph.clear()
     }
   }
 }

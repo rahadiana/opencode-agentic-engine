@@ -1,6 +1,6 @@
 import type { Plugin, PluginModule } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin"
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs"
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs"
 import { execFileSync } from "node:child_process"
 import { join, dirname } from "node:path"
 import { IntentParser, type TaskIntent, type Subtask } from "./core/intent-parser.js"
@@ -64,6 +64,26 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
   const planner = new Planner()
   const navigator = new CodebaseNavigator()
   const depTracker = new DependencyTracker()
+  // Build initial file-level dependency graph from project source
+  try {
+    const sourceDir = join(input.worktree, "src")
+    if (existsSync(sourceDir)) {
+      const scanBatch: Record<string, string> = {}
+      const walkDir = (dir: string) => {
+        try {
+          for (const entry of readdirSync(dir, { withFileTypes: true })) {
+            const full = join(dir, entry.name)
+            if (entry.isDirectory() && !["node_modules", ".git", "dist", ".agentic"].includes(entry.name))
+              walkDir(full)
+            else if (entry.isFile() && /\.(ts|tsx|js|jsx|mjs)$/.test(entry.name) && Object.keys(scanBatch).length < 100)
+              try { scanBatch[full] = readFileSync(full, "utf-8") } catch {}
+          }
+        } catch {}
+      }
+      walkDir(sourceDir)
+      depTracker.scanFiles(scanBatch, input.worktree)
+    }
+  } catch { /* non-fatal */ }
   const contextCompressor = new ContextCompressor()
   const git = new GitIntegration(input.worktree)
   const debtScorer = new TechDebtScorer()
