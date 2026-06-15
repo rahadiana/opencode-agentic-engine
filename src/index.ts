@@ -67,15 +67,59 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
   llmEngine.setOpencodeClient(input.client)
   llmEngine.setModelRegistry(modelRegistry)
 
-  // Register models into ModelRegistry from env vars
-  const defaultModel = process.env.OPENAI_MODEL || process.env.LLM_MODEL || ""
-  const fastModel = process.env.FAST_MODEL || defaultModel
-  const capableModel = process.env.CAPABLE_MODEL || defaultModel
+  // Discover models from OpenCode client + env vars
+  ;(async () => {
+    try {
+      const client = input.client as { config?: { providers?: () => Promise<{ 200?: { providers: Array<{ name: string; id: string; models?: Record<string, unknown> }>; default?: Record<string, string> } }> }; models?: () => Promise<Array<{ id: string }>> }
+      const allModels: string[] = []
 
-  if (fastModel) { modelRegistry.addModel(fastModel); modelRegistry.registerAlias("fast", [fastModel]) }
-  if (capableModel && capableModel !== fastModel) { modelRegistry.addModel(capableModel) }
-  if (capableModel) { modelRegistry.registerAlias("capable", [capableModel]) }
-  // Tanpa env: alias tetap ada tapi kosong — output pake kategori saja
+      // 1. Try client.config.providers() — daftar provider + model dari OpenCode
+      if (client?.config?.providers) {
+        const provResp = await client.config.providers()
+        const providers = provResp?.[200]?.providers ?? []
+        const defaultMap = provResp?.[200]?.default ?? {}
+        const defaultModelName = defaultMap[Object.keys(defaultMap)[0] ?? ""]?.split("/")?.pop() || ""
+        if (defaultModelName) allModels.push(defaultModelName)
+        for (const p of providers) {
+          if (p.models) {
+            for (const modelKey of Object.keys(p.models)) {
+              const name = modelKey.includes("/") ? modelKey.split("/").pop()! : modelKey
+              if (name && !allModels.includes(name)) allModels.push(name)
+            }
+          }
+        }
+      }
+
+      // 2. Try client.models() — alternatif
+      if (allModels.length === 0 && typeof client?.models === "function") {
+        const models = await client.models()
+        for (const m of models) {
+          if (m.id && !allModels.includes(m.id)) allModels.push(m.id)
+        }
+      }
+
+      // 3. Fallback: env vars
+      const envModel = process.env.OPENAI_MODEL || process.env.LLM_MODEL || ""
+      if (envModel && !allModels.includes(envModel)) allModels.push(envModel)
+
+      // 4. Register semua model yang ditemukan
+      const fastModel = process.env.FAST_MODEL || allModels[0] || ""
+      const capableModel = process.env.CAPABLE_MODEL || allModels[0] || ""
+
+      for (const m of allModels) modelRegistry.addModel(m)
+      if (fastModel) modelRegistry.registerAlias("fast", [fastModel])
+      if (capableModel && capableModel !== fastModel) modelRegistry.addModel(capableModel)
+      if (capableModel) modelRegistry.registerAlias("capable", [capableModel])
+    } catch {
+      // Silent fallback — discovery gagal, pake env var
+      const envModel = process.env.OPENAI_MODEL || process.env.LLM_MODEL || ""
+      const fastModel = process.env.FAST_MODEL || envModel
+      const capableModel = process.env.CAPABLE_MODEL || envModel
+      if (fastModel) { modelRegistry.addModel(fastModel); modelRegistry.registerAlias("fast", [fastModel]) }
+      if (capableModel && capableModel !== fastModel) modelRegistry.addModel(capableModel)
+      if (capableModel) modelRegistry.registerAlias("capable", [capableModel])
+    }
+  })()
   llmEngine.setMemoryStores({
     searchEpisodes: (query: string) => episodicStore.search(query),
     findSkills: (query: string) => skillStore.find(query).map(s => ({ name: s.definition.meta.name, successRate: s.successRate })),
