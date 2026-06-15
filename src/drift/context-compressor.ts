@@ -71,13 +71,15 @@ export class ContextCompressor {
       "## Compressed Context",
       "",
       `**Plan:** ${summary.planSummary}`,
-      "",
-      "### Key Decisions",
-      ...summary.decisions.map((d, i) => `${i + 1}. ${d}`),
-      "",
-      "### Files Modified",
-      ...summary.fileChanges.map(f => `- \`${f}\``),
     ]
+
+    if (summary.decisions.length > 0) {
+      parts.push("", "### Key Decisions", ...summary.decisions.map((d, i) => `${i + 1}. ${d}`))
+    }
+
+    if (summary.fileChanges.length > 0) {
+      parts.push("", "### Files Modified", ...summary.fileChanges.map(f => `- \`${f}\``))
+    }
 
     if (summary.invariants.length > 0) {
       parts.push("", "### Invariants (MUST be preserved)", ...summary.invariants.map(i => `- ${i}`))

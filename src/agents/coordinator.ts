@@ -43,9 +43,20 @@ export class AgentCoordinator {
   private registry: RoleRegistry
   private tasks = new Map<string, AgentTask[]>()
   private pipelineRuns = new Map<string, string[]>()
+  private maxDepth = 3
 
   constructor() {
     this.registry = new RoleRegistry()
+  }
+
+  /** Set max delegation depth (from config hot-reload) */
+  setMaxDepth(depth: number): void {
+    this.maxDepth = depth
+  }
+
+  /** Get current max delegation depth */
+  getMaxDepth(): number {
+    return this.maxDepth
   }
 
   onSharedMemoryWrite(listener: SharedMemoryListener): void {
@@ -129,17 +140,29 @@ export class AgentCoordinator {
 
   // --- Task Management ---
 
-  delegate(role: string, task: AgentTask, sessionId: string, parentDepth = 0): AgentTask {
+  delegate(role: string, task: AgentTask, sessionId: string, parentDepth = 0, relevantSkills?: Array<{ name: string; successRate: number; steps: string }>): AgentTask {
     task.assignedTo = role
     task.status = "pending"
     task.delegationDepth = parentDepth + 1
 
     const entries = this.getAllSharedMemory()
+    const contextParts: string[] = []
     if (entries.length > 0) {
-      const context = entries
+      contextParts.push(entries
         .map(e => `[${e.key}] (by ${e.writtenBy}): ${e.value}`)
-        .join("\n")
-      task.sharedContext = context
+        .join("\n"))
+    }
+
+    // Inject relevant skills into task context (Gap #4: auto-skill-loading)
+    if (relevantSkills && relevantSkills.length > 0) {
+      const skillsBlock = relevantSkills.slice(0, 3).map(s =>
+        `- **${s.name}** (${(s.successRate * 100).toFixed(0)}% success rate)\n  Steps: ${s.steps}`
+      ).join("\n\n")
+      contextParts.push(`## Relevant Skills\n${skillsBlock}\n\nConsider applying these proven patterns from past successful tasks.`)
+    }
+
+    if (contextParts.length > 0) {
+      task.sharedContext = contextParts.join("\n\n")
     }
 
     const sessionTasks = this.tasks.get(sessionId) ?? []
@@ -201,7 +224,22 @@ export class AgentCoordinator {
     return this.pipelineRuns.get(sessionId)
   }
 
-  getSuggestedRole(description: string): AgentRole {
+  /**
+   * Suggest the best agent role for a task description.
+   * Uses LLM when available (Gap #6), falls back to keyword matching.
+   */
+  async getSuggestedRole(description: string, llm?: { suggestRole: (desc: string) => Promise<string | null> }): Promise<AgentRole> {
+    // Try LLM first when available (paper's intelligent agent assignment)
+    if (llm) {
+      try {
+        const llmRole = await llm.suggestRole(description)
+        if (llmRole && ["architect", "developer", "qa", "coordinator", "pm"].includes(llmRole)) {
+          return llmRole as AgentRole
+        }
+      } catch { /* fall through to keyword */ }
+    }
+
+    // Keyword fallback
     const d = description.toLowerCase()
     if (d.includes("architect") || d.includes("design") || d.includes("structure") || d.includes("api contract")) return "architect"
     if (d.includes("test") || d.includes("qa") || d.includes("verify") || d.includes("validate") || d.includes("check")) return "qa"

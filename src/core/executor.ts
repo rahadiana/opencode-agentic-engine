@@ -33,6 +33,42 @@ export class Executor {
   private maxRetries = 3
   private states = new Map<string, ExecutionState>()
 
+  /** Per-error-category retry limits (Gap #13: adaptive retry policies).
+   *  Different error types need different retry strategies:
+   *  - compile/type: usually deterministic, 3 retries
+   *  - test: flaky tests may need fewer retries
+   *  - import: file-not-found won't fix by retrying
+   *  - runtime: environmental, worth a few retries
+   */
+  private retryPolicies = new Map<string, number>([
+    ["compile", 3],
+    ["type", 3],
+    ["test", 2],
+    ["import", 1],
+    ["runtime", 3],
+    ["unknown", 3],
+  ])
+
+  /** Set max retries for a specific error category. Default categories: compile, type, test, import, runtime, unknown */
+  setRetryPolicy(category: string, maxRetries: number): void {
+    this.retryPolicies.set(category, maxRetries)
+  }
+
+  /** Get max retries for an error category, or the global default if not categorized */
+  getMaxRetries(category?: string): number {
+    if (category && this.retryPolicies.has(category)) {
+      return this.retryPolicies.get(category)!
+    }
+    return this.maxRetries
+  }
+
+  /** Get all retry policy summaries */
+  getRetryPolicies(): Array<{ category: string; maxRetries: number }> {
+    return [...this.retryPolicies.entries()]
+      .map(([category, maxRetries]) => ({ category, maxRetries }))
+      .sort((a, b) => a.category.localeCompare(b.category))
+  }
+
   initExecution(sessionId: string, plan: Plan): ExecutionState {
     const state: ExecutionState = {
       plan,
@@ -102,10 +138,14 @@ export class Executor {
         success: false,
       })
 
-      if (stepState.retryCount < this.maxRetries) {
+      // Adaptive: use per-category retry limit (Gap #13)
+      const errorCategory = this.detectErrorCategory(result.error ?? result.output)
+      const maxRetries = this.getMaxRetries(errorCategory)
+
+      if (stepState.retryCount < maxRetries) {
         state.failedSteps.delete(result.stepId)
       } else {
-        state.failedSteps.set(result.stepId, result.error ?? "Max retries exceeded")
+        state.failedSteps.set(result.stepId, result.error ?? `Max retries (${maxRetries}) exceeded for category: ${errorCategory}`)
       }
     }
   }
@@ -122,11 +162,34 @@ export class Executor {
     }
   }
 
-  canRetry(sessionId: string, stepId: string): boolean {
+  canRetry(sessionId: string, stepId: string, category?: string): boolean {
     const state = this.states.get(sessionId)
     if (!state) return false
     const ss = state.stepStates.get(stepId)
+
+    // Adaptive: if category provided, use per-category limit
+    if (category) {
+      return (ss?.retryCount ?? 0) < this.getMaxRetries(category)
+    }
+
+    // Fall back to last known error's category
+    if (ss?.result?.error) {
+      const detectedCategory = this.detectErrorCategory(ss.result.error)
+      return (ss?.retryCount ?? 0) < this.getMaxRetries(detectedCategory)
+    }
+
     return (ss?.retryCount ?? 0) < this.maxRetries
+  }
+
+  /** Detect error category from error text */
+  private detectErrorCategory(errorText: string): string {
+    const lower = errorText.toLowerCase()
+    if (lower.includes("cannot find module") || lower.includes("module not found") || lower.includes("import") || lower.includes("require")) return "import"
+    if (lower.includes("type") && (lower.includes("not assignable") || lower.includes("is not a type") || lower.includes("property") || lower.includes("does not exist"))) return "type"
+    if (lower.includes("compile") || lower.includes("tsc") || lower.includes("syntax error") || lower.includes("unexpected token")) return "compile"
+    if (lower.includes("test") || lower.includes("assert") || lower.includes("expected") && lower.includes("to be") || lower.includes("expect.")) return "test"
+    if (lower.includes("timeout") || lower.includes("econnrefused") || lower.includes("etimedout") || lower.includes("network")) return "runtime"
+    return "unknown"
   }
 
   getRetryCount(sessionId: string, stepId: string): number {

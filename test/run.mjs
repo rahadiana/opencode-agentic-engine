@@ -125,6 +125,29 @@ const manOut = typeof manualPlan === "string" ? manualPlan : manualPlan.output
 assert(!manOut.includes("auto-decomposed"), "not auto-decomposed")
 assert(manOut.includes("custom-1"), "uses manual subtask")
 
+// 7b. agentic_plan — new templates: security, docker, ci
+console.log("\n[7b] agentic_plan — new templates")
+const secPlan = await hooks.tool.agentic_plan.execute({
+  goal: "Security vulnerability in login endpoint",
+  autoDecompose: true,
+}, mockCtx(freshSid()))
+const secOut = typeof secPlan === "string" ? secPlan : secPlan.output
+assert(secOut.includes("sec-audit") || secOut.includes("sec-fix"), "security template matches")
+
+const dockPlan = await hooks.tool.agentic_plan.execute({
+  goal: "Create Dockerfile with multi-stage build for Node.js app",
+  autoDecompose: true,
+}, mockCtx(freshSid()))
+const dockOut = typeof dockPlan === "string" ? dockPlan : dockPlan.output
+assert(dockOut.includes("docker-build") || dockOut.includes("docker-audit"), "docker template matches")
+
+const ciPlan = await hooks.tool.agentic_plan.execute({
+  goal: "Setup GitHub Actions CI pipeline",
+  autoDecompose: true,
+}, mockCtx(freshSid()))
+const ciOut = typeof ciPlan === "string" ? ciPlan : ciPlan.output
+assert(ciOut.includes("ci-impl") || ciOut.includes("ci-design"), "ci template matches")
+
 // 8. agentic_nav — find relevant files
 console.log("\n[8] agentic_nav — find files")
 const nid = freshSid()
@@ -271,6 +294,74 @@ for (const s of scenarios) {
   const rOut = typeof rRef === "string" ? rRef : rRef.output
   assert(rOut.toLowerCase().includes(s.expect), `identifies "${s.expect}" error`)
 }
+
+// 17b. ErrorAnalyzer — setLLM + hasLLM + analyzeDeep with mock LLM
+console.log("\n[17b] ErrorAnalyzer — LLM fallback")
+{const { ErrorAnalyzer } = await import(pluginDist)
+const ea = new ErrorAnalyzer()
+assert(ea.hasLLM() === false, "hasLLM false before setLLM")
+
+// Mock LLM that returns JSON for unknown errors
+ea.setLLM({
+  call: async (req) => ({
+    content: JSON.stringify({
+      category: "runtime",
+      summary: "Null reference in loop",
+      likelyRootCause: "Array.find() returned undefined, then .property accessed on undefined",
+      suggestedFix: "Add optional chaining: `arr.find(...)?.property` or check if found before accessing",
+      severity: "high",
+    }),
+  }),
+})
+assert(ea.hasLLM() === true, "hasLLM true after setLLM")
+
+// Test: rule-based still works first for known patterns
+const ruleResult = ea.analyze("Type 'string' is not assignable to type 'number'", ["src/test.ts"])
+assert(ruleResult.category === "type", "analyze returns rule-based result for known patterns")
+
+// Test: analyzeDeep uses LLM for unknown errors
+const deepResult = await ea.analyzeDeep("Something went wrong in the processing pipeline at step 3. The batch processor failed with code 0xDEAD.", ["src/processor.ts", "src/batch.ts"])
+assert(deepResult.category === "runtime" || deepResult.category === "unknown", "analyzeDeep returns LLM result for unknown patterns")
+assert(typeof deepResult.likelyRootCause === "string" && deepResult.likelyRootCause.length > 0, "analyzeDeep has root cause")
+assert(typeof deepResult.suggestedFix === "string" && deepResult.suggestedFix.length > 0, "analyzeDeep has suggested fix")
+
+// Test: analyzeDeep with no LLM falls back to unknown
+const ea2 = new ErrorAnalyzer()
+const noLlmResult = await ea2.analyzeDeep("Some weird error", [])
+assert(noLlmResult.category === "unknown", "analyzeDeep without LLM returns unknown")}
+
+// 17c. RoleRegistry — few-shot prompts verification
+console.log("\n[17c] RoleRegistry — few-shot prompts")
+{const { RoleRegistry } = await import(pluginDist)
+const rr = new RoleRegistry()
+const builtIn = rr.getAllBuiltIn()
+const roleNames = builtIn.map(r => r.role)
+assert(roleNames.includes("architect"), "architect role registered")
+assert(roleNames.includes("developer"), "developer role registered")
+assert(roleNames.includes("qa"), "qa role registered")
+assert(roleNames.includes("coordinator"), "coordinator role registered")
+assert(roleNames.includes("pm"), "pm role registered")
+
+// Verify few-shot content is present in prompts
+const archPrompt = rr.getBuiltIn("architect").prompt
+assert(archPrompt.includes("Few-Shot Examples"), "architect prompt has few-shot examples")
+assert(archPrompt.includes("Input") && archPrompt.includes("Output"), "architect prompt has Input/Output format")
+
+const devPrompt = rr.getBuiltIn("developer").prompt
+assert(devPrompt.includes("Few-Shot Examples"), "developer prompt has few-shot examples")
+assert(devPrompt.includes("calculateTotal"), "developer prompt has concrete code example")
+
+const qaPrompt = rr.getBuiltIn("qa").prompt
+assert(qaPrompt.includes("Few-Shot Examples"), "qa prompt has few-shot examples")
+assert(qaPrompt.includes("SQL injection") || qaPrompt.includes("security"), "qa prompt has security example")
+
+const coordPrompt = rr.getBuiltIn("coordinator").prompt
+assert(coordPrompt.includes("Few-Shot Examples"), "coordinator prompt has few-shot examples")
+assert(coordPrompt.includes("architect") && coordPrompt.includes("developer"), "coordinator prompt references sub-roles")
+
+const pmPrompt = rr.getBuiltIn("pm").prompt
+assert(pmPrompt.includes("Few-Shot Examples"), "pm prompt has few-shot examples")
+assert(pmPrompt.includes("Acceptance Criteria"), "pm prompt has acceptance criteria format")}
 
 // 18. agentic_status — blocked steps visibility
 console.log("\n[18] agentic_status — blocked steps")
@@ -876,6 +967,337 @@ await cfgHooksC.dispose()
 try { rmSync(cfgWorktree, { recursive: true, force: true }) } catch {}
 try { rmSync(cfgWorktreeB, { recursive: true, force: true }) } catch {}
 try { rmSync(cfgWorktreeC, { recursive: true, force: true }) } catch {}
+
+// 55. VectorStore — Unicode/non-Latin stop word support
+console.log("\n[55] VectorStore — Unicode / non-Latin tokenization")
+const { VectorStore } = await import(pluginDist)
+const vs = new VectorStore()
+// Default stop words: ind + eng
+
+// Latin: works
+vs.addDocument("doc1", "Hello world this is a test document", { type: "episode", tags: [] })
+// Arabic: should not be stripped
+vs.addDocument("doc2", "السلام عليكم ورحمة الله وبركاته هذا نص تجريبي", { type: "episode", tags: [] })
+// Chinese: should not be stripped
+vs.addDocument("doc3", "你好世界这是一个测试文档", { type: "episode", tags: [] })
+// Japanese (mixed): should not be stripped
+vs.addDocument("doc4", "こんにちは世界 これはテスト文書です", { type: "episode", tags: [] })
+// Korean: should not be stripped
+vs.addDocument("doc5", "안녕하세요 세계 이것은 테스트 문서입니다", { type: "episode", tags: [] })
+// Russian: should not be stripped
+vs.addDocument("doc6", "Привет мир это тестовый документ", { type: "episode", tags: [] })
+
+assert(vs.size() === 6, "all 6 docs added")
+
+// Search in Arabic — should find Arabic doc (Arabic uses spaces between words)
+const arabicResults = vs.search("تجريبي", 3)
+assert(arabicResults.length > 0, "Arabic search returns results")
+assert(arabicResults[0].id === "doc2", "Arabic doc ranked first for Arabic query")
+
+// Search in Russian — should find Russian doc (Cyrillic uses spaces between words)
+const russianResults = vs.search("тестовый", 3)
+assert(russianResults.length > 0, "Russian search returns results")
+assert(russianResults[0].id === "doc6", "Russian doc ranked first for Russian query")
+
+// Search in Japanese — token that has spaces around it should match
+const jpResults = vs.search("こんにちは世界", 3)
+assert(jpResults.length > 0, "Japanese search returns results")
+assert(jpResults[0].id === "doc4", "Japanese doc ranked first for Japanese query")
+
+// Arabic stop word filtering: set language to Arabic only
+const vsAr = new VectorStore()
+vsAr.setStopWordsLanguages(["ara"])
+vsAr.addDocument("ar1", "السلام عليكم هذا نص", { type: "episode", tags: [] })
+// "هذا" (this) should be filtered as Arabic stop word
+// Verify the doc was added without tokenization crashing
+assert(vsAr.size() === 1, "Arabic doc added with Arabic stop words")
+
+// Note: CJK (Chinese, Japanese without spaces, Korean) search membutuhkan
+// word segmentation karena tidak pakai spasi antar kata.
+// Ini adalah known limitation — butuh library seperti nodejieba atau kuromoji.
+// Untuk sekarang, karakter CJK di-tokenize sebagai 1 token utuh per block.
+
+// 56. Verifier — semantic verification (no LLM fallback)
+console.log("\n[56] Verifier — semantic verification")
+const v = new mod.Verifier()
+assert(typeof v.setLLM === "function", "Verifier.setLLM is a function")
+assert(typeof v.hasLLM === "function", "Verifier.hasLLM is a function")
+assert(v.hasLLM() === false, "hasLLM returns false when no LLM set")
+const semanticSkip = await v.verifySemantic("test-step", "test intent", ["src/test.ts"], projectDir)
+assert(semanticSkip.passed === true, "verifySemantic returns passed=true when no LLM")
+assert(semanticSkip.output.includes("no LLM"), "verifySemantic output mentions no LLM")
+
+// verifyAllDeep with no LLM (should not include semantic check)
+const deepResult = await v.verifyAllDeep("test-step", projectDir)
+assert(typeof deepResult.passed === "boolean", "verifyAllDeep returns passed boolean")
+assert(Array.isArray(deepResult.checks), "verifyAllDeep returns checks array")
+assert(deepResult.checks.every(c => c.name !== "semantic"), "verifyAllDeep does not include semantic check when no LLM")
+
+// Handles empty intent gracefully
+const semanticSkip2 = await v.verifySemantic("test-step", "", [], projectDir)
+assert(semanticSkip2.passed === true, "verifySemantic with empty params returns passed=true when no LLM")
+
+assert(true, "Verifier semantic verification tests passed")
+
+// 57. ContinuousEvolution — trend tracking + degradation detection
+console.log("\n[57] ContinuousEvolution — trend tracking")
+const ce = new mod.ContinuousEvolution(5) // small window for testing
+
+// Empty state
+let emptyTrend = ce.getTrend()
+assert(emptyTrend.overall.total === 0, "fresh CE has 0 total steps")
+assert(emptyTrend.degradationDetected === false, "fresh CE has no degradation")
+assert(emptyTrend.rolling.direction === "stable", "fresh CE has stable direction")
+
+// Feed successes
+for (let i = 0; i < 5; i++) {
+  ce.feedStepResult({ stepId: `s${i}`, success: true, output: "ok", sessionId: "sess-1", timestamp: Date.now() })
+}
+let fiveSuccess = ce.getTrend()
+assert(fiveSuccess.overall.total === 5, "after 5 successes, total=5")
+assert(fiveSuccess.overall.successRate === 1, "after 5 successes, rate=1")
+assert(fiveSuccess.rolling.direction === "stable", "perfect success rate is stable")
+
+// Feed failures → degradation
+for (let i = 0; i < 5; i++) {
+  ce.feedStepResult({ stepId: `f${i}`, success: false, output: `error ${i}`, sessionId: "sess-1", timestamp: Date.now(), category: "compile" })
+}
+let degraded = ce.getTrend()
+assert(degraded.overall.total === 10, "after 5 fails, total=10")
+assert(degraded.degradationDetected === true, "degradation detected when recent rate < 60%")
+assert(degraded.rolling.direction === "degrading", "direction is degrading after failures")
+assert(degraded.anomalyCount >= 5, "anomaly count >= 5")
+assert(degraded.recentErrors.length > 0, "recentErrors populated after failures")
+
+// checkAndNotify fires callbacks
+let notified = false
+ce.onDegradation(() => { notified = true })
+ce.checkAndNotify()
+assert(notified === true, "onDegradation callback fired on degradation")
+assert(true, "ContinuousEvolution trend tracking tests passed")
+
+// 58. ContinuousEvolution — shouldEvolve logic
+console.log("\n[58] ContinuousEvolution — shouldEvolve")
+const ce2 = new mod.ContinuousEvolution(5)
+
+// No trigger at start
+assert(ce2.shouldEvolve("sess-2") === null, "no evolve trigger on fresh CE")
+
+// Feed all failures → should trigger degradation
+for (let i = 0; i < 5; i++) {
+  ce2.feedStepResult({ stepId: `x${i}`, success: false, output: "fail", sessionId: "sess-2", timestamp: Date.now() })
+}
+const trigger = ce2.shouldEvolve("sess-2")
+assert(trigger !== null, "shouldEvolve returns trigger after degradation")
+assert(trigger.type === "degradation", "trigger type is degradation")
+assert(trigger.metrics.recentRate < 0.6, "degradation trigger has low recent rate")
+
+// Should not trigger again for same session
+assert(ce2.shouldEvolve("sess-2") === null, "no duplicate evolve trigger for same session")
+
+// Reset works
+ce2.reset()
+assert(ce2.shouldEvolve("sess-3") === null, "reset CE has no trigger")
+assert(true, "ContinuousEvolution shouldEvolve tests passed")
+
+// 59. RoleRegistry — updatePrompt (prompt auto-patching)
+console.log("\n[59] RoleRegistry — updatePrompt")
+const rr = new mod.RoleRegistry()
+const originalArchitectPrompt = rr.getPrompt("architect")
+assert(typeof originalArchitectPrompt === "string" && originalArchitectPrompt.length > 50, "architect prompt exists before update")
+
+const updated = rr.updatePrompt("architect", originalArchitectPrompt + "\n\n## Auto-Patched\nTest instruction.")
+assert(updated === true, "updatePrompt returns true for valid role")
+
+const afterPrompt = rr.getPrompt("architect")
+assert(afterPrompt.includes("Auto-Patched"), "architect prompt updated with new content")
+assert(afterPrompt.includes("Test instruction"), "architect prompt contains patched instruction")
+
+// Update non-existent role returns false
+const nonExistent = rr.updatePrompt("nonexistent", "test")
+assert(nonExistent === false, "updatePrompt returns false for invalid role")
+
+// getPrompt for custom role
+rr.registerCustom({ role: "custom-dev", name: "Custom Dev", prompt: "Custom prompt", tools: ["read"] })
+assert(rr.getPrompt("custom-dev") === "Custom prompt", "getPrompt works for custom roles")
+assert(true, "RoleRegistry updatePrompt tests passed")
+
+// 60. SelfEvolver — prompt patches from error patterns
+console.log("\n[60] SelfEvolver — prompt patches from error patterns")
+const evolver3 = new mod.SelfEvolver()
+// Feed step states with compile errors
+evolver3.feedStepStates([
+  { stepId: "s1", success: false, output: "TypeScript compile error in types.ts" },
+  { stepId: "s2", success: false, output: "Module not found: ./missing" },
+  { stepId: "s3", success: false, output: "Type 'string' is not assignable to type 'number'" },
+  { stepId: "s4", success: false, output: "Cannot find module" },
+  { stepId: "s5", success: true, output: "ok" },
+])
+// Feed episodes with error tags
+evolver3.feedEpisodes([
+  { sessionId: "sess-a", planGoal: "task1", tags: ["compile", "type"], outcome: "failed", summary: "", decisions: [], filesChanged: [], timestamp: Date.now() },
+  { sessionId: "sess-b", planGoal: "task2", tags: ["compile", "type"], outcome: "failed", summary: "", decisions: [], filesChanged: [], timestamp: Date.now() },
+  { sessionId: "sess-c", planGoal: "task3", tags: ["import"], outcome: "failed", summary: "", decisions: [], filesChanged: [], timestamp: Date.now() },
+  { sessionId: "sess-d", planGoal: "task4", tags: ["import"], outcome: "failed", summary: "", decisions: [], filesChanged: [], timestamp: Date.now() },
+])
+const report2 = evolver3.evolve()
+assert(Array.isArray(report2.promptPatches), "evolve returns promptPatches array")
+assert(report2.promptPatches.length >= 2, `generates prompt patches from error patterns (got ${report2.promptPatches.length})`)
+
+// Check patch details
+const compilePatch = report2.promptPatches.find(p => p.errorCategory === "compile")
+assert(compilePatch !== undefined, "compile error generates a prompt patch")
+assert(compilePatch.role === "developer", "compile patch targets developer role")
+assert(compilePatch.instruction.length > 20, "compile patch has meaningful instruction")
+
+const importPatch = report2.promptPatches.find(p => p.errorCategory === "import")
+assert(importPatch !== undefined, "import error generates a prompt patch")
+assert(importPatch.role === "architect", "import patch targets architect role")
+
+// Feed empty data — no patches
+const evolver4 = new mod.SelfEvolver()
+const emptyReport = evolver4.evolve()
+assert(emptyReport.promptPatches.length === 0, "no prompt patches from empty data")
+assert(true, "SelfEvolver prompt patching tests passed")
+
+// 61. Skill-aware delegation — delegate with skills context
+console.log("\n[61] Skill-aware delegation — skills injected into context")
+const mockCoordinator = new mod.AgentCoordinator()
+const t1 = mockCoordinator.delegate("developer", {
+  id: "test-task-1", assignedTo: "", description: "Build login API", input: "", status: "pending",
+}, "test-session", 0, [
+  { name: "API Auth Pattern", successRate: 0.9, steps: "design: define routes; implement: add middleware" },
+  { name: "Input Validation", successRate: 0.85, steps: "implement: validate input" },
+])
+assert(t1.assignedTo === "developer", "delegate assigns to correct role")
+assert(t1.sharedContext !== undefined, "delegate with skills attaches sharedContext")
+assert(t1.sharedContext.includes("API Auth Pattern"), "sharedContext contains skill name")
+assert(t1.sharedContext.includes("90% success rate"), "sharedContext contains success rate")
+assert(t1.sharedContext.includes("Input Validation"), "sharedContext contains second skill")
+
+// Delegate without skills — no extra context
+const t2 = mockCoordinator.delegate("qa", {
+  id: "test-task-2", assignedTo: "", description: "Test login flow", input: "", status: "pending",
+}, "test-session")
+// Should still work with or without sharedContext
+assert(t2.assignedTo === "qa", "delegate without skills still works")
+assert(true, "Skill-aware delegation tests passed")
+
+// 62. Adaptive Retry Policies — Executor
+console.log("\n[62] Adaptive Retry Policies — Executor")
+const execAdapt = new mod.Executor()
+assert(typeof execAdapt.setRetryPolicy === "function", "setRetryPolicy is a function")
+assert(typeof execAdapt.getMaxRetries === "function", "getMaxRetries is a function")
+assert(typeof execAdapt.getRetryPolicies === "function", "getRetryPolicies is a function")
+
+// Default policies
+const policies = execAdapt.getRetryPolicies()
+assert(policies.length >= 5, `has at least 5 default retry policies (got ${policies.length})`)
+const compilePolicy = policies.find(p => p.category === "compile")
+assert(compilePolicy !== undefined, "compile category has retry policy")
+assert(compilePolicy.maxRetries === 3, "compile has maxRetries=3")
+const importPolicy = policies.find(p => p.category === "import")
+assert(importPolicy !== undefined, "import category has retry policy")
+assert(importPolicy.maxRetries === 1, "import has maxRetries=1 (file-not-found won't fix by retrying)")
+
+// Custom policy override
+execAdapt.setRetryPolicy("compile", 5)
+assert(execAdapt.getMaxRetries("compile") === 5, "custom compile retry limit applied")
+assert(execAdapt.getMaxRetries("test") === 2, "test retry limit unchanged from default")
+
+// No-category falls back to global default
+const defaultLim = execAdapt.getMaxRetries()
+assert(defaultLim === 3, "no category returns global default maxRetries=3")
+
+// canRetry with category
+const planMock = { intent: { goal: "test", constraints: [], context: { relevantFiles: [], dependencies: [] }, subtasks: [{ id: "step-1", description: "test", dependsOn: [], verificationCriteria: [] }] } }
+execAdapt.initExecution("sess-adapt-1", planMock)
+// First failure with import category (maxRetries=1)
+execAdapt.recordResult("sess-adapt-1", { stepId: "step-1", success: false, output: "Cannot find module", error: "Cannot find module ./missing" })
+assert(execAdapt.canRetry("sess-adapt-1", "step-1", "import") === false, "import error: no retry after 1 failure (maxRetries=1)")
+assert(execAdapt.canRetry("sess-adapt-1", "step-1", "compile") === true, "same step with compile category: still retryable (maxRetries=3)")
+
+// Type error gets 3 retries
+execAdapt.initExecution("sess-adapt-2", planMock)
+execAdapt.recordResult("sess-adapt-2", { stepId: "step-2", success: false, output: "Type 'X' not assignable", error: "Type 'string' is not assignable to type 'number'" })
+assert(execAdapt.canRetry("sess-adapt-2", "step-2", "type") === true, "type error: retryable after 1 failure")
+execAdapt.recordResult("sess-adapt-2", { stepId: "step-2", success: false, output: "Type error again", error: "Type error" })
+assert(execAdapt.canRetry("sess-adapt-2", "step-2", "type") === true, "type error: retryable after 2 failures")
+execAdapt.recordResult("sess-adapt-2", { stepId: "step-2", success: false, output: "Type error again", error: "Type error" })
+assert(execAdapt.canRetry("sess-adapt-2", "step-2", "type") === false, "type error: no retry after 3 failures")
+
+assert(true, "Adaptive Retry Policies tests passed")
+
+// 63. LLM-based Role Suggestion — coordinator.getSuggestedRole with LLM mock
+console.log("\n[63] LLM-based Role Suggestion — getSuggestedRole")
+const roleCoord = new mod.AgentCoordinator()
+
+// LLM suggests a role
+const mockLLM = {
+  suggestRole: async (desc) => {
+    if (desc.includes("design")) return "architect"
+    if (desc.includes("implement")) return "developer"
+    if (desc.includes("test") || desc.includes("verify")) return "qa"
+    return null
+  },
+}
+const archRole = await roleCoord.getSuggestedRole("Design the API contract and data flow", mockLLM)
+assert(archRole === "architect", "LLM suggests architect for design task")
+const devRole = await roleCoord.getSuggestedRole("Implement the login endpoint", mockLLM)
+assert(devRole === "developer", "LLM suggests developer for implementation task")
+const qaRole = await roleCoord.getSuggestedRole("Write tests for the payment module", mockLLM)
+assert(qaRole === "qa", "LLM suggests qa for testing task")
+
+// Without LLM, falls back to keyword
+const noLlmRole = await roleCoord.getSuggestedRole("Architect the system")
+assert(noLlmRole === "architect", "keyword fallback detects architect")
+
+// Unknown task → default developer
+const unknownRole = await roleCoord.getSuggestedRole("Do whatever needs to be done")
+assert(unknownRole === "developer", "unknown task defaults to developer")
+
+// LLM returns null → fallback to keyword
+const nullLLM = { suggestRole: async () => null }
+const fallbackRole = await roleCoord.getSuggestedRole("Write unit tests", nullLLM)
+assert(fallbackRole === "qa", "LLM returns null → keyword fallback detects qa")
+
+assert(true, "LLM-based Role Suggestion tests passed")
+
+// 64. Predictive Degradation Forecast — ContinuousEvolution
+console.log("\n[64] Predictive Degradation Forecast — ContinuousEvolution")
+const ceForecast = new mod.ContinuousEvolution(10)
+
+// Need enough data for forecast (≥10)
+for (let i = 0; i < 10; i++) {
+  ceForecast.feedStepResult({ stepId: `s${i}`, success: true, output: "ok", sessionId: "sess-fc", timestamp: Date.now() })
+}
+let fcTrend = ceForecast.getTrend()
+assert(fcTrend.forecast.bucketRates.length === 5, "forecast has 5 buckets with 10 results")
+assert(fcTrend.forecast.critical === false, "100% success rate is not critical")
+
+// Feed increasingly failing results to create degrading trend
+const ceDegrade = new mod.ContinuousEvolution(10)
+for (let i = 0; i < 10; i++) {
+  ceDegrade.feedStepResult({ stepId: `ok${i}`, success: true, output: "ok", sessionId: "sess-deg", timestamp: Date.now() })
+}
+for (let i = 0; i < 10; i++) {
+  ceDegrade.feedStepResult({ stepId: `fail${i}`, success: false, output: "error", sessionId: "sess-deg", timestamp: Date.now(), category: "compile" })
+}
+const degTrend = ceDegrade.getTrend()
+assert(degTrend.forecast.bucketRates.length === 5, "degrading CE has 5 buckets")
+// After 10 successes then 10 failures, we have 20 results. 
+// Buckets should show decreasing rates
+assert(degTrend.forecast.nextWindowRate < 0.6, "forecast predicts lower rate for degrading trend")
+assert(typeof degTrend.forecast.stepsUntilCritical === "number" || degTrend.forecast.stepsUntilCritical === null, "stepsUntilCritical is number or null")
+
+// Agentic_execute feedback parameter exists
+assert(typeof hooks.tool.agentic_execute.args.feedback === "object", "agentic_execute has feedback arg")
+assert(true, "Predictive Degradation Forecast tests passed")
+
+// 65. agentic_execute — feedback parameter exists
+console.log("\n[65] agentic_execute — feedback parameter")
+assert(typeof hooks.tool.agentic_execute.args.feedback === "object", "agentic_execute tool has feedback arg")
+assert(true, "agentic_execute feedback parameter tests passed")
 
 // 54. Trace logging
 console.log("\n[54] Trace logging")

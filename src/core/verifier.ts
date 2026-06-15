@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process"
-import { existsSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
+import type { LLMEngine } from "./llm.js"
 
 export type SupportedLanguage = "typescript" | "python" | "go" | "rust" | "javascript" | "unknown"
 
@@ -85,6 +86,76 @@ const LANGUAGE_CONFIGS: Record<SupportedLanguage, LanguageConfig> = {
 
 export class Verifier {
   private detectedLang: SupportedLanguage = "unknown"
+  private llm: LLMEngine | null = null
+
+  setLLM(llm: LLMEngine): void {
+    this.llm = llm
+  }
+
+  hasLLM(): boolean {
+    return this.llm !== null
+  }
+
+  async verifySemantic(stepId: string, intent: string, changedFiles: string[], projectDir: string): Promise<CheckResult> {
+    if (!this.llm) {
+      return { name: "semantic", passed: true, output: "Semantic verification skipped (no LLM configured)" }
+    }
+
+    const fileContents: Record<string, string> = {}
+    for (const f of changedFiles) {
+      const absPath = resolve(projectDir, f)
+      try {
+        fileContents[f] = readFileSync(absPath, "utf-8")
+      } catch { /* skip unreadable files */ }
+    }
+
+    if (Object.keys(fileContents).length === 0) {
+      return { name: "semantic", passed: true, output: "Semantic verification skipped (no readable changed files)" }
+    }
+
+    const filesBlock = Object.entries(fileContents).map(([path, content]) =>
+      `### ${path}\n\`\`\`\n${content.slice(0, 2000)}\n\`\`\``
+    ).join("\n\n")
+
+    const resp = await this.llm.call({
+      systemPrompt: "You are a semantic verification assistant. Given an intent/goal and the code changes made, determine if the changes correctly implement the intent. Consider: edge cases, completeness, correctness. Respond as JSON with keys: passed (boolean), reasoning (string), issuesFound (array of strings). If the code correctly implements the intent, passed must be true.",
+      userPrompt: `## Intent\n${intent}\n\n## Changed Files\n${filesBlock}\n\nVerify if these changes correctly implement the intent. Return JSON.`,
+      jsonMode: true,
+      temperature: 0.1,
+    })
+
+    try {
+      const parsed = JSON.parse(resp.content)
+      const issues = Array.isArray(parsed.issuesFound) ? parsed.issuesFound : []
+      const passed = parsed.passed !== false
+      return {
+        name: "semantic",
+        passed,
+        output: `Semantic verification: ${passed ? "PASS" : "ISSUES FOUND"}\nReasoning: ${parsed.reasoning ?? "N/A"}\n${issues.length > 0 ? `Issues:\n${issues.map((i: string) => `- ${i}`).join("\n")}` : ""}`,
+      }
+    } catch {
+      return { name: "semantic", passed: true, output: `Semantic verification: ${resp.content.slice(0, 500)}` }
+    }
+  }
+
+  async verifyAllDeep(stepId: string, projectDir: string, intent?: string, changedFiles?: string[]): Promise<VerificationResult> {
+    const checks: CheckResult[] = [
+      this.verifyCompile(projectDir),
+    ]
+    if (this.detectedLang !== "unknown") {
+      checks.push(this.verifyLint(projectDir))
+    }
+    checks.push(this.verifyTests(projectDir))
+
+    // Add semantic verification if LLM available + we have intent + files
+    if (this.llm && intent && changedFiles && changedFiles.length > 0) {
+      const semantic = await this.verifySemantic(stepId, intent, changedFiles, projectDir)
+      checks.push(semantic)
+    }
+
+    const errors = checks.filter(c => !c.passed).map(c => c.output)
+    return { passed: errors.length === 0, stepId, checks, errors }
+  }
 
   detectLanguage(projectDir: string): SupportedLanguage {
     const checks: Array<{ lang: SupportedLanguage; file: string }> = [

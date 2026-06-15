@@ -29,6 +29,7 @@ import { RoleRegistry } from "./agents/role-registry.js"
 import { MemorySchemaVersion, createMemoryEnvelope, parseMemoryEnvelope } from "./memory/schema-version.js"
 import { createSkillDefinition, inspectSkill, serializeSkill, deserializeSkill } from "./memory/skill-format.js"
 import { SelfEvolver } from "./evolution/self-evolver.js"
+import { ContinuousEvolution } from "./evolution/continuous-evolution.js"
 import { LLMEngine } from "./core/llm.js"
 import { AgentLoop } from "./core/agent-loop.js"
 import { PersistenceLayer } from "./memory/persistence.js"
@@ -104,11 +105,14 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
   const roleRegistry = new RoleRegistry()
   const schemaVersion = new MemorySchemaVersion()
   const selfEvolver = new SelfEvolver()
+  const continuousEvolution = new ContinuousEvolution()
   const modelRegistry = new ModelRegistry()
   const llmEngine = new LLMEngine()
   llmEngine.setOpencodeClient(input.client)
   llmEngine.setModelRegistry(modelRegistry)
   orchestrator.setLLMEngine(llmEngine)
+  errorAnalyzer.setLLM(llmEngine)
+  verifier.setLLM(llmEngine)
 
   const agentRuntime = new AgentRuntime()
   agentRuntime.setOpencodeClient(input.client)
@@ -213,6 +217,26 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
   }
 
   await traceLogger.init()
+
+  // ── Config hot-reload propagation ──
+  // Ketika config berubah di disk, module-module berikut di-update
+  configLoader.onChange((newConfig) => {
+    // 1. Vector store: search weights + stop words
+    vectorStore.setSearchWeights(newConfig.memory.search.keywordWeight, newConfig.memory.search.vectorWeight)
+    vectorStore.setStopWordsLanguages(newConfig.memory.stopWordsLanguages)
+
+    // 2. Embedding config
+    const embedCfg = newConfig.embedding
+    if (embedCfg && embedCfg.model) {
+      vectorStore.setEmbeddingConfig(embedCfg.model, embedCfg.endpoint, embedCfg.apiKey)
+    }
+
+    // 3. Agent delegation depth — propagate ke coordinator (akan dipakai untuk validasi depth)
+    const maxDepth = newConfig.agent.maxDelegationDepth
+    if (maxDepth > 0) {
+      coordinator.setMaxDepth(maxDepth)
+    }
+  })
 
   function ctxDir(context: { worktree: string; directory?: string }) {
     return context.worktree
@@ -378,7 +402,7 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
       }),
 
       agentic_execute: tool({
-        description: "Record completion of a subtask. Auto-verifies compilation on success. Includes error recovery guidance + error propagation analysis on failure.",
+        description: "Record completion of a subtask. Auto-verifies compilation on success. Includes error recovery guidance + error propagation analysis on failure. Supports user feedback for continuous learning.",
         args: {
           stepId: tool.schema.string().describe("The ID of the step that was executed"),
           success: tool.schema.boolean().describe("Whether the step completed successfully"),
@@ -386,6 +410,7 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
           filesModified: tool.schema.array(tool.schema.string()).optional().describe("List of files that were modified or created in this step"),
           error: tool.schema.string().optional().describe("Error message if the step failed"),
           autoVerify: tool.schema.boolean().optional().describe("Auto-run compile verification (default: true when success=true)"),
+          feedback: tool.schema.enum(["positive", "negative"]).optional().describe("User feedback on the result. Positive boosts skill confidence; negative triggers adaptation (Gap #9: continuous learning from feedback)"),
         },
         async execute(args, context) {
           llmEngine.setSessionId(context.sessionID)
@@ -449,6 +474,20 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
               : verifier.verifyAll(args.stepId, projectDir)
             if (verifyResult.passed) {
               response += `✅ Compile + tests pass\n`
+
+              // Semantic verification (paper's verification fidelity)
+              if (changedFiles.length > 0 && verifier.hasLLM()) {
+                const session = sessionStore.getOrCreate(context.sessionID)
+                const intent = session.plan?.intent.goal ?? args.output
+                const semanticResult = await verifier.verifySemantic(args.stepId, intent, changedFiles, projectDir)
+                if (semanticResult.passed) {
+                  response += `✅ Semantic check: changes match intent\n`
+                } else {
+                  response += `⚠️ **Semantic issues found!**\n`
+                  response += `\`\`\`\n${semanticResult.output.slice(0, 400)}\n\`\`\`\n`
+                  response += `Consider reviewing the logic before proceeding.\n`
+                }
+              }
             } else {
               response += `❌ Verification failed after this step!\n`
               response += verifyResult.checks.map(c =>
@@ -460,10 +499,11 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
 
           if (!args.success) {
             const modifiedFiles = executor.getAllFilesModified(context.sessionID)
-            const analysis = errorAnalyzer.analyze(args.error ?? args.output, modifiedFiles)
-            const canRetry = executor.canRetry(context.sessionID, args.stepId)
+            const analysis = await errorAnalyzer.analyzeDeep(args.error ?? args.output, modifiedFiles)
+            const maxAllowed = executor.getMaxRetries(analysis.category)
+            const canRetry = executor.canRetry(context.sessionID, args.stepId, analysis.category)
             const retriesUsed = executor.getRetryCount(context.sessionID, args.stepId)
-            const retriesLeft = 3 - retriesUsed
+            const retriesLeft = maxAllowed - retriesUsed
 
             response += `\n### Error Analysis\n`
             response += `**Category:** \`${analysis.category}\` | **Severity:** ${analysis.severity}\n`
@@ -484,10 +524,31 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
             response += `\n**Suggested fix:** ${analysis.suggestedFix}\n`
 
             if (canRetry) {
-              response += `\n🔄 **Retries remaining:** ${retriesLeft}/3 — fix the issue and call \`agentic_execute\` again.`
+              response += `\n🔄 **Retries remaining:** ${retriesLeft}/${maxAllowed} (${analysis.category}) — fix the issue and call \`agentic_execute\` again.`
             } else {
-              response += `\n🛑 **Max retries reached.** Address the underlying issue or revise the plan.`
+              response += `\n🛑 **Max retries (${maxAllowed}) reached for ${analysis.category}.** Address the underlying issue or revise the plan.`
             }
+
+            // Feed failure to ContinuousEvolution
+            continuousEvolution.feedStepResult({
+              stepId: args.stepId,
+              success: false,
+              output: args.output,
+              sessionId: context.sessionID,
+              timestamp: startTime,
+              category: analysis.category,
+            })
+          }
+
+          if (args.success) {
+            // Feed success to ContinuousEvolution
+            continuousEvolution.feedStepResult({
+              stepId: args.stepId,
+              success: true,
+              output: args.output,
+              sessionId: context.sessionID,
+              timestamp: startTime,
+            })
           }
 
           const progress = executor.getProgress(context.sessionID)
@@ -522,6 +583,56 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
             }
           }
 
+          // ── User Feedback for Continuous Learning (Gap #9) ──
+          if (args.feedback) {
+            const isPositive = args.feedback === "positive"
+            response += `\n### 📝 Feedback Recorded\n`
+            response += `${isPositive ? "✅ Positive — confidence increased" : "❌ Negative — adapting..."}\n`
+
+            // Update skill success rates based on feedback
+            const session = sessionStore.getOrCreate(context.sessionID)
+            const goal = session.plan?.intent.goal ?? args.output
+            const existingSkills = skillStore.find(goal)
+            for (const skill of existingSkills.slice(0, 3)) {
+              if (isPositive) {
+                // Boost: record success
+                skill.usageCount++
+                skill.successRate = Math.min(1, skill.successRate + 0.05)
+                persistence.save("skills", skill.definition.meta.id, skill.definition)
+              } else {
+                // Penalize: report failure
+                skillStore.reportFailure(skill.definition.meta.id)
+              }
+            }
+
+            // Negative feedback → trigger adaptation
+            if (!isPositive) {
+              // Increase retry allowance for this error category
+              const modifiedFiles = executor.getAllFilesModified(context.sessionID)
+              const feedbackAnalysis = await errorAnalyzer.analyzeDeep(args.output, modifiedFiles)
+              const currentMax = executor.getMaxRetries(feedbackAnalysis.category)
+              executor.setRetryPolicy(feedbackAnalysis.category, Math.min(currentMax + 1, 5))
+              response += `  **Retry limit increased:** \`${feedbackAnalysis.category}\` → ${Math.min(currentMax + 1, 5)}\n`
+
+              // Feed into continuous evolution
+              continuousEvolution.feedStepResult({
+                stepId: `feedback-${args.stepId}`,
+                success: false,
+                output: `User negative feedback: ${args.output.slice(0, 200)}`,
+                sessionId: context.sessionID,
+                timestamp: Date.now(),
+                category: feedbackAnalysis.category,
+              })
+
+              // Check if evolution should trigger
+              const trigger = continuousEvolution.shouldEvolve(context.sessionID)
+              if (trigger) {
+                response += `  🔄 **Auto-evolution triggered:** ${trigger.reason}\n`
+                response += `  Run \`agentic_evolve evolve\` to apply changes.\n`
+              }
+            }
+          }
+
           return { output: response, metadata: { progress, nextStep: nextStep?.id, verifyResult } }
         },
       }),
@@ -548,7 +659,7 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
             .filter(Boolean)
             .join("\n")
           const modifiedFiles = executor.getAllFilesModified(context.sessionID)
-          const analysis = errorAnalyzer.analyze(errorText, modifiedFiles)
+          const analysis = await errorAnalyzer.analyzeDeep(errorText, modifiedFiles)
           const canRetry = executor.canRetry(context.sessionID, args.stepId)
           const retriesUsed = executor.getRetryCount(context.sessionID, args.stepId)
 
@@ -632,7 +743,7 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
             return { output: `## ✅ Verification Passed\n\n${checkOutput}`, metadata: result }
           }
 
-          const analysis = errorAnalyzer.analyze(result.errors.join("\n"), [])
+          const analysis = await errorAnalyzer.analyzeDeep(result.errors.join("\n"), [])
           return {
             output: `## ❌ Verification Failed\n\n${checkOutput}\n\n### Analysis\n**Category:** \`${analysis.category}\`\n**Likely cause:** ${analysis.likelyRootCause}\n**Fix:** ${analysis.suggestedFix}`,
             metadata: result,
@@ -688,6 +799,34 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
           const modelSummary = modelRegistry.getSummary()
           output += modelSummary + "\n"
 
+          // Evolution trend
+          const trend = continuousEvolution.getTrend()
+          if (trend.overall.total > 0) {
+            const dirIcon = trend.rolling.direction === "improving" ? "📈" : trend.rolling.direction === "degrading" ? "📉" : "📊"
+            output += `\n### 🔄 Evolution Trend\n`
+            output += `**Overall:** ${(trend.overall.successRate * 100).toFixed(0)}% (${trend.overall.success}/${trend.overall.total} steps)\n`
+            output += `**Recent (last ${trend.rolling.windowSize}):** ${(trend.rolling.successRate * 100).toFixed(0)}% — ${dirIcon} ${trend.rolling.direction}\n`
+            if (trend.degradationDetected) {
+              output += `⚠️ **Performance degradation detected!** Consider \`agentic_evolve evolve\`.\n`
+            }
+            // Forecast (Gap #12)
+            if (trend.forecast && trend.forecast.bucketRates.length > 0) {
+              output += `**Forecast next window:** ${(trend.forecast.nextWindowRate * 100).toFixed(0)}%`
+              if (trend.forecast.critical) {
+                output += ` 🔴 **Critical**`
+              }
+              if (trend.forecast.stepsUntilCritical !== null) {
+                output += ` (~${trend.forecast.stepsUntilCritical} steps to 50%)`
+              }
+              output += `\n`
+              output += `**Trend buckets:** ${trend.forecast.bucketRates.map(r => `${(r * 100).toFixed(0)}%`).join(" → ")}\n`
+            }
+            if (trend.recommendations.length > 0) {
+              output += `**Tips:**\n`
+              output += trend.recommendations.map(r => `- ${r}`).join("\n") + "\n"
+            }
+          }
+
           return { output, metadata: { progress, nextStep: nextStep?.id, blockedSteps, isComplete, isHealthy } }
         },
       }),
@@ -709,7 +848,7 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
             output += `**Files tracked:** ${allFiles.length}\n`
             output += `**Plan steps:** ${session.plan?.intent.subtasks.length ?? 0}\n`
 
-            const summary = contextCompressor.compress(
+            const summary = await contextCompressor.compressWithLLM(
               session.plan?.intent.goal ?? "N/A",
               turns,
               decisions,
@@ -728,8 +867,8 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
             return { output }
           }
 
-          // Compress
-          const summary = contextCompressor.compress(
+          // Compress — use LLM-enhanced version when available
+          const summary = await contextCompressor.compressWithLLM(
             session.plan?.intent.goal ?? "N/A",
             turns,
             decisions,
@@ -1191,14 +1330,22 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
             return { output }
           }
 
-          // Normal delegation flow
-          const role: AgentRole = args.role ?? coordinator.getSuggestedRole(args.description)
+          // Normal delegation flow (LLM-based role suggestion, Gap #6)
+          const role: AgentRole = args.role ?? await coordinator.getSuggestedRole(args.description, llmEngine)
           const agent = coordinator.getAgent(role)
           if (!agent) {
             return { output: `Unknown role "${role}". Available: architect, developer, qa, coordinator.` }
           }
 
           const contextWithMemory = args.context ?? args.description
+
+          // Auto-load relevant skills from skill store (Gap #4: skill-aware delegation)
+          const relevantSkills = skillStore.find(args.description).slice(0, 3).map(s => ({
+            name: s.definition.meta.name,
+            successRate: s.successRate,
+            steps: s.definition.workflow.steps.map(st => `${st.action}: ${st.description}`).join("; "),
+          }))
+
           const task = coordinator.delegate(role, {
             id: args.taskId,
             assignedTo: role,
@@ -1206,7 +1353,7 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
             input: contextWithMemory,
             status: "running",
             pipelineRunId: args.pipelineRunId,
-          }, context.sessionID)
+          }, context.sessionID, 0, relevantSkills)
 
           // Build pipeline context if part of a pipeline run
           let pipelineContext = ""
@@ -1245,10 +1392,10 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
           output += `**Description:** ${args.description}\n`
           output += `**Status:** ${agentResult ? "✅ Done" : executionError ? "❌ Failed" : "⚠️ Unknown"}\n`
 
-          // Model suggestion — resolve alias ke nama model sebenarnya
+          // Model suggestion — prefer healthy models, avoid hallucinating ones
           const suggestedCategory = roleRegistry.suggestModel(role)
-          const resolvedModels = modelRegistry.resolveAlias(suggestedCategory)
-          const suggestedModel = resolvedModels.length > 0 ? resolvedModels[0] : suggestedCategory
+          const suggestedModels = modelRegistry.suggestWithFallback(role, [suggestedCategory])
+          const suggestedModel = suggestedModels.length > 0 ? suggestedModels[0] : suggestedCategory
           const modelLabel = suggestedModel !== suggestedCategory ? `${suggestedModel} (${suggestedCategory})` : suggestedModel
           output += `**Model Used:** ${modelLabel}\n`
           if (agent.model) output += `**Configured Model:** ${agent.model}\n`
@@ -1907,10 +2054,31 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
                 out += `\n`
               }
 
+              // Auto-apply prompt patches (Gap #1)
+              const appliedPatches: string[] = []
+              for (const patch of report.promptPatches) {
+                try {
+                  const existingPrompt = roleRegistry.getPrompt(patch.role)
+                  if (existingPrompt && !existingPrompt.includes(patch.instruction.slice(0, 40))) {
+                    const newPrompt = existingPrompt + `\n\n## Auto-Patched Instruction (from ${patch.errorCategory} errors)\n${patch.instruction}`
+                    roleRegistry.updatePrompt(patch.role as "architect" | "developer" | "qa" | "coordinator" | "pm", newPrompt)
+                    appliedPatches.push(`${patch.role}: "${patch.instruction.slice(0, 60)}..."`)
+                  }
+                } catch { /* non-fatal */ }
+              }
+
               if (patchedSkills.length > 0) {
                 out += `### ✅ Auto-Patched Skills\n`
                 for (const name of patchedSkills) {
                   out += `- **${name}** — patched automatically\n`
+                }
+                out += `\n`
+              }
+
+              if (appliedPatches.length > 0) {
+                out += `### ✅ Auto-Patched Prompts\n`
+                for (const p of appliedPatches) {
+                  out += `- ${p}\n`
                 }
                 out += `\n`
               }
@@ -1949,6 +2117,15 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
                 out += `\n### 📊 Top Error Categories\n`
                 for (const err of report.metrics.topErrorCategories) {
                   out += `- **${err.category}**: ${err.count} occurrence(s)\n`
+                }
+              }
+
+              if (report.promptPatches.length > 0) {
+                out += `\n### 📝 Prompt Auto-Patches (${report.promptPatches.length})\n`
+                for (const pp of report.promptPatches) {
+                  const priorityIcon = pp.priority === "high" ? "🔴" : pp.priority === "medium" ? "🟡" : "🟢"
+                  out += `${priorityIcon} **${pp.role}** — ${pp.errorCategory} (${pp.occurrences}x)\n`
+                  out += `  → ${pp.instruction}\n`
                 }
               }
 
@@ -2045,6 +2222,12 @@ Only include files that need changing. Return ONLY valid JSON.` + llmEngine.getM
 
             const impl = parseStepOutput(resp.content)
 
+            // Validate LLM actually produced implementation
+            const hasContent = (impl.files && impl.files.length > 0) || (impl.summary && impl.summary.length > 20)
+            if (!hasContent) {
+              return { success: false, output: `LLM produced no implementation. Raw output: ${resp.content.slice(0, 200)}`, filesModified: [] }
+            }
+
             const files: string[] = []
             for (const file of impl.files ?? []) {
               const fullPath = join(projectDir, file.path)
@@ -2083,7 +2266,29 @@ Only include files that need changing. Return ONLY valid JSON.` + llmEngine.getM
             allFiles,
           )
 
-          // 5. Auto-extract skill if successful
+          // 5. Feed results to ContinuousEvolution
+          const completedSteps = executor.getCompletedSteps(context.sessionID)
+          for (const stepId of completedSteps) {
+            continuousEvolution.feedStepResult({
+              stepId,
+              success: true,
+              output: "completed",
+              sessionId: context.sessionID,
+              timestamp: Date.now(),
+            })
+          }
+          for (const stepId of result.failedSteps) {
+            continuousEvolution.feedStepResult({
+              stepId,
+              success: false,
+              output: "failed",
+              sessionId: context.sessionID,
+              timestamp: Date.now(),
+            })
+          }
+          const autoTrend = continuousEvolution.checkAndNotify()
+
+          // 6. Auto-extract skill if successful
           if (result.success && result.completedSteps.length > 0) {
             const skillResult = await skillStore.extract({
               role: "tool",
@@ -2094,7 +2299,7 @@ Only include files that need changing. Return ONLY valid JSON.` + llmEngine.getM
             }
           }
 
-          // 6. Report
+          // 7. Report
           const totalSteps = result.completedSteps.length + result.failedSteps.length
           let report = `## 🤖 Autonomous Agent Report\n\n`
           report += `**Goal:** ${args.goal}\n`
@@ -2105,6 +2310,20 @@ Only include files that need changing. Return ONLY valid JSON.` + llmEngine.getM
             report += `### Files Modified\n\`\`\`\n${[...new Set(allFiles)].join("\n")}\n\`\`\`\n`
           }
           report += `\n${result.summary}`
+
+          // Evolution trend summary
+          if (autoTrend.overall.total >= 5 || autoTrend.degradationDetected) {
+            const dirIcon = autoTrend.rolling.direction === "improving" ? "📈" : autoTrend.rolling.direction === "degrading" ? "📉" : "📊"
+            report += `\n\n### ${dirIcon} Evolution Trend\n`
+            report += `**Overall:** ${(autoTrend.overall.successRate * 100).toFixed(0)}% (${autoTrend.overall.success}/${autoTrend.overall.total})\n`
+            report += `**Recent (last ${autoTrend.rolling.windowSize}):** ${(autoTrend.rolling.successRate * 100).toFixed(0)}% — ${autoTrend.rolling.direction}\n`
+            if (autoTrend.degradationDetected) {
+              report += `⚠️ **Degradation detected!** Run \`agentic_evolve evolve\` to analyze and auto-apply fixes.\n`
+            }
+            if (autoTrend.recommendations.length > 0) {
+              report += `**Suggestions:**\n${autoTrend.recommendations.map(r => `- ${r}`).join("\n")}\n`
+            }
+          }
 
           return { output: report, metadata: { result } }
         },
@@ -2137,3 +2356,13 @@ const pluginModule: PluginModule = {
   server: createEngine,
 }
 export default pluginModule
+
+// Re-export key classes so tests can construct them directly
+export { ErrorAnalyzer } from "./core/error-analyzer.js"
+export { RoleRegistry } from "./agents/role-registry.js"
+export { VectorStore } from "./memory/vector-store.js"
+export { Verifier } from "./core/verifier.js"
+export { ContinuousEvolution } from "./evolution/continuous-evolution.js"
+export { SelfEvolver } from "./evolution/self-evolver.js"
+export { AgentCoordinator } from "./agents/coordinator.js"
+export { Executor } from "./core/executor.js"

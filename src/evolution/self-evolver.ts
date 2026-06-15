@@ -33,10 +33,19 @@ export interface RoleSuggestion {
   reason: string
 }
 
+export interface PromptPatch {
+  role: string
+  errorCategory: string
+  instruction: string
+  priority: "high" | "medium" | "low"
+  occurrences: number
+}
+
 export interface EvolutionReport {
   metrics: EvolutionMetrics
   skillPatches: SkillPatch[]
   roleSuggestions: RoleSuggestion[]
+  promptPatches: PromptPatch[]
   improvementScore: number // 0-100, higher = more evolving
 }
 
@@ -57,15 +66,17 @@ export class SelfEvolver {
     const metrics = this.computeMetrics()
     const skillPatches = this.analyzeSkills()
     const roleSuggestions = this.suggestRoles()
+    const promptPatches = this.suggestPromptPatches(metrics)
 
     const improvementScore = Math.min(100, Math.round(
       (skillPatches.length * 15) +
       (roleSuggestions.length * 10) +
+      (promptPatches.length * 8) +
       (metrics.successRate * 20) +
       (metrics.recommendations.length * 5)
     ))
 
-    return { metrics, skillPatches, roleSuggestions, improvementScore }
+    return { metrics, skillPatches, roleSuggestions, promptPatches, improvementScore }
   }
 
   private computeMetrics(): EvolutionMetrics {
@@ -279,5 +290,67 @@ export class SelfEvolver {
     }
 
     return suggestions.slice(0, 5)
+  }
+
+  /**
+   * Generate prompt patches from recurring error patterns (Gap #1: prompt auto-patching).
+   * Maps error categories → specific instruction additions for the relevant agent role.
+   */
+  private suggestPromptPatches(metrics: EvolutionMetrics): PromptPatch[] {
+    const patches: PromptPatch[] = []
+
+    // Error category → (role, instruction) mapping
+    const errorToPatch: Array<{
+      category: string
+      role: string
+      instruction: string
+      priority: "high" | "medium" | "low"
+    }> = [
+      {
+        category: "compile",
+        role: "developer",
+        instruction: "Before writing code, verify that all types and interfaces are compatible. Run `npx tsc --noEmit` to check for type errors before considering a step complete.",
+        priority: "high",
+      },
+      {
+        category: "type",
+        role: "developer",
+        instruction: "Always define explicit type annotations for function parameters and return values. Avoid `any` types. Verify type exports/imports match between files.",
+        priority: "high",
+      },
+      {
+        category: "import",
+        role: "architect",
+        instruction: "Before implementing, document all file dependencies and ensure import paths are correct. Verify the import exists at the expected relative path.",
+        priority: "high",
+      },
+      {
+        category: "test",
+        role: "qa",
+        instruction: "When reviewing code, check edge cases: empty inputs, null/undefined values, boundary conditions, and error paths. Ensure tests cover both success and failure scenarios.",
+        priority: "medium",
+      },
+      {
+        category: "runtime",
+        role: "developer",
+        instruction: "Add error handling for runtime edge cases: network timeouts, file not found, permission denied, and invalid input. Use try/catch blocks and return user-friendly error messages.",
+        priority: "medium",
+      },
+    ]
+
+    for (const errCat of metrics.topErrorCategories) {
+      const mapping = errorToPatch.find(e => e.category === errCat.category)
+      if (mapping && errCat.count >= 2) {
+        patches.push({
+          role: mapping.role,
+          errorCategory: errCat.category,
+          instruction: mapping.instruction,
+          priority: errCat.count >= 5 ? "high" : mapping.priority,
+          occurrences: errCat.count,
+        })
+      }
+    }
+
+    return patches
   }
 }

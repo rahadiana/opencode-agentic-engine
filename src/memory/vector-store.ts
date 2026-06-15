@@ -430,8 +430,10 @@ export class VectorStore {
 
   private tokenize(text: string): string[] {
     const stopWords = getStopWordSet(this.stopWordsLanguages)
+    // Unicode-aware tokenizer: dukung semua script (Latin, Arab, CJK, dll)
+    // \p{L} = any Unicode letter, \p{N} = any Unicode number
     return text.toLowerCase()
-      .split(/[^a-z0-9_]+/)
+      .split(/[^\p{L}\p{N}_]+/u)
       .filter(t => t.length > 1 && !stopWords.has(t))
   }
 }

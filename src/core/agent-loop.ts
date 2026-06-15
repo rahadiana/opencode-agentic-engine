@@ -98,7 +98,7 @@ export class AgentLoop {
             if (!verifyResult.passed) {
               stepSuccess = false
               stepOutput = `Verification failed: ${verifyResult.errors.join("\n")}`
-              const analysis = errorAnalyzer.analyze(stepOutput, result.filesModified)
+              const analysis = await errorAnalyzer.analyzeDeep(stepOutput, result.filesModified)
               this.observers.forEach(o => o.onStepComplete(nextStep.id, false, analysis.suggestedFix))
 
               if (!this.config.autoRetry) break
@@ -122,7 +122,7 @@ export class AgentLoop {
 
         if (!this.config.autoRetry || retryCount > this.config.maxRetries) break
 
-        const analysis = errorAnalyzer.analyze(stepOutput, result.filesModified ?? [])
+        const analysis = await errorAnalyzer.analyzeDeep(stepOutput, result.filesModified ?? [])
         const repairResult = await this.attemptRepair(nextStep, stepOutput, analysis, fixExecutor)
         if (!repairResult) break
       }

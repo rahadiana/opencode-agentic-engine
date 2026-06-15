@@ -284,6 +284,22 @@ export class LLMEngine {
     }
   }
 
+  async suggestRole(description: string): Promise<string | null> {
+    try {
+      const resp = await this.call({
+        systemPrompt: "You are an agent role classifier. Given a task description, determine the best agent role for it. Available roles: architect (design/structure/API), developer (implementation/coding/fix), qa (testing/verification/review), coordinator (planning/orchestration/coordination), pm (requirements/specs/acceptance). Return ONLY the role name in lowercase: architect, developer, qa, coordinator, or pm. No explanation, no punctuation." + this.buildMemoryContext(description),
+        userPrompt: description,
+        temperature: 0.1,
+        maxTokens: 20,
+      })
+      const role = resp.content.trim().toLowerCase()
+      if (["architect", "developer", "qa", "coordinator", "pm"].includes(role)) {
+        return role as "architect" | "developer" | "qa" | "coordinator" | "pm"
+      }
+    } catch { /* fall through */ }
+    return null
+  }
+
   async suggestSkillSteps(taskDescription: string, successOutput: string): Promise<{
     steps: Array<{ action: string; description: string; tool?: string; expectedOutput: string; rollback?: string }>
   }> {
