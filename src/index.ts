@@ -68,13 +68,14 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
   llmEngine.setModelRegistry(modelRegistry)
 
   // Register models into ModelRegistry from env vars
-  const fastModel = process.env.FAST_MODEL || process.env.OPENAI_MODEL || "fast-default"
-  const capableModel = process.env.CAPABLE_MODEL || process.env.OPENAI_MODEL || "capable-default"
+  const defaultModel = process.env.OPENAI_MODEL || process.env.LLM_MODEL || ""
+  const fastModel = process.env.FAST_MODEL || defaultModel
+  const capableModel = process.env.CAPABLE_MODEL || defaultModel
 
-  modelRegistry.addModel(fastModel)
-  if (fastModel !== capableModel) modelRegistry.addModel(capableModel)
-  modelRegistry.registerAlias("fast", [fastModel])
-  modelRegistry.registerAlias("capable", [capableModel])
+  if (fastModel) { modelRegistry.addModel(fastModel); modelRegistry.registerAlias("fast", [fastModel]) }
+  if (capableModel && capableModel !== fastModel) { modelRegistry.addModel(capableModel) }
+  if (capableModel) { modelRegistry.registerAlias("capable", [capableModel]) }
+  // Tanpa env: alias tetap ada tapi kosong — output pake kategori saja
   llmEngine.setMemoryStores({
     searchEpisodes: (query: string) => episodicStore.search(query),
     findSkills: (query: string) => skillStore.find(query).map(s => ({ name: s.definition.meta.name, successRate: s.successRate })),
@@ -749,7 +750,7 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
               out += pipeline.stages.map((s, i) => {
                 const category = s.model ?? roleRegistry.suggestModel(s.role)
                 const resolved = modelRegistry.resolveAlias(category)
-                const modelLabel = resolved.length > 0 ? `${resolved[0]} (${category})` : category
+                const modelLabel = resolved.length > 0 && resolved[0] !== category ? `${resolved[0]} (${category})` : category
                 return `${i + 1}. **${s.role}** — ${s.description} (model: ${modelLabel})`
               }).join("\n")
               return { output: out }
@@ -773,7 +774,7 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
                 const prefix = i === 0 ? "▶" : "⏳"
                 const category = s.model ?? roleRegistry.suggestModel(s.role)
                 const resolved = modelRegistry.resolveAlias(category)
-                const modelLabel = resolved.length > 0 ? `${resolved[0]} (${category})` : category
+                const modelLabel = resolved.length > 0 && resolved[0] !== category ? `${resolved[0]} (${category})` : category
                 return `${prefix} **${s.role}** — ${s.description} (model: ${modelLabel})`
               }).join("\n")
               out += `\n\n### Next Step\nDelegate tasks to each stage. Start with \`agentic_delegate\` for the first role: **${pipeline.stages[0].role}**.`
@@ -1111,7 +1112,8 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
           const suggestedCategory = roleRegistry.suggestModel(role)
           const resolvedModels = modelRegistry.resolveAlias(suggestedCategory)
           const suggestedModel = resolvedModels.length > 0 ? resolvedModels[0] : suggestedCategory
-          output += `**Suggested Model:** ${suggestedModel} (${suggestedCategory})\n`
+          const modelLabel = suggestedModel !== suggestedCategory ? `${suggestedModel} (${suggestedCategory})` : suggestedModel
+          output += `**Suggested Model:** ${modelLabel}\n`
           if (agent.model) output += `**Configured Model:** ${agent.model}\n`
 
           // Model reliability info
