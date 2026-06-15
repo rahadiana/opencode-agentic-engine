@@ -67,13 +67,14 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
   llmEngine.setOpencodeClient(input.client)
   llmEngine.setModelRegistry(modelRegistry)
 
-  // Register current model into ModelRegistry for alias resolution
-  const currentModel = llmEngine.getCurrentModel()
-  if (currentModel !== "unknown") {
-    modelRegistry.addModel(currentModel)
-    modelRegistry.registerAlias("capable", [currentModel])
-    modelRegistry.registerAlias("fast", [currentModel])
-  }
+  // Register models into ModelRegistry from env vars
+  const fastModel = process.env.FAST_MODEL || process.env.OPENAI_MODEL || "fast-default"
+  const capableModel = process.env.CAPABLE_MODEL || process.env.OPENAI_MODEL || "capable-default"
+
+  modelRegistry.addModel(fastModel)
+  if (fastModel !== capableModel) modelRegistry.addModel(capableModel)
+  modelRegistry.registerAlias("fast", [fastModel])
+  modelRegistry.registerAlias("capable", [capableModel])
   llmEngine.setMemoryStores({
     searchEpisodes: (query: string) => episodicStore.search(query),
     findSkills: (query: string) => skillStore.find(query).map(s => ({ name: s.definition.meta.name, successRate: s.successRate })),

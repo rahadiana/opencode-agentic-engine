@@ -24,6 +24,9 @@ services:
       # Also expose for the agentic-engine plugin's LLMEngine
       - OPENAI_BASE_URL=${LLM_BASE_URL:-https://rc2cu8i.abc-tunnel.us/v1}
       - OPENAI_MODEL=${LLM_MODEL:-StrongReason}
+      # Model aliases (optional — fallback ke LLM_MODEL)
+      - FAST_MODEL=${FAST_MODEL:-}
+      - CAPABLE_MODEL=${CAPABLE_MODEL:-}
     volumes:
       - opencode_data:/root/.opencode
       - agentic_store:/workspace/.agentic
