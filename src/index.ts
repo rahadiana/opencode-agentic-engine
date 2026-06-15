@@ -92,6 +92,12 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
   contextCompressor.setLLM(llmEngine)
   verifier.detectLanguage(input.worktree)
 
+  // Restore persisted model stats
+  const savedModels = persistence.loadAll<Record<string, import("./core/model-registry.js").ModelStats>>("models")
+  for (const m of savedModels) {
+    modelRegistry.fromJSON(m.data)
+  }
+
   // Restore persisted episodes and skills
   const savedEpisodes = persistence.loadAll<{ planGoal: string; outcome: string; decisions: string[]; filesChanged: string[]; sessionId: string; timestamp: string; tags: string[] }>("episodes")
   for (const ep of savedEpisodes) {
@@ -1472,7 +1478,10 @@ const createEngine = async (input: Parameters<Plugin>[0], _options: Parameters<P
           }
 
           const data = dashboard.generate(traces, Date.now())
-          const output = dashboard.formatForDisplay(data)
+          let output = dashboard.formatForDisplay(data)
+
+          output += `\n### 🤖 Model Reliability\n${modelRegistry.getSummary()}\n`
+
           return { output }
         },
       }),
@@ -1960,6 +1969,7 @@ Only include files that need changing. Return ONLY valid JSON.` + llmEngine.getM
     },
 
     dispose: async () => {
+      persistence.save("models", "registry", modelRegistry.toJSON())
       await traceLogger.dispose()
     },
   }
