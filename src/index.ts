@@ -240,6 +240,136 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
     }
   })
 
+  /** Helper: run the full self-evolution cycle and return a summary */
+  async function runAutoEvolve(): Promise<string> {
+    await traceLogger.flush()
+
+    const allSkills = skillStore.getAll()
+    const allEpisodes = episodicStore.getRecent(50)
+    const uniqueSessions = new Set(allEpisodes.map(e => e.sessionId))
+
+    let allTasks: AgentTask[] = []
+    for (const sid of uniqueSessions) {
+      allTasks = allTasks.concat(coordinator.getTasks(sid))
+    }
+
+    const allStepStates: Array<{ stepId: string; success: boolean; output: string }> = []
+    for (const sid of uniqueSessions) {
+      const session = sessionStore.getOrCreate(sid)
+      const subtasks = session.plan?.intent.subtasks ?? []
+      for (const step of subtasks) {
+        const state = executor.getStepState(sid, step.id)
+        if (state?.result) {
+          allStepStates.push({
+            stepId: step.id,
+            success: state.result.success,
+            output: state.result.output,
+          })
+        }
+      }
+    }
+
+    let traces: Array<{ toolUsed: string; success: boolean; step: string }> = []
+    const tracePath = `${input.worktree}/.agentic/trace.jsonl`
+    try {
+      const content = readFileSync(tracePath, "utf-8")
+      for (const line of content.trim().split("\n").filter(Boolean)) {
+        const parsed = JSON.parse(line)
+        traces.push({
+          toolUsed: parsed.toolUsed ?? "unknown",
+          success: parsed.success ?? true,
+          step: parsed.step ?? "",
+        })
+      }
+    } catch { /* no traces yet */ }
+
+    selfEvolver.feedSkills(allSkills)
+    selfEvolver.feedEpisodes(allEpisodes)
+    selfEvolver.feedTasks(allTasks)
+    selfEvolver.feedStepStates(allStepStates)
+    selfEvolver.feedTraces(traces)
+
+    const report = selfEvolver.evolve()
+
+    // Auto-apply role suggestions
+    const appliedRoles: string[] = []
+    for (const role of report.roleSuggestions) {
+      try {
+        coordinator.registerCustomRole({
+          role: role.name,
+          name: role.name,
+          tools: role.suggestedTools,
+          prompt: `You are ${role.name}. ${role.reason}\n\nTrigger: ${role.triggerPattern}`,
+        })
+        appliedRoles.push(role.name)
+      } catch { }
+    }
+
+    // Auto-apply skill patches
+    const patchedSkills: string[] = []
+    for (const patch of report.skillPatches) {
+      const record = skillStore.getById(patch.skillId)
+      if (!record) continue
+      const def = record.definition
+      let modified = false
+
+      for (const change of patch.suggestedChanges) {
+        if (change.type === "add_rollback") {
+          for (const step of def.workflow.steps) {
+            if (!step.rollback) {
+              step.rollback = change.detail
+              modified = true
+            }
+          }
+        }
+        if (change.type === "add_step") {
+          const newStep: import("./memory/skill-format.js").SkillStep = {
+            order: def.workflow.steps.length + 1,
+            action: "verify",
+            description: change.detail,
+            expectedOutput: "Step completed successfully",
+          }
+          def.workflow.steps.push(newStep)
+          modified = true
+        }
+      }
+
+      if (modified) {
+        def.quality.usageCount = record.usageCount
+        def.quality.successRate = record.successRate
+        def.audit.lastModified = new Date().toISOString()
+        def.audit.modifiedBy = "system"
+        def.meta.version++
+        persistence.save("skills", def.meta.id, def)
+        patchedSkills.push(patch.skillName)
+      }
+    }
+
+    // Auto-apply prompt patches
+    const appliedPatches: string[] = []
+    for (const patch of report.promptPatches) {
+      try {
+        const existingPrompt = roleRegistry.getPrompt(patch.role)
+        if (existingPrompt && !existingPrompt.includes(patch.instruction.slice(0, 40))) {
+          const newPrompt = existingPrompt + `\n\n## Auto-Patched Instruction (from ${patch.errorCategory} errors)\n${patch.instruction}`
+          roleRegistry.updatePrompt(patch.role as "architect" | "developer" | "qa" | "coordinator" | "pm", newPrompt)
+          appliedPatches.push(`${patch.role}: "${patch.instruction.slice(0, 60)}..."`)
+        }
+      } catch { /* non-fatal */ }
+    }
+
+    let result = `### 🔮 Auto-Evolution Complete\n`
+    result += `**Score:** ${report.improvementScore}/100\n`
+    result += `**Sessions:** ${report.metrics.totalSessions} | **Steps:** ${report.metrics.totalSteps} | **Success Rate:** ${(report.metrics.successRate * 100).toFixed(0)}%\n`
+    if (appliedRoles.length > 0) result += `**Roles Registered:** ${appliedRoles.join(", ")}\n`
+    if (patchedSkills.length > 0) result += `**Skills Patched:** ${patchedSkills.join(", ")}\n`
+    if (appliedPatches.length > 0) result += `**Prompts Patched:** ${appliedPatches.length}\n`
+    if (appliedRoles.length === 0 && patchedSkills.length === 0 && appliedPatches.length === 0) {
+      result += `No changes needed — system is healthy.\n`
+    }
+    return result.trim()
+  }
+
   function ctxDir(context: { worktree: string; directory?: string }) {
     return context.worktree
   }
@@ -626,11 +756,16 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
                 category: feedbackAnalysis.category,
               })
 
-              // Check if evolution should trigger
+              // Check if evolution should trigger — auto-execute if so
               const trigger = continuousEvolution.shouldEvolve(context.sessionID)
               if (trigger) {
                 response += `  🔄 **Auto-evolution triggered:** ${trigger.reason}\n`
-                response += `  Run \`agentic_evolve evolve\` to apply changes.\n`
+                try {
+                  const evolveSummary = await runAutoEvolve()
+                  response += `  ${evolveSummary.replace(/\n/g, "\n  ")}\n`
+                } catch (e) {
+                  response += `  ⚠️ Auto-evolution encountered an error: ${(e as Error).message}\n`
+                }
               }
             }
           }
@@ -816,7 +951,12 @@ You are an AI assistant with access to 20 agentic engineering tools (agentic_pla
             output += `**Overall:** ${(trend.overall.successRate * 100).toFixed(0)}% (${trend.overall.success}/${trend.overall.total} steps)\n`
             output += `**Recent (last ${trend.rolling.windowSize}):** ${(trend.rolling.successRate * 100).toFixed(0)}% — ${dirIcon} ${trend.rolling.direction}\n`
             if (trend.degradationDetected) {
-              output += `⚠️ **Performance degradation detected!** Consider \`agentic_evolve evolve\`.\n`
+              output += `⚠️ **Performance degradation detected!** Auto-running self-evolution...\n`
+              try {
+                output += `${(await runAutoEvolve()).replace(/\n/g, "\n")}\n`
+              } catch {
+                output += `⚠️ Auto-evolution encountered an error.\n`
+              }
             }
             // Forecast (Gap #12)
             if (trend.forecast && trend.forecast.bucketRates.length > 0) {
@@ -2496,7 +2636,13 @@ Only include files that need changing. Return ONLY valid JSON.` + llmEngine.getM
             report += `**Overall:** ${(autoTrend.overall.successRate * 100).toFixed(0)}% (${autoTrend.overall.success}/${autoTrend.overall.total})\n`
             report += `**Recent (last ${autoTrend.rolling.windowSize}):** ${(autoTrend.rolling.successRate * 100).toFixed(0)}% — ${autoTrend.rolling.direction}\n`
             if (autoTrend.degradationDetected) {
-              report += `⚠️ **Degradation detected!** Run \`agentic_evolve evolve\` to analyze and auto-apply fixes.\n`
+              report += `⚠️ **Degradation detected!** Auto-running self-evolution...\n`
+              try {
+                const evolveSummary = await runAutoEvolve()
+                report += `${evolveSummary.replace(/\n/g, "\n")}\n`
+              } catch (e) {
+                report += `⚠️ Auto-evolution encountered an error: ${(e as Error).message}\n`
+              }
             }
             if (autoTrend.recommendations.length > 0) {
               report += `**Suggestions:**\n${autoTrend.recommendations.map(r => `- ${r}`).join("\n")}\n`

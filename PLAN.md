@@ -284,7 +284,7 @@ Mengadopsi framework evaluasi dari paper:
 - [ ] **Skill persist** — `skill-store.ts` sambungkan ke `PersistenceLayer` (sekarang in-memory)
 - [ ] **ErrorAnalyzer LLM fallback** — `error-analyzer.ts` tambah LLM untuk kasus ambiguity
 - [ ] **Config hot-reload propagate** — `config.ts` watcher sudah ada, tapi belum ke semua module
-- [ ] **`agentic_evolve` auto-execute** — `self-evolver.ts` action items yang bisa jalan sendiri
+- [x] **`agentic_evolve` auto-execute** — `self-evolver.ts` action items diterapkan otomatis saat degradasi terdeteksi di `agentic_execute`, `agentic_status`, dan `agentic_auto`
 
 ### 🔵 Stage IV — Self-Evolving (Future)
 - [x] **Cross-session pattern discovery** — `pattern-discovery.ts` menganalisis pola error/file/session/skill otomatis

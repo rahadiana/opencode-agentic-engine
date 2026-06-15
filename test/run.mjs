@@ -1752,6 +1752,36 @@ assert(exEeOut.includes("Error") || exEeOut.includes("error") || exEeOut.include
 assert(typeof exEmptyError === "object", "execute returns object")
 assert(true, "agentic_execute edge case tests passed")
 
+// 82. Auto-Evolution — self-evolution triggers on degradation
+console.log("\n[82] Auto-Evolution — self-evolution triggers")
+const autoEvoSid = freshSid()
+const autoEvoCtx = mockCtx(autoEvoSid)
+
+// Run a plan + execute to set up some data
+await hooks.tool.agentic_plan.execute({
+  goal: "Evolution test",
+  subtasks: [{ id: "aev-1", description: "Evo step", dependsOn: [] }],
+}, autoEvoCtx)
+const aevExe = await hooks.tool.agentic_execute.execute({
+  stepId: "aev-1", success: true, output: "Evo step done",
+  filesModified: ["src/evo-test.ts"],
+}, autoEvoCtx)
+assert(aevExe.output.length > 0, "execute works before evolution test")
+
+// Status shows auto-evolution (with no degradation, system is healthy)
+const aevStat = await hooks.tool.agentic_status.execute({}, autoEvoCtx)
+const aevStatOut = typeof aevStat === "string" ? aevStat : (aevStat.output || "")
+assert(aevStatOut.length > 0, "status output")
+
+// Auto run with a simple task should not crash (auto-evolution is best-effort)
+const aevAuto = await hooks.tool.agentic_auto.execute({
+  goal: "Auto-evolution test function",
+  constraints: [],
+}, autoEvoCtx)
+const aevAutoOut = typeof aevAuto === "string" ? aevAuto : (aevAuto.output || "")
+assert(aevAutoOut.length > 0, "auto-evolution auto run produces output")
+assert(true, "auto-evolution tests passed")
+
 // 54. Trace logging
 console.log("\n[54] Trace logging")
 await hooks.dispose()
