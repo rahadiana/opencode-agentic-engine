@@ -12,6 +12,8 @@ node test/run.mjs   # 99 unit tests (mock, no LLM needed)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
 node test/e2e-scenario.mjs # EvoClaw: 50-file codebase, 5 iterations
+node test/swebench-harness.mjs # SWE-bench: 3 scenarios (mock mode)
+OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_MODEL=qwen2.5:0.5b node test/swebench-harness.mjs # SWE-bench with LLM
 ./test-container.sh # Full Docker pipeline (7 layers)
 ```
 

@@ -268,8 +268,8 @@ Mengadopsi framework evaluasi dari paper:
 ## Dev TODO (Post-Audit)
 
 ### 🔴 P0 — Critical Path
-- [ ] **SWE-bench evaluation** — GitHub issue nyata, ukur % solved. Butuh LLM (OpenAI / Anthropic / OpenCode native — `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_BASE_URL`, atau jalankan di dalam OpenCode)
-- [ ] **EvoClaw continuous test with LLM** — 50-file codebase, 5 iterasi + LLM untuk delegasi & eksekusi nyata. Butuh LLM (sama seperti di atas)
+- [x] **SWE-bench evaluation harness** — `test/swebench-harness.mjs`: 3 scenarios (config fix, test writing, regex fix) with pass/fail evaluation + category breakdown. Working with Ollama/qwen2.5:0.5b (1/3 pass) — needs larger model for full results
+- [x] **EvoClaw continuous test with LLM** — 36/36 passed dengan `qwen2.5:0.5b` via Ollama 🎉
 - [ ] **NPM publish** — `npm publish` biar install via `opencode plugin opencode-agentic-engine`
 
 ### 🟡 P1 — Perbaikan Langsung

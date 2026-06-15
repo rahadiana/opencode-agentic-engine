@@ -38,6 +38,8 @@
     "test": "node test/run.mjs",
     "test:e2e": "node test/e2e-scenario.mjs",
     "test:e2e-llm": "node test/e2e-llm.mjs",
+    "test:swebench": "node test/swebench-harness.mjs",
+    "test:swebench-llm": "OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_MODEL=qwen2.5:0.5b node test/swebench-harness.mjs",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
