@@ -21,7 +21,7 @@ export class TraceLogger {
   private retentionDays = 7
 
   constructor(worktree: string) {
-    this.logPath = join(worktree, ".agentic", "trace.jsonl")
+    this.logPath = join(worktree || process.cwd(), ".agentic", "trace.jsonl")
   }
 
   /** Set retention days for pruning old traces — called on config hot-reload. */

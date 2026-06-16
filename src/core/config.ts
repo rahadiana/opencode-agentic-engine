@@ -105,8 +105,8 @@ export class ConfigLoader {
   private listeners: Array<(config: AgenticConfigSchema) => void> = []
 
   constructor(worktree: string) {
-    this.worktree = worktree
-    this.configPath = join(worktree, ".agentic", "config.json")
+    this.worktree = worktree || process.cwd()
+    this.configPath = join(this.worktree, ".agentic", "config.json")
     this.config = { ...DEFAULT_CONFIG }
   }
 

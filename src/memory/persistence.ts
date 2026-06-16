@@ -12,8 +12,8 @@ export class PersistenceLayer {
   private storeDir: string
 
   constructor(worktree: string) {
-    this.baseDir = worktree
-    this.storeDir = resolve(worktree, ".agentic", "store")
+    this.baseDir = worktree || process.cwd()
+    this.storeDir = resolve(this.baseDir, ".agentic", "store")
     this.ensureDir()
   }
 

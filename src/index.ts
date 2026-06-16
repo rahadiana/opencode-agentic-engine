@@ -42,13 +42,16 @@ import { PatternDiscovery } from "./drift/pattern-discovery.js"
 import { LiveEvaluator } from "./evaluation/live-evaluator.js"
 
 const createEngine: Plugin = async (input, _options) => {
+  // ── Normalize worktree: empty string → cwd (prevents "/.agentic" root crash) ──
+  const worktree = input.worktree || process.cwd()
+
   // ── Config (load first, everything else depends on it) ──
-  const configLoader = new ConfigLoader(input.worktree)
+  const configLoader = new ConfigLoader(worktree)
   const config = configLoader.load()
   configLoader.startWatch()
 
   // ── Auto-register "agentic" agent if not present ──
-  const agentsDir = join(input.worktree, ".opencode", "agents")
+  const agentsDir = join(worktree, ".opencode", "agents")
   const agenticAgentPath = join(agentsDir, "agentic.md")
   if (!existsSync(agenticAgentPath)) {
     try {
@@ -72,7 +75,7 @@ You are an AI assistant with access to 21 agentic engineering tools (agentic_pla
   const depTracker = new DependencyTracker()
   // Build initial file-level dependency graph from project source
   try {
-    const sourceDir = join(input.worktree, "src")
+    const sourceDir = join(worktree, "src")
     if (existsSync(sourceDir)) {
       const scanBatch: Record<string, string> = {}
       const walkDir = (dir: string) => {
@@ -87,11 +90,11 @@ You are an AI assistant with access to 21 agentic engineering tools (agentic_pla
         } catch {}
       }
       walkDir(sourceDir)
-      depTracker.scanFiles(scanBatch, input.worktree)
+      depTracker.scanFiles(scanBatch, worktree)
     }
   } catch { /* non-fatal */ }
   const contextCompressor = new ContextCompressor()
-  const git = new GitIntegration(input.worktree)
+  const git = new GitIntegration(worktree)
   const debtScorer = new TechDebtScorer()
   const skillStore = new SkillStore()
   const coordinator = new AgentCoordinator(skillStore)
@@ -101,11 +104,11 @@ You are an AI assistant with access to 21 agentic engineering tools (agentic_pla
   }
   const episodicStore = new EpisodicStore()
   const checkpoints = new CheckpointSystem()
-  const hallucinationGuard = new HallucinationGuard(input.worktree)
+  const hallucinationGuard = new HallucinationGuard(worktree)
   const parallelExec = new ParallelExecutor()
   const dashboard = new Dashboard()
   const sessionStore = new SessionStore()
-  const traceLogger = new TraceLogger(input.worktree)
+  const traceLogger = new TraceLogger(worktree)
   const roleRegistry = new RoleRegistry()
   const schemaVersion = new MemorySchemaVersion()
   const selfEvolver = new SelfEvolver()
@@ -183,7 +186,7 @@ You are an AI assistant with access to 21 agentic engineering tools (agentic_pla
     findSkills: (query: string) => skillStore.find(query).map(s => ({ name: s.definition.meta.name, successRate: s.successRate })),
   })
   const agentLoop = new AgentLoop(llmEngine, { maxIterations: 10, autoRetry: true, maxRetries: 2, verifyAfterEach: false })
-  const persistence = new PersistenceLayer(input.worktree)
+  const persistence = new PersistenceLayer(worktree)
   const vectorStore = new VectorStore()
   vectorStore.setLLM(llmEngine)
   // Set search weights from config
@@ -201,7 +204,7 @@ You are an AI assistant with access to 21 agentic engineering tools (agentic_pla
   // Lightweight mode: tanpa embedder → VectorStore fallback ke sparse search otomatis
 
   contextCompressor.setLLM(llmEngine)
-  verifier.detectLanguage(input.worktree)
+  verifier.detectLanguage(worktree)
 
   // Restore persisted model stats
   const savedModels = persistence.loadAll<Record<string, import("./core/model-registry.js").ModelStats>>("models")
@@ -313,7 +316,7 @@ You are an AI assistant with access to 21 agentic engineering tools (agentic_pla
     }
 
     let traces: Array<{ toolUsed: string; success: boolean; step: string }> = []
-    const tracePath = `${input.worktree}/.agentic/trace.jsonl`
+    const tracePath = `${worktree}/.agentic/trace.jsonl`
     try {
       const content = readFileSync(tracePath, "utf-8")
       for (const line of content.trim().split("\n").filter(Boolean)) {
@@ -441,7 +444,7 @@ You are an AI assistant with access to 21 agentic engineering tools (agentic_pla
 
           if (subtasks.length === 0 && args.autoDecompose !== false) {
             if (args.llmDecompose !== false) {
-              await navigator.scan(input.worktree)
+              await navigator.scan(worktree)
               const codebaseSummary = navigator.getSummary()
               try {
                 const llmIntent = await planner.decomposeWithLLM(llmEngine, args.goal, codebaseSummary)
@@ -533,7 +536,7 @@ You are an AI assistant with access to 21 agentic engineering tools (agentic_pla
         },
         async execute(args, _context) {
           const maxResults = args.maxResults ?? 10
-          await navigator.scan(input.worktree)
+          await navigator.scan(worktree)
           const files = navigator.findRelevantFiles(args.query, maxResults)
 
           // Index files into vector store for hybrid search
@@ -2136,7 +2139,7 @@ You are an AI assistant with access to 21 agentic engineering tools (agentic_pla
 
           // Read traces from file
           await traceLogger.flush()
-          const tracePath = `${input.worktree}/.agentic/trace.jsonl`
+          const tracePath = `${worktree}/.agentic/trace.jsonl`
           let traces = []
           try {
             const content = readFileSync(tracePath, "utf-8")
@@ -2388,7 +2391,7 @@ You are an AI assistant with access to 21 agentic engineering tools (agentic_pla
               }
 
               let traces: Array<{ toolUsed: string; success: boolean; step: string }> = []
-              const tracePath = `${input.worktree}/.agentic/trace.jsonl`
+              const tracePath = `${worktree}/.agentic/trace.jsonl`
               try {
                 const content = readFileSync(tracePath, "utf-8")
                 for (const line of content.trim().split("\n").filter(Boolean)) {
