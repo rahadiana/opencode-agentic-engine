@@ -1,0 +1,56 @@
+# Test files
+test/
+*.test.ts
+*.test.js
+*.test.mjs
+
+# Source files (publish dist/ only)
+src/
+tsconfig.json
+esbuild.config.mjs
+
+# Development files
+.agentic/
+.git/
+.github/
+node_modules/
+*.log
+*.swp
+*.swo
+*~
+
+# Documentation (keep essential ones only)
+ANALISIS_GAP_PAPER.md
+CARA_CEK_SELF_EVOLUTION.md
+COMPATIBILITY_REPORT.md
+GAP4_CONTOH_SCENARIO.md
+GAP4_SUMMARY.md
+KESESUAIAN_RINGKAS.md
+LAPORAN_AKHIR_LENGKAP.md
+LOKASI_SELF_LEARNING.md
+MISSION_COMPLETE.md
+PERBAIKAN_GAP4_LENGKAP.md
+PRIORITY2_COMPLETE.md
+REKOMENDASI_FIX_GAP.md
+SELF_EVOLUTION_SUMMARY.md
+MEMORY_DATA_SUMMARY.md
+PRODUCTION_READY_CHECKLIST.md
+MISSING_FEATURES_SUMMARY.md
+FINAL_SUMMARY.md
+
+# Demo scripts (keep only the useful ones)
+demo-self-evolution.mjs
+demo-populate-memory.mjs
+
+# Build artifacts
+dist/*.map
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
