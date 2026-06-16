@@ -44,6 +44,9 @@ import { PatternDiscovery } from "./drift/pattern-discovery.js"
 import { LiveEvaluator } from "./evaluation/live-evaluator.js"
 import { DebateLoop } from "./core/debate-loop.js"
 import { RouterAgent } from "./core/router-agent.js"
+import { DataCleaner } from "./core/data-cleaner.js"
+import { MultiIndexRAG } from "./memory/multi-index-rag.js"
+import { MCPClient } from "./core/mcp-client.js"
 
 // ── Build-time version injected by esbuild define ──
 declare const __VERSION__: string
@@ -143,7 +146,7 @@ mode: all
 
 ## 🚨 CRITICAL RULES
 
-You have access to **22 specialized agentic_* tools** designed for software engineering. **YOU MUST PREFER THESE TOOLS OVER BUILT-IN TOOLS** for any software engineering task.
+You have access to **26 specialized agentic_* tools** designed for software engineering. **YOU MUST PREFER THESE TOOLS OVER BUILT-IN TOOLS** for any software engineering task.
 
 ### Tool Preference Hierarchy (HIGHEST first):
 1. **agentic_*** — Use FIRST. Far more powerful than built-in tools.
@@ -208,12 +211,25 @@ Call the specific tool (agentic_nav, agentic_execute, etc.) directly.
 ### Stage IV — Self-Evolution
 - **agentic_evolve**: Inspect/extend the agent system, manage prompts.
 
+### Blueprint Architecture — Smart via Structure (5 Layers)
+These tools implement the system-centric philosophy: cheap models become smart through structure and debate.
+
+- **agentic_debate**: Debate loop — Agent A (executor) ↔ Agent B (critic). Use for analysis, code review, strategic decisions, API design. Produces cleaner output via multi-round adversarial refinement.
+- **agentic_router**: Keyword-first intent classifier. Routes queries to the best category/agent/action. Zero LLM cost for clear intents. Use BEFORE agentic_rag to scope which index to search.
+- **agentic_clean**: Data cleaner — strips debate artifacts ("I think...", "Good catch!"), reformats to markdown/json, validates against schema. Use AFTER agentic_debate to get production-ready output.
+- **agentic_rag**: Multi-index RAG — category-segregated memory indices (automotive, financial, personal, tech, general). Supports search, store, stats, categories actions. Prevents cross-category context pollution.
+- **agentic_mcp**: MCP Client — connect to databases/external APIs via stdio subprocess or HTTP(S). Supports connect, list, call, disconnect. Use for live data access during engineering tasks.
+
 ## CRITICAL RULES
 1. **ALWAYS prefer agentic_* tools over built-in tools** for engineering tasks
 2. For multi-step tasks: call **agentic_auto** immediately
 3. Never ask "should I..." — just call the tool
 4. If a step fails, call **agentic_reflect** before retrying
 5. After all steps done, call **agentic_verify** for final verification
+6. **For analysis/review tasks**: use **agentic_debate** (executor↔critic) for better quality than a single pass
+7. **For RAG queries**: use **agentic_router** first to classify intent, then **agentic_rag** with the detected category
+8. **For external data access**: use **agentic_mcp** to connect to databases or APIs
+9. **After debates**: pipe output through **agentic_clean** to strip discussion artifacts
 `
 
   // Always write to GLOBAL agents dir (available on first run in any project)
@@ -351,24 +367,20 @@ Call the specific tool (agentic_nav, agentic_execute, etc.) directly.
   })
   const agentLoop = new AgentLoop(llmEngine, { maxIterations: 10, autoRetry: true, maxRetries: 2, verifyAfterEach: false })
   const persistence = new PersistenceLayer(worktree)
-  const vectorStore = new VectorStore()
-  vectorStore.setLLM(llmEngine)
-  // Set search weights from config
-  vectorStore.setSearchWeights(config.memory.search.keywordWeight, config.memory.search.vectorWeight)
-  // Set stop word languages from config
-  vectorStore.setStopWordsLanguages(config.memory.stopWordsLanguages)
-
-  // Embedding: dari config — kalau ada endpoint, pake remote embedding
-  // Kalau null → lightweight mode (TF-IDF sparse-only, zero dep)
-  const embedConfig = config.embedding
-  if (embedConfig && embedConfig.model) {
-    vectorStore.setEmbeddingConfig(embedConfig.model, embedConfig.endpoint, embedConfig.apiKey)
-    vectorStore.setLLM(llmEngine)
+  // Build RAG config from config file
+  const ragConfig: import("./memory/multi-index-rag.js").RAGConfig = {
+    keywordWeight: config.memory.search.keywordWeight,
+    vectorWeight: config.memory.search.vectorWeight,
+    embedding: config.embedding, // null = TF-IDF only
   }
-  // Lightweight mode: tanpa embedder → VectorStore fallback ke sparse search otomatis
+  const multiIndexRAG = new MultiIndexRAG(undefined, ragConfig)
 
+  // Alias for backward compat — vectorStore is multiIndexRAG's TF-IDF engine
+  const vectorStore = multiIndexRAG.vectorStore
   const debateLoop = new DebateLoop(llmEngine)
   const routerAgent = new RouterAgent(llmEngine)
+  const dataCleaner = new DataCleaner(llmEngine)
+  const mcpClient = new MCPClient()
 
   contextCompressor.setLLM(llmEngine)
   verifier.detectLanguage(worktree)
@@ -427,17 +439,11 @@ Call the specific tool (agentic_nav, agentic_execute, etc.) directly.
   // ── Config hot-reload propagation ──
   // Ketika config berubah di disk, module-module berikut di-update
   configLoader.onChange((newConfig) => {
-    // 1. Vector store: search weights + stop words
-    vectorStore.setSearchWeights(newConfig.memory.search.keywordWeight, newConfig.memory.search.vectorWeight)
-    vectorStore.setStopWordsLanguages(newConfig.memory.stopWordsLanguages)
+    // 1. MultiIndexRAG: keywordWeight + vectorWeight are set at construction time.
+    //    For hot-reload, log the change — weights take effect on next restart.
+    //    (TF-IDF is stateless — no need to re-index)
 
-    // 2. Embedding config
-    const embedCfg = newConfig.embedding
-    if (embedCfg && embedCfg.model) {
-      vectorStore.setEmbeddingConfig(embedCfg.model, embedCfg.endpoint, embedCfg.apiKey)
-    }
-
-    // 3. Agent delegation depth — propagate ke coordinator (akan dipakai untuk validasi depth)
+    // 2. Agent delegation depth — propagate ke coordinator (akan dipakai untuk validasi depth)
     const maxDepth = newConfig.agent.maxDelegationDepth
     if (maxDepth > 0) {
       coordinator.setMaxDepth(maxDepth)
@@ -711,12 +717,15 @@ Call the specific tool (agentic_nav, agentic_execute, etc.) directly.
           await navigator.scan(scanDir)
           const files = navigator.findRelevantFiles(args.query, maxResults)
 
-          // Index files into vector store for hybrid search
+          // Index files into TF-IDF vector store for future search
           for (const file of files) {
-            vectorStore.addDocument(`file:${file}`, `File ${file}`, {
-              type: "file",
-              path: file,
-              tags: [],
+            multiIndexRAG.vectorStore.index({
+              id: `file:${file}`,
+              category: "general",
+              title: file,
+              content: `File ${file}`,
+              keywords: file.split(/[/\\]/).pop()?.split(".") ?? [],
+              metadata: { type: "file", path: file },
             })
           }
 
@@ -2137,21 +2146,26 @@ Call the specific tool (agentic_nav, agentic_execute, etc.) directly.
 
             // Index episodes into vector store for RAG-enhanced search
             const allEpisodes = episodicStore.getRecent(50)
+            // Index episodes into TF-IDF vector store for scoring
             for (const ep of allEpisodes) {
-              vectorStore.addDocument(`ep:${ep.sessionId}`, `${ep.planGoal} ${ep.outcome} ${ep.decisions.join(" ")}`, {
-                type: "episode",
-                sessionId: ep.sessionId,
-                outcome: ep.outcome,
-                tags: [],
+              multiIndexRAG.vectorStore.index({
+                id: `ep:${ep.sessionId}`,
+                category: "general",
+                title: ep.planGoal,
+                content: `${ep.outcome} ${ep.decisions.join(" ")}`,
+                keywords: ep.tags,
+                metadata: { type: "episode", sessionId: ep.sessionId, outcome: ep.outcome },
               })
             }
-            const vectorResults = await vectorStore.semanticSearch(args.query, 5)
-            const episodes = allEpisodes.filter(e => vectorResults.some(r => r.id === `ep:${e.sessionId}`))
+            const tfidfResults = multiIndexRAG.vectorStore.search(args.query, "general", 5)
+            const episodeIds = new Set(tfidfResults.map(r => r.doc.id))
+            const episodes = allEpisodes.filter(e => episodeIds.has(`ep:${e.sessionId}`))
             if (episodes.length === 0) return { output: `No episodes found for "${args.query}".` }
-            let output = `## 🧠 Episodic Memory (RAG): "${args.query}"\n\n`
-            output += episodes.map(e =>
-              `- **${e.outcome === "success" ? "✅" : e.outcome === "partial" ? "⚠️" : "❌"} ${e.planGoal}**\n  Score: ${vectorResults.find(r => r.id === `ep:${e.sessionId}`)?.score.toFixed(2) ?? "?"} | Files: ${e.filesChanged.length} | ${e.timestamp.slice(0, 10)}`
-            ).join("\n")
+            let output = `## 🧠 Episodic Memory (TF-IDF): "${args.query}"\n\n`
+            output += episodes.map(e => {
+              const score = tfidfResults.find(r => r.doc.id === `ep:${e.sessionId}`)?.score.toFixed(2) ?? "?"
+              return `- **${e.outcome === "success" ? "✅" : e.outcome === "partial" ? "⚠️" : "❌"} ${e.planGoal}**\n  TF-IDF Score: ${score} | Files: ${e.filesChanged.length} | ${e.timestamp.slice(0, 10)}`
+            }).join("\n")
             return { output }
           }
 
@@ -3231,6 +3245,295 @@ Only include files that need changing. Return ONLY valid JSON.` + llmEngine.getM
           }
         },
       }),
+
+      // ── Layer 3: Data Cleaner — strip artifacts, validate structure ──
+      agentic_clean: tool({
+        description: "Clean raw text by stripping debate artifacts, reformatting to markdown/json, and optionally validating against a schema. Use after debate or any multi-step analysis to get clean output.",
+        args: {
+          text: tool.schema.string().describe("Raw text to clean"),
+          format: tool.schema.enum(["markdown", "json", "text"]).optional().default("json").describe("Output format"),
+          schema: tool.schema.string().optional().describe("Expected JSON schema description (e.g., 'array of {name, description}')"),
+          stripDebate: tool.schema.boolean().optional().default(true).describe("Strip debate/review artifacts"),
+        },
+        async execute(args, context) {
+          llmEngine.setSessionId(context.sessionID)
+          const startTime = Date.now()
+
+          const result = await dataCleaner.clean({
+            text: args.text,
+            format: args.format ?? "json",
+            schema: args.schema,
+            stripDebateArtifacts: args.stripDebate ?? true,
+          })
+
+          traceLogger.log({
+            step: "execute",
+            input: `Clean: ${args.text.slice(0, 80)}...`,
+            output: `cleaned (${result.stats.removedLines} lines removed)`,
+            toolUsed: "agentic_clean",
+            success: true,
+            durationMs: Date.now() - startTime,
+          })
+
+          return {
+            output: `## 🧹 Data Cleaned\n\n**Original:** ${result.stats.originalLength} chars → **Cleaned:** ${result.stats.cleanedLength} chars (${result.stats.removedLines} lines removed)\n${result.validJson ? "✅ Valid JSON" : "ℹ️ Text output"}\n\n### Result\n\`\`\`${args.format === "json" ? "json" : args.format === "markdown" ? "markdown" : ""}\n${result.cleaned.slice(0, 2000)}\n\`\`\``,
+            metadata: { cleanResult: result },
+          }
+        },
+      }),
+
+      // ── Layer 4: Multi-Index RAG — category-segregated memory ──
+      agentic_rag: tool({
+        description: "Multi-index RAG: search or store knowledge in category-segregated indices. Prevents cross-category context pollution. Use with agentic_router to scope searches to relevant domains.",
+        args: {
+          action: tool.schema.enum(["search", "store", "stats", "categories"]).describe("Action: search across categories, store new data, view stats, or list categories"),
+          query: tool.schema.string().optional().describe("Search query (required for search/stats)"),
+          category: tool.schema.string().optional().describe("Category to search within (omit for all)"),
+          title: tool.schema.string().optional().describe("Title for stored entry"),
+          content: tool.schema.string().optional().describe("Content to store (for store action)"),
+          type: tool.schema.enum(["episode", "skill"]).optional().default("episode").describe("Type of content to store"),
+        },
+        async execute(args, context) {
+          llmEngine.setSessionId(context.sessionID)
+          const startTime = Date.now()
+
+          switch (args.action) {
+            case "search": {
+              const q = args.query || ""
+              const cat = args.category
+
+              if (cat) {
+                const results = multiIndexRAG.searchByCategory(q, cat)
+                const lines = [
+                  `## 🔍 RAG Search Results`,
+                  `**Query:** ${q}`,
+                  `**Category:** ${cat}`,
+                  `**Matches:** ${results.totalInCategory}`,
+                  ``,
+                ]
+                for (const entry of results.entries.slice(0, 10)) {
+                  const type = entry.episode ? "📖 Episode" : "🔧 Skill"
+                  const title = entry.title
+                  lines.push(`- ${type}: **${title}** [${entry.category}]`)
+                }
+                if (results.entries.length === 0) {
+                  lines.push("*(no results)*")
+                }
+
+                return {
+                  output: lines.join("\n"),
+                  metadata: { searchResults: results },
+                }
+              } else {
+                const allResults = multiIndexRAG.searchAll(q)
+                const totalMatches = allResults.reduce((s, r) => s + r.entries.length, 0)
+                const lines = [
+                  `## 🔍 RAG Search Results (All Categories)`,
+                  `**Query:** ${q}`,
+                  `**Total Matches:** ${totalMatches}`,
+                  ``,
+                ]
+                for (const catResult of allResults) {
+                  lines.push(`### ${catResult.category} (${catResult.entries.length})`)
+                  for (const entry of catResult.entries.slice(0, 3)) {
+                    lines.push(`- **${entry.title}**`)
+                  }
+                }
+                if (allResults.length === 0) {
+                  lines.push("*(no results across any category)*")
+                }
+
+                return {
+                  output: lines.join("\n"),
+                  metadata: { searchResults: allResults },
+                }
+              }
+            }
+
+            case "store": {
+              const cat = args.category || multiIndexRAG.autoCategory(args.title || args.content || args.query || "")
+              const title = args.title || args.query || "untitled"
+
+              if (args.type === "skill" && args.content) {
+                // Store as a skill record
+                const skillRecord = {
+                  definition: {
+                    meta: { id: `rag-skill-${Date.now()}`, name: title, description: args.content.slice(0, 200), version: "1.0.0" },
+                    trigger: { pattern: title, keywords: title.split(/\s+/) },
+                    workflow: { steps: [{ action: "execute", description: args.content.slice(0, 500), expectedOutput: "completed" }], maxRetries: 2 },
+                    quality: { successRate: 1.0, usageCount: 1, failureScenarios: [] },
+                    audit: { created: new Date().toISOString(), lastUsed: new Date().toISOString(), lastModified: new Date().toISOString(), modifiedBy: "agent" },
+                  },
+                  usageCount: 1,
+                  successRate: 1.0,
+                  lastUsed: new Date().toISOString(),
+                } as any // Simple skill record for RAG storage
+                multiIndexRAG.indexSkill(cat, skillRecord)
+              } else {
+                // Store as an episode
+                const episode = {
+                  id: `rag-ep-${Date.now()}`,
+                  sessionId: context.sessionID,
+                  planGoal: title,
+                  summary: (args.content || args.query || "").slice(0, 500),
+                  outcome: "success" as const,
+                  decisions: [],
+                  filesChanged: [],
+                  timestamp: new Date().toISOString(),
+                  tags: title.split(/\s+/).filter(w => w.length > 3).map(w => w.toLowerCase()),
+                }
+                multiIndexRAG.indexEpisode(cat, episode)
+              }
+
+              return {
+                output: `## ✅ Stored in RAG\n\n**Category:** ${cat}\n**Title:** ${title}\n**Type:** ${args.type || "episode"}`,
+                metadata: { category: cat },
+              }
+            }
+
+            case "stats": {
+              const stats = multiIndexRAG.getStats()
+              const lines = [
+                `## 📊 RAG Statistics`,
+                `**Total Episodes:** ${stats.totalEpisodes}`,
+                `**Total Skills:** ${stats.totalSkills}`,
+                `**Categories:** ${stats.categories.join(", ")}`,
+                ``,
+                `### Per Category`,
+              ]
+              for (const [cat, data] of Object.entries(stats.perCategory)) {
+                lines.push(`- **${cat}**: ${data.episodes} episodes, ${data.skills} skills`)
+              }
+              return {
+                output: lines.join("\n"),
+                metadata: { stats },
+              }
+            }
+
+            case "categories": {
+              const cats = multiIndexRAG.getStats().categories
+              return {
+                output: `## 📂 RAG Categories\n\nAvailable: ${cats.join(", ")}\n\n> 💡 Use \`agentic_router\` to auto-detect the best category for a query.`,
+                metadata: { categories: cats },
+              }
+            }
+
+            default:
+              return { output: "Unknown action. Use: search, store, stats, categories" }
+          }
+        },
+      }),
+
+      // ── Layer 1: MCP Client — connect to external tools/APIs ──
+      agentic_mcp: tool({
+        description: "MCP (Model Context Protocol) client. Connect to external servers (databases, APIs, tools) via stdio or HTTP, discover available tools, and call them. Lets agents interact with the real world.",
+        args: {
+          action: tool.schema.enum(["connect", "list", "call", "disconnect", "disconnect-all"]).describe("Action: connect to a server, list connections, call a tool, or disconnect"),
+          transport: tool.schema.enum(["stdio", "http", "https"]).optional().describe("Transport type (for connect)"),
+          command: tool.schema.string().optional().describe("Executable path (for stdio connect)"),
+          args: tool.schema.array(tool.schema.string()).optional().describe("Command arguments (for stdio connect)"),
+          url: tool.schema.string().optional().describe("Server URL (for http/https connect)"),
+          name: tool.schema.string().optional().describe("Server name for identification"),
+          headers: tool.schema.string().optional().describe("JSON string of extra HTTP headers"),
+          server: tool.schema.string().optional().describe("Server name to call/disconnect"),
+          tool: tool.schema.string().optional().describe("Tool name to call on the server"),
+          params: tool.schema.string().optional().describe("JSON string of tool arguments"),
+        },
+        async execute(args, context) {
+          llmEngine.setSessionId(context.sessionID)
+          const startTime = Date.now()
+
+          switch (args.action) {
+            case "connect": {
+              if (!args.transport) {
+                return { output: "Parameter 'transport' diperlukan: stdio, http, atau https" }
+              }
+              if (!args.command && !args.url) {
+                return { output: "Parameter 'command' (stdio) atau 'url' (http/https) diperlukan" }
+              }
+
+              let headers: Record<string, string> | undefined
+              if (args.headers) {
+                try { headers = JSON.parse(args.headers) } catch { headers = undefined }
+              }
+
+              const conn = await mcpClient.connect({
+                transport: args.transport as any,
+                command: args.command,
+                args: args.args,
+                url: args.url,
+                headers,
+                name: args.name,
+              })
+
+              const toolList = conn.tools.map(t => `  - **${t.name}**: ${t.description || "(no description)"}`).join("\n")
+              return {
+                output: `## 🔌 MCP Connected\n\n**Server:** ${conn.name}\n**Transport:** ${conn.transport}\n**Tools (${conn.tools.length}):**\n${toolList || "  *(none discovered)*"}`,
+                metadata: { connection: conn },
+              }
+            }
+
+            case "list": {
+              const connections = mcpClient.listConnections()
+              if (connections.length === 0) {
+                return { output: "No MCP servers connected. Use `agentic_mcp action=connect` first." }
+              }
+              const lines = ["## 🔌 MCP Connections", ""]
+              for (const conn of connections) {
+                lines.push(`### ${conn.name}`)
+                lines.push(`- Transport: ${conn.transport}`)
+                lines.push(`- Connected: ${conn.connectedAt}`)
+                lines.push(`- Tools:`)
+                for (const tool of conn.tools) {
+                  lines.push(`  - **${tool.name}**: ${tool.description || "(no description)"}`)
+                }
+                lines.push("")
+              }
+              return {
+                output: lines.join("\n"),
+                metadata: { connections },
+              }
+            }
+
+            case "call": {
+              if (!args.server) return { output: "Parameter 'server' diperlukan" }
+              if (!args.tool) return { output: "Parameter 'tool' diperlukan" }
+
+              let params: Record<string, unknown> = {}
+              if (args.params) {
+                try { params = JSON.parse(args.params) } catch { params = {} }
+              }
+
+              const result = await mcpClient.callTool(args.server, args.tool, params)
+              const contentStr = typeof result.content === "string"
+                ? result.content
+                : JSON.stringify(result.content, null, 2)
+
+              return {
+                output: `## 🔧 MCP Tool Call\n\n**Server:** ${args.server}\n**Tool:** ${args.tool}\n**Duration:** ${result.durationMs}ms\n${result.isError ? "❌ Error" : "✅ Success"}\n\n### Result\n\`\`\`json\n${contentStr.slice(0, 3000)}\n\`\`\``,
+                metadata: { callResult: result },
+              }
+            }
+
+            case "disconnect": {
+              if (!args.server) return { output: "Parameter 'server' diperlukan" }
+              const ok = mcpClient.disconnect(args.server)
+              return {
+                output: ok ? `🔌 Disconnected from ${args.server}` : `⚠️ Server "${args.server}" not found`,
+                metadata: { disconnected: ok },
+              }
+            }
+
+            case "disconnect-all": {
+              mcpClient.disconnectAll()
+              return { output: "🔌 All MCP servers disconnected" }
+            }
+
+            default:
+              return { output: "Unknown action. Use: connect, list, call, disconnect, disconnect-all" }
+          }
+        },
+      }),
     },
 
     "tool.execute.after": async (toolInput: { tool: string; args: Record<string, unknown>; sessionID: string; callID: string }, _output: { title: string; output: string; metadata: unknown }) => {
@@ -3300,6 +3603,25 @@ Only include files that need changing. Return ONLY valid JSON.` + llmEngine.getM
             if (_output?.output && typeof _output.output === "string") {
               const match = _output.output.match(/Category:\s*(\S+)/)
               if (match) liveEvaluator.feedNavigation(String(args.input), 1)
+            }
+            break
+          }
+          case "agentic_clean": {
+            if (args.text && _output?.output) {
+              liveEvaluator.feedStepResult({ stepId: "clean", success: true, sessionId: toolInput.sessionID })
+            }
+            break
+          }
+          case "agentic_rag": {
+            if (args.action === "search" && _output?.output) {
+              const match = _output.output.match(/Matches:\s*(\d+)/)
+              if (match) liveEvaluator.feedSkillLookup(parseInt(match[1]) > 0)
+            }
+            break
+          }
+          case "agentic_mcp": {
+            if (args.action === "connect" && _output?.output) {
+              liveEvaluator.feedDelegation("mcp-connect", String(args.name || "unknown"), _output.output.includes("Connected"))
             }
             break
           }

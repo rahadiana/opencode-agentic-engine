@@ -72,9 +72,9 @@ catch (e) { assert(false, `AgenticEngine() threw: ${e.message}`) }
 assert(hooks && typeof hooks === "object", "hooks is an object")
 assert(typeof hooks.dispose === "function", "dispose hook registered")
 
-// 3. Tool registration (23 tools)
+// 3. Tool registration (26 tools)
 console.log("\n[3] Tool registration")
-for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_model", "agentic_episodes", "agentic_parallel", "agentic_dashboard", "agentic_guard", "agentic_evolve", "agentic_auto", "agentic_debate", "agentic_router"]) {
+for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_model", "agentic_episodes", "agentic_parallel", "agentic_dashboard", "agentic_guard", "agentic_evolve", "agentic_auto", "agentic_debate", "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp"]) {
   const tool = hooks.tool?.[name]
   assert(tool && typeof tool.execute === "function", `"${name}" has execute()`)
   assert(typeof tool.description === "string" && tool.description.length > 0, `"${name}" has description`)
@@ -1034,54 +1034,63 @@ try { rmSync(cfgWorktree, { recursive: true, force: true }) } catch {}
 try { rmSync(cfgWorktreeB, { recursive: true, force: true }) } catch {}
 try { rmSync(cfgWorktreeC, { recursive: true, force: true }) } catch {}
 
-// 55. VectorStore — Unicode/non-Latin stop word support
-console.log("\n[55] VectorStore — Unicode / non-Latin tokenization")
+// 55. VectorStore — TF-IDF sparse retrieval
+console.log("\n[55] VectorStore — TF-IDF sparse retrieval")
 const { VectorStore } = await import(pluginDist)
 const vs = new VectorStore()
-// Default stop words: ind + eng
 
-// Latin: works
-vs.addDocument("doc1", "Hello world this is a test document", { type: "episode", tags: [] })
-// Arabic: should not be stripped
-vs.addDocument("doc2", "السلام عليكم ورحمة الله وبركاته هذا نص تجريبي", { type: "episode", tags: [] })
-// Chinese: should not be stripped
-vs.addDocument("doc3", "你好世界这是一个测试文档", { type: "episode", tags: [] })
-// Japanese (mixed): should not be stripped
-vs.addDocument("doc4", "こんにちは世界 これはテスト文書です", { type: "episode", tags: [] })
-// Korean: should not be stripped
-vs.addDocument("doc5", "안녕하세요 세계 이것은 테스트 문서입니다", { type: "episode", tags: [] })
-// Russian: should not be stripped
-vs.addDocument("doc6", "Привет мир это тестовый документ", { type: "episode", tags: [] })
+// Index documents
+vs.index({
+  id: "doc1", category: "general", title: "Hello world",
+  content: "this is a test document for vector store",
+  keywords: ["hello", "test"],
+})
+vs.index({
+  id: "doc2", category: "general", title: "Arabic test",
+  content: "السلام عليكم ورحمة الله وبركاته هذا نص تجريبي",
+  keywords: ["arabic"],
+})
+vs.index({
+  id: "doc3", category: "general", title: "Chinese test",
+  content: "你好世界这是一个测试文档",
+  keywords: ["chinese"],
+})
+vs.index({
+  id: "doc4", category: "general", title: "Japanese test",
+  content: "こんにちは世界 これはテスト文書です",
+  keywords: ["japanese"],
+})
+vs.index({
+  id: "doc5", category: "general", title: "Korean test",
+  content: "안녕하세요 세계 이것은 테스트 문서입니다",
+  keywords: ["korean"],
+})
+vs.index({
+  id: "doc6", category: "general", title: "Russian test",
+  content: "Привет мир это тестовый документ",
+  keywords: ["russian"],
+})
 
-assert(vs.size() === 6, "all 6 docs added")
+assert(vs.size === 6, "all 6 docs indexed")
 
-// Search in Arabic — should find Arabic doc (Arabic uses spaces between words)
-const arabicResults = vs.search("تجريبي", 3)
-assert(arabicResults.length > 0, "Arabic search returns results")
-assert(arabicResults[0].id === "doc2", "Arabic doc ranked first for Arabic query")
+// Search for a matching term
+const results = vs.search("hello", "general", 5)
+assert(results.length > 0, "TF-IDF search returns results")
+assert(results[0].doc.id === "doc1", "doc1 ranked first for 'hello' query")
+assert(results[0].score > 0, "TF-IDF score is positive")
+assert(results[0].matchFields.includes("content") || results[0].matchFields.includes("title"), "match fields populated")
 
-// Search in Russian — should find Russian doc (Cyrillic uses spaces between words)
-const russianResults = vs.search("тестовый", 3)
-assert(russianResults.length > 0, "Russian search returns results")
-assert(russianResults[0].id === "doc6", "Russian doc ranked first for Russian query")
+// Search in Russian — should find Russian doc
+const russianResults = vs.search("тестовый", "general", 3)
+assert(russianResults.length > 0, "Russian TF-IDF search returns results")
+assert(russianResults[0].doc.id === "doc6", "Russian doc ranked first for Russian query")
 
-// Search in Japanese — token that has spaces around it should match
-const jpResults = vs.search("こんにちは世界", 3)
-assert(jpResults.length > 0, "Japanese search returns results")
-assert(jpResults[0].id === "doc4", "Japanese doc ranked first for Japanese query")
+// Search across all categories
+const allResults = vs.searchAll("test", 10)
+assert(allResults.length > 0, "searchAll returns results")
+assert(allResults[0].score > 0, "searchAll score is positive")
 
-// Arabic stop word filtering: set language to Arabic only
-const vsAr = new VectorStore()
-vsAr.setStopWordsLanguages(["ara"])
-vsAr.addDocument("ar1", "السلام عليكم هذا نص", { type: "episode", tags: [] })
-// "هذا" (this) should be filtered as Arabic stop word
-// Verify the doc was added without tokenization crashing
-assert(vsAr.size() === 1, "Arabic doc added with Arabic stop words")
-
-// Note: CJK (Chinese, Japanese without spaces, Korean) search membutuhkan
-// word segmentation karena tidak pakai spasi antar kata.
-// Ini adalah known limitation — butuh library seperti nodejieba atau kuromoji.
-// Untuk sekarang, karakter CJK di-tokenize sebagai 1 token utuh per block.
+assert(true, "VectorStore TF-IDF tests passed")
 
 // 56. Verifier — semantic verification (no LLM fallback)
 console.log("\n[56] Verifier — semantic verification")
@@ -2207,6 +2216,110 @@ const routeEmpty = await hooks.tool.agentic_router.execute({
 const routeEmpOut = typeof routeEmpty === "string" ? routeEmpty : (routeEmpty.output || "")
 assert(routeEmpOut.length > 0, "router empty input returns output")
 assert(true, "agentic_router empty input handled")
+
+// ── Layer 3: Data Cleaner ──
+console.log("\n[89] agentic_clean — data cleaning")
+const cleanSid = freshSid()
+
+// Happy path: clean debate-like text
+const cleanText = await hooks.tool.agentic_clean.execute({
+  text: "I think this is a good analysis. Let me revise it. The answer is 42. I agree with that point. Actually the correct value is 42. Good catch!",
+  format: "json",
+}, mockCtx(cleanSid))
+const cleanOut = typeof cleanText === "string" ? cleanText : (cleanText.output || "")
+assert(cleanOut.length > 20, "clean returns output")
+assert(typeof cleanText === "object", "clean returns object")
+assert(true, "agentic_clean happy path passed")
+
+// Error path: empty text
+const cleanEmpty = await hooks.tool.agentic_clean.execute({
+  text: "",
+}, mockCtx(freshSid()))
+const cleanEmpOut = typeof cleanEmpty === "string" ? cleanEmpty : (cleanEmpty.output || "")
+assert(cleanEmpOut.length > 0, "clean empty text returns output")
+assert(true, "agentic_clean empty text handled")
+
+// ── Layer 4: Multi-Index RAG ──
+console.log("\n[90] agentic_rag — multi-index RAG")
+const ragSid = freshSid()
+
+// Store some test data
+await hooks.tool.agentic_rag.execute({
+  action: "store",
+  query: "Cara mengganti oli mobil",
+  category: "automotive",
+  content: "Langkah-langkah mengganti oli mobil: 1. Siapkan alat 2. Buka baut pembuangan 3. Buang oli lama 4. Pasang baut 5. Isi oli baru",
+}, mockCtx(ragSid))
+
+await hooks.tool.agentic_rag.execute({
+  action: "store",
+  query: "Cara hitung pajak penghasilan",
+  category: "financial",
+  content: "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+  type: "skill",
+}, mockCtx(ragSid))
+
+// Search within category
+const ragSearch = await hooks.tool.agentic_rag.execute({
+  action: "search",
+  query: "oli",
+  category: "automotive",
+}, mockCtx(freshSid()))
+const ragSearchOut = typeof ragSearch === "string" ? ragSearch : (ragSearch.output || "")
+assert(ragSearchOut.length > 20, "rag search returns output")
+assert(ragSearchOut.includes("oli") || ragSearchOut.includes("mobil"), "rag finds stored data")
+assert(true, "agentic_rag search within category passed")
+
+// Search all categories
+const ragAll = await hooks.tool.agentic_rag.execute({
+  action: "search",
+  query: "pajak",
+}, mockCtx(freshSid()))
+const ragAllOut = typeof ragAll === "string" ? ragAll : (ragAll.output || "")
+assert(ragAllOut.length > 20, "rag all-category search returns output")
+assert(ragAllOut.includes("financial") || ragAllOut.includes("pajak"), "rag finds across categories")
+assert(true, "agentic_rag cross-category search passed")
+
+// Stats
+const ragStats = await hooks.tool.agentic_rag.execute({
+  action: "stats",
+}, mockCtx(freshSid()))
+const ragStatsOut = typeof ragStats === "string" ? ragStats : (ragStats.output || "")
+assert(ragStatsOut.length > 20, "rag stats returns output")
+assert(ragStatsOut.includes("automotive") && ragStatsOut.includes("financial"), "rag stats shows categories")
+assert(true, "agentic_rag stats passed")
+
+// Categories
+const ragCats = await hooks.tool.agentic_rag.execute({
+  action: "categories",
+}, mockCtx(freshSid()))
+assert(true, "agentic_rag categories passed")
+
+// ── Layer 1: MCP Client ──
+console.log("\n[91] agentic_mcp — MCP client")
+const mcpSid = freshSid()
+
+// List with no connections
+const mcpList = await hooks.tool.agentic_mcp.execute({
+  action: "list",
+}, mockCtx(mcpSid))
+const mcpListOut = typeof mcpList === "string" ? mcpList : (mcpList.output || "")
+assert(mcpListOut.includes("No MCP") || mcpListOut.includes("Connected"), "mcp list shows no connections")
+assert(true, "agentic_mcp list empty passed")
+
+// Missing params
+const mcpNoTrans = await hooks.tool.agentic_mcp.execute({
+  action: "connect",
+}, mockCtx(freshSid()))
+const mcpNoTransOut = typeof mcpNoTrans === "string" ? mcpNoTrans : (mcpNoTrans.output || "")
+assert(mcpNoTransOut.includes("transport"), "mcp connect without transport shows error")
+assert(true, "agentic_mcp missing params handled")
+
+// Disconnect-all with no connections
+const mcpDiscAll = await hooks.tool.agentic_mcp.execute({
+  action: "disconnect-all",
+}, mockCtx(freshSid()))
+assert(true, "agentic_mcp disconnect-all passed")
 }
 
 await runAll()

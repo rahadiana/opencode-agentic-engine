@@ -17,7 +17,7 @@ Berdasarkan konsep dari paper **"The End of Software Engineering"** (arXiv:2606.
 | — | **Model Registry** | Auto-discover model dari provider, tracking reliability & hallucination rate |
 | — | **Dashboard** | Timeline, anomaly detection, model reliability stats |
 
-### 21 Tools
+### 26 Tools
 
 | Tool | Stage | Description |
 |---|---|---|
@@ -42,6 +42,11 @@ Berdasarkan konsep dari paper **"The End of Software Engineering"** (arXiv:2606.
 | `agentic_guard` | III | Hallucination detection |
 | `agentic_evolve` | IV | Inspect + extend the agent system |
 | `agentic_auto` | V | Fully autonomous agent loop (plan→execute→verify→retry in one call) |
+| `agentic_debate` | 🏗 Blueprint | Debate loop — Agent A (executor) ↔ Agent B (critic) |
+| `agentic_router` | 🏗 Blueprint | Keyword-first intent classifier, zero LLM cost for clear intents |
+| `agentic_clean` | 🏗 Blueprint | Strip debate artifacts, reformat to markdown/json, validate schema |
+| `agentic_rag` | 🏗 Blueprint | Multi-index RAG: TF-IDF + vector hybrid search per category |
+| `agentic_mcp` | 🏗 Blueprint | MCP Client — connect to DB/APIs via stdio or HTTP(S) |
 
 ## Quick Start
 
@@ -213,7 +218,7 @@ File ini di-watch — perubahan langsung diterapkan tanpa restart plugin.
 
 ```
 src/
-├── index.ts               # Plugin entry: registers 21 tools + hooks
+├── index.ts               # Plugin entry: registers 26 tools + hooks
 ├── core/                  # Core engine
 │   ├── intent-parser.ts   # Parses user intent → Plan structure
 │   ├── planner.ts         # Auto-decompose (create/fix/refactor/test templates)
@@ -258,7 +263,7 @@ src/
 ## Testing
 
 ```bash
-# Unit tests (489 tests, mock-based, no LLM needed)
+# Unit tests (548 tests, mock-based, no LLM needed)
 node test/run.mjs
 
 # Simulates opencode auto-discovery
@@ -279,7 +284,7 @@ node test/e2e-llm.mjs
 # SWE-bench mock mode (no LLM)
 LLM_OFF=true node test/swebench-harness.mjs
 
-# Docker pipeline (7 layers, 489 unit + E2E tests)
+# Docker pipeline (7 layers, 548 unit + E2E tests)
 ./test-container.sh
 ```
 
@@ -305,216 +310,35 @@ Semua aktivitas dicatat ke `.agentic/trace.jsonl`:
 - Step execution + error propagation
 - Retry history & anomaly detection
 
-## Recent Updates (2026-06-16)
+## Recent Updates (v0.4.0 — 2026-06-16)
 
-### Gap #4 Fix: Semantic Verification Blocking ✅
+### 5 Blueprint Layers Complete ✅
 
-**Problem:** Semantic verification existed but didn't block incorrect steps (only warned).
+| Layer | File | Tool | Status |
+|-------|------|------|--------|
+| L1 — MCP Client | `src/core/mcp-client.ts` | `agentic_mcp` | ✅ |
+| L2 — Debate Loop | `src/core/debate-loop.ts` | `agentic_debate` | ✅ |
+| L3 — Data Cleaner | `src/core/data-cleaner.ts` | `agentic_clean` | ✅ |
+| L4 — Multi-Index RAG | `src/memory/multi-index-rag.ts` | `agentic_rag` | ✅ |
+| L5 — Router Agent | `src/core/router-agent.ts` | `agentic_router` | ✅ |
 
-**Solution:** 
-- Added `requireSemanticCheck: boolean` config parameter (defaults to `false`)
-- Integrated semantic check into main verification flow via `verifyAllDeep()`
-- Semantic check failures now BLOCK step success (not just warn)
+### TF-IDF + Vector Hybrid Search (Replacing old keyword search)
 
-**Configuration:**
-```json
-// .agentic/config.json
-{
-  "requireSemanticCheck": true  // Enable strict semantic verification
-}
-```
+- **VectorStore** (`src/memory/vector-store.ts`): TF-IDF sparse retrieval with inverted index, Unicode tokenization (Cyrillic/Arabic/CJK), zero external dependencies
+- **LocalEmbedder** (`src/memory/local-embedder.ts`): Vector embeddings via OpenAI-compatible endpoint + hash-based fallback, cosine similarity
+- **MultiIndexRAG**: `lightweight` mode (TF-IDF only, `embedding: null`) or `full` mode (hybrid TF-IDF + vector, `embedding.model: "..."`)
+- Configurable weights: `keywordWeight: 0.3`, `vectorWeight: 0.7` in `.agentic/config.json`
 
-**Impact:** EvoClaw benchmark projected improvement: 38% → 55%+ success rate (+44.7%)
+### v0.3.0 — Debate Loop + Router Agent
 
-### Gap #5 Fix: Silent Error Handling ✅
+- Layer 2: agentic_debate — adversarial debate between executor and critic agents
+- Layer 5: agentic_router — keyword-first intent classification, zero LLM cost
 
-**Problem:** 21 empty catch blocks in LLM parsing - no error logging when failures occurred.
+### Stats
 
-**Solution:**
-- Added `logParseError()` helper function
-- All LLM parsing errors now logged with context
-- Opt-in debugging via `DEBUG_LLM_PARSING=true` environment variable
-
-**Usage:**
-```bash
-DEBUG_LLM_PARSING=true npm test  # Enable error logging
-```
-
-**Impact:** 100% elimination of silent failures, significantly improved debugging experience.
-
-### Test Coverage
-
-- **Before:** 489 unit tests
-- **After:** 495 unit tests + 26 integration tests = **521 total tests (100% passing)**
-- **New integration tests:** EvoClaw benchmark, error propagation, before/after comparison
-
-### Documentation
-
-See detailed reports:
-- `ANALISIS_GAP_PAPER.md` - Deep analysis vs paper (arXiv:2606.05608)
-- `LAPORAN_AKHIR_LENGKAP.md` - Complete implementation report (Indonesian)
-- `FINAL_SUMMARY.md` - Executive summary (English)
-
----
-
-## Auto-Learning Features ✨
-
-**Autonomous Level: 92%** (up from 58%) - Plugin now has a **closed self-learning loop** with automatic perception, decision, and action.
-
-### 🛡️ Auto-Hallucination Check + Blocking
-
-**Problem:** Agents hallucinated phantom files/functions but continued running, causing cascading errors.
-
-**Solution:** Automatic detection and blocking integrated into every step execution.
-
-**Configuration:**
-```json
-{
-  "autoHallucinationCheck": true,      // Auto-check after each step
-  "blockOnHallucination": false,       // Set true for strict mode
-  "hallucinationThreshold": 0.3        // 30% unverified claims = block
-}
-```
-
-**Result:** Hallucinations detected in real-time, agents blocked before cascading failures occur.
-
-### 🎯 Auto-Skill Application
-
-**Problem:** Skills were extracted and stored but required manual application.
-
-**Solution:** Automatic skill search and injection when delegating tasks.
-
-**Behavior:** When `@agentic_delegate` is called, system auto-searches skill store and injects top 3 relevant skills into agent context.
-
-**Result:** Agents automatically learn from past successes without manual intervention.
-
-### 🔄 Auto-Prompt Patching
-
-**Problem:** Prompt patches generated from error patterns but required manual approval.
-
-**Solution:** Automatic application of low-risk patches based on priority and frequency.
-
-**Auto-Apply Rules:**
-- High-priority + 2-5 occurrences → ✅ Auto-apply (new patterns)
-- Medium-priority + ≥10 occurrences → ✅ Auto-apply (proven patterns)
-- Low-priority or widespread → Manual review
-
-**Result:** System self-improves autonomously based on learned error patterns.
-
-### 📊 Complete Self-Learning Loop
-
-```
-Perception → Recording → Analysis → Decision → Action
-    ✅           ✅          ✅         ✅        ✅
-```
-
-**See:** `AUTO_LEARNING_IMPLEMENTATION.md` for complete technical details.
-
-### 🎯 Task-Aware Model Selection
-
-**Problem:** Single model used for all task types (coding, reasoning, testing) without optimization.
-
-**Solution:** Automatic task type detection + per-task-type performance tracking + capability-aware model selection.
-
-**How It Works:**
-1. **Detect Task Type:** Every step execution auto-detects task type from description (coding/reasoning/testing/documentation/debugging)
-2. **Track Performance:** Model registry tracks success rate, latency, and hallucination rate **per task type**
-3. **Select Best Model:** System auto-selects best-performing model for each task type
-
-**Task Type Detection:**
-```typescript
-// Automatic detection from step description
-"Implement user authentication" → CODING
-"Analyze distributed system tradeoffs" → REASONING  
-"Test OAuth flow with edge cases" → TESTING
-"Document REST API endpoints" → DOCUMENTATION
-"Fix memory leak in worker pool" → DEBUGGING
-```
-
-**Capability-Aware Selection:**
-```typescript
-// Example: Different models excel at different tasks
-Model A: 95% success on CODING, 60% success on REASONING
-Model B: 70% success on CODING, 92% success on REASONING
-
-// System auto-selects:
-CODING task → Model A (best coding performance)
-REASONING task → Model B (best reasoning performance)
-```
-
-**Result:** 
-- **98% autonomous** (up from 92%) - Plugin now auto-optimizes model selection per task type
-- Better task outcomes through capability-matched model selection
-- Continuous learning of model strengths/weaknesses per task category
-
-**See:** `CAPABILITY_MAP_GUIDE.md` for complete usage guide and examples.
-
----
-
-## Model Lifecycle Management 🔄
-
-**Autonomous Level: 99%** (up from 98%) - Plugin now automatically blocks, replaces, resets, and quarantines failing models.
-
-### 🚫 Auto-Blocking
-
-Models are automatically blocked when they become unreliable:
-
-**Hard Block (immediate):**
-- Reliability < 20%
-- 5+ consecutive failures
-- Hallucination rate > 50%
-
-**Soft Block (with warning):**
-- Reliability < 40%
-- 3+ consecutive failures
-- Hallucination rate > 30%
-
-**Configuration:**
-```json
-{
-  "hardBlockReliability": 0.2,
-  "softBlockReliability": 0.4,
-  "minSampleSize": 5
-}
-```
-
-### 🔄 Auto-Replacement
-
-When current model is blocked, system automatically falls back through 4 tiers:
-
-1. **Tier 1 (Healthy):** Models with 70%+ reliability
-2. **Tier 2 (Degraded):** Models with 40-70% reliability (with warning)
-3. **Tier 3 (Unstable):** Any non-blocked model (with warning)
-4. **Tier 4 (Reset):** Reset blocked model and retry (last resort)
-
-**Result:** Plugin NEVER completely fails, even with 2-3 models.
-
-### ♻️ Auto-Reset
-
-Models automatically reset their statistics:
-
-- **Time-based:** Models unused for 7+ days auto-reset (stale data)
-- **Manual:** Call `@agentic_model_reset` after model upgrade
-- **Emergency:** All models blocked → auto-reset all
-
-### 🔒 Quarantine System
-
-Models enter 30-minute quarantine after 5 consecutive failures.
-
-**Exit Criteria:**
-- Quarantine period expired (30 min)
-- 3+ consecutive successes
-- 5+ total calls
-- Hallucination rate < 20%
-
-**Result:** 
-- MTTR: 2 hours → 5 minutes
-- Automatic recovery: 0% → 95%
-- User intervention: Always → Rarely
-
-**See:** `MODEL_LIFECYCLE_ANALYSIS.md` and `MODEL_LIFECYCLE_RINGKASAN.md` for technical details.
-
----
+- **26 tools** (was 21) — 5 new Blueprint tools added
+- **548 tests, 0 failed** (was 489)
+- **v0.4.0** published to npm
 
 ## License
 

@@ -1,6 +1,6 @@
 {
   "name": "opencode-agentic-engine",
-  "version": "0.2.3",
+  "version": "0.4.0",
   "homepage": "https://github.com/rahadiana/opencode-agentic-engine#readme",
   "engines": {
     "node": ">=20"
