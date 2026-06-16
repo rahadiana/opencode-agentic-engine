@@ -2094,6 +2094,39 @@ for (const line of lines) {
   try { JSON.parse(line) } catch { assert(false, `invalid JSON: ${line.slice(0, 80)}`) }
 }
 assert(true, "all trace entries valid JSON")
+
+// 86. Gap #4 Fix: Semantic verification blocking
+console.log("\n[86] Gap #4 Fix: Semantic verification blocking")
+const verifierGap4 = new mod.Verifier()
+verifierGap4.detectLanguage(projectDir)
+const mockLLMGap4 = {
+  call: async (params) => {
+    if (params.userPrompt.includes("WRONG_LOGIC")) {
+      return { content: JSON.stringify({ passed: false, reasoning: "Logic error detected", issuesFound: ["Function returns wrong value"] }) }
+    }
+    return { content: JSON.stringify({ passed: true, reasoning: "Implementation correct", issuesFound: [] }) }
+  }
+}
+verifierGap4.setLLM(mockLLMGap4)
+
+// Test 1: Semantic check blocks when logic is wrong
+const wrongResult = await verifierGap4.verifyAllDeep("test-step", projectDir, "WRONG_LOGIC", ["src/utils.ts"], true)
+assert(wrongResult.passed === false, "semantic check blocks wrong logic when requireSemanticCheck=true")
+assert(wrongResult.checks.some(c => c.name === "semantic" && !c.passed), "semantic check failed")
+
+// Test 2: Semantic check passes when logic is correct
+const correctResult = await verifierGap4.verifyAllDeep("test-step", projectDir, "Correct implementation", ["src/utils.ts"], true)
+const semanticCheck = correctResult.checks.find(c => c.name === "semantic")
+assert(semanticCheck && semanticCheck.passed, "semantic check passed for correct logic")
+
+// Test 3: requireSemanticCheck enforcement without LLM
+const verifierNoLLM = new mod.Verifier()
+verifierNoLLM.detectLanguage(projectDir)
+const noLLMResult = await verifierNoLLM.verifyAllDeep("test-step", projectDir, "Test intent", ["src/utils.ts"], true)
+assert(noLLMResult.passed === false, "blocks when requireSemanticCheck=true but no LLM")
+assert(noLLMResult.checks.some(c => c.name === "semantic" && !c.passed), "semantic check fails without LLM when required")
+
+assert(true, "Gap #4 fix: semantic verification blocking tests passed")
 }
 
 await runAll()

@@ -33,6 +33,7 @@ export interface AgentConfig {
   maxDelegationDepth: number
   autoSkillExtract: boolean
   defaultRole: string
+  requireSemanticCheck: boolean
 }
 
 export interface StorageConfig {
@@ -72,6 +73,7 @@ export const DEFAULT_CONFIG: AgenticConfigSchema = {
     maxDelegationDepth: 3,
     autoSkillExtract: true,
     defaultRole: "developer",
+    requireSemanticCheck: false,
   },
   storage: {
     traceRetentionDays: 7,

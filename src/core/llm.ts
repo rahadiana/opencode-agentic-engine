@@ -1,5 +1,12 @@
 import { execFileSync } from "node:child_process"
 
+// Error logging helper for silent catch blocks
+function logParseError(context: string, error: unknown): void {
+  if (process.env.DEBUG_LLM_PARSING) {
+    console.error(`[LLM Parse Error] ${context}:`, error);
+  }
+}
+
 export interface LLMConfig {
   provider: "openai" | "anthropic" | "local" | "opencode"
   apiKey?: string
@@ -80,7 +87,9 @@ export class LLMEngine {
         parts.push("Relevant known skills:")
         parts.push(skills.map(s => `- ${s.name} (${(s.successRate * 100).toFixed(0)}% success rate)`).join("\n"))
       }
-    } catch { }
+    } catch (error) {
+      logParseError('buildMemoryContext', error);
+    }
     return parts.length > 0 ? `\n\n## Memory Context\n${parts.join("\n\n")}` : ""
   }
 
@@ -131,7 +140,8 @@ export class LLMEngine {
           else response = await this.callOpenAI(req)
       }
       success = !response.content.startsWith("LLM error") && !response.content.startsWith("[NO_LLM]") && !response.content.startsWith("LLM call failed")
-    } catch {
+    } catch (error) {
+      logParseError('LLM call', error);
       response = { content: "LLM call threw an exception", finishReason: "error" }
       success = false
     }
@@ -157,18 +167,22 @@ export class LLMEngine {
         if (Array.isArray(parsed)) return parsed
         if (parsed.subtasks && Array.isArray(parsed.subtasks)) return parsed.subtasks
         if (parsed.steps && Array.isArray(parsed.steps)) return parsed.steps
-      } catch { /* try extraction */ }
+      } catch (error) {
+        logParseError('decomposeTask JSON parse', error);
+      }
 
       const codeBlock = cleaned.match(/```(?:json)?\s*\n?(\[[\s\S]*?\])\s*\n?```/)
       if (codeBlock) {
-        try { const arr = JSON.parse(codeBlock[1]); if (Array.isArray(arr)) return arr } catch {}
+        try { const arr = JSON.parse(codeBlock[1]); if (Array.isArray(arr)) return arr } catch (error) { logParseError('decomposeTask codeBlock', error); }
       }
 
       const arrMatch = cleaned.match(/\[[\s\S]*?\]/)
       if (arrMatch) {
-        try { const arr = JSON.parse(arrMatch[0]); if (Array.isArray(arr)) return arr } catch {}
+        try { const arr = JSON.parse(arrMatch[0]); if (Array.isArray(arr)) return arr } catch (error) { logParseError('decomposeTask arrMatch', error); }
       }
-    } catch { /* fall through */ }
+    } catch (error) {
+      logParseError('decomposeTask', error);
+    }
 
     return []
   }
@@ -200,14 +214,18 @@ export class LLMEngine {
       try {
         const parsed = JSON.parse(cleaned)
         if (parsed.category || parsed.rootCause) return parsed
-      } catch { /* try extraction */ }
+      } catch (error) {
+        logParseError('analyzeError JSON parse', error);
+      }
 
       const codeBlock = cleaned.match(/```(?:json)?\s*\n?(\{[\s\S]*?\})\s*\n?```/)
       if (codeBlock) {
         try {
           const parsed = JSON.parse(codeBlock[1])
           if (parsed.category) return parsed
-        } catch { /* try next */ }
+        } catch (error) {
+          logParseError('analyzeError codeBlock', error);
+        }
       }
 
       const jsonMatch = cleaned.match(/\{[\s\S]*?"category"[\s\S]*?"rootCause"[\s\S]*?"fix"[\s\S]*?\}/)
@@ -215,9 +233,13 @@ export class LLMEngine {
         try {
           const parsed = JSON.parse(jsonMatch[0])
           if (parsed.category) return parsed
-        } catch { /* fall through */ }
+        } catch (error) {
+          logParseError('analyzeError jsonMatch', error);
+        }
       }
-    } catch { /* fall through */ }
+    } catch (error) {
+      logParseError('analyzeError', error);
+    }
 
     return { category: "unknown", rootCause: "Unable to analyze", fix: "Manual investigation needed" }
   }
@@ -227,13 +249,17 @@ export class LLMEngine {
     try {
       const parsed = JSON.parse(cleaned)
       if (!requiredKey || (parsed && typeof parsed === "object" && requiredKey in parsed)) return parsed as T
-    } catch { /* try next */ }
+    } catch (error) {
+      logParseError('extractJSON direct parse', error);
+    }
     const codeBlock = cleaned.match(/```(?:json)?\s*\n?(\{[\s\S]*?\})\s*\n?```/)
     if (codeBlock) {
       try {
         const parsed = JSON.parse(codeBlock[1])
         if (!requiredKey || (parsed && typeof parsed === "object" && requiredKey in parsed)) return parsed as T
-      } catch { /* try next */ }
+      } catch (error) {
+        logParseError('extractJSON codeBlock', error);
+      }
     }
     if (requiredKey) {
       const loose = cleaned.match(new RegExp(`\\{[\s\S]*?"${requiredKey}"[\\s\\S]*?\\}`))
@@ -241,14 +267,18 @@ export class LLMEngine {
         try {
           const parsed = JSON.parse(loose[0])
           if (requiredKey in parsed) return parsed as T
-        } catch { /* try next */ }
+        } catch (error) {
+          logParseError('extractJSON loose match', error);
+        }
       }
       const arrMatch = cleaned.match(/\[[\s\S]*?\]/)
       if (requiredKey === "steps" && arrMatch) {
         try {
           const arr = JSON.parse(arrMatch[0])
           if (Array.isArray(arr)) return { steps: arr, complexity: "medium" } as unknown as T
-        } catch { /* fall through */ }
+        } catch (error) {
+          logParseError('extractJSON arrMatch', error);
+        }
       }
     }
     return null
@@ -267,7 +297,9 @@ export class LLMEngine {
       })
       const parsed = this.extractJSON<{ steps: Array<{ id: string; description: string; dependsOn: string[] }>; complexity: string }>(resp.content, "steps")
       if (parsed && Array.isArray(parsed.steps) && parsed.steps.length > 0) return parsed
-    } catch { /* fall through */ }
+    } catch (error) {
+      logParseError('generatePlan', error);
+    }
     return { steps: [], complexity: "low" }
   }
 
@@ -281,7 +313,8 @@ export class LLMEngine {
     })
     try {
       return JSON.parse(resp.content)
-    } catch {
+    } catch (error) {
+      logParseError('reviewCode JSON parse', error);
       return []
     }
   }
@@ -298,7 +331,9 @@ export class LLMEngine {
       if (["architect", "developer", "qa", "coordinator", "pm"].includes(role)) {
         return role as "architect" | "developer" | "qa" | "coordinator" | "pm"
       }
-    } catch { /* fall through */ }
+    } catch (error) {
+      logParseError('suggestAgentRole', error);
+    }
     return null
   }
 
@@ -313,7 +348,8 @@ export class LLMEngine {
     })
     try {
       return JSON.parse(resp.content)
-    } catch {
+    } catch (error) {
+      logParseError('suggestSkillSteps JSON parse', error);
       return { steps: [{ action: "execute", description: taskDescription, expectedOutput: "completed" }] }
     }
   }
@@ -383,7 +419,8 @@ export class LLMEngine {
         stdio: ["ignore", "pipe", "pipe"],
       })
       return { content: output.trim() }
-    } catch {
+    } catch (error) {
+      logParseError('callLocal ollama', error);
       return this.fallbackResponse(req)
     }
   }
@@ -430,8 +467,8 @@ export class LLMEngine {
         if (text.trim()) {
           return { content: text.trim(), finishReason: "stop" }
         }
-      } catch {
-        // fall through to fallback
+      } catch (error) {
+        logParseError('callOpenCode', error);
       }
     }
 

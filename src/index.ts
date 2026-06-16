@@ -643,25 +643,19 @@ You are an AI assistant with access to 21 agentic engineering tools (agentic_pla
           if (args.success && args.autoVerify !== false) {
             response += `\n### Auto-Verify\n`
             const changedFiles = args.filesModified ?? []
-            verifyResult = changedFiles.length > 0
-              ? verifier.verifyRelated(args.stepId, projectDir, changedFiles)
-              : verifier.verifyAll(args.stepId, projectDir)
+            
+            // Use verifyAllDeep to include semantic check (Gap #4 fix)
+            const session = sessionStore.getOrCreate(context.sessionID)
+            const intent = session.plan?.intent.goal ?? args.output
+            const requireSemantic = configLoader.get().agent.requireSemanticCheck
+            verifyResult = await verifier.verifyAllDeep(args.stepId, projectDir, intent, changedFiles, requireSemantic)
+            
             if (verifyResult.passed) {
-              response += `✅ Compile + tests pass\n`
-
-              // Semantic verification (paper's verification fidelity)
-              if (changedFiles.length > 0 && verifier.hasLLM()) {
-                const session = sessionStore.getOrCreate(context.sessionID)
-                const intent = session.plan?.intent.goal ?? args.output
-                const semanticResult = await verifier.verifySemantic(args.stepId, intent, changedFiles, projectDir)
-                if (semanticResult.passed) {
-                  response += `✅ Semantic check: changes match intent\n`
-                } else {
-                  response += `⚠️ **Semantic issues found!**\n`
-                  response += `\`\`\`\n${semanticResult.output.slice(0, 400)}\n\`\`\`\n`
-                  response += `Consider reviewing the logic before proceeding.\n`
-                }
-              }
+              response += `✅ All checks passed\n`
+              // Show individual check results
+              verifyResult.checks.forEach(c => {
+                response += `  ${c.passed ? "✅" : "❌"} ${c.name}\n`
+              })
             } else {
               response += `❌ Verification failed after this step!\n`
               response += verifyResult.checks.map(c =>

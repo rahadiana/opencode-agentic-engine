@@ -138,7 +138,7 @@ export class Verifier {
     }
   }
 
-  async verifyAllDeep(stepId: string, projectDir: string, intent?: string, changedFiles?: string[]): Promise<VerificationResult> {
+  async verifyAllDeep(stepId: string, projectDir: string, intent?: string, changedFiles?: string[], requireSemanticCheck = false): Promise<VerificationResult> {
     const checks: CheckResult[] = [
       this.verifyCompile(projectDir),
     ]
@@ -147,10 +147,15 @@ export class Verifier {
     }
     checks.push(this.verifyTests(projectDir))
 
-    // Add semantic verification if LLM available + we have intent + files
     if (this.llm && intent && changedFiles && changedFiles.length > 0) {
       const semantic = await this.verifySemantic(stepId, intent, changedFiles, projectDir)
       checks.push(semantic)
+    } else if (requireSemanticCheck && changedFiles && changedFiles.length > 0) {
+      checks.push({
+        name: "semantic",
+        passed: false,
+        output: "Semantic verification required but no LLM configured. Set requireSemanticCheck=false or configure LLM.",
+      })
     }
 
     const errors = checks.filter(c => !c.passed).map(c => c.output)
