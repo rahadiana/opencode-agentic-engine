@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TELEGRAM_BOT_TOKEN="8726183460:AAFkcRxiIzsye4nIGSCz9kQx6QkZZohmWQY"
-TELEGRAM_CHAT_ID="336238760"
+TELEGRAM_BOT_TOKEN=""
+TELEGRAM_CHAT_ID=""
 PORT="${OPENCODE_SERVER_PORT:-4096}"
 TUNNEL_LOG="/tmp/cloudflared.log"
 
