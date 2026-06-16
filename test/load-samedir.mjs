@@ -68,6 +68,7 @@ const expected = [
   "agentic_message", "agentic_parallel",
   "agentic_skill", "agentic_model", "agentic_episodes", "agentic_dashboard", "agentic_guard",
   "agentic_evolve", "agentic_auto",
+  "agentic_debate", "agentic_router",
 ]
 const actual = Object.keys(hooks.tool || {})
 for (const name of expected) {

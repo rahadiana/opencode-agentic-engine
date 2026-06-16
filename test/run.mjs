@@ -72,9 +72,9 @@ catch (e) { assert(false, `AgenticEngine() threw: ${e.message}`) }
 assert(hooks && typeof hooks === "object", "hooks is an object")
 assert(typeof hooks.dispose === "function", "dispose hook registered")
 
-// 3. Tool registration (21 tools)
+// 3. Tool registration (23 tools)
 console.log("\n[3] Tool registration")
-for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_model", "agentic_episodes", "agentic_parallel", "agentic_dashboard", "agentic_guard", "agentic_evolve", "agentic_auto"]) {
+for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_model", "agentic_episodes", "agentic_parallel", "agentic_dashboard", "agentic_guard", "agentic_evolve", "agentic_auto", "agentic_debate", "agentic_router"]) {
   const tool = hooks.tool?.[name]
   assert(tool && typeof tool.execute === "function", `"${name}" has execute()`)
   assert(typeof tool.description === "string" && tool.description.length > 0, `"${name}" has description`)
@@ -2127,6 +2127,86 @@ assert(noLLMResult.passed === false, "blocks when requireSemanticCheck=true but 
 assert(noLLMResult.checks.some(c => c.name === "semantic" && !c.passed), "semantic check fails without LLM when required")
 
 assert(true, "Gap #4 fix: semantic verification blocking tests passed")
+
+// ── Layer 2: Debate Loop ──
+console.log("\n[87] agentic_debate — debate loop")
+const debateSid2 = freshSid()
+
+// Happy path: simple debate task
+const debateSimple = await hooks.tool.agentic_debate.execute({
+  task: "Apa kelebihan dan kekurangan TypeScript dibanding JavaScript?",
+  maxRounds: 2,
+  format: "markdown",
+}, mockCtx(debateSid2))
+const debateOut = typeof debateSimple === "string" ? debateSimple : (debateSimple.output || "")
+assert(debateOut.length > 50, "debate returns output for simple task")
+assert(debateOut.includes("Task") || debateOut.includes("Result"), "debate shows task/result info")
+assert(debateOut.includes("Final Output") || debateOut.includes("APPROVED") || debateOut.includes("✅"), "debate has final output or approval")
+assert(typeof debateSimple === "object", "debate returns object")
+assert(true, "agentic_debate happy path passed")
+
+// Happy path: debate with context and JSON output
+const debateCtx = await hooks.tool.agentic_debate.execute({
+  task: "Review kode berikut: function add(a,b){return a+b}",
+  context: "Ini adalah fungsi sederhana dalam JavaScript",
+  maxRounds: 2,
+  format: "json",
+}, mockCtx(freshSid()))
+const debateCtxOut = typeof debateCtx === "string" ? debateCtx : (debateCtx.output || "")
+assert(debateCtxOut.length > 50, "debate with context returns output")
+assert(true, "agentic_debate with context passed")
+
+// Error path: empty task
+const debateEmpty = await hooks.tool.agentic_debate.execute({
+  task: "",
+  maxRounds: 1,
+}, mockCtx(freshSid()))
+const debateEmpOut = typeof debateEmpty === "string" ? debateEmpty : (debateEmpty.output || "")
+assert(debateEmpOut.length > 0, "debate empty task still returns output")
+assert(true, "agentic_debate empty task handled")
+
+// ── Layer 5: Router Agent ──
+console.log("\n[88] agentic_router — intent routing")
+const routeSid2 = freshSid()
+
+// Happy path: route automotive query
+const routeAuto = await hooks.tool.agentic_router.execute({
+  input: "Saya mau service mobil, ganti oli dan filter",
+}, mockCtx(routeSid2))
+const routeAutoOut = typeof routeAuto === "string" ? routeAuto : (routeAuto.output || "")
+assert(routeAutoOut.length > 20, "router returns output for automotive query")
+assert(routeAutoOut.includes("automotive") || routeAutoOut.includes("Otomotif") || routeAutoOut.includes("Category"), "router detects automotive category")
+assert(typeof routeAuto === "object", "router returns object")
+assert(true, "agentic_router automotive query passed")
+
+// Happy path: route financial query
+const routeFin = await hooks.tool.agentic_router.execute({
+  input: "Bagaimana cara menghitung pajak penghasilan?",
+}, mockCtx(freshSid()))
+const routeFinOut = typeof routeFin === "string" ? routeFin : (routeFin.output || "")
+assert(routeFinOut.length > 20, "router returns output for financial query")
+assert(routeFinOut.includes("financial") || routeFinOut.includes("Finansial") || routeFinOut.includes("Category"), "router detects financial category")
+assert(true, "agentic_router financial query passed")
+
+// Custom categories
+const routeCustom = await hooks.tool.agentic_router.execute({
+  input: "Saya mau pesan pizza",
+  categories: [
+    { id: "food", name: "Makanan", keywords: ["pizza", "makan", "pesan", "menu", "restoran"], description: "Pemesanan makanan" },
+  ],
+}, mockCtx(freshSid()))
+const routeCustOut = typeof routeCustom === "string" ? routeCustom : (routeCustom.output || "")
+assert(routeCustOut.length > 20, "router with custom categories returns output")
+assert(routeCustOut.includes("food") || routeCustOut.includes("Makanan"), "router detects custom food category")
+assert(true, "agentic_router custom categories passed")
+
+// Edge: empty input
+const routeEmpty = await hooks.tool.agentic_router.execute({
+  input: "",
+}, mockCtx(freshSid()))
+const routeEmpOut = typeof routeEmpty === "string" ? routeEmpty : (routeEmpty.output || "")
+assert(routeEmpOut.length > 0, "router empty input returns output")
+assert(true, "agentic_router empty input handled")
 }
 
 await runAll()

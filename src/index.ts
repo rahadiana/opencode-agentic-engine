@@ -42,6 +42,8 @@ import { ModelRegistry } from "./core/model-registry.js"
 import { ConfigLoader } from "./core/config.js"
 import { PatternDiscovery } from "./drift/pattern-discovery.js"
 import { LiveEvaluator } from "./evaluation/live-evaluator.js"
+import { DebateLoop } from "./core/debate-loop.js"
+import { RouterAgent } from "./core/router-agent.js"
 
 // ── Build-time version injected by esbuild define ──
 declare const __VERSION__: string
@@ -364,6 +366,9 @@ Call the specific tool (agentic_nav, agentic_execute, etc.) directly.
     vectorStore.setLLM(llmEngine)
   }
   // Lightweight mode: tanpa embedder → VectorStore fallback ke sparse search otomatis
+
+  const debateLoop = new DebateLoop(llmEngine)
+  const routerAgent = new RouterAgent(llmEngine)
 
   contextCompressor.setLLM(llmEngine)
   verifier.detectLanguage(worktree)
@@ -3128,6 +3133,104 @@ Only include files that need changing. Return ONLY valid JSON.` + llmEngine.getM
           return { output: report, metadata: { result } }
         },
       }),
+
+      // ── Debate Loop: multi-agent analysis with executor ↔ critic ──
+      agentic_debate: tool({
+        description: "Debate loop between two agents (executor ↔ critic) for thorough analysis. Produces cleaner, more accurate results than a single LLM call. Best for complex analysis, data validation, and reviews.",
+        args: {
+          task: tool.schema.string().describe("The task or question to analyze in depth"),
+          context: tool.schema.string().optional().describe("Additional context: data, files, requirements, or previous work"),
+          maxRounds: tool.schema.number().optional().default(3).describe("Maximum debate rounds (default: 3, max: 5)"),
+          format: tool.schema.enum(["markdown", "json"]).optional().default("json").describe("Output format: structured JSON or readable markdown"),
+        },
+        async execute(args, context) {
+          llmEngine.setSessionId(context.sessionID)
+          const startTime = Date.now()
+
+          const maxRounds = Math.min(args.maxRounds ?? 3, 5)
+          const result = await debateLoop.execute({
+            task: args.task,
+            context: args.context,
+            maxRounds,
+            format: args.format ?? "json",
+          })
+
+          // Record as episode for future learning
+          try {
+            episodicStore.record(
+              context.sessionID,
+              `Debate: ${args.task.slice(0, 100)}`,
+              result.approved ? "success" : "partial",
+              [`${result.totalRounds} rounds`, `Approved: ${result.approved}`, result.revisionSummary],
+              [],
+            )
+          } catch { /* non-fatal */ }
+
+          // Try to extract skill if debate was successful
+          if (result.approved) {
+            try {
+              skillStore.extract({
+                role: "tool",
+                content: `✅ Debate completed: ${args.task}\nRounds: ${result.totalRounds}\nFinal output:\n${result.finalOutput.slice(0, 500)}`,
+              }, [args.task])
+            } catch { /* non-fatal */ }
+          }
+
+          traceLogger.log({
+            step: "execute",
+            input: `Debate: ${args.task}`,
+            output: result.approved ? "approved" : "not-approved",
+            toolUsed: "agentic_debate",
+            success: result.approved,
+            durationMs: Date.now() - startTime,
+          })
+
+          return {
+            output: `## 🗣️ Debate Result\n\n**Task:** ${args.task}\n**Status:** ${result.approved ? "✅ Approved" : "⚠️ Not fully resolved"} after ${result.totalRounds} round(s)\n**Revision:** ${result.revisionSummary}\n\n### Final Output\n\n${(args.format ?? "json") === "json" ? "```json\n" + result.finalOutput + "\n```" : result.finalOutput}`,
+            metadata: { debateResult: result },
+          }
+        },
+      }),
+
+      // ── Router Agent: lightweight intent-to-category routing ──
+      agentic_router: tool({
+        description: "Lightweight intent classifier that routes user input to the right knowledge category, RAG index, and tools. Use before searching memory to scope results to relevant domain.",
+        args: {
+          input: tool.schema.string().describe("User input or query to classify"),
+          categories: tool.schema.array(tool.schema.object({
+            id: tool.schema.string(),
+            name: tool.schema.string(),
+            keywords: tool.schema.array(tool.schema.string()),
+            description: tool.schema.string(),
+          })).optional().describe("Optional custom categories (overrides defaults)"),
+        },
+        async execute(args, context) {
+          llmEngine.setSessionId(context.sessionID)
+          const startTime = Date.now()
+
+          if (args.categories && Array.isArray(args.categories) && args.categories.length > 0) {
+            routerAgent.setCategories(args.categories as any[])
+          }
+
+          const route = await routerAgent.route(args.input)
+
+          traceLogger.log({
+            step: "execute",
+            input: `Route: ${args.input}`,
+            output: route.category,
+            toolUsed: "agentic_router",
+            success: true,
+            durationMs: Date.now() - startTime,
+          })
+
+          const confidenceBar = "█".repeat(Math.round(route.confidence * 10)) + "░".repeat(10 - Math.round(route.confidence * 10))
+
+          return {
+            output: `## 🧭 Route Result\n\n**Input:** ${args.input}\n**Intent:** ${route.intent}\n**Category:** ${route.category}\n**Confidence:** ${(route.confidence * 100).toFixed(0)}% ${confidenceBar}\n**Method:** ${route.usedLlm ? "LLM + Keywords" : "Keywords only"} (fast)\n**RAG Index:** ${route.suggestedRagIndex}\n**Reasoning:** ${route.reasoning}\n\n> 💡 Use \`agentic_episodes search "${route.suggestedRagIndex}: ${args.input}"\` to find relevant past sessions in this category.`,
+            metadata: { route },
+          }
+        },
+      }),
     },
 
     "tool.execute.after": async (toolInput: { tool: string; args: Record<string, unknown>; sessionID: string; callID: string }, _output: { title: string; output: string; metadata: unknown }) => {
@@ -3183,6 +3286,20 @@ Only include files that need changing. Return ONLY valid JSON.` + llmEngine.getM
             if (args.action === "find" || args.action === "search") {
               const found = (_output?.output || "").includes("Skill") || (_output?.output || "").includes("skill")
               liveEvaluator.feedSkillLookup(found)
+            }
+            break
+          }
+          case "agentic_debate": {
+            if (args.task) {
+              const approved = (_output?.output || "").includes("Approved")
+              liveEvaluator.feedStepResult({ stepId: `debate-${String(args.task).slice(0, 40)}`, success: approved, sessionId: toolInput.sessionID })
+            }
+            break
+          }
+          case "agentic_router": {
+            if (_output?.output && typeof _output.output === "string") {
+              const match = _output.output.match(/Category:\s*(\S+)/)
+              if (match) liveEvaluator.feedNavigation(String(args.input), 1)
             }
             break
           }
