@@ -14,12 +14,12 @@ export class PersistenceLayer {
   constructor(worktree: string) {
     this.baseDir = worktree || process.cwd()
     this.storeDir = resolve(this.baseDir, ".agentic", "store")
-    this.ensureDir()
   }
 
   save<T>(namespace: string, key: string, data: T): void {
+    try { this.ensureDir() } catch { /* non-fatal */ }
     const dir = resolve(this.storeDir, namespace)
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    if (!existsSync(dir)) { try { mkdirSync(dir, { recursive: true }) } catch { return } }
 
     const state: PersistentState<T> = {
       key,

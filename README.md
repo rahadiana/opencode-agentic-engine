@@ -45,15 +45,37 @@ Berdasarkan konsep dari paper **"The End of Software Engineering"** (arXiv:2606.
 
 ## Quick Start
 
-### Drop-in Instalasi
+### Via OpenCode CLI (Rekomendasi)
+
+```bash
+# Install global (tersedia di semua project):
+opencode plugin opencode-agentic-engine@latest --global
+
+# Atau install lokal (hanya untuk project ini):
+opencode plugin opencode-agentic-engine@latest
+```
+
+Perintah ini otomatis:
+1. Mengunduh package dari npm
+2. Mendaftarkan plugin di config OpenCode (`~/.config/opencode/opencode.jsonc` untuk global, atau `opencode.json` lokal)
+3. Plugin siap dipakai saat OpenCode di-restart
+
+### Via Config (`opencode.json`)
+
+```json
+{
+  "plugin": ["opencode-agentic-engine"]
+}
+```
+
+OpenCode akan auto-install dari npm saat startup berikutnya.
+
+### Drop-in (tanpa npm)
 
 ```bash
 # Cukup copy satu file ke project OpenCode:
 curl -L https://github.com/rahadiana/opencode-agentic-engine/releases/latest/download/index.js \
   -o .opencode/plugins/agentic-engine.js
-
-# Pastikan .opencode/package.json:
-{"name":"project","type":"module"}
 ```
 
 OpenCode auto-load plugin dari folder `.opencode/plugins/` — tidak perlu konfigurasi tambahan.

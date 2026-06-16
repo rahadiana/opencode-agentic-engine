@@ -42,8 +42,9 @@ import { PatternDiscovery } from "./drift/pattern-discovery.js"
 import { LiveEvaluator } from "./evaluation/live-evaluator.js"
 
 const createEngine: Plugin = async (input, _options) => {
-  // ── Normalize worktree: empty string → cwd (prevents "/.agentic" root crash) ──
-  const worktree = input.worktree || process.cwd()
+  // ── Normalize worktree: jangan sampai "/" (root) karena akan crash mkdir ──
+  const rawWorktree = input.worktree || process.cwd()
+  const worktree = rawWorktree === "/" ? process.cwd() : rawWorktree
 
   // ── Config (load first, everything else depends on it) ──
   const configLoader = new ConfigLoader(worktree)
@@ -252,7 +253,7 @@ You are an AI assistant with access to 21 agentic engineering tools (agentic_pla
     }
   }
 
-  await traceLogger.init()
+  try { await traceLogger.init() } catch { /* non-fatal: cannot create trace dir */ }
 
   // ── Config hot-reload propagation ──
   // Ketika config berubah di disk, module-module berikut di-update

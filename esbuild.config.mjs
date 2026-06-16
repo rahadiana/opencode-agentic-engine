@@ -10,7 +10,7 @@ const ctx = await esbuild.context({
   target: "node22",
   format: "esm",
   sourcemap: true,
-  external: [],
+  external: ["@opencode-ai/plugin"],
   banner: {
     js: "// opencode-agentic-engine v0.1.0\n// Bundled for zero-install drop-in",
   },
