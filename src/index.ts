@@ -600,7 +600,8 @@ Call the specific tool (agentic_nav, agentic_execute, etc.) directly.
 
           if (subtasks.length === 0 && args.autoDecompose !== false) {
             if (args.llmDecompose !== false) {
-              await navigator.scan(worktree)
+              const scanDir = context.directory || context.worktree || worktree
+              await navigator.scan(scanDir)
               const codebaseSummary = navigator.getSummary()
               try {
                 const llmIntent = await planner.decomposeWithLLM(llmEngine, args.goal, codebaseSummary)
@@ -690,9 +691,10 @@ Call the specific tool (agentic_nav, agentic_execute, etc.) directly.
           maxResults: tool.schema.number().optional().describe("Maximum number of files to return (default: 10)"),
           showSummary: tool.schema.boolean().optional().describe("Show full project structure summary"),
         },
-        async execute(args, _context) {
+        async execute(args, context) {
           const maxResults = args.maxResults ?? 10
-          await navigator.scan(worktree)
+          const scanDir = context.directory || context.worktree || worktree
+          await navigator.scan(scanDir)
           const files = navigator.findRelevantFiles(args.query, maxResults)
 
           // Index files into vector store for hybrid search
