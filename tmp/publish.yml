@@ -1,0 +1,167 @@
+name: Publish to npm
+
+# Run only when a version tag is pushed (e.g., v0.1.0, v1.2.3)
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  # Job 1: Build, test, and publish to npm
+  publish:
+    name: Build and Publish to npm
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write  # Allow creating GitHub releases
+      id-token: write  # Allow npm provenance
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+      
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Publishing version: $VERSION"
+      
+      - name: Verify package.json version matches tag
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${{ steps.version.outputs.version }}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "❌ Version mismatch!"
+            echo "package.json: $PKG_VERSION"
+            echo "Git tag: $TAG_VERSION"
+            exit 1
+          fi
+          echo "✅ Version verified: $PKG_VERSION"
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run TypeScript type checking
+        run: npm run typecheck
+      
+      - name: Build project
+        run: npm run build
+      
+      - name: Run full test suite
+        run: npm test
+      
+      - name: Verify build artifacts
+        run: |
+          if [ ! -f dist/index.js ]; then
+            echo "❌ Build failed: dist/index.js not found"
+            exit 1
+          fi
+          echo "✅ Build artifacts verified"
+          ls -lh dist/index.js
+      
+      - name: Test package before publishing
+        run: |
+          npm pack --dry-run
+          echo "✅ Package validation passed"
+      
+      - name: Publish to npm
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      
+      - name: Verify npm publication
+        run: |
+          sleep 10  # Wait for npm registry to update
+          npm info opencode-agentic-engine@${{ steps.version.outputs.version }}
+          echo "✅ Package published successfully!"
+  
+  # Job 2: Create GitHub release
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: publish
+    
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for changelog
+      
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Extract changelog for this version from CHANGELOG.md if it exists
+          if [ -f CHANGELOG.md ]; then
+            echo "Reading CHANGELOG.md..."
+            # TODO: Extract version-specific changelog
+            echo "changelog=See CHANGELOG.md for details" >> $GITHUB_OUTPUT
+          else
+            # Generate simple changelog from git commits
+            echo "Generating changelog from git commits..."
+            PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+            if [ -z "$PREV_TAG" ]; then
+              CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges)
+            else
+              CHANGELOG=$(git log $PREV_TAG..HEAD --pretty=format:"- %s (%h)" --no-merges)
+            fi
+            echo "changelog<<EOF" >> $GITHUB_OUTPUT
+            echo "$CHANGELOG" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          release_name: Release v${{ steps.version.outputs.version }}
+          body: |
+            ## opencode-agentic-engine v${{ steps.version.outputs.version }}
+            
+            ### Installation
+            ```bash
+            npm install opencode-agentic-engine@${{ steps.version.outputs.version }}
+            ```
+            
+            ### Changes
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ### Links
+            - [npm package](https://www.npmjs.com/package/opencode-agentic-engine/v/${{ steps.version.outputs.version }})
+            - [Documentation](https://github.com/rahadiana/opencode-agentic-engine#readme)
+            - [Changelog](https://github.com/rahadiana/opencode-agentic-engine/blob/main/CHANGELOG.md)
+          draft: false
+          prerelease: false
+  
+  # Job 3: Notify on success
+  notify:
+    name: Notify Success
+    runs-on: ubuntu-latest
+    needs: [publish, release]
+    
+    steps:
+      - name: Success summary
+        run: |
+          echo "🎉 Publication successful!"
+          echo "✅ npm package published"
+          echo "✅ GitHub release created"
+          echo "📦 Version: ${{ needs.publish.outputs.version }}"
+          echo "🔗 https://www.npmjs.com/package/opencode-agentic-engine"
