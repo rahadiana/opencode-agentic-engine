@@ -34,6 +34,9 @@ export interface AgentConfig {
   autoSkillExtract: boolean
   defaultRole: string
   requireSemanticCheck: boolean
+  autoHallucinationCheck: boolean
+  blockOnHallucination: boolean
+  hallucinationThreshold: number
 }
 
 export interface StorageConfig {
@@ -74,6 +77,9 @@ export const DEFAULT_CONFIG: AgenticConfigSchema = {
     autoSkillExtract: true,
     defaultRole: "developer",
     requireSemanticCheck: false,
+    autoHallucinationCheck: true,
+    blockOnHallucination: false,
+    hallucinationThreshold: 0.3,
   },
   storage: {
     traceRetentionDays: 7,

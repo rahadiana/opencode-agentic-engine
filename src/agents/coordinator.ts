@@ -1,4 +1,5 @@
 import { RoleRegistry, type AgentDef, type CustomAgentDef } from "./role-registry.js"
+import type { SkillStore } from "../memory/skill-store.js"
 
 export type AgentRole = "architect" | "developer" | "qa" | "coordinator" | "pm"
 
@@ -44,9 +45,11 @@ export class AgentCoordinator {
   private tasks = new Map<string, AgentTask[]>()
   private pipelineRuns = new Map<string, string[]>()
   private maxDepth = 3
+  private skillStore?: SkillStore
 
-  constructor() {
+  constructor(skillStore?: SkillStore) {
     this.registry = new RoleRegistry()
+    this.skillStore = skillStore
   }
 
   /** Set max delegation depth (from config hot-reload) */
@@ -145,6 +148,15 @@ export class AgentCoordinator {
     task.status = "pending"
     task.delegationDepth = parentDepth + 1
 
+    if (!relevantSkills && this.skillStore) {
+      const foundSkills = this.skillStore.find(task.description).slice(0, 3)
+      relevantSkills = foundSkills.map((s: any) => ({
+        name: s.name,
+        successRate: s.successRate,
+        steps: s.steps.map((step: any) => step.description).join(" → ")
+      }))
+    }
+
     const entries = this.getAllSharedMemory()
     const contextParts: string[] = []
     if (entries.length > 0) {
@@ -153,7 +165,6 @@ export class AgentCoordinator {
         .join("\n"))
     }
 
-    // Inject relevant skills into task context (Gap #4: auto-skill-loading)
     if (relevantSkills && relevantSkills.length > 0) {
       const skillsBlock = relevantSkills.slice(0, 3).map(s =>
         `- **${s.name}** (${(s.successRate * 100).toFixed(0)}% success rate)\n  Steps: ${s.steps}`

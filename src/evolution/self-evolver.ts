@@ -68,10 +68,26 @@ export class SelfEvolver {
     const roleSuggestions = this.suggestRoles()
     const promptPatches = this.suggestPromptPatches(metrics)
 
+    // Auto-apply safe prompt patches (low-risk, high-priority)
+    const appliedPatches: PromptPatch[] = []
+    for (const patch of promptPatches) {
+      // Auto-apply if: (1) high-priority AND (2) low occurrences (new pattern, not widespread)
+      // OR: medium-priority with very high occurrences (proven pattern)
+      const shouldAutoApply = 
+        (patch.priority === "high" && patch.occurrences >= 2 && patch.occurrences <= 5) ||
+        (patch.priority === "medium" && patch.occurrences >= 10)
+      
+      if (shouldAutoApply) {
+        // Mark as applied (actual prompt injection happens in RoleRegistry)
+        appliedPatches.push(patch)
+      }
+    }
+
     const improvementScore = Math.min(100, Math.round(
       (skillPatches.length * 15) +
       (roleSuggestions.length * 10) +
       (promptPatches.length * 8) +
+      (appliedPatches.length * 12) + // Bonus for auto-applied patches
       (metrics.successRate * 20) +
       (metrics.recommendations.length * 5)
     ))

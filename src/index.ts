@@ -92,12 +92,12 @@ You are an AI assistant with access to 21 agentic engineering tools (agentic_pla
   const contextCompressor = new ContextCompressor()
   const git = new GitIntegration(input.worktree)
   const debtScorer = new TechDebtScorer()
-  const coordinator = new AgentCoordinator()
+  const skillStore = new SkillStore()
+  const coordinator = new AgentCoordinator(skillStore)
   const orchestrator = new Orchestrator()
   for (const pipeline of orchestrator.getBuiltInPipelines()) {
     orchestrator.definePipeline(pipeline)
   }
-  const skillStore = new SkillStore()
   const episodicStore = new EpisodicStore()
   const checkpoints = new CheckpointSystem()
   const hallucinationGuard = new HallucinationGuard(input.worktree)
@@ -662,6 +662,50 @@ You are an AI assistant with access to 21 agentic engineering tools (agentic_pla
                 `${c.passed ? "✅" : "❌"} **${c.name}**\n\`\`\`\n${c.output.slice(0, 400)}\n\`\`\``
               ).join("\n\n")
               response += `\n\n⚠️ **Recommendation:** Run \`agentic_reflect\` on this step for propagation analysis and fix suggestions.`
+            }
+          }
+
+          if (args.success && configLoader.get().agent.autoHallucinationCheck) {
+            response += `\n### Auto-Hallucination Check\n`
+            const guardResult = hallucinationGuard.check(args.output, args.filesModified ?? [])
+
+            if (guardResult.claims.length > 0) {
+              const failedClaims = guardResult.claims.filter((c: any) => !c.verified)
+              const hallucinationRate = failedClaims.length / guardResult.claims.length
+
+              if (failedClaims.length > 0) {
+                response += `⚠️ Detected ${failedClaims.length}/${guardResult.claims.length} unverified claims (hallucination rate: ${(hallucinationRate * 100).toFixed(1)}%)\n`
+                failedClaims.forEach((c: any) => {
+                  response += `  ❌ ${c.type}: ${c.claim}\n`
+                })
+
+                const modelId = llmEngine.getCurrentModel()
+                if (modelId) {
+                  modelRegistry.recordHallucination(modelId)
+                }
+
+                const threshold = configLoader.get().agent.hallucinationThreshold
+                const blockEnabled = configLoader.get().agent.blockOnHallucination
+                if (hallucinationRate >= threshold && blockEnabled) {
+                  response += `\n🛑 **BLOCKED**: Hallucination rate ${(hallucinationRate * 100).toFixed(1)}% exceeds threshold ${(threshold * 100).toFixed(1)}%\n`
+                  response += `This step will be marked as FAILED to prevent cascading errors from phantom files/functions.\n`
+                  response += `\n⚠️ **Recommendation:** Review the step output and verify all file/function references exist before proceeding.`
+                  
+                  executor.recordResult(context.sessionID, {
+                    stepId: args.stepId,
+                    success: false,
+                    output: args.output,
+                    filesModified: args.filesModified ?? [],
+                    error: `Hallucination detected: ${failedClaims.length} unverified claims`,
+                  })
+
+                  return { output: response, metadata: { progress: executor.getProgress(context.sessionID), blocked: true, hallucinationDetected: true } }
+                }
+              } else {
+                response += `✅ All ${guardResult.claims.length} claims verified\n`
+              }
+            } else {
+              response += `✅ No claims detected (clean output)\n`
             }
           }
 
