@@ -154,10 +154,12 @@ You have access to **22 specialized agentic_* tools** designed for software engi
 
 ### BEFORE STARTING ANY TASK — Gather Knowledge First
 Your training data has a cutoff date. Before implementing:
-1. **Search skills**: \`agentic_skill find "relevant technology"\` — learn from past successes/failures
-2. **Search episodes**: \`agentic_episodes search "similar task"\` — see what worked before
-3. **Search latest docs**: \`websearch "technology X latest version 2026"\` — check current APIs for ANY ecosystem (Node, Rust, Go, Python, etc.)
-4. Only then start implementing
+1. **Check project structure** — agentic_auto already gives you a map: file types, root dirs, largest dirs
+2. **Read relevant files** — use \`read\` or \`agentic_nav\` to inspect specific files (you decide which)
+3. **Search skills**: \`agentic_skill find "relevant technology"\` — learn from past successes/failures
+4. **Search episodes**: \`agentic_episodes search "similar task"\` — see what worked before
+5. **Search latest docs**: \`websearch "technology X latest version 2026"\` — check current APIs for ANY ecosystem (Node, Rust, Go, Python, etc.)
+6. Only then start implementing
 
 ### FOR MULTI-STEP FEATURES (apps, APIs, refactors):
 Call **agentic_auto** IMMEDIATELY. It auto-gathers skills + doc context. Example:
@@ -2885,46 +2887,60 @@ Call the specific tool (agentic_nav, agentic_execute, etc.) directly.
             }
           } catch { /* non-fatal */ }
 
-          // ── 0b. Auto-gather codebase context: configs + source patterns ──
-          let codebaseContext = ""
+          // ── 0b. Project structure map (LLM decides what to read) ──
+          let structureContext = ""
           try {
-            // Dynamically detect config files from project root
-            const rootFiles = readdirSync(projectDir).filter(f => !f.startsWith(".") && !f.includes("lock"))
-            const knownConfigNames = new Set(["Makefile", "Dockerfile", "docker-compose.yml", "docker-compose.yaml", "go.mod", "Gemfile", "requirements.txt", "setup.py", "setup.cfg", "pom.xml", "build.gradle", "gradle.properties", "Podfile", "Cartfile", "Mixfile", "rebar.config", "opam", "stack.yaml", "cabal.project", "Cargo.lock", "Gemfile.lock", "composer.lock", "pnpm-lock.yaml", "yarn.lock", "bun.lock"])
-            const configExts = [".json", ".toml", ".yaml", ".yml", ".ini", ".cfg", ".conf"]
-            const configFiles = rootFiles.filter(f => knownConfigNames.has(f) || configExts.some(ext => f.endsWith(ext))).slice(0, 5)
-            for (const cfg of configFiles) {
-              const cfgPath = join(projectDir, cfg)
-              codebaseContext += `\n### ${cfg}\n\`\`\`\n${readFileSync(cfgPath, "utf-8").slice(0, 1000)}\n\`\`\`\n`
-            }
-            // Read a few source files to understand code patterns (max 5)
-            const srcDirs = ["src", "app", "lib", "server"].filter(d => existsSync(join(projectDir, d)))
-            let filesRead = 0
-            for (const dir of srcDirs) {
-              const walkDir = (d: string) => {
-                if (filesRead >= 5) return
-                try {
-                  for (const entry of readdirSync(d, { withFileTypes: true })) {
-                    if (filesRead >= 5) return
-                    const full = join(d, entry.name)
-                    if (entry.isDirectory() && !["node_modules", ".git", "dist"].includes(entry.name)) walkDir(full)
-                    else if (entry.isFile() && /\.(ts|js|tsx|jsx|mjs|rs|go|py)$/.test(entry.name)) {
-                      const content = readFileSync(full, "utf-8").slice(0, 500)
-                      if (content.trim()) {
-                        codebaseContext += `\n### ${full.replace(projectDir, ".")}\n\`\`\`\n${content}\n\`\`\`\n`
-                        filesRead++
-                      }
-                    }
-                  }
-                } catch {}
+            // Extension distribution (count files by type)
+            const extCount = new Map<string, number>()
+            const walkExt = (d: string, depth = 0): void => {
+              if (depth > 8) return
+              for (const entry of readdirSync(d, { withFileTypes: true })) {
+                if (entry.name.startsWith(".") || ["node_modules", ".git", "dist", "build", "target", "vendor"].includes(entry.name)) continue
+                const full = join(d, entry.name)
+                if (entry.isDirectory()) walkExt(full, depth + 1)
+                else if (entry.isFile()) {
+                  const idx = entry.name.lastIndexOf(".")
+                  const ext = idx > 0 ? entry.name.slice(idx) : "(no ext)"
+                  extCount.set(ext, (extCount.get(ext) || 0) + 1)
+                }
               }
-              walkDir(join(projectDir, dir))
             }
+            walkExt(projectDir)
+            const sortedExts = [...extCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15)
+            structureContext += `\n### Project File Types\n| Extension | Count |\n|-----------|-------|\n`
+            for (const [ext, count] of sortedExts) {
+              structureContext += `| \`${ext}\` | ${count} |\n`
+            }
+            // Root directory listing (top-level files + dirs)
+            const rootEntries = readdirSync(projectDir, { withFileTypes: true })
+              .filter(e => !e.name.startsWith(".") && !["node_modules", ".git", "dist", "build", "target", "vendor"].includes(e.name))
+            structureContext += `\n### Project Root\n\`\`\`\n${rootEntries.map(e => (e.isDirectory() ? "📁 " : "📄 ") + e.name).join("\n")}\n\`\`\`\n`
+            // Top 3 largest directories by file count
+            const dirCount = new Map<string, number>()
+            const walkDirCount = (d: string, depth = 0): void => {
+              if (depth > 6) return
+              for (const entry of readdirSync(d, { withFileTypes: true })) {
+                if (entry.name.startsWith(".") || ["node_modules", ".git", "dist", "build", "target", "vendor"].includes(entry.name)) continue
+                const full = join(d, entry.name)
+                if (entry.isDirectory()) walkDirCount(full, depth + 1)
+                else if (entry.isFile()) {
+                  const parent = d.replace(projectDir, "").slice(1) || "."
+                  dirCount.set(parent, (dirCount.get(parent) || 0) + 1)
+                }
+              }
+            }
+            walkDirCount(projectDir)
+            const sortedDirs = [...dirCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)
+            structureContext += `\n### Largest Directories\n| Directory | Files |\n|-----------|-------|\n`
+            for (const [dir, count] of sortedDirs) {
+              structureContext += `| \`${dir}/\` | ${count} |\n`
+            }
+            structureContext += `\n> 💡 LLM: Use \`read\` or \`agentic_nav\` to inspect specific files as needed.`
           } catch { /* non-fatal */ }
 
           // 1. Scan codebase for context
           await navigator.scan(projectDir)
-          const summary = navigator.getSummary() + knowledgeContext + codebaseContext
+          const summary = navigator.getSummary() + knowledgeContext + structureContext
 
           // 2. LLM-driven plan (fallback to template if LLM returns empty)
           let subtasks: Subtask[] = []
