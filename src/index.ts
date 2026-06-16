@@ -2888,12 +2888,14 @@ Call the specific tool (agentic_nav, agentic_execute, etc.) directly.
           // ── 0b. Auto-gather codebase context: configs + source patterns ──
           let codebaseContext = ""
           try {
-            // Read key config files
-            for (const cfg of ["package.json", "Cargo.toml", "go.mod", "pyproject.toml", "Gemfile", "composer.json"]) {
+            // Dynamically detect config files from project root
+            const rootFiles = readdirSync(projectDir).filter(f => !f.startsWith(".") && !f.includes("lock"))
+            const knownConfigNames = new Set(["Makefile", "Dockerfile", "docker-compose.yml", "docker-compose.yaml", "go.mod", "Gemfile", "requirements.txt", "setup.py", "setup.cfg", "pom.xml", "build.gradle", "gradle.properties", "Podfile", "Cartfile", "Mixfile", "rebar.config", "opam", "stack.yaml", "cabal.project", "Cargo.lock", "Gemfile.lock", "composer.lock", "pnpm-lock.yaml", "yarn.lock", "bun.lock"])
+            const configExts = [".json", ".toml", ".yaml", ".yml", ".ini", ".cfg", ".conf"]
+            const configFiles = rootFiles.filter(f => knownConfigNames.has(f) || configExts.some(ext => f.endsWith(ext))).slice(0, 5)
+            for (const cfg of configFiles) {
               const cfgPath = join(projectDir, cfg)
-              if (existsSync(cfgPath)) {
-                codebaseContext += `\n### ${cfg}\n\`\`\`\n${readFileSync(cfgPath, "utf-8").slice(0, 1000)}\n\`\`\`\n`
-              }
+              codebaseContext += `\n### ${cfg}\n\`\`\`\n${readFileSync(cfgPath, "utf-8").slice(0, 1000)}\n\`\`\`\n`
             }
             // Read a few source files to understand code patterns (max 5)
             const srcDirs = ["src", "app", "lib", "server"].filter(d => existsSync(join(projectDir, d)))
