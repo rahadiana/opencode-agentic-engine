@@ -119,9 +119,12 @@ async function autoUpdatePlugin(currentVersion: string): Promise<void> {
 }
 
 const createEngine: Plugin = async (input, _options) => {
-  // ── Normalize worktree: jangan sampai "/" (root) karena akan crash mkdir ──
-  const rawWorktree = input.worktree || process.cwd()
-  const worktree = rawWorktree === "/" ? process.cwd() : rawWorktree
+  // ── Normalize worktree: jangan sampai "/" (root) karena akan crash ──
+  // Pakai input.directory dulu (paling akurat), fallback ke worktree, lalu HOME
+  const rawWorktree = input.directory || input.worktree || process.env.HOME || process.cwd()
+  const worktree = rawWorktree === "/" || rawWorktree === "/home"
+    ? (input.directory || process.env.HOME || process.cwd())
+    : rawWorktree
 
   // ── Config (load first, everything else depends on it) ──
   const configLoader = new ConfigLoader(worktree)
