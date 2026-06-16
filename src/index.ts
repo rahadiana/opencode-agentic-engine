@@ -152,8 +152,15 @@ You have access to **22 specialized agentic_* tools** designed for software engi
 - Use **agentic_auto** instead of implementing step by step manually
 - Use **agentic_execute** instead of tracking progress manually
 
+### BEFORE STARTING ANY TASK — Gather Knowledge First
+Your training data has a cutoff date. Before implementing:
+1. **Search skills**: \`agentic_skill find "relevant technology"\` — learn from past successes/failures
+2. **Search episodes**: \`agentic_episodes search "similar task"\` — see what worked before
+3. **Check latest versions**: Use \`websearch\` for "technology X latest version 2026" to ensure you use current APIs
+4. Only then start implementing
+
 ### FOR MULTI-STEP FEATURES (apps, APIs, refactors):
-Call **agentic_auto** IMMEDIATELY. Just pass the goal. Example:
+Call **agentic_auto** IMMEDIATELY. It auto-gathers skills + doc context. Example:
 \`@agentic_auto goal="Buat aplikasi POS dengan Express dan SQLite"\`
 
 ### FOR SINGLE-STEP TASKS:
@@ -161,8 +168,8 @@ Call the specific tool (agentic_nav, agentic_execute, etc.) directly.
 
 ## Standard Workflow
 
-1. **agentic_auto** — For multi-step tasks, call this FIRST. It handles everything.
-2. OR manually: **agentic_plan** → **agentic_nav** → **agentic_execute** → **agentic_verify** → **agentic_reflect**
+1. **agentic_auto** — For multi-step tasks, call this FIRST. It auto-gathers knowledge
+2. OR manually: **agentic_skill find** → **agentic_episodes search** → **agentic_plan** → **agentic_execute** → **agentic_verify**
 
 ## Tool Reference
 
@@ -2859,9 +2866,46 @@ Call the specific tool (agentic_nav, agentic_execute, etc.) directly.
           const startTime = Date.now()
           const projectDir = ctxDir(context)
 
+          // ── 0. Auto-gather knowledge: skills + episodes + latest versions ──
+          let knowledgeContext = ""
+          try {
+            const relevantSkills = skillStore.find(args.goal)
+            if (relevantSkills.length > 0) {
+              knowledgeContext += `\n## Relevant Skills from Past Sessions\n`
+              for (const sk of relevantSkills.slice(0, 5)) {
+                knowledgeContext += `- **${sk.definition.meta.name}** (${(sk.successRate * 100).toFixed(0)}% success, ${sk.usageCount}x): ${sk.definition.workflow.steps.map(s => s.description).join(" → ")}\n`
+              }
+            }
+            const similarTasks = episodicStore.search(args.goal)
+            if (similarTasks.length > 0) {
+              knowledgeContext += `\n## Similar Past Tasks\n`
+              for (const ep of similarTasks.slice(0, 3)) {
+                knowledgeContext += `- **${ep.planGoal}** → outcome: ${ep.outcome}\n`
+              }
+            }
+            // Fetch latest versions from npm for mentioned technologies
+            const techPattern = args.goal.match(/(node\.js|express|react|vue|angular|tailwind|bootstrap|sqlite|mongodb|postgres|typescript|next\.js|nuxt|svelte|prisma|drizzle|trpc|graphql|socket\.io|docker)/gi)
+            if (techPattern) {
+              const uniqueTech = [...new Set(techPattern.map(t => t.toLowerCase().replace(/\.js$/, "").replace(/\.io$/, "")))]
+              knowledgeContext += `\n## Latest Technology Versions\n`
+              for (const tech of uniqueTech.slice(0, 4)) {
+                try {
+                  const pkgName = tech === "node" ? "node" : tech === "socket" ? "socket.io" : tech
+                  const res = await fetch(`https://registry.npmjs.org/${pkgName}/latest`, { signal: AbortSignal.timeout(3000) })
+                  if (res.ok) {
+                    const data = await res.json() as { version?: string; description?: string }
+                    if (data.version) {
+                      knowledgeContext += `- **${tech}**: v${data.version}${data.description ? ` — ${data.description.slice(0, 80)}` : ""}\n`
+                    }
+                  }
+                } catch { /* skip */ }
+              }
+            }
+          } catch { /* non-fatal */ }
+
           // 1. Scan codebase for context
           await navigator.scan(projectDir)
-          const summary = navigator.getSummary()
+          const summary = navigator.getSummary() + knowledgeContext
 
           // 2. LLM-driven plan (fallback to template if LLM returns empty)
           let subtasks: Subtask[] = []
