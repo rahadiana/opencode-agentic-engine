@@ -10,6 +10,7 @@ export interface SessionState {
   turns: ConversationTurn[]
   plan?: import("../core/intent-parser").Plan
   artifacts: Map<string, string>
+  currentTaskType?: string
 }
 
 export interface ExecutorSnapshot {

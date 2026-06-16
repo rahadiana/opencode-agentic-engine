@@ -28,6 +28,7 @@ import { TraceLogger } from "./observability/trace-logger.js"
 import { RoleRegistry, type PromptEntry } from "./agents/role-registry.js"
 import { MemorySchemaVersion, createMemoryEnvelope, parseMemoryEnvelope } from "./memory/schema-version.js"
 import { createSkillDefinition, inspectSkill, serializeSkill, deserializeSkill } from "./memory/skill-format.js"
+import { detectTaskType } from "./core/task-classifier.js"
 import { skillsToTrainingData, trainingDatasetSummary, skillToTrainingExample } from "./memory/skill-training.js"
 import { SelfEvolver } from "./evolution/self-evolver.js"
 import { ContinuousEvolution } from "./evolution/continuous-evolution.js"
@@ -114,7 +115,8 @@ You are an AI assistant with access to 21 agentic engineering tools (agentic_pla
   const modelRegistry = new ModelRegistry()
   const llmEngine = new LLMEngine()
   llmEngine.setOpencodeClient(input.client)
-  llmEngine.setModelRegistry(modelRegistry)
+    llmEngine.setModelRegistry(modelRegistry)
+    llmEngine.setSessionStore(sessionStore)
   orchestrator.setLLMEngine(llmEngine)
   errorAnalyzer.setLLM(llmEngine)
   verifier.setLLM(llmEngine)
@@ -590,6 +592,11 @@ You are an AI assistant with access to 21 agentic engineering tools (agentic_pla
           llmEngine.setSessionId(context.sessionID)
           const startTime = Date.now()
           const projectDir = ctxDir(context)
+          
+          const taskType = detectTaskType(args.output)
+          
+          const session = sessionStore.getOrCreate(context.sessionID)
+          session.currentTaskType = taskType
 
           if (args.filesModified && args.filesModified.length > 0) {
             depTracker.recordChange(context.sessionID, args.stepId, args.filesModified)

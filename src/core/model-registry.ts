@@ -7,6 +7,7 @@ export interface ModelStats {
   avgLatencyMs: number
   lastUsed: number
   consecutiveFailures: number
+  byTaskType?: Record<string, Omit<ModelStats, 'model' | 'byTaskType'>> // Per-task-type stats
 }
 
 export interface ModelScore {
@@ -43,11 +44,12 @@ export class ModelRegistry {
         avgLatencyMs: 0,
         lastUsed: 0,
         consecutiveFailures: 0,
+        byTaskType: {}, // Initialize empty per-task-type tracking
       })
     }
   }
 
-  recordCall(model: string, success: boolean, latencyMs: number): void {
+  recordCall(model: string, success: boolean, latencyMs: number, taskType?: string): void {
     this.addModel(model)
     const stat = this.stats.get(model)!
     stat.totalCalls++
@@ -64,6 +66,34 @@ export class ModelRegistry {
     stat.avgLatencyMs = stat.avgLatencyMs === 0
       ? latencyMs
       : (stat.avgLatencyMs * (stat.totalCalls - 1) + latencyMs) / stat.totalCalls
+
+    // Record per-task-type stats if taskType provided
+    if (taskType && stat.byTaskType) {
+      if (!stat.byTaskType[taskType]) {
+        stat.byTaskType[taskType] = {
+          totalCalls: 0,
+          successCalls: 0,
+          failedCalls: 0,
+          hallucinationCount: 0,
+          avgLatencyMs: 0,
+          lastUsed: 0,
+          consecutiveFailures: 0,
+        }
+      }
+      const taskStat = stat.byTaskType[taskType]
+      taskStat.totalCalls++
+      taskStat.lastUsed = Date.now()
+      if (success) {
+        taskStat.successCalls++
+        taskStat.consecutiveFailures = 0
+      } else {
+        taskStat.failedCalls++
+        taskStat.consecutiveFailures++
+      }
+      taskStat.avgLatencyMs = taskStat.avgLatencyMs === 0
+        ? latencyMs
+        : (taskStat.avgLatencyMs * (taskStat.totalCalls - 1) + latencyMs) / taskStat.totalCalls
+    }
   }
 
   recordHallucination(model: string): void {
@@ -93,6 +123,40 @@ export class ModelRegistry {
     if (hallucinationRate > 0.3 || successRate < 0.4) status = "unstable"
 
     return { model, reliability, hallucinationRate, totalCalls: stat.totalCalls, status }
+  }
+
+  getScoreByTaskType(model: string, taskType: string): ModelScore | null {
+    const stat = this.stats.get(model)
+    if (!stat || !stat.byTaskType || !stat.byTaskType[taskType]) {
+      return {
+        model,
+        reliability: 0.5,
+        hallucinationRate: 0,
+        totalCalls: 0,
+        status: "healthy",
+      }
+    }
+
+    const taskStat = stat.byTaskType[taskType]
+    if (taskStat.totalCalls === 0) {
+      return {
+        model,
+        reliability: 0.5,
+        hallucinationRate: 0,
+        totalCalls: 0,
+        status: "healthy",
+      }
+    }
+
+    const successRate = taskStat.successCalls / taskStat.totalCalls
+    const hallucinationRate = taskStat.hallucinationCount / taskStat.totalCalls
+    const reliability = Math.max(0, Math.min(1, successRate - hallucinationRate * 2))
+
+    let status: ModelScore["status"] = "healthy"
+    if (taskStat.consecutiveFailures >= this.maxConsecutiveFailures) status = "degraded"
+    if (hallucinationRate > 0.3 || successRate < 0.4) status = "unstable"
+
+    return { model, reliability, hallucinationRate, totalCalls: taskStat.totalCalls, status }
   }
 
   getAllScores(): ModelScore[] {
@@ -130,6 +194,37 @@ export class ModelRegistry {
       })
 
     return scored.map(s => s.model)
+  }
+
+  selectBestModel(taskType: string, availableModels: string[]): string {
+    if (availableModels.length === 0) return "default"
+    if (availableModels.length === 1) return availableModels[0]
+
+    const scored = availableModels
+      .map(model => {
+        const resolvedModels = this.resolveAlias(model)
+        if (resolvedModels.length === 0) return { model, score: null }
+        
+        const bestResolved = resolvedModels
+          .map(m => ({ model: m, score: this.getScoreByTaskType(m, taskType) }))
+          .sort((a, b) => {
+            if (!a.score || !b.score) return 0
+            if (a.score.status === "healthy" && b.score.status !== "healthy") return -1
+            if (a.score.status !== "healthy" && b.score.status === "healthy") return 1
+            return b.score.reliability - a.score.reliability
+          })[0]
+        
+        return bestResolved
+      })
+      .filter(s => s.score !== null)
+      .sort((a, b) => {
+        if (!a.score || !b.score) return 0
+        if (a.score.status === "healthy" && b.score.status !== "healthy") return -1
+        if (a.score.status !== "healthy" && b.score.status === "healthy") return 1
+        return b.score.reliability - a.score.reliability
+      })
+
+    return scored.length > 0 ? scored[0].model : availableModels[0]
   }
 
   getSummary(): string {

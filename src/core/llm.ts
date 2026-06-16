@@ -45,6 +45,7 @@ export class LLMEngine {
   private opencodeClient: unknown = null
   private pluginSessionId: string | null = null
   private modelRegistry?: ModelRegistry
+  private sessionStore?: import("../memory/session-store.js").SessionStore
   private memoryStores?: {
     searchEpisodes: (query: string) => Array<{ planGoal: string; outcome: string; timestamp: string }>
     findSkills: (query: string) => Array<{ name: string; successRate: number }>
@@ -108,6 +109,10 @@ export class LLMEngine {
     this.modelRegistry = registry
   }
 
+  setSessionStore(store: import("../memory/session-store.js").SessionStore): void {
+    this.sessionStore = store
+  }
+
   updateConfig(config: Partial<LLMConfig>): void {
     Object.assign(this.config, config)
   }
@@ -147,7 +152,11 @@ export class LLMEngine {
     }
 
     const latency = Date.now() - startTime
-    this.modelRegistry?.recordCall(this.getCurrentModel(), success, latency)
+    
+    const taskType = this.sessionStore && this.pluginSessionId
+      ? this.sessionStore.getOrCreate(this.pluginSessionId).currentTaskType
+      : undefined
+    this.modelRegistry?.recordCall(this.getCurrentModel(), success, latency, taskType)
 
     return response
   }
