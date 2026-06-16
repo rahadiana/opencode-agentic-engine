@@ -2885,9 +2885,44 @@ Call the specific tool (agentic_nav, agentic_execute, etc.) directly.
             }
           } catch { /* non-fatal */ }
 
+          // ── 0b. Auto-gather codebase context: configs + source patterns ──
+          let codebaseContext = ""
+          try {
+            // Read key config files
+            for (const cfg of ["package.json", "Cargo.toml", "go.mod", "pyproject.toml", "Gemfile", "composer.json"]) {
+              const cfgPath = join(projectDir, cfg)
+              if (existsSync(cfgPath)) {
+                codebaseContext += `\n### ${cfg}\n\`\`\`\n${readFileSync(cfgPath, "utf-8").slice(0, 1000)}\n\`\`\`\n`
+              }
+            }
+            // Read a few source files to understand code patterns (max 5)
+            const srcDirs = ["src", "app", "lib", "server"].filter(d => existsSync(join(projectDir, d)))
+            let filesRead = 0
+            for (const dir of srcDirs) {
+              const walkDir = (d: string) => {
+                if (filesRead >= 5) return
+                try {
+                  for (const entry of readdirSync(d, { withFileTypes: true })) {
+                    if (filesRead >= 5) return
+                    const full = join(d, entry.name)
+                    if (entry.isDirectory() && !["node_modules", ".git", "dist"].includes(entry.name)) walkDir(full)
+                    else if (entry.isFile() && /\.(ts|js|tsx|jsx|mjs|rs|go|py)$/.test(entry.name)) {
+                      const content = readFileSync(full, "utf-8").slice(0, 500)
+                      if (content.trim()) {
+                        codebaseContext += `\n### ${full.replace(projectDir, ".")}\n\`\`\`\n${content}\n\`\`\`\n`
+                        filesRead++
+                      }
+                    }
+                  }
+                } catch {}
+              }
+              walkDir(join(projectDir, dir))
+            }
+          } catch { /* non-fatal */ }
+
           // 1. Scan codebase for context
           await navigator.scan(projectDir)
-          const summary = navigator.getSummary() + knowledgeContext
+          const summary = navigator.getSummary() + knowledgeContext + codebaseContext
 
           // 2. LLM-driven plan (fallback to template if LLM returns empty)
           let subtasks: Subtask[] = []
