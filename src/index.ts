@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, cpSync
 import { execFileSync } from "node:child_process"
 import { join, dirname } from "node:path"
 import { fileURLToPath } from "node:url"
-import { tmpdir } from "node:os"
+import { tmpdir, homedir } from "node:os"
 import { IntentParser, type TaskIntent, type Subtask } from "./core/intent-parser.js"
 import { Executor } from "./core/executor.js"
 import { Verifier } from "./core/verifier.js"
@@ -131,13 +131,8 @@ const createEngine: Plugin = async (input, _options) => {
   const config = configLoader.load()
   configLoader.startWatch()
 
-  // ── Auto-register "agentic" agent if not present ──
-  const agentsDir = join(worktree, ".opencode", "agents")
-  const agenticAgentPath = join(agentsDir, "agentic.md")
-  if (!existsSync(agenticAgentPath)) {
-    try {
-      mkdirSync(agentsDir, { recursive: true })
-      writeFileSync(agenticAgentPath, `---
+  // ── Auto-register "agentic" agent in global + local agents dir ──
+  const agentContent = `---
 description: Multi-agent software engineering assistant — 22 tools for autonomous planning, execution, verification, delegation, and self-evolution.
 mode: all
 ---
@@ -208,9 +203,21 @@ Call the specific tool (agentic_nav, agentic_execute, etc.) directly.
 3. Never ask "should I..." — just call the tool
 4. If a step fails, call **agentic_reflect** before retrying
 5. After all steps done, call **agentic_verify** for final verification
-`, "utf-8")
-    } catch { /* non-fatal: agent file is optional */ }
-  }
+`
+
+  // Always write to GLOBAL agents dir (available on first run in any project)
+  try {
+    const globalAgentsDir = join(homedir(), ".config", "opencode", "agents")
+    mkdirSync(globalAgentsDir, { recursive: true })
+    writeFileSync(join(globalAgentsDir, "agentic.md"), agentContent, "utf-8")
+  } catch { /* non-fatal */ }
+
+  // Also write to PROJECT agents dir (for project-specific config)
+  try {
+    const localAgentsDir = join(worktree, ".opencode", "agents")
+    mkdirSync(localAgentsDir, { recursive: true })
+    writeFileSync(join(localAgentsDir, "agentic.md"), agentContent, "utf-8")
+  } catch { /* non-fatal: agent file is optional */ }
 
   const intentParser = new IntentParser()
   const executor = new Executor()
