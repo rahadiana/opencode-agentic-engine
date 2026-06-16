@@ -1,8 +1,10 @@
 import type { Plugin, PluginModule } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin"
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs"
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, cpSync, rmSync, mkdtempSync } from "node:fs"
 import { execFileSync } from "node:child_process"
 import { join, dirname } from "node:path"
+import { fileURLToPath } from "node:url"
+import { tmpdir } from "node:os"
 import { IntentParser, type TaskIntent, type Subtask } from "./core/intent-parser.js"
 import { Executor } from "./core/executor.js"
 import { Verifier } from "./core/verifier.js"
@@ -40,6 +42,81 @@ import { ModelRegistry } from "./core/model-registry.js"
 import { ConfigLoader } from "./core/config.js"
 import { PatternDiscovery } from "./drift/pattern-discovery.js"
 import { LiveEvaluator } from "./evaluation/live-evaluator.js"
+
+// ── Build-time version injected by esbuild define ──
+declare const __VERSION__: string
+
+/**
+ * Compare semver strings: returns true if latest > current
+ */
+function isNewerVersion(latest: string, current: string): boolean {
+  const l = latest.split(".").map(Number)
+  const c = current.split(".").map(Number)
+  for (let i = 0; i < Math.max(l.length, c.length); i++) {
+    if ((l[i] ?? 0) > (c[i] ?? 0)) return true
+    if ((l[i] ?? 0) < (c[i] ?? 0)) return false
+  }
+  return false
+}
+
+/**
+ * Auto-update: fire-and-forget. Fetch latest version from npm, download and
+ * overwrite local plugin files if newer. User must restart OpenCode to apply.
+ */
+async function autoUpdatePlugin(currentVersion: string): Promise<void> {
+  if (typeof __VERSION__ === "undefined") return
+  try {
+    const res = await fetch(
+      "https://registry.npmjs.org/opencode-agentic-engine/latest",
+      { signal: AbortSignal.timeout(5000) }
+    )
+    if (!res.ok) return
+    const data = await res.json() as { version: string }
+    const latest = data.version
+    if (!isNewerVersion(latest, currentVersion)) return
+
+    // Find own location: import.meta.url points to dist/index.js
+    const ownFile = fileURLToPath(import.meta.url)
+    const distDir = dirname(ownFile)
+    const pluginDir = dirname(distDir)
+
+    // Temp dir for npm pack
+    const tmpDir = mkdtempSync(join(tmpdir(), "opencode-agentic-engine-"))
+    try {
+      execFileSync("npm", ["pack", "opencode-agentic-engine@latest"], {
+        cwd: tmpDir,
+        stdio: "pipe",
+        timeout: 30000,
+      })
+
+      // Find tarball
+      const tarball = readdirSync(tmpDir).find(f => f.endsWith(".tgz"))
+      if (!tarball) return
+
+      // Extract
+      execFileSync("tar", ["-xzf", tarball], {
+        cwd: tmpDir,
+        stdio: "pipe",
+        timeout: 10000,
+      })
+
+      // Overwrite plugin files
+      const extractDir = join(tmpDir, "package")
+      if (existsSync(extractDir)) {
+        cpSync(extractDir, pluginDir, { recursive: true, force: true })
+      }
+
+      // Notify user (console — not visible in OpenCode chat, but shows in process stderr)
+      process.stderr.write(
+        `\n[AgenticEngine] ✅ Auto-updated v${currentVersion} → v${latest}. Restart OpenCode to apply.\n`
+      )
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
+  } catch {
+    // Silent fail — never block plugin startup
+  }
+}
 
 const createEngine: Plugin = async (input, _options) => {
   // ── Normalize worktree: jangan sampai "/" (root) karena akan crash mkdir ──
@@ -254,6 +331,9 @@ You are an AI assistant with access to 21 agentic engineering tools (agentic_pla
   }
 
   try { await traceLogger.init() } catch { /* non-fatal: cannot create trace dir */ }
+
+  // ── Auto-update: fire-and-forget version check + download ──
+  autoUpdatePlugin(__VERSION__)
 
   // ── Config hot-reload propagation ──
   // Ketika config berubah di disk, module-module berikut di-update

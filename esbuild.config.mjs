@@ -1,6 +1,9 @@
 import esbuild from "esbuild"
+import { readFileSync } from "node:fs"
 
 const watch = process.argv.includes("--watch")
+const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8"))
+const version = pkg.version
 
 const ctx = await esbuild.context({
   entryPoints: ["src/index.ts"],
@@ -11,8 +14,11 @@ const ctx = await esbuild.context({
   format: "esm",
   sourcemap: true,
   external: ["@opencode-ai/plugin"],
+  define: {
+    __VERSION__: JSON.stringify(version),
+  },
   banner: {
-    js: "// opencode-agentic-engine v0.1.0\n// Bundled for zero-install drop-in",
+    js: `// opencode-agentic-engine v${version}\n// Bundled for zero-install drop-in`,
   },
 })
 
