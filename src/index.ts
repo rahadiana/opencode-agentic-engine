@@ -1907,6 +1907,49 @@ You are an AI assistant with access to 21 agentic engineering tools (agentic_pla
         },
       }),
 
+      agentic_model_reset: tool({
+        description: "Reset model statistics to recover from degraded performance. Use 'reset' to clear stats for a specific model. Use 'reset-stale' to auto-reset models not used in 7+ days. Use 'reset-all' for emergency recovery.",
+        args: {
+          action: tool.schema.enum(["reset", "reset-stale", "reset-all"]).describe("Action: reset (single model), reset-stale (auto-detect old models), reset-all (emergency)"),
+          model: tool.schema.string().optional().describe("Model name (required for 'reset' action)"),
+          staleDays: tool.schema.number().optional().describe("Days threshold for stale detection (default: 7)"),
+        },
+        async execute(args, context) {
+          if (args.action === "reset") {
+            if (!args.model) return { output: "Provide a `model` name to reset (e.g. 'gpt-4o')." }
+            
+            const beforeScore = modelRegistry.getScore(args.model)
+            modelRegistry.resetModel(args.model)
+            const afterScore = modelRegistry.getScore(args.model)
+            
+            return { 
+              output: `✅ Reset model statistics for \`${args.model}\`\n\n**Before:** ${beforeScore ? `${(beforeScore.reliability * 100).toFixed(0)}% reliability, ${beforeScore.totalCalls} calls` : "No data"}\n**After:** ${afterScore ? `${(afterScore.reliability * 100).toFixed(0)}% reliability, ${afterScore.totalCalls} calls` : "Clean slate"}` 
+            }
+          }
+
+          if (args.action === "reset-stale") {
+            const staleDays = args.staleDays ?? 7
+            const resetModels = modelRegistry.resetStaleModels(staleDays)
+            
+            if (resetModels.length === 0) {
+              return { output: `No stale models found (threshold: ${staleDays} days unused).` }
+            }
+            
+            return { output: `✅ Reset ${resetModels.length} stale model(s):\n${resetModels.map(m => `- \`${m}\``).join("\n")}\n\nThese models had not been used in ${staleDays}+ days.` }
+          }
+
+          if (args.action === "reset-all") {
+            const allScores = modelRegistry.getAllScores()
+            for (const score of allScores) {
+              modelRegistry.resetModel(score.model)
+            }
+            return { output: `⚠️ **EMERGENCY RESET:** Cleared statistics for ${allScores.length} model(s).\n\nAll models now have clean slate. Use this only when all models are blocked.` }
+          }
+
+          return { output: "Unknown action. Use 'reset', 'reset-stale', or 'reset-all'." }
+        },
+      }),
+
       agentic_episodes: tool({
         description: "Browse cross-session memory. Search past tasks and their outcomes to learn from previous sessions. Use before planning similar tasks to avoid repeating mistakes.",
         args: {

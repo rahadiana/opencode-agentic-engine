@@ -7,7 +7,9 @@ export interface ModelStats {
   avgLatencyMs: number
   lastUsed: number
   consecutiveFailures: number
-  byTaskType?: Record<string, Omit<ModelStats, 'model' | 'byTaskType'>> // Per-task-type stats
+  consecutiveSuccesses: number
+  quarantineUntil: number
+  byTaskType?: Record<string, Omit<ModelStats, 'model' | 'byTaskType'>>
 }
 
 export interface ModelScore {
@@ -44,7 +46,9 @@ export class ModelRegistry {
         avgLatencyMs: 0,
         lastUsed: 0,
         consecutiveFailures: 0,
-        byTaskType: {}, // Initialize empty per-task-type tracking
+        consecutiveSuccesses: 0,
+        quarantineUntil: 0,
+        byTaskType: {},
       })
     }
   }
@@ -58,9 +62,20 @@ export class ModelRegistry {
     if (success) {
       stat.successCalls++
       stat.consecutiveFailures = 0
+      stat.consecutiveSuccesses++
+      
+      const score = this.getScore(model)
+      if (stat.quarantineUntil > 0 && stat.consecutiveSuccesses >= 3 && stat.totalCalls >= 5 && score && score.hallucinationRate < 0.2) {
+        stat.quarantineUntil = 0
+      }
     } else {
       stat.failedCalls++
       stat.consecutiveFailures++
+      stat.consecutiveSuccesses = 0
+      
+      if (stat.consecutiveFailures >= 5) {
+        this.enterQuarantine(model, 30)
+      }
     }
 
     stat.avgLatencyMs = stat.avgLatencyMs === 0
@@ -78,6 +93,8 @@ export class ModelRegistry {
           avgLatencyMs: 0,
           lastUsed: 0,
           consecutiveFailures: 0,
+          consecutiveSuccesses: 0,
+          quarantineUntil: 0,
         }
       }
       const taskStat = stat.byTaskType[taskType]
@@ -196,17 +213,64 @@ export class ModelRegistry {
     return scored.map(s => s.model)
   }
 
-  selectBestModel(taskType: string, availableModels: string[]): string {
+  isBlocked(model: string, config: { hardBlockReliability: number; softBlockReliability: number; minSampleSize: number }): { blocked: boolean; reason: string; severity: "hard" | "soft" | null } {
+    const stat = this.stats.get(model)
+    if (!stat) return { blocked: false, reason: "", severity: null }
+
+    if (stat.quarantineUntil > 0 && Date.now() < stat.quarantineUntil) {
+      const remainingMinutes = Math.ceil((stat.quarantineUntil - Date.now()) / (60 * 1000))
+      return { blocked: true, reason: `In quarantine for ${remainingMinutes} more minutes`, severity: "hard" }
+    }
+
+    if (stat.totalCalls < config.minSampleSize) {
+      return { blocked: false, reason: "", severity: null }
+    }
+
+    const score = this.getScore(model)
+    if (!score) return { blocked: false, reason: "", severity: null }
+
+    if (score.reliability < config.hardBlockReliability) {
+      return { blocked: true, reason: `Reliability ${(score.reliability * 100).toFixed(0)}% < ${(config.hardBlockReliability * 100).toFixed(0)}%`, severity: "hard" }
+    }
+    if (stat.consecutiveFailures >= 5) {
+      return { blocked: true, reason: `${stat.consecutiveFailures} consecutive failures`, severity: "hard" }
+    }
+    if (score.hallucinationRate > 0.5) {
+      return { blocked: true, reason: `Hallucination rate ${(score.hallucinationRate * 100).toFixed(0)}% > 50%`, severity: "hard" }
+    }
+
+    if (score.reliability < config.softBlockReliability) {
+      return { blocked: true, reason: `Reliability ${(score.reliability * 100).toFixed(0)}% < ${(config.softBlockReliability * 100).toFixed(0)}%`, severity: "soft" }
+    }
+
+    return { blocked: false, reason: "", severity: null }
+  }
+
+  selectBestModel(
+    taskType: string, 
+    availableModels: string[], 
+    blockingConfig?: { hardBlockReliability: number; softBlockReliability: number; minSampleSize: number }
+  ): string {
     if (availableModels.length === 0) return "default"
     if (availableModels.length === 1) return availableModels[0]
 
     const scored = availableModels
       .map(model => {
         const resolvedModels = this.resolveAlias(model)
-        if (resolvedModels.length === 0) return { model, score: null }
+        if (resolvedModels.length === 0) return { model, score: null, blocked: false }
         
         const bestResolved = resolvedModels
-          .map(m => ({ model: m, score: this.getScoreByTaskType(m, taskType) }))
+          .map(m => {
+            const blockStatus = blockingConfig 
+              ? this.isBlocked(m, blockingConfig)
+              : { blocked: false, reason: "", severity: null }
+            return { 
+              model: m, 
+              score: this.getScoreByTaskType(m, taskType),
+              blocked: blockStatus.blocked && blockStatus.severity === "hard"
+            }
+          })
+          .filter(s => !s.blocked)
           .sort((a, b) => {
             if (!a.score || !b.score) return 0
             if (a.score.status === "healthy" && b.score.status !== "healthy") return -1
@@ -216,7 +280,7 @@ export class ModelRegistry {
         
         return bestResolved
       })
-      .filter(s => s.score !== null)
+      .filter(s => s && s.score !== null)
       .sort((a, b) => {
         if (!a.score || !b.score) return 0
         if (a.score.status === "healthy" && b.score.status !== "healthy") return -1
@@ -225,6 +289,98 @@ export class ModelRegistry {
       })
 
     return scored.length > 0 ? scored[0].model : availableModels[0]
+  }
+
+  selectWithFallback(
+    taskType: string,
+    availableModels: string[],
+    blockingConfig: { hardBlockReliability: number; softBlockReliability: number; minSampleSize: number }
+  ): { model: string; tier: "healthy" | "degraded" | "unstable" | "reset"; warnings: string[] } {
+    if (availableModels.length === 0) {
+      return { model: "default", tier: "reset", warnings: ["No models available, using default"] }
+    }
+
+    const warnings: string[] = []
+    const categorized: { healthy: string[]; degraded: string[]; unstable: string[]; hardBlocked: string[] } = {
+      healthy: [],
+      degraded: [],
+      unstable: [],
+      hardBlocked: []
+    }
+
+    for (const model of availableModels) {
+      const blockStatus = this.isBlocked(model, blockingConfig)
+      if (blockStatus.blocked && blockStatus.severity === "hard") {
+        categorized.hardBlocked.push(model)
+        warnings.push(`${model}: HARD BLOCKED - ${blockStatus.reason}`)
+        continue
+      }
+
+      const score = this.getScore(model)
+      if (!score || score.totalCalls < blockingConfig.minSampleSize) {
+        categorized.healthy.push(model)
+      } else if (score.status === "healthy") {
+        categorized.healthy.push(model)
+      } else if (score.status === "degraded") {
+        categorized.degraded.push(model)
+      } else {
+        categorized.unstable.push(model)
+      }
+    }
+
+    if (categorized.healthy.length > 0) {
+      return { model: categorized.healthy[0], tier: "healthy", warnings }
+    }
+
+    if (categorized.degraded.length > 0) {
+      warnings.push(`Using degraded model ${categorized.degraded[0]} - all healthy models unavailable`)
+      return { model: categorized.degraded[0], tier: "degraded", warnings }
+    }
+
+    if (categorized.unstable.length > 0) {
+      warnings.push(`Using unstable model ${categorized.unstable[0]} - all healthy/degraded models unavailable`)
+      return { model: categorized.unstable[0], tier: "unstable", warnings }
+    }
+
+    const leastBadModel = availableModels[0]
+    this.resetModel(leastBadModel)
+    warnings.push(`All models blocked - reset ${leastBadModel} and retrying`)
+    return { model: leastBadModel, tier: "reset", warnings }
+  }
+
+  resetModel(model: string): void {
+    const stat = this.stats.get(model)
+    if (!stat) return
+    
+    stat.totalCalls = 0
+    stat.successCalls = 0
+    stat.failedCalls = 0
+    stat.hallucinationCount = 0
+    stat.consecutiveFailures = 0
+    stat.byTaskType = {}
+  }
+
+  resetStaleModels(staleDays: number = 7): string[] {
+    const now = Date.now()
+    const staleThreshold = staleDays * 24 * 60 * 60 * 1000
+    const resetModels: string[] = []
+
+    for (const [model, stat] of this.stats.entries()) {
+      if (stat.lastUsed > 0 && (now - stat.lastUsed) > staleThreshold) {
+        this.resetModel(model)
+        resetModels.push(model)
+      }
+    }
+
+    return resetModels
+  }
+
+  enterQuarantine(model: string, durationMinutes: number = 30): void {
+    const stat = this.stats.get(model)
+    if (!stat) return
+    
+    stat.quarantineUntil = Date.now() + (durationMinutes * 60 * 1000)
+    stat.consecutiveSuccesses = 0
   }
 
   getSummary(): string {

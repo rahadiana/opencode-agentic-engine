@@ -37,6 +37,9 @@ export interface AgentConfig {
   autoHallucinationCheck: boolean
   blockOnHallucination: boolean
   hallucinationThreshold: number
+  hardBlockReliability: number
+  softBlockReliability: number
+  minSampleSize: number
 }
 
 export interface StorageConfig {
@@ -80,6 +83,9 @@ export const DEFAULT_CONFIG: AgenticConfigSchema = {
     autoHallucinationCheck: true,
     blockOnHallucination: false,
     hallucinationThreshold: 0.3,
+    hardBlockReliability: 0.2,
+    softBlockReliability: 0.4,
+    minSampleSize: 5,
   },
   storage: {
     traceRetentionDays: 7,
