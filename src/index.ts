@@ -594,7 +594,7 @@ These tools implement the system-centric philosophy: cheap models become smart t
   }
 
   function ctxDir(context: { worktree: string; directory?: string }) {
-    return context.worktree
+    return context.directory || context.worktree
   }
 
   return {
