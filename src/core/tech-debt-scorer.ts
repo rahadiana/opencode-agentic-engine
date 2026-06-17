@@ -109,7 +109,8 @@ export class TechDebtScorer {
     let score = 0
 
     for (const [file, content] of contents) {
-      if (content.includes("any")) {
+      // Match ': any' type annotation, not just the word "any" in strings/comments
+      if (/:\s*any\b/.test(content)) {
         issues.push(`${file} uses 'any' type — replace with specific types`)
         score += 2
       }

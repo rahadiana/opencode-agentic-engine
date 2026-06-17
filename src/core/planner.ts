@@ -145,8 +145,8 @@ export class Planner {
   async decomposeWithLLM(llm: LLMEngine, goal: string, codebaseSummary: string): Promise<TaskIntent> {
     const llmPlan = await llm.generatePlan(goal, [], codebaseSummary)
     const subtasks = Array.isArray(llmPlan.steps)
-      ? llmPlan.steps.map(s => ({
-          id: s.id,
+      ? llmPlan.steps.map((s, i) => ({
+          id: s.id || `step-${i + 1}`,
           description: s.description,
           dependsOn: s.dependsOn ?? [],
           verificationCriteria: [],

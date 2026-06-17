@@ -88,17 +88,19 @@ export class EpisodicStore {
     const parsed = parseMemoryEnvelope<Episode>(envelope)
     if (!parsed || parsed.type !== "episode") return false
 
+    // Check for duplicate before importing
+    if (this.episodes.some(e => e.id === parsed.data.id)) {
+      return false
+    }
+
     if (parsed.version < MEMORY_SCHEMA_VERSION) {
       const upgraded = this.migrator.upgrade(parsed.data, parsed.version)
       this.episodes.push(upgraded)
       return true
     }
 
-    if (!this.episodes.some(e => e.id === parsed.data.id)) {
-      this.episodes.push(parsed.data)
-      return true
-    }
-    return false
+    this.episodes.push(parsed.data)
+    return true
   }
 
   exportAll(): EpisodeEnvelope[] {

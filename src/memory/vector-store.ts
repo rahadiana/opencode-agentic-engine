@@ -67,6 +67,9 @@ export class VectorStore {
    */
   index(doc: TfIdfDoc): void {
     const tokens = tokenize(doc.title + " " + doc.content + " " + doc.keywords.join(" "))
+
+    // Check if this is a re-index (replace existing doc)
+    const existing = this.docs.get(doc.id)
     this.docs.set(doc.id, { doc, tokens })
 
     const catIndex = this.invertedIndex.get(doc.category) ?? new Map()
@@ -81,7 +84,11 @@ export class VectorStore {
       }
     }
     this.invertedIndex.set(doc.category, catIndex)
-    this.docCount.set(doc.category, (this.docCount.get(doc.category) ?? 0) + 1)
+
+    // Only increment docCount if this is a NEW document (not a re-index)
+    if (!existing) {
+      this.docCount.set(doc.category, (this.docCount.get(doc.category) ?? 0) + 1)
+    }
   }
 
   /**

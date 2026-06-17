@@ -48,6 +48,9 @@ export class CodebaseNavigator {
       .split(/[\s,_\-.:/]+/)
       .filter(w => w.length > 2)
 
+    // Detect if the task is specifically about tests
+    const isTestTask = /\b(test|spec|verify|assert|qa)\b/i.test(taskDescription)
+
     const scored = this.index.modules.map(m => {
       let score = 0
       const name = m.name.toLowerCase()
@@ -60,7 +63,8 @@ export class CodebaseNavigator {
         if (m.exports.some(e => e.toLowerCase().includes(kw))) score += 8
       }
 
-      if (m.ext === ".test.ts" || m.ext === ".spec.ts") score -= 2
+      // Penalize test files only if the task is NOT about tests
+      if (!isTestTask && (m.ext === ".test.ts" || m.ext === ".spec.ts")) score -= 2
 
       return { path: m.path, score }
     })

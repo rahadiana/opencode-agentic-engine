@@ -101,14 +101,19 @@ export class Dashboard {
   }
 
   private computePeakConcurrency(traces: TraceEntry[]): number {
+    if (traces.length === 0) return 0
+    // Sort by timestamp, then use sweep line with 2-second window
+    const sorted = traces.map(t => new Date(t.timestamp).getTime()).sort((a, b) => a - b)
     let max = 0
-    for (let i = 0; i < traces.length; i++) {
-      let concurrent = 0
-      const start = new Date(traces[i].timestamp).getTime()
-      for (let j = 0; j < traces.length; j++) {
-        const t = new Date(traces[j].timestamp).getTime()
-        if (Math.abs(t - start) < 100) concurrent++
+    let concurrent = 0
+    let j = 0
+    for (let i = 0; i < sorted.length; i++) {
+      // Move window start forward (2-second window)
+      while (j < i && sorted[i] - sorted[j] > 2000) {
+        concurrent--
+        j++
       }
+      concurrent++
       max = Math.max(max, concurrent)
     }
     return max
@@ -183,14 +188,16 @@ export class Dashboard {
         lastVerifyFailed = true
         lastFailedVerifyStep = t.step
       }
-      if (lastVerifyFailed && t.step.startsWith("execute:") && t.success) {
-        anomalies.push({
-          type: "silent_failure",
-          description: `Step reported success but verification "${lastFailedVerifyStep}" had previously failed`,
-          detectedAt: t.timestamp,
-          tool: t.toolUsed,
-        })
-        lastVerifyFailed = false
+      if (t.step.startsWith("execute:") && t.success) {
+        if (lastVerifyFailed) {
+          anomalies.push({
+            type: "silent_failure",
+            description: `Step reported success but verification "${lastFailedVerifyStep}" had previously failed`,
+            detectedAt: t.timestamp,
+            tool: t.toolUsed,
+          })
+          lastVerifyFailed = false
+        }
       }
       if (t.step.startsWith("execute:") && !t.success) {
         lastVerifyFailed = false

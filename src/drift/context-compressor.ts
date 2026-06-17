@@ -23,10 +23,10 @@ export class ContextCompressor {
 
     const extracted = this.extractKeyInfo(relevantTurns)
 
-    const allDecisions = [...new Set([...decisions, ...extracted.decisions])]
-    const allFileChanges = [...new Set([...fileChanges, ...extracted.fileChanges])]
-    const allInvariants = extracted.invariants
-    const allOpenItems = extracted.openItems
+    const allDecisions = [...new Set([...decisions, ...extracted.decisions])].slice(-10)
+    const allFileChanges = [...new Set([...fileChanges, ...extracted.fileChanges])].slice(-15)
+    const allInvariants = [...new Set(extracted.invariants)].slice(-5)
+    const allOpenItems = [...new Set(extracted.openItems)].slice(-5)
 
     const summary: ContextSummary = {
       planSummary: `Goal: ${planSummary.slice(0, 200)}`,

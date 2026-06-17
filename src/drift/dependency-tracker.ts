@@ -273,11 +273,13 @@ export class DependencyTracker {
     const currentIdx = planSteps.indexOf(currentStepId)
     if (currentIdx <= 0) return []
 
+    // Build a set of step IDs that come before the current step for O(1) lookup
+    const previousStepIds = new Set(planSteps.slice(0, currentIdx))
+
     const changes = this.fileChanges.get(sessionId) ?? []
     const files = new Set<string>()
     for (const c of changes) {
-      const stepIdx = planSteps.indexOf(c.stepId)
-      if (stepIdx >= 0 && stepIdx < currentIdx) {
+      if (previousStepIds.has(c.stepId)) {
         files.add(c.file)
       }
     }

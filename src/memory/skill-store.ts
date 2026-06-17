@@ -27,7 +27,8 @@ export class SkillStore {
     const existing = [...this.skills.values()].find(s => s.definition.meta.name === name)
     if (existing) {
       existing.usageCount++
-      existing.successRate = (existing.successRate * (existing.usageCount - 1) + 1) / existing.usageCount
+      // Update success rate using incremental average: newAvg = (oldAvg * (n-1) + newValue) / n
+      existing.successRate = (existing.successRate * (existing.usageCount - 1) + 1.0) / existing.usageCount
       existing.lastUsed = new Date().toISOString()
       existing.definition.quality.usageCount = existing.usageCount
       existing.definition.quality.successRate = existing.successRate
@@ -70,7 +71,7 @@ export class SkillStore {
       .filter(s =>
         s.definition.meta.name.toLowerCase().includes(q) ||
         s.definition.trigger.pattern.toLowerCase().includes(q) ||
-        s.definition.meta.name.toLowerCase().includes(q)
+        (s.definition.trigger.keywords ?? []).some(k => k.toLowerCase().includes(q))
       )
       .sort((a, b) => b.successRate - a.successRate)
       .slice(0, 5)

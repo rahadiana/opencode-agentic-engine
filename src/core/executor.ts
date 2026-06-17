@@ -142,7 +142,7 @@ export class Executor {
       const errorCategory = this.detectErrorCategory(result.error ?? result.output)
       const maxRetries = this.getMaxRetries(errorCategory)
 
-      if (stepState.retryCount < maxRetries) {
+      if (stepState.retryCount <= maxRetries) {
         state.failedSteps.delete(result.stepId)
       } else {
         state.failedSteps.set(result.stepId, result.error ?? `Max retries (${maxRetries}) exceeded for category: ${errorCategory}`)
@@ -187,7 +187,7 @@ export class Executor {
     if (lower.includes("cannot find module") || lower.includes("module not found") || lower.includes("import") || lower.includes("require")) return "import"
     if (lower.includes("type") && (lower.includes("not assignable") || lower.includes("is not a type") || lower.includes("property") || lower.includes("does not exist"))) return "type"
     if (lower.includes("compile") || lower.includes("tsc") || lower.includes("syntax error") || lower.includes("unexpected token")) return "compile"
-    if (lower.includes("test") || lower.includes("assert") || lower.includes("expected") && lower.includes("to be") || lower.includes("expect.")) return "test"
+    if (lower.includes("test") || lower.includes("assert") || (lower.includes("expected") && lower.includes("to be")) || lower.includes("expect.")) return "test"
     if (lower.includes("timeout") || lower.includes("econnrefused") || lower.includes("etimedout") || lower.includes("network")) return "runtime"
     return "unknown"
   }

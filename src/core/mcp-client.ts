@@ -212,7 +212,7 @@ export class MCPClient {
         timeout: STDIO_TIMEOUT,
       })
 
-      const state = this.connections.get(name) || {
+      const state = {
         config,
         proc,
         tools: [] as MCPTool[],
@@ -220,7 +220,6 @@ export class MCPClient {
         connectedAt: "",
         buffer: "",
       }
-      state.proc = proc
       this.connections.set(name, state)
 
       let settled = false

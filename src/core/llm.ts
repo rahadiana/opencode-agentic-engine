@@ -298,16 +298,13 @@ export class LLMEngine {
     complexity: string
   }> {
     try {
-      const resp = await Promise.race([
-        this.call({
-          systemPrompt: `You are a software planning assistant. Generate a plan as JSON with "steps" (array of {id, description, dependsOn}) and "complexity" ("low"/"medium"/"high"). Steps IDs like "step-1", "step-2". Keep descriptions concise (max 80 chars). Max 8 steps.` + this.buildMemoryContext(goal),
-          userPrompt: `Goal: ${goal}\nCodebase: ${codebaseSummary.slice(0, 2000)}\n\nGenerate plan JSON.`,
-          jsonMode: false,
-          temperature: 0.3,
-          maxTokens: 1000,
-        }),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("LLM_TIMEOUT")), 15000)),
-      ])
+      const resp = await this.call({
+        systemPrompt: `You are a software planning assistant. Generate a plan as JSON with "steps" (array of {id, description, dependsOn}) and "complexity" ("low"/"medium"/"high"). Steps IDs like "step-1", "step-2". Keep descriptions concise (max 80 chars). Max 8 steps.` + this.buildMemoryContext(goal),
+        userPrompt: `Goal: ${goal}\nCodebase: ${codebaseSummary.slice(0, 2000)}\n\nGenerate plan JSON.`,
+        jsonMode: false,
+        temperature: 0.3,
+        maxTokens: 1000,
+      })
       const parsed = this.extractJSON<{ steps: Array<{ id: string; description: string; dependsOn: string[] }>; complexity: string }>(resp.content, "steps")
       if (parsed && Array.isArray(parsed.steps) && parsed.steps.length > 0) return parsed
     } catch (error) {
@@ -507,25 +504,32 @@ export class LLMEngine {
         stdio: ["ignore", "pipe", "pipe"],
       })
 
-      const data = JSON.parse(output)
-
-      if (data.error) {
-        return { content: `LLM error: ${data.error.message ?? JSON.stringify(data.error)}` }
+      let data: Record<string, unknown>
+      try {
+        data = JSON.parse(output)
+      } catch {
+        // Response is not JSON — return raw content
+        return { content: output.slice(0, 4096) || "LLM returned non-JSON response" }
       }
 
-      if (data.content) {
+      const d = data as Record<string, any>
+      if (d.error) {
+        return { content: `LLM error: ${d.error.message ?? JSON.stringify(d.error)}` }
+      }
+
+      if (d.content) {
         return {
-          content: typeof data.content === "string" ? data.content : data.content[0]?.text ?? JSON.stringify(data.content),
-          usage: data.usage ? { promptTokens: data.usage.input_tokens ?? 0, completionTokens: data.usage.output_tokens ?? 0 } : undefined,
-          finishReason: data.stop_reason,
+          content: typeof d.content === "string" ? d.content : d.content[0]?.text ?? JSON.stringify(d.content),
+          usage: d.usage ? { promptTokens: d.usage.input_tokens ?? 0, completionTokens: d.usage.output_tokens ?? 0 } : undefined,
+          finishReason: d.stop_reason,
         }
       }
 
-      const choice = data.choices?.[0]
+      const choice = d.choices?.[0]
       if (choice) {
         return {
           content: choice.message?.content ?? JSON.stringify(choice),
-          usage: data.usage ? { promptTokens: data.usage.prompt_tokens ?? 0, completionTokens: data.usage.completion_tokens ?? 0 } : undefined,
+          usage: d.usage ? { promptTokens: d.usage.prompt_tokens ?? 0, completionTokens: d.usage.completion_tokens ?? 0 } : undefined,
           finishReason: choice.finish_reason,
         }
       }

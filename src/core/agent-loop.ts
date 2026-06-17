@@ -165,11 +165,11 @@ export class AgentLoop {
       // LLM repair failed, but we can still try basic fixes
     }
 
-    // Compile/type/import errors are generally retryable - the step executor
-    // will try again with the error signal
+    // Only allow retry for deterministic/recoverable error categories
     if (analysis && (analysis.category === "import" || analysis.category === "compile" || analysis.category === "type")) {
       return true
     }
-    return true // always allow retry for non-fatal errors
+    // Runtime errors, test failures, and unknown errors — do not auto-retry without explicit fix
+    return false
   }
 }

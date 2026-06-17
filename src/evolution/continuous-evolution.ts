@@ -231,8 +231,8 @@ export class ContinuousEvolution {
     // Don't evolve twice in the same session
     if (this.lastEvolveSession === sessionId) return null
 
-    // Cap total evolutions to prevent infinite loops
-    if (this.evolveCount >= 5) return null
+    // Cap total evolutions to prevent infinite loops (allow up to 20 per session)
+    if (this.evolveCount >= 20) return null
 
     // Trigger 1: Degradation
     if (trend.degradationDetected) {

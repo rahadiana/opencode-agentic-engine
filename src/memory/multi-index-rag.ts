@@ -118,14 +118,15 @@ export class MultiIndexRAG {
     const index = this.indices.get(category)
     if (!index) {
       this.addCategory(category)
-      this.indices.get(category)!.episodes.push(episode)
-    } else {
-      if (!index.episodes.some(e => e.id === episode.id)) {
-        index.episodes.push(episode)
-      }
+    }
+    const targetIndex = this.indices.get(category)!
+
+    // Check for duplicate before adding
+    if (!targetIndex.episodes.some(e => e.id === episode.id)) {
+      targetIndex.episodes.push(episode)
     }
 
-    // Index into TF-IDF vector store
+    // Index into TF-IDF vector store (idempotent — re-indexing replaces old entry)
     this.vectorStore.index({
       id: `ep-${episode.id}`,
       category,
@@ -152,14 +153,15 @@ export class MultiIndexRAG {
     const index = this.indices.get(category)
     if (!index) {
       this.addCategory(category)
-      this.indices.get(category)!.skills.push(skill)
-    } else {
-      if (!index.skills.some(s => s.definition.meta.id === skill.definition.meta.id)) {
-        index.skills.push(skill)
-      }
+    }
+    const targetIndex = this.indices.get(category)!
+
+    // Check for duplicate before adding
+    if (!targetIndex.skills.some(s => s.definition.meta.id === skill.definition.meta.id)) {
+      targetIndex.skills.push(skill)
     }
 
-    // Index into TF-IDF vector store
+    // Index into TF-IDF vector store (idempotent — re-indexing replaces old entry)
     this.vectorStore.index({
       id: `sk-${skill.definition.meta.id}`,
       category,

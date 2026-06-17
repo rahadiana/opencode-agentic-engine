@@ -303,18 +303,21 @@ export class Verifier {
   verifyRelated(stepId: string, projectDir: string, changedFiles: string[]): VerificationResult {
     if (this.detectedLang === "unknown") this.detectLanguage(projectDir)
     const lang = this.detectedLang
-    const config = LANGUAGE_CONFIGS[lang] ?? LANGUAGE_CONFIGS.typescript
+    const config = LANGUAGE_CONFIGS[lang] ?? LANGUAGE_CONFIGS.unknown
 
     const checks: CheckResult[] = [this.verifyCompile(projectDir)]
 
-    const isTestFile = (f: string): boolean => config.testFileExts.some(ext => {
-      if (ext.startsWith("test_")) {
-        const basename = f.split("/").pop() ?? f
-        return basename.startsWith("test_")
-      }
-      if (ext.startsWith("_test.")) return f.endsWith(ext)
-      return f.endsWith(ext)
-    })
+    const isTestFile = (f: string): boolean => {
+      if (config.testFileExts.length === 0) return false
+      return config.testFileExts.some(ext => {
+        if (ext.startsWith("test_")) {
+          const basename = f.split("/").pop() ?? f
+          return basename.startsWith("test_")
+        }
+        if (ext.startsWith("_test.")) return f.endsWith(ext)
+        return f.endsWith(ext)
+      })
+    }
 
     const testFiles = changedFiles.filter(f => isTestFile(f))
     const sourceFiles = changedFiles.filter(f =>

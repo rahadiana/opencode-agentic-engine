@@ -164,7 +164,7 @@ Return your analysis as JSON with:
       ? `Cross-validation passed: ${allStageResults.size} stages reviewed, no critical issues`
       : `Cross-validation found ${issues.length} issue(s): ${issues.filter(i => i.severity === "error").length} error(s), ${issues.filter(i => i.severity === "warning").length} warning(s)`
 
-    return { stage: targetRole, targetStage: targetRole, issues, passed, summary }
+    return { stage: targetRole, targetStage: "<all>", issues, passed, summary }
   }
 
   buildContextForRole(role: string, runId: string, sharedMemory: SharedMemoryEntry[]): string {

@@ -139,23 +139,22 @@ export class ParallelExecutor {
       }
     }
 
-    // Group steps that have no shared dependencies (can truly run in parallel)
+    // Group steps by their dependency set (steps with same deps can run in parallel)
     const groups = new Map<string, number>()
     let groupId = 0
 
     for (const step of ready) {
-      const depKey = [...step.dependsOn].sort().join(",")
-      const group = groups.get(depKey)
-      if (group !== undefined) {
-        groups.set(step.id, group)
-      } else {
+      const depKey = [...step.dependsOn].sort().join(",") || "__root__"
+      if (!groups.has(depKey)) {
         groups.set(depKey, groupId)
-        groups.set(step.id, groupId)
         groupId++
       }
     }
 
-    return ready.map(s => ({ taskId: s.id, parallelGroup: groups.get(s.id) ?? 0 }))
+    return ready.map(s => {
+      const depKey = [...s.dependsOn].sort().join(",") || "__root__"
+      return { taskId: s.id, parallelGroup: groups.get(depKey) ?? 0 }
+    })
   }
 
   detectConflicts(parallelTasks: string[], modifiedFiles: Map<string, string[]>): Array<{ taskA: string; taskB: string; conflictingFile: string }> {
