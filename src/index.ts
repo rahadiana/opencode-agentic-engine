@@ -3390,35 +3390,32 @@ agentic_status
           // ═══════════════════════════════════════════════
           const fileContents: Record<string, string> = {}
           for (const f of relevantFiles) {
-            try { fileContents[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 1000) } catch { /* skip */ }
+            try { fileContents[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 300) } catch { /* skip */ }
           }
 
-          const stepDescriptions = activeSteps.map((s, i) => `${i + 1}. ${s.id}: ${s.description}`).join("\n")
           const filesBlock = Object.entries(fileContents)
             .map(([p, c]) => `### ${p}\n\`\`\`\n${c}\n\`\`\``).join("\n\n")
-          const memoryBlock = memoryContexts.length > 0 ? `\n\n## Past Similar Tasks\n${memoryContexts.join("\n")}` : ""
-          const skillBlock = skillContexts.length > 0 ? `\n\n## Relevant Skills\n${skillContexts.join("\n")}` : ""
+          const contextHints = [...memoryContexts.slice(0, 2), ...skillContexts.slice(0, 1)].join("; ")
 
-          // Architecture-first prompt — compact: design -> code -> self-review
-          const systemPrompt = `Senior engineer. Process: 1) design structure/interfaces 2) write COMPLETE files 3) self-check.
+          // Super-compact prompt — minimal token waste
+          const systemPrompt = `Senior engineer. Write COMPLETE files.
 
 FILE: path/to/file.ext
 \`\`\`language
-... complete content ...
+... code ...
 \`\`\`
 
-RULES:
-- COMPLETE files only (no diffs)
-- TypeScript ESM imports (.js)
-- Match existing patterns
-- Valid imports (no hallucinated deps)
-- NO_CHANGES if nothing to change`
+Rules: complete files only · ESM imports (.js) · match existing patterns · valid imports · NO_CHANGES if nothing to change`
 
-          const userPrompt = `## Goal\n${args.goal}${args.constraints?.length ? `\n\n## Constraints\n${args.constraints.join("\n")}` : ""}\n\n## Plan\n${stepDescriptions}${memoryBlock}${skillBlock}\n\n## Current Code\n${filesBlock || "(new project)"}\n\n## Codebase\n${codebaseSummary.slice(0, 500)}\n\nGenerate all file changes.`
+          const userPrompt = `${args.goal}${args.constraints?.length ? `\nConstraints: ${args.constraints.join(", ")}` : ""}${contextHints ? `\nContext: ${contextHints}` : ""}\n\nCurrent files:\n${filesBlock || "(new project)"}\n\nCodebase: ${codebaseSummary.slice(0, 200)}\n\nGenerate file changes.`
+
+          // Adaptive maxTokens: simple task = 2048, complex = 4096
+          const isSimple = args.goal.length < 80 && activeSteps.length < 3
+          const maxTokens = isSimple ? 2048 : 4096
 
           const llmResult = await llmEngine.call({
             systemPrompt, userPrompt,
-            temperature: 0.2, maxTokens: 4096,
+            temperature: 0.2, maxTokens,
           })
 
           const output = llmResult.content || ""
