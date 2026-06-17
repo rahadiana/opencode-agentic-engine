@@ -144,8 +144,8 @@ export class LocalEmbedder {
       }
     }
 
-    // Fall back to individual hash embeddings
-    return texts.map(t => this.embed(t) as unknown as EmbeddingResult)
+    // Fall back to individual hash embeddings (await each to resolve Promises)
+    return Promise.all(texts.map(t => this.embed(t)))
   }
 
   private async remoteEmbed(text: string): Promise<EmbeddingResult> {

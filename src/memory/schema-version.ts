@@ -32,6 +32,12 @@ export class MemorySchemaVersion {
   }
 
   registerMigration(migration: SchemaMigration): void {
+    // Validate: no branching migrations (only one migration per source version)
+    const existingFromSame = this.migrations.filter(m => m.from === migration.from)
+    if (existingFromSame.length > 0 && existingFromSame.some(m => m.to !== migration.to)) {
+      console.warn(`SchemaMigrator: branching migration detected from v${migration.from} — skipping. Existing: v${migration.from}->v${existingFromSame[0].to}, attempted: v${migration.from}->v${migration.to}`)
+      return
+    }
     const exists = this.migrations.some(m => m.from === migration.from && m.to === migration.to)
     if (!exists) {
       this.migrations.push(migration)
@@ -41,11 +47,13 @@ export class MemorySchemaVersion {
 
   upgrade<T>(data: T, currentVersion: number): T {
     let result = data
-    for (const m of this.migrations) {
-      if (m.from === currentVersion) {
-        result = m.apply(result) as T
-        currentVersion = m.to
-      }
+    // Apply migrations in chain until we reach the latest version
+    let maxIterations = 100 // safety limit
+    while (maxIterations-- > 0) {
+      const m = this.migrations.find(m => m.from === currentVersion)
+      if (!m) break
+      result = m.apply(result) as T
+      currentVersion = m.to
     }
     return result
   }

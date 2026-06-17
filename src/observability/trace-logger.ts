@@ -75,18 +75,19 @@ export class TraceLogger {
   async flush(): Promise<void> {
     if (this.buffer.length === 0) return
 
-    const snapshot = [...this.buffer]
+    // Atomically swap buffer to prevent duplicate entries during async write
+    const snapshot = this.buffer
+    this.buffer = []
     const lines = snapshot.map(e => JSON.stringify(e)).join("\n") + "\n"
 
     try {
       await appendFile(this.logPath, lines)
-      this.buffer = this.buffer.slice(snapshot.length)
     } catch {
       try {
         await writeFile(this.logPath, lines)
-        this.buffer = this.buffer.slice(snapshot.length)
       } catch {
-        // Silently fail — data retained in buffer for next flush
+        // Write failed — re-add entries to buffer for next flush
+        this.buffer = [...snapshot, ...this.buffer]
       }
     }
   }

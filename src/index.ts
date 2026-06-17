@@ -1125,10 +1125,11 @@ agentic_status
           const planSteps = session.plan?.intent.subtasks.map(s => s.id) ?? []
           const propAnalysis = depTracker.analyzeErrorPropagation(context.sessionID, args.stepId, errorText, planSteps)
 
+          const maxRetries = executor.getMaxRetries(analysis.category)
           let output = `## 🔍 Error Analysis: Step "${args.stepId}"\n\n`
           output += `**Category:** \`${analysis.category}\`\n`
           output += `**Severity:** ${analysis.severity}\n`
-          output += `**Retry #${retriesUsed}/3**\n\n`
+          output += `**Retry #${retriesUsed}/${maxRetries}**\n\n`
           output += `### Root Cause\n${analysis.likelyRootCause}\n\n`
 
           if (propAnalysis.likelyCulprit || propAnalysis.propagationPath.length > 0) {
@@ -1158,7 +1159,7 @@ agentic_status
           }
 
           if (canRetry) {
-            output += `\n---\n🔄 **${3 - retriesUsed} retries left.** Fix and call \`agentic_execute\` to retry.`
+            output += `\n---\n🔄 **${maxRetries - retriesUsed} retries left.** Fix and call \`agentic_execute\` to retry.`
           } else {
             output += `\n---\n🛑 **No retries remaining.** Consider adding a new plan step for this fix.`
           }

@@ -357,6 +357,8 @@ export class ModelRegistry {
     stat.failedCalls = 0
     stat.hallucinationCount = 0
     stat.consecutiveFailures = 0
+    stat.consecutiveSuccesses = 0
+    stat.quarantineUntil = 0
     stat.byTaskType = {}
   }
 

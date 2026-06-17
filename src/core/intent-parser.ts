@@ -56,6 +56,30 @@ export class IntentParser {
       }
     }
 
+    // Detect circular dependencies using DFS
+    const depMap = new Map(plan.intent.subtasks.map(s => [s.id, s.dependsOn]))
+    const visited = new Set<string>()
+    const inStack = new Set<string>()
+
+    const hasCycle = (node: string): boolean => {
+      if (inStack.has(node)) return true
+      if (visited.has(node)) return false
+      visited.add(node)
+      inStack.add(node)
+      for (const dep of depMap.get(node) ?? []) {
+        if (ids.has(dep) && hasCycle(dep)) return true
+      }
+      inStack.delete(node)
+      return false
+    }
+
+    for (const step of plan.intent.subtasks) {
+      if (hasCycle(step.id)) {
+        errors.push(`Circular dependency detected involving step "${step.id}"`)
+        break
+      }
+    }
+
     if (plan.intent.subtasks.length === 0) {
       errors.push("Plan has no subtasks")
     }

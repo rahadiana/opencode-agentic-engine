@@ -69,9 +69,10 @@ export class CheckpointSystem {
       })
     }
 
-    // Critical infrastructure
+    // Critical infrastructure — only block actual config/secret files, not source code that happens to have "config" in the name
+    const configPatterns = [/\.env(\..*)?$/i, /credentials/i, /secret/i, /config\.(json|yaml|yml|toml|ini|conf|cfg)$/i, /\.config\.(js|ts|mjs|cjs)$/i]
     for (const file of filesModified) {
-      if (file.includes("config") || file.includes("env") || file.includes("secret") || file.includes(".env") || file.includes("credentials")) {
+      if (configPatterns.some(p => p.test(file))) {
         results.push({
           id: `${stepId}-config-${file.replace(/[^a-zA-Z0-9]/g, "-")}`,
           type: "block",

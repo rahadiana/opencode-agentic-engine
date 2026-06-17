@@ -179,7 +179,7 @@ export class SelfEvolver {
       totalSteps,
       successRate: total > 0 ? done / total : 0,
       retryRate: retryFraction,
-      avgRetriesPerFailure: failed > 0 ? (totalSteps - done) / failed : 0,
+      avgRetriesPerFailure: failed > 0 ? failedSteps / failed : 0,
       topErrorCategories: topErrors,
       skillEffectiveness: skillEff,
       toolUsage: toolStats,
