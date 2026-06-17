@@ -93,7 +93,7 @@ export class AgentLoop {
               const analysis = await errorAnalyzer.analyzeDeep(stepOutput, result.filesModified)
               this.observers.forEach(o => o.onStepComplete(nextStep.id, false, analysis.suggestedFix))
 
-              if (!this.config.autoRetry) break
+              if (!this.config.autoRetry) { retryCount++; break }
 
               const repairResult = await this.attemptRepair(nextStep, stepOutput, analysis, fixExecutor)
               if (!repairResult) {

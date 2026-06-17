@@ -210,7 +210,7 @@ export class PatternDiscovery {
         sessionCount: data.sessions.size,
         totalOccurrences: data.count,
         sessionAffinity: totalSessions > 0 ? data.sessions.size / totalSessions : 0,
-        lastOccurrence: new Date(data.lastTimestamp).toISOString(),
+        lastOccurrence: data.lastTimestamp > 0 ? new Date(data.lastTimestamp).toISOString() : new Date().toISOString(),
         suggestion: this.suggestErrorFix(category),
         sampleSessions: [...data.sessions].slice(0, 3),
       })

@@ -209,8 +209,16 @@ export class MCPClient {
     return new Promise((resolve, reject) => {
       const proc = spawn(config.command!, config.args ?? [], {
         stdio: ["pipe", "pipe", "pipe"],
-        timeout: STDIO_TIMEOUT,
       })
+
+      // Manual timeout since spawn() ignores timeout option
+      const timeoutId = setTimeout(() => {
+        if (!settled) {
+          settled = true
+          try { proc.kill() } catch { /* already dead */ }
+          reject(new Error(`MCP stdio connection timed out after ${STDIO_TIMEOUT}ms`))
+        }
+      }, STDIO_TIMEOUT)
 
       const state = {
         config,
@@ -311,6 +319,7 @@ export class MCPClient {
           setTimeout(() => {
             if (!settled) {
               settled = true
+              clearTimeout(timeoutId)
               resolve(state.tools.length > 0 ? state.tools : [])
             }
           }, STDIO_TIMEOUT)
@@ -343,32 +352,49 @@ export class MCPClient {
 
       let settled = false
       let resultBuffer = ""
+      let braceDepth = 0
+      let inString = false
+      let escapeNext = false
 
       const onData = (data: Buffer) => {
         const chunk = data.toString()
         resultBuffer += chunk
-        const lines = resultBuffer.split("\n")
 
-        for (const line of lines) {
-          if (!line.trim()) continue
-          try {
-            const msg = JSON.parse(line)
-            if (msg.id === callId) {
-              cleanup()
-              if (msg.error) {
-                reject(new Error(msg.error.message || String(msg.error)))
-              } else {
-                resolve(msg.result?.content || msg.result || null)
+        // Find complete JSON objects using brace counting (handles newlines in content)
+        let i = 0
+        while (i < resultBuffer.length) {
+          const ch = resultBuffer[i]
+          if (escapeNext) {
+            escapeNext = false
+          } else if (ch === "\\" && inString) {
+            escapeNext = true
+          } else if (ch === '"') {
+            inString = !inString
+          } else if (!inString) {
+            if (ch === "{") braceDepth++
+            else if (ch === "}") {
+              braceDepth--
+              if (braceDepth === 0) {
+                // Found a complete JSON object
+                const candidate = resultBuffer.slice(0, i + 1)
+                resultBuffer = resultBuffer.slice(i + 1)
+                i = -1 // Reset loop
+                try {
+                  const msg = JSON.parse(candidate)
+                  if (msg.id === callId) {
+                    cleanup()
+                    if (msg.error) {
+                      reject(new Error(msg.error.message || String(msg.error)))
+                    } else {
+                      resolve(msg.result?.content || msg.result || null)
+                    }
+                    return
+                  }
+                } catch { /* not valid JSON, continue */ }
               }
-              return
             }
-          } catch { /* continue */ }
-        }
-
-        // Keep incomplete last line
-        const lastNewline = resultBuffer.lastIndexOf("\n")
-        if (lastNewline >= 0) {
-          resultBuffer = resultBuffer.slice(lastNewline + 1)
+          }
+          i++
         }
       }
 

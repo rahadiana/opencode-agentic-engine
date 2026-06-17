@@ -143,7 +143,7 @@ export class Executor {
       const errorCategory = this.detectErrorCategory(result.error ?? result.output)
       const maxRetries = this.getMaxRetries(errorCategory)
 
-      if (stepState.retryCount <= maxRetries) {
+      if (stepState.retryCount < maxRetries) {
         state.failedSteps.delete(result.stepId)
       } else {
         state.failedSteps.set(result.stepId, result.error ?? `Max retries (${maxRetries}) exceeded for category: ${errorCategory}`)

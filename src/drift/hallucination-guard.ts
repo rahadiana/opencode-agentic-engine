@@ -199,10 +199,12 @@ export class HallucinationGuard {
   private functionExists(funcName: string, file: string, _knownFiles: string[]): boolean {
     try {
       const content = readFileSync(file, "utf-8")
+      // Escape regex special characters to prevent crash on names like "$parse" or "get.value"
+      const escaped = funcName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
       const patterns = [
-        new RegExp(`(?:function|const|let|var|export\\s+(?:const|function|class|default|async\\s+function))\\s+${funcName}\\b`),
-        new RegExp(`${funcName}\\s*[=(:]`),
-        new RegExp(`(?:async\\s+)?${funcName}\\s*\\(`),
+        new RegExp(`(?:function|const|let|var|export\\s+(?:const|function|class|default|async\\s+function))\\s+${escaped}\\b`),
+        new RegExp(`${escaped}\\s*[=(:]`),
+        new RegExp(`(?:async\\s+)?${escaped}\\s*\\(`),
       ]
       return patterns.some(p => p.test(content))
     } catch {
