@@ -187,7 +187,7 @@ await hooks.tool.agentic_plan.execute({
   ],
 }, mockCtx(eid))
 await hooks.tool.agentic_execute.execute({
-  stepId: "ft1", success: true, output: "Created types", filesModified: ["src/types.ts"],
+  stepId: "ft1", success: true, autoVerify: false, output: "Created types", filesModified: ["src/types.ts"],
 }, mockCtx(eid))
 const stat = await hooks.tool.agentic_status.execute({}, mockCtx(eid))
 const statOut = typeof stat === "string" ? stat : stat.output
@@ -204,7 +204,7 @@ await hooks.tool.agentic_plan.execute({
   ],
 }, mockCtx(epid))
 await hooks.tool.agentic_execute.execute({
-  stepId: "ep1", success: true, output: "Done ep1", filesModified: ["src/module.ts"],
+  stepId: "ep1", success: true, autoVerify: false, output: "Done ep1", filesModified: ["src/module.ts"],
 }, mockCtx(epid))
 const failExec = await hooks.tool.agentic_execute.execute({
   stepId: "ep2", success: false, output: "Error referencing module.ts", error: "Cannot resolve import",
@@ -235,7 +235,7 @@ await hooks.tool.agentic_plan.execute({
 const planSteps = ["plan-types", "plan-impl", "plan-tests"]
 for (const stepId of planSteps) {
   await hooks.tool.agentic_execute.execute({
-    stepId, success: true, output: `Done ${stepId}`,
+    stepId, success: true, autoVerify: false, output: `Done ${stepId}`,
     filesModified: [`src/${stepId}.ts`],
   }, mockCtx(rtid))
 }
@@ -390,7 +390,7 @@ assert(vOut.includes("Analysis") || vOut.includes("Passed") || vOut.includes("Fa
 console.log("\n[20] agentic_context — view + compress")
 const ctxCtx = mockCtx(freshSid())
 await hooks.tool.agentic_plan.execute({ goal: "Context test", subtasks: [{ id: "c1", description: "Context step", dependsOn: [] }] }, ctxCtx)
-await hooks.tool.agentic_execute.execute({ stepId: "c1", success: true, output: "Done context", filesModified: ["src/ctx.ts"] }, ctxCtx)
+await hooks.tool.agentic_execute.execute({ stepId: "c1", success: true, autoVerify: false, output: "Done context", filesModified: ["src/ctx.ts"] }, ctxCtx)
 const ctxView = await hooks.tool.agentic_context.execute({ action: "view" }, ctxCtx)
 const cvOut = typeof ctxView === "string" ? ctxView : ctxView.output
 assert(cvOut.includes("Turns") || cvOut.includes("Context"), "context view shows stats")
@@ -402,7 +402,7 @@ assert(ccOut.includes("Compressed") || ccOut.includes("token"), "context compres
 console.log("\n[21] agentic_snapshot — save + list")
 const snapCtx = mockCtx(freshSid())
 await hooks.tool.agentic_plan.execute({ goal: "Snapshot test", subtasks: [{ id: "sn1", description: "Snap", dependsOn: [] }] }, snapCtx)
-await hooks.tool.agentic_execute.execute({ stepId: "sn1", success: true, output: "Done snap", filesModified: ["src/snap.ts"] }, snapCtx)
+await hooks.tool.agentic_execute.execute({ stepId: "sn1", success: true, autoVerify: false, output: "Done snap", filesModified: ["src/snap.ts"] }, snapCtx)
 const snapSave = await hooks.tool.agentic_snapshot.execute({ action: "save", label: "after-1" }, snapCtx)
 const ssOut = typeof snapSave === "string" ? snapSave : snapSave.output
 assert(ssOut.includes("Saved") || ssOut.includes("Snapshot"), "snapshot saved")
@@ -415,7 +415,7 @@ console.log("\n[22] agentic_pr — generate PR")
 const prCtx = mockCtx(freshSid())
 await hooks.tool.agentic_plan.execute({ goal: "Add login validation", subtasks: [{ id: "pr1", description: "Types", dependsOn: [] }, { id: "pr2", description: "Impl", dependsOn: ["pr1"] }] }, prCtx)
 for (const s of ["pr1", "pr2"]) {
-  await hooks.tool.agentic_execute.execute({ stepId: s, success: true, output: `Done ${s}`, filesModified: [`src/${s}.ts`] }, prCtx)
+  await hooks.tool.agentic_execute.execute({ stepId: s, success: true, autoVerify: false, output: `Done ${s}`, filesModified: [`src/${s}.ts`] }, prCtx)
 }
 const prResult = await hooks.tool.agentic_pr.execute({}, prCtx)
 const prOut = typeof prResult === "string" ? prResult : prResult.output
@@ -426,7 +426,7 @@ assert(prOut.includes("pr1") && prOut.includes("pr2"), "PR includes all steps")
 console.log("\n[23] agentic_score — tech debt")
 const scCtx = mockCtx(freshSid())
 await hooks.tool.agentic_plan.execute({ goal: "Score test", subtasks: [{ id: "sc1", description: "Scored", dependsOn: [] }] }, scCtx)
-await hooks.tool.agentic_execute.execute({ stepId: "sc1", success: true, output: "Done", filesModified: [`${projectDir}/src/utils.ts`] }, scCtx)
+await hooks.tool.agentic_execute.execute({ stepId: "sc1", success: true, autoVerify: false, output: "Done", filesModified: [`${projectDir}/src/utils.ts`] }, scCtx)
 const scResult = await hooks.tool.agentic_score.execute({}, scCtx)
 const scOut = typeof scResult === "string" ? scResult : scResult.output
 assert(scOut.includes("Tech Debt") || scOut.includes("Score"), "score output produced")
@@ -625,7 +625,7 @@ await hooks.tool.agentic_plan.execute({
   subtasks: [{ id: "sk1", description: "Add user login with email validation", dependsOn: [] }],
 }, skCtx)
 await hooks.tool.agentic_execute.execute({
-  stepId: "sk1", success: true, output: "1. Created login form\n2. Added email validation\n3. Wrote tests",
+  stepId: "sk1", success: true, autoVerify: false, output: "1. Created login form\n2. Added email validation\n3. Wrote tests",
 }, skCtx)
 const skExtract = await hooks.tool.agentic_skill.execute({ action: "extract", query: "sk1" }, skCtx)
 const skExOut = typeof skExtract === "string" ? skExtract : skExtract.output
@@ -647,7 +647,7 @@ await hooks.tool.agentic_plan.execute({
   subtasks: [{ id: "ep1", description: "Complete episode", dependsOn: [] }],
 }, epCtx)
 await hooks.tool.agentic_execute.execute({
-  stepId: "ep1", success: true, output: "All done", filesModified: ["src/ep.ts"],
+  stepId: "ep1", success: true, autoVerify: false, output: "All done", filesModified: ["src/ep.ts"],
 }, epCtx)
 
 const epSearch = await hooks.tool.agentic_episodes.execute({ action: "search", query: "Episode" }, epCtx)
@@ -700,7 +700,7 @@ assert(plOut.includes("Parallel") || plOut.includes("Phase"), "parallel analysis
 assert(plOut.includes("pl2") && plOut.includes("pl3"), "identifies parallel tasks")
 
 // Execute pl1
-await hooks.tool.agentic_execute.execute({ stepId: "pl1", success: true, output: "Done", filesModified: ["src/setup.ts"] }, plCtx)
+await hooks.tool.agentic_execute.execute({ stepId: "pl1", success: true, autoVerify: false, output: "Done", filesModified: ["src/setup.ts"] }, plCtx)
 const pl2Result = await hooks.tool.agentic_parallel.execute({}, plCtx)
 const pl2Out = typeof pl2Result === "string" ? pl2Result : pl2Result.output
 assert(pl2Out.includes("pl2") || pl2Out.includes("Runnable"), "shows runnable tasks")
@@ -716,7 +716,7 @@ await hooks.tool.agentic_plan.execute({
   ],
 }, plexCtx)
 // Mark px1 complete so px2 is the only ready step for partial parallel test
-await hooks.tool.agentic_execute.execute({ stepId: "px1", success: true, output: "Done", filesModified: ["a.txt"] }, plexCtx)
+await hooks.tool.agentic_execute.execute({ stepId: "px1", success: true, autoVerify: false, output: "Done", filesModified: ["a.txt"] }, plexCtx)
 const plexExec = await hooks.tool.agentic_parallel.execute({ action: "execute" }, plexCtx)
 const plexOut = typeof plexExec === "string" ? plexExec : plexExec.output
 assert(plexOut.includes("Execution") || plexOut.includes("passed") || plexOut.includes("Failed"), "parallel execute produces result")
@@ -1804,7 +1804,7 @@ await hooks.tool.agentic_plan.execute({
   goal: "PR test feature",
   subtasks: [{ id: "pr-1", description: "Implement feature", dependsOn: [], verificationCriteria: [] }],
 }, mockCtx(prSid))
-await hooks.tool.agentic_execute.execute({ stepId: "pr-1", success: true, output: "Done feature" }, mockCtx(prSid))
+await hooks.tool.agentic_execute.execute({ stepId: "pr-1", success: true, autoVerify: false, output: "Done feature" }, mockCtx(prSid))
 const prWithData = await hooks.tool.agentic_pr.execute({ goal: "PR test feature" }, mockCtx(prSid))
 const prWdOut = typeof prWithData === "string" ? prWithData : (prWithData.output || "")
 assert(prWdOut.length > 0, "PR after execution returns output")
@@ -1837,7 +1837,7 @@ await hooks.tool.agentic_plan.execute({
   goal: "Guard test",
   subtasks: [{ id: "gd-1", description: "Test", dependsOn: [], verificationCriteria: [] }],
 }, mockCtx(gdSid))
-await hooks.tool.agentic_execute.execute({ stepId: "gd-1", success: true, output: "Done with test" }, mockCtx(gdSid))
+await hooks.tool.agentic_execute.execute({ stepId: "gd-1", success: true, autoVerify: false, output: "Done with test" }, mockCtx(gdSid))
 const gdOk = await hooks.tool.agentic_guard.execute({ stepId: "gd-1" }, mockCtx(gdSid))
 const gdOkOut = typeof gdOk === "string" ? gdOk : (gdOk.output || "")
 assert(gdOkOut.includes("Verdict") || gdOkOut.includes("claims") || gdOkOut.includes("Hallucination") || gdOkOut.length > 0, "guard on simple step returns output")
