@@ -127,9 +127,31 @@ const createEngine: Plugin = async (input, _options) => {
   // ── Normalize worktree: jangan sampai "/" (root) karena akan crash ──
   // Pakai input.directory dulu (paling akurat), fallback ke worktree, lalu HOME
   const rawWorktree = input.directory || input.worktree || process.env.HOME || process.cwd()
-  const worktree = rawWorktree === "/" || rawWorktree === "/home"
-    ? (input.directory || process.env.HOME || process.cwd())
-    : rawWorktree
+
+  // Safety: list of system/OS directories that should never be used as worktree
+  const systemDirs = ["/", "/home", "/lib", "/usr", "/var", "/etc", "/boot", "/sys", "/proc", "/dev", "/run", "/tmp"]
+
+  // Check if path looks like a real project (has package.json, Cargo.toml, go.mod, pyproject.toml, etc.)
+  const looksLikeProject = (dir: string): boolean => {
+    try {
+      const projectFiles = ["package.json", "Cargo.toml", "go.mod", "pyproject.toml", "setup.py", "requirements.txt", "Makefile", "CMakeLists.txt"]
+      return projectFiles.some(f => existsSync(join(dir, f)))
+    } catch {
+      return false
+    }
+  }
+
+  // Normalize: reject system directories, prefer input.directory, validate it's a project
+  let worktree = rawWorktree
+  if (systemDirs.includes(worktree) || systemDirs.some(s => worktree.startsWith(s + "/") && worktree.split("/").length <= 2)) {
+    // System directory detected — try input.directory first, then fallback
+    worktree = input.directory || process.env.HOME || process.cwd()
+  }
+
+  // If still looks like a system dir and we have input.directory, use it
+  if (systemDirs.includes(worktree) && input.directory && !systemDirs.includes(input.directory)) {
+    worktree = input.directory
+  }
 
   // ── Config (load first, everything else depends on it) ──
   const configLoader = new ConfigLoader(worktree)

@@ -117,18 +117,50 @@ export class CodebaseNavigator {
     return [...groups].sort((a, b) => b[1] - a[1])
   }
 
+  /**
+   * Check if a path is a system/OS directory that should never be scanned.
+   * Prevents navigator from scanning /lib, /usr, /var, etc. when root is "/".
+   */
+  private isSystemDirectory(dirPath: string): boolean {
+    const systemPrefixes = [
+      "/lib", "/usr", "/var", "/etc", "/boot", "/sys", "/proc",
+      "/dev", "/run", "/snap", "/opt", "/sbin", "/bin",
+    ]
+    const normalized = dirPath.replace(/\/+$/, "")
+    return systemPrefixes.some(prefix => normalized === prefix || normalized.startsWith(prefix + "/"))
+  }
+
   private async findDir(root: string, names: string[]): Promise<string | null> {
+    // Safety: never scan from root "/" or system directories
+    if (this.isSystemDirectory(root)) return null
+
     for (const name of names) {
       const p = join(root, name)
       try {
-        const s = await stat(p)
-        if (s.isDirectory()) return p
+        // Safety: reject if resolved path escapes root or is a system directory
+        const resolved = await stat(p)
+        if (!resolved.isDirectory()) continue
+        if (this.isSystemDirectory(p)) continue
+        return p
       } catch { /* skip */ }
     }
     return null
   }
 
-  private async walk(dir: string, modules: ModuleInfo[], root: string): Promise<void> {
+  private async walk(dir: string, modules: ModuleInfo[], root: string, depth = 0): Promise<void> {
+    // Safety: limit recursion depth to prevent scanning entire filesystem
+    if (depth > 10) return
+
+    // Safety: never walk into system directories
+    if (this.isSystemDirectory(dir)) return
+
+    // Safety: stop if we've escaped the root directory
+    const resolvedDir = dir.replace(/\/+$/, "")
+    const resolvedRoot = root.replace(/\/+$/, "")
+    if (resolvedDir !== resolvedRoot && !resolvedDir.startsWith(resolvedRoot + "/")) {
+      return
+    }
+
     let entries: Dirent[]
     try {
       entries = await readdir(dir, { withFileTypes: true })
@@ -140,7 +172,7 @@ export class CodebaseNavigator {
       const fullPath = join(dir, entry.name)
       if (entry.isDirectory()) {
         if (entry.name === "node_modules" || entry.name === ".git" || entry.name === "dist" || entry.name === ".agentic") continue
-        await this.walk(fullPath, modules, root)
+        await this.walk(fullPath, modules, root, depth + 1)
       } else if (entry.isFile()) {
         const ext = extname(entry.name)
         if (![".ts", ".tsx", ".js", ".jsx", ".mjs", ".mts"].includes(ext)) continue
