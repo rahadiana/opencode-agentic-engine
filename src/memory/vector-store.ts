@@ -73,8 +73,19 @@ export class VectorStore {
     this.docs.set(doc.id, { doc, tokens })
 
     const catIndex = this.invertedIndex.get(doc.category) ?? new Map()
-    const seen = new Set<string>()
 
+    // Remove old postings if re-indexing to prevent stale token matches
+    if (existing) {
+      for (const oldToken of existing.tokens) {
+        const oldPostings = catIndex.get(oldToken)
+        if (oldPostings) {
+          oldPostings.delete(doc.id)
+          if (oldPostings.size === 0) catIndex.delete(oldToken)
+        }
+      }
+    }
+
+    const seen = new Set<string>()
     for (const token of tokens) {
       if (!seen.has(token)) {
         seen.add(token)

@@ -129,6 +129,7 @@ export class Executor {
 
     if (result.success) {
       state.completedSteps.add(result.stepId)
+      state.failedSteps.delete(result.stepId) // Clear from failed if succeeded after retry
     } else {
       stepState.retryCount++
       stepState.errorHistory.push({

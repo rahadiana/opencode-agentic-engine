@@ -78,14 +78,6 @@ export class AgentLoop {
           depTracker.recordChange(sessionId, nextStep.id, result.filesModified)
         }
 
-        executor.recordResult(sessionId, {
-          stepId: nextStep.id,
-          success: result.success,
-          output: result.output,
-          filesModified: result.filesModified,
-          error: result.error,
-        })
-
         stepSuccess = result.success
         stepOutput = result.output
 
@@ -112,6 +104,14 @@ export class AgentLoop {
             }
           }
 
+          // Record success only after verification passes
+          executor.recordResult(sessionId, {
+            stepId: nextStep.id,
+            success: true,
+            output: stepOutput,
+            filesModified: result.filesModified,
+            error: result.error,
+          })
           completedSteps.push(nextStep.id)
           this.observers.forEach(o => o.onStepComplete(nextStep.id, true, stepOutput))
           break
@@ -128,6 +128,14 @@ export class AgentLoop {
       }
 
       if (!stepSuccess) {
+        // Record failure after all retries exhausted
+        executor.recordResult(sessionId, {
+          stepId: nextStep.id,
+          success: false,
+          output: stepOutput,
+          filesModified: [],
+          error: stepOutput,
+        })
         failedSteps.push(nextStep.id)
       }
     }

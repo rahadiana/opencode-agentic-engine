@@ -144,12 +144,14 @@ export class AgentCoordinator {
   // --- Task Management ---
 
   delegate(role: string, task: AgentTask, sessionId: string, parentDepth = 0, relevantSkills?: Array<{ name: string; successRate: number; steps: string }>): AgentTask {
-    task.assignedTo = role
-    task.status = "pending"
-    task.delegationDepth = parentDepth + 1
+    // Clone task to avoid mutating the caller's object
+    const clonedTask: AgentTask = { ...task }
+    clonedTask.assignedTo = role
+    clonedTask.status = "pending"
+    clonedTask.delegationDepth = parentDepth + 1
 
     if (!relevantSkills && this.skillStore) {
-      const foundSkills = this.skillStore.find(task.description).slice(0, 3)
+      const foundSkills = this.skillStore.find(clonedTask.description).slice(0, 3)
       relevantSkills = foundSkills.map((s: any) => ({
         name: s.name,
         successRate: s.successRate,
@@ -173,14 +175,14 @@ export class AgentCoordinator {
     }
 
     if (contextParts.length > 0) {
-      task.sharedContext = contextParts.join("\n\n")
+      clonedTask.sharedContext = contextParts.join("\n\n")
     }
 
     const sessionTasks = this.tasks.get(sessionId) ?? []
-    sessionTasks.push(task)
+    sessionTasks.push(clonedTask)
     this.tasks.set(sessionId, sessionTasks)
 
-    return task
+    return clonedTask
   }
 
   getTasks(sessionId: string): AgentTask[] {

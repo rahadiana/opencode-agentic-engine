@@ -87,7 +87,7 @@ export class SelfEvolver {
       (skillPatches.length * 15) +
       (roleSuggestions.length * 10) +
       (promptPatches.length * 8) +
-      (appliedPatches.length * 12) + // Bonus for auto-applied patches
+      (appliedPatches.length * 5) + // Small bonus for identified patches (actual application requires RoleRegistry)
       (metrics.successRate * 20) +
       (metrics.recommendations.length * 5)
     ))

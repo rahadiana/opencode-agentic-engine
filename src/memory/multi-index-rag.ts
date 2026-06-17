@@ -298,10 +298,11 @@ export class MultiIndexRAG {
       .slice(0, limit)
       .map(d => d.entry)
 
+    const catIndex = this.indices.get(category)
     return {
       entries: sorted,
       category,
-      totalInCategory: sorted.length,
+      totalInCategory: catIndex ? catIndex.episodes.length + catIndex.skills.length : sorted.length,
       query,
     }
   }
