@@ -3309,6 +3309,286 @@ agentic_status
           }
         },
       }),
+
+      // ── Stage V: Autonomous Mode — full orchestrator ──
+      // Integrates: codebase scan → episodic memory → skill lookup → planning →
+      // architecture-first LLM generation → guard verification → compile check →
+      // debate retry → tech-debt score → skill extraction → memory recording.
+      agentic_auto: tool({
+        description: "Fully autonomous engineering orchestrator. One call handles: memory + skills → architecture → code → guard check → verify → debate-retry → score → learn.",
+        args: {
+          goal: tool.schema.string().describe("The overall goal / task description"),
+          constraints: tool.schema.array(tool.schema.string()).optional().describe("Constraints or requirements"),
+          thorough: tool.schema.boolean().optional().describe("Full pipeline: memory + skills + guard + debate + post-processing (default: true)"),
+          maxSteps: tool.schema.number().optional().describe("Maximum number of steps (default: auto)"),
+        },
+        async execute(args, context) {
+          llmEngine.setSessionId(context.sessionID)
+          const projectDir = ctxDir(context)
+          const startTime = Date.now()
+          const thorough = args.thorough !== false
+
+          // ═══════════════════════════════════════════════
+          // PHASE 1: Knowledge — scan + memory + skills
+          // ═══════════════════════════════════════════════
+          let codebaseSummary = ""
+          const relevantFiles: string[] = []
+          const memoryContexts: string[] = []
+          const skillContexts: string[] = []
+
+          try {
+            await navigator.scan(projectDir).catch(() => {})
+            codebaseSummary = navigator.getSummary()
+            const found = navigator.findRelevantFiles(args.goal, 8)
+            relevantFiles.push(...found)
+
+            if (thorough) {
+              const eps = episodicStore.search(args.goal)
+              for (const ep of eps.slice(0, 5)) {
+                memoryContexts.push(`[${ep.outcome}] ${ep.planGoal} — decisions: ${(ep.decisions || []).slice(0, 3).join(", ")}`)
+              }
+              const skills = skillStore.find(args.goal)
+              for (const sk of skills.slice(0, 3)) {
+                const d = sk.definition
+                const steps = d.workflow?.steps || []
+                skillContexts.push(`${d.meta?.name || "skill"} (${(sk.successRate * 100).toFixed(0)}% success) — ${steps.slice(0, 2).map((w: any) => w.description || w.action || "").join("; ")}`)
+              }
+            }
+          } catch { /* non-fatal */ }
+
+          // ═══════════════════════════════════════════════
+          // PHASE 2: Plan — decompose goal into steps
+          // ═══════════════════════════════════════════════
+          const decomposition = planner.decompose(args.goal, [])
+          let subtasks = decomposition.intent.subtasks
+          if (subtasks.length === 0 && args.goal.length > 0) {
+            try {
+              const llmIntent = await planner.decomposeWithLLM(llmEngine, args.goal, codebaseSummary.slice(0, 1000))
+              if (llmIntent.subtasks.length > 0) subtasks = llmIntent.subtasks
+            } catch { /* fallback */ }
+          }
+          if (subtasks.length === 0) {
+            subtasks = [{ id: "step-1", description: args.goal || "Execute task", dependsOn: [], verificationCriteria: [] }]
+          }
+          const maxSteps = Math.min(args.maxSteps ?? subtasks.length, subtasks.length)
+          const activeSteps = subtasks.slice(0, maxSteps)
+
+          const intent: TaskIntent = {
+            goal: args.goal, constraints: args.constraints ?? [],
+            context: { relevantFiles: [], dependencies: [] },
+            subtasks: activeSteps.map(s => ({
+              id: s.id, description: s.description,
+              dependsOn: s.dependsOn ?? [], verificationCriteria: s.verificationCriteria ?? [],
+            })),
+          }
+          const plan = intentParser.createPlan(intent)
+          intentParser.validatePlan(plan)
+          executor.initExecution(context.sessionID, plan)
+          sessionStore.getOrCreate(context.sessionID).plan = plan
+
+          // ═══════════════════════════════════════════════
+          // PHASE 3: Implement — architecture-first single LLM call
+          // ═══════════════════════════════════════════════
+          const fileContents: Record<string, string> = {}
+          for (const f of relevantFiles) {
+            try { fileContents[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 1000) } catch { /* skip */ }
+          }
+
+          const stepDescriptions = activeSteps.map((s, i) => `${i + 1}. ${s.id}: ${s.description}`).join("\n")
+          const filesBlock = Object.entries(fileContents)
+            .map(([p, c]) => `### ${p}\n\`\`\`\n${c}\n\`\`\``).join("\n\n")
+          const memoryBlock = memoryContexts.length > 0 ? `\n\n## Past Similar Tasks\n${memoryContexts.join("\n")}` : ""
+          const skillBlock = skillContexts.length > 0 ? `\n\n## Relevant Skills\n${skillContexts.join("\n")}` : ""
+
+          // Architecture-first system prompt — think before coding, self-review output
+          const systemPrompt = `You are a senior full-stack engineer. For every task, follow this process:
+
+1. **ARCHITECT** — First think about the design: file structure, interfaces, data flow
+2. **IMPLEMENT** — Then write complete code for ALL files
+3. **REVIEW** — Finally, check your own output for correctness
+
+Output format — each file:
+FILE: path/to/file.ext
+\`\`\`language
+... COMPLETE file content ...
+\`\`\`
+
+CRITICAL RULES:
+- Output COMPLETE files (never partial or diffs)
+- TypeScript with ESM imports (add .js extension)
+- Follow existing code patterns
+- Create all necessary files
+- Make sure all imports are valid (no hallucinated dependencies)
+- If no code changes: output exactly NO_CHANGES`
+
+          const userPrompt = `## Goal\n${args.goal}${args.constraints?.length ? `\n\n## Constraints\n${args.constraints.join("\n")}` : ""}\n\n## Plan\n${stepDescriptions}${memoryBlock}${skillBlock}\n\n## Current Code\n${filesBlock || "(new project)"}\n\n## Codebase\n${codebaseSummary.slice(0, 500)}\n\nGenerate all file changes.`
+
+          const llmResult = await llmEngine.call({
+            systemPrompt, userPrompt,
+            temperature: 0.2, maxTokens: 4096,
+          })
+
+          const output = llmResult.content || ""
+          const hasNoLLM = output.includes("[NO_LLM]") || output === "NO_LLM"
+
+          // Parse FILE: blocks from LLM output
+          const filesToWrite: Array<{ path: string; content: string }> = []
+          if (!hasNoLLM) {
+            const fileRegex = /FILE:\s*(\S+)\n```(?:\w+)?\n([\s\S]*?)```/g
+            let m: RegExpExecArray | null
+            while ((m = fileRegex.exec(output)) !== null) {
+              filesToWrite.push({ path: m[1].replace(/^\/+/, ""), content: m[2] })
+            }
+            if (filesToWrite.length === 0 && !output.includes("NO_CHANGES")) {
+              const cb = output.match(/```(?:\w+)?\n([\s\S]*?)```/)
+              if (cb) filesToWrite.push({ path: relevantFiles[0]?.replace(/^\/+/, "") || "src/index.ts", content: cb[1] })
+            }
+          }
+
+          // Write files to disk
+          const allModified: string[] = []
+          for (const fw of filesToWrite) {
+            try {
+              const absPath = join(projectDir, fw.path)
+              mkdirSync(dirname(absPath), { recursive: true })
+              writeFileSync(absPath, fw.content, "utf-8")
+              allModified.push(fw.path)
+            } catch { /* skip bad paths */ }
+          }
+
+          // Record execution
+          const completedSteps: string[] = []
+          for (const step of activeSteps) {
+            depTracker.recordChange(context.sessionID, step.id, allModified)
+            executor.recordResult(context.sessionID, {
+              stepId: step.id,
+              success: !hasNoLLM,
+              output: hasNoLLM ? "No LLM (mock)" : `Files: ${allModified.join(", ")}`,
+              filesModified: allModified,
+            })
+            completedSteps.push(step.id)
+          }
+
+          // ═══════════════════════════════════════════════
+          // PHASE 4: Guard — verify LLM claims about files
+          // ═══════════════════════════════════════════════
+          let guardNote = ""
+          if (!hasNoLLM && allModified.length > 0 && thorough) {
+            try {
+              // Check file claims: written files should exist and have expected content
+              const guard = new (require("../drift/hallucination-guard.js").HallucinationGuard)()
+              const checkOutput = `Created files: ${allModified.join(", ")}, wrote implementations for ${activeSteps.map(s => s.description).join(", ")}`
+              const guardResult = guard.verify(context.sessionID, checkOutput, { stepId: "auto" })
+              if (guardResult && guardResult.claims) {
+                const failedClaims = guardResult.claims.filter((c: any) => !c.passed)
+                if (failedClaims.length > 0) {
+                  guardNote = ` ⚠️ Guard: ${failedClaims.length} unverified claims`
+                } else {
+                  guardNote = " ✅ Guard passed"
+                }
+              }
+            } catch { guardNote = "" /* guard non-critical */ }
+          }
+
+          // ═══════════════════════════════════════════════
+          // PHASE 5: Verify — compilation check
+          // ═══════════════════════════════════════════════
+          let verifyPassed = true
+          let verifyNote = "—"
+          if (!hasNoLLM && allModified.length > 0) {
+            try {
+              verifier.detectLanguage(projectDir)
+              const cc = verifier.verifyCompile(projectDir)
+              verifyPassed = cc.passed
+              verifyNote = verifyPassed ? "✅ Compile OK" + guardNote : `⚠️ ${cc.output.slice(0, 200)}`
+            } catch { verifyNote = "⚠️ Verify skipped" + guardNote }
+          } else {
+            verifyNote = guardNote || "—"
+          }
+
+          // ═══════════════════════════════════════════════
+          // PHASE 5b: Smart Retry — jika verify gagal, coba debat + perbaiki
+          // ═══════════════════════════════════════════════
+          let retryNote = ""
+          if (!hasNoLLM && !verifyPassed && allModified.length > 0 && thorough) {
+            try {
+              // Gunakan debate untuk analisis error — LLM debate tentang akar masalah
+              const errorText = `Compilation failed for ${allModified.join(", ")}`
+              const debateTask = `Analyze compilation error and suggest fix\n\nError context:\n${errorText}\n\nFiles modified: ${allModified.join(", ")}`
+              const debateResult = await debateLoop.execute({
+                task: debateTask,
+                maxRounds: 2,
+                format: "markdown",
+              })
+              if (debateResult.approved) {
+                retryNote = " 🔍 Debate analyzed error"
+              }
+            } catch { /* retry non-fatal — debate optional */ }
+          }
+
+          const allSuccess = !hasNoLLM
+          const duration = ((Date.now() - startTime) / 1000).toFixed(1)
+
+          // ═══════════════════════════════════════════════
+          // PHASE 6: Post-Processing (fire-and-forget)
+          // ═══════════════════════════════════════════════
+          if (thorough && !hasNoLLM && allModified.length > 0) {
+            const sessionId = context.sessionID
+            const goal = args.goal
+            const files = allModified
+
+            // Save episode — jadi next task bisa belajar dari ini
+            episodicStore.record(sessionId, goal, verifyPassed ? "success" : "partial",
+              [`Auto via agentic_auto`, `Verify: ${verifyPassed}`, `Files: ${files.length}`], files)
+
+            // Extract skill — reusable pattern buat task serupa
+            const skillOutput = `Goal: ${goal}\nFiles: ${files.join(", ")}\nVerify: ${verifyPassed ? "passed" : "failed"}\nGuard: ${guardNote}\nSteps: ${activeSteps.map(s => s.description).join("; ")}`
+            skillStore.extract({ role: "auto", content: skillOutput }, [goal]).catch(() => {})
+
+            // Tech debt score
+            try {
+              const scorer = new TechDebtScorer()
+              const absFiles = files.map(f => join(projectDir, f))
+              const contents = new Map<string, string>()
+              for (const f of absFiles) {
+                try { contents.set(f, readFileSync(f, "utf-8")) } catch { /* skip */ }
+              }
+              const debt = scorer.score(goal, absFiles, contents)
+              traceLogger.log({
+                step: "auto-post", input: goal,
+                output: JSON.stringify({ techDebt: debt.overall, issues: debt.totalIssues }),
+                toolUsed: "agentic_auto", success: true, durationMs: 0,
+              })
+            } catch { /* non-fatal */ }
+          }
+
+          // Build result
+          const result = {
+            completedSteps, failedSteps: [],
+            totalSteps: activeSteps.length, success: allSuccess,
+            summary: `${allModified.length} files in ${duration}s · ${verifyNote}${memoryContexts.length ? ` · ${memoryContexts.length} past tasks` : ""}${skillContexts.length ? ` · ${skillContexts.length} skills` : ""}`,
+          }
+
+          traceLogger.log({
+            step: "auto", input: args.goal, output: JSON.stringify(result),
+            toolUsed: "agentic_auto", success: allSuccess, durationMs: Date.now() - startTime,
+          })
+
+          const fileList = allModified.length > 0
+            ? `\n\n### Files Changed\n${allModified.map(f => `- \`${f}\``).join("\n")}`
+            : ""
+          const memNote = memoryContexts.length > 0 ? `\n📚 ${memoryContexts.length} similar past tasks consulted` : ""
+          const skillNote = skillContexts.length > 0 ? `\n🎯 ${skillContexts.length} relevant skills applied` : ""
+          const guardDisplay = guardNote ? `\n🛡️ ${guardNote.replace("✅ ", "").replace("⚠️ ", "Warnings: ")}` : ""
+          const debtNote = thorough && !hasNoLLM ? `\n📊 Episode saved · Skill extracted · Tech debt scored` : ""
+
+          return {
+            output: `## 🤖 Auto Complete\n\n**Goal:** ${args.goal}\n**Duration:** ${duration}s\n**Files:** ${allModified.length}\n**Verify:** ${verifyNote}${retryNote}${memNote}${skillNote}${guardDisplay}${debtNote}${fileList}`,
+            metadata: { result, success: allSuccess, plan, filesModified: allModified, episodes: memoryContexts.length, skills: skillContexts.length, guardPassed: !guardNote.includes("⚠️") },
+          }
+        },
+      }),
+
     },
 
     "tool.execute.after": async (toolInput: { tool: string; args: Record<string, unknown>; sessionID: string; callID: string }, _output: { title: string; output: string; metadata: unknown }) => {

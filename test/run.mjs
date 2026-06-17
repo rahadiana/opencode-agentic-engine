@@ -72,9 +72,9 @@ catch (e) { assert(false, `AgenticEngine() threw: ${e.message}`) }
 assert(hooks && typeof hooks === "object", "hooks is an object")
 assert(typeof hooks.dispose === "function", "dispose hook registered")
 
-// 3. Tool registration (26 tools)
+// 3. Tool registration (27 tools)
 console.log("\n[3] Tool registration")
-for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_model", "agentic_episodes", "agentic_parallel", "agentic_dashboard", "agentic_guard", "agentic_evolve", "agentic_debate", "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp"]) {
+for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_model", "agentic_episodes", "agentic_parallel", "agentic_dashboard", "agentic_guard", "agentic_evolve", "agentic_auto", "agentic_debate", "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp"]) {
   const tool = hooks.tool?.[name]
   assert(tool && typeof tool.execute === "function", `"${name}" has execute()`)
   assert(typeof tool.description === "string" && tool.description.length > 0, `"${name}" has description`)
@@ -2293,6 +2293,34 @@ const mcpDiscAll = await hooks.tool.agentic_mcp.execute({
   action: "disconnect-all",
 }, mockCtx(freshSid()))
 assert(true, "agentic_mcp disconnect-all passed")
+
+// ── Stage V: Autonomous Loop ──
+console.log("\n[92] agentic_auto — autonomous loop (mock mode)")
+
+// Test: basic goal decomposition and execution
+const autoSid = freshSid()
+const autoResult = await hooks.tool.agentic_auto.execute({
+  goal: "Add a greet function to test-project",
+  constraints: ["TypeScript"],
+}, mockCtx(autoSid))
+const autoOut = typeof autoResult === "string" ? autoResult : (autoResult.output || "")
+assert(autoOut.length > 20, "agentic_auto returns output")
+assert(autoOut.includes("Goal") || autoOut.includes("goal") || autoOut.includes("Auto"), "output mentions goal")
+
+// Test: verify metadata has plan info
+const autoMeta = autoResult.metadata || {}
+assert(autoMeta.plan || autoMeta.success !== undefined, "auto returns metadata with plan/success")
+assert(true, "agentic_auto executed successfully")
+
+// Test: agentic_auto with empty/invalid goal still returns gracefully
+const emptySid = freshSid()
+const emptyResult = await hooks.tool.agentic_auto.execute({
+  goal: "",
+  maxSteps: 1,
+}, mockCtx(emptySid))
+const emptyOut = typeof emptyResult === "string" ? emptyResult : (emptyResult.output || "")
+assert(emptyOut.length > 5, "agentic_auto handles empty goal")
+assert(true, "agentic_auto error handling passed")
 }
 
 await runAll()

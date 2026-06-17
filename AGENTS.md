@@ -70,6 +70,7 @@ Note: `memory/skill-training.ts` juga ada — konversi skill → training data (
 | agentic_snapshot | II | Save/list execution checkpoints |
 | agentic_pr | II | Generate PR + description |
 | agentic_score | II | Tech debt analysis |
+| agentic_model + agentic_model_reset | II | Configure per-role LLM model preferences per session |
 | agentic_delegate | III | Assign to architect/developer/qa/coordinator — pipeline-aware with cross-validation |
 | agentic_pipeline | III | Define and run multi-agent workflow pipelines (PM→Arch→Dev→QA) |
 | agentic_message | III | Inter-agent messaging: send, inbox, conversation, review requests |
@@ -78,9 +79,13 @@ Note: `memory/skill-training.ts` juga ada — konversi skill → training data (
 | agentic_episodes | III | Cross-session memory search |
 | agentic_dashboard | III | Timeline + anomaly detection |
 | agentic_guard | III | Hallucination detection |
-| agentic_model | II | Configure per-role LLM model preferences per session |
 | agentic_evolve | IV | Inspect + extend the agent system |
-| agentic_auto | V | Fully autonomous agent loop (plan→execute→verify→retry in one call) |
+| agentic_auto | V | Fully autonomous loop: plan → execute → verify → retry in one call |
+| agentic_debate | Blueprint | Executor ↔ Critic AI debate for analysis |
+| agentic_router | Blueprint | Intent classification + routing |
+| agentic_clean | Blueprint | Strip debate artifacts + format output |
+| agentic_rag | Blueprint | Multi-index RAG with category segregation |
+| agentic_mcp | Blueprint | MCP client for external tools/APIs |
 
 ## Conventions
 
