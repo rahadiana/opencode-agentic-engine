@@ -224,4 +224,30 @@ export class LiveEvaluator {
 
     return out
   }
+
+  /** Serialize for persistence */
+  toJSON(): {
+    stepResults: Array<{ stepId: string; success: boolean; sessionId?: string }>
+    errorRecoveries: Array<{ errorId: string; recovered: boolean }>
+    navigations: Array<{ query: string; resultsCount: number; focused: boolean }>
+    delegations: Array<{ taskId: string; role: string; success: boolean }>
+    skillLookups: Array<{ found: boolean }>
+  } {
+    return {
+      stepResults: this.stepResults,
+      errorRecoveries: this.errorRecoveries,
+      navigations: this.navigations,
+      delegations: this.delegations,
+      skillLookups: this.skillLookups,
+    }
+  }
+
+  /** Restore from persisted state */
+  fromJSON(data: ReturnType<LiveEvaluator["toJSON"]>): void {
+    this.stepResults = data.stepResults || []
+    this.errorRecoveries = data.errorRecoveries || []
+    this.navigations = data.navigations || []
+    this.delegations = data.delegations || []
+    this.skillLookups = data.skillLookups || []
+  }
 }

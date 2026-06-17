@@ -435,6 +435,12 @@ agentic_status
     modelRegistry.fromJSON(m.data)
   }
 
+  // Restore persisted evolution trend + evaluator score
+  const savedEvo = persistence.load<{ results: any[]; evolveCount: number; windowSize: number }>("evolution", "trend")
+  if (savedEvo) continuousEvolution.fromJSON(savedEvo)
+  const savedEval = persistence.load<any>("evaluation", "live")
+  if (savedEval) liveEvaluator.fromJSON(savedEval)
+
   // Restore persisted episodes and skills
   const savedEpisodes = persistence.loadAll<{ planGoal: string; outcome: string; decisions: string[]; filesChanged: string[]; sessionId: string; timestamp: string; tags: string[] }>("episodes")
   for (const ep of savedEpisodes) {
@@ -3640,6 +3646,8 @@ Rules: complete files only · ESM imports (.js) · match existing patterns · va
       configLoader.stopWatch()
       persistence.save("models", "registry", modelRegistry.toJSON())
       persistence.save("prompts", "state", roleRegistry.getAllPromptStates())
+      persistence.save("evolution", "trend", continuousEvolution.toJSON())
+      persistence.save("evaluation", "live", liveEvaluator.toJSON())
       await traceLogger.dispose()
     },
   }

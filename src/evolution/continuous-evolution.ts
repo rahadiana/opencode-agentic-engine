@@ -282,4 +282,20 @@ export class ContinuousEvolution {
       windowSize: this.windowSize,
     }
   }
+
+  /** Serialize for persistence */
+  toJSON(): { results: StepResult[]; evolveCount: number; windowSize: number } {
+    return {
+      results: this.results,
+      evolveCount: this.evolveCount,
+      windowSize: this.windowSize,
+    }
+  }
+
+  /** Restore from persisted state */
+  fromJSON(data: { results: StepResult[]; evolveCount: number; windowSize: number }): void {
+    this.results = data.results || []
+    this.evolveCount = data.evolveCount || 0
+    if (data.windowSize) this.windowSize = data.windowSize
+  }
 }
