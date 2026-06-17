@@ -2327,5 +2327,5 @@ await runAll()
 
 console.log(`\n${"=".repeat(40)}`)
 console.log(`Results: ${passed} passed, ${failed} failed`)
-if (failed > 0) process.exit(1)
-console.log("ALL TESTS PASSED")
+if (failed === 0) console.log("ALL TESTS PASSED")
+process.exit(failed > 0 ? 1 : 0)
