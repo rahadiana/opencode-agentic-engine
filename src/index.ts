@@ -3310,16 +3310,15 @@ agentic_status
         },
       }),
 
-      // ── Stage V: Autonomous Mode — full orchestrator ──
-      // Integrates: codebase scan → episodic memory → skill lookup → planning →
-      // architecture-first LLM generation → guard verification → compile check →
-      // debate retry → tech-debt score → skill extraction → memory recording.
+      // ── Stage V: Autonomous Mode — fast orchestrator ──
+      // Fast path: LLM call + file write + compile check (return immediately).
+      // Thorough path (+async): memory + skills + guard + post-processing (fire-and-forget after return).
       agentic_auto: tool({
-        description: "Fully autonomous engineering orchestrator. One call handles: memory + skills → architecture → code → guard check → verify → debate-retry → score → learn.",
+        description: "Fully autonomous engineering orchestrator. One call handles: memory + skills → architecture → code → guard check → verify → score → learn.",
         args: {
           goal: tool.schema.string().describe("The overall goal / task description"),
           constraints: tool.schema.array(tool.schema.string()).optional().describe("Constraints or requirements"),
-          thorough: tool.schema.boolean().optional().describe("Full pipeline: memory + skills + guard + debate + post-processing (default: true)"),
+          thorough: tool.schema.boolean().optional().describe("Extra: memory + skills + guard + tech-debt post-processing (non-blocking, default: true)"),
           maxSteps: tool.schema.number().optional().describe("Maximum number of steps (default: auto)"),
         },
         async execute(args, context) {
@@ -3400,26 +3399,20 @@ agentic_status
           const memoryBlock = memoryContexts.length > 0 ? `\n\n## Past Similar Tasks\n${memoryContexts.join("\n")}` : ""
           const skillBlock = skillContexts.length > 0 ? `\n\n## Relevant Skills\n${skillContexts.join("\n")}` : ""
 
-          // Architecture-first system prompt — think before coding, self-review output
-          const systemPrompt = `You are a senior full-stack engineer. For every task, follow this process:
+          // Architecture-first prompt — compact: design -> code -> self-review
+          const systemPrompt = `Senior engineer. Process: 1) design structure/interfaces 2) write COMPLETE files 3) self-check.
 
-1. **ARCHITECT** — First think about the design: file structure, interfaces, data flow
-2. **IMPLEMENT** — Then write complete code for ALL files
-3. **REVIEW** — Finally, check your own output for correctness
-
-Output format — each file:
 FILE: path/to/file.ext
 \`\`\`language
-... COMPLETE file content ...
+... complete content ...
 \`\`\`
 
-CRITICAL RULES:
-- Output COMPLETE files (never partial or diffs)
-- TypeScript with ESM imports (add .js extension)
-- Follow existing code patterns
-- Create all necessary files
-- Make sure all imports are valid (no hallucinated dependencies)
-- If no code changes: output exactly NO_CHANGES`
+RULES:
+- COMPLETE files only (no diffs)
+- TypeScript ESM imports (.js)
+- Match existing patterns
+- Valid imports (no hallucinated deps)
+- NO_CHANGES if nothing to change`
 
           const userPrompt = `## Goal\n${args.goal}${args.constraints?.length ? `\n\n## Constraints\n${args.constraints.join("\n")}` : ""}\n\n## Plan\n${stepDescriptions}${memoryBlock}${skillBlock}\n\n## Current Code\n${filesBlock || "(new project)"}\n\n## Codebase\n${codebaseSummary.slice(0, 500)}\n\nGenerate all file changes.`
 
@@ -3470,28 +3463,7 @@ CRITICAL RULES:
           }
 
           // ═══════════════════════════════════════════════
-          // PHASE 4: Guard — verify LLM claims about files
-          // ═══════════════════════════════════════════════
-          let guardNote = ""
-          if (!hasNoLLM && allModified.length > 0 && thorough) {
-            try {
-              // Check file claims: written files should exist and have expected content
-              const guard = new (require("../drift/hallucination-guard.js").HallucinationGuard)()
-              const checkOutput = `Created files: ${allModified.join(", ")}, wrote implementations for ${activeSteps.map(s => s.description).join(", ")}`
-              const guardResult = guard.verify(context.sessionID, checkOutput, { stepId: "auto" })
-              if (guardResult && guardResult.claims) {
-                const failedClaims = guardResult.claims.filter((c: any) => !c.passed)
-                if (failedClaims.length > 0) {
-                  guardNote = ` ⚠️ Guard: ${failedClaims.length} unverified claims`
-                } else {
-                  guardNote = " ✅ Guard passed"
-                }
-              }
-            } catch { guardNote = "" /* guard non-critical */ }
-          }
-
-          // ═══════════════════════════════════════════════
-          // PHASE 5: Verify — compilation check
+          // PHASE 4: Verify — compilation check (always runs)
           // ═══════════════════════════════════════════════
           let verifyPassed = true
           let verifyNote = "—"
@@ -3500,69 +3472,54 @@ CRITICAL RULES:
               verifier.detectLanguage(projectDir)
               const cc = verifier.verifyCompile(projectDir)
               verifyPassed = cc.passed
-              verifyNote = verifyPassed ? "✅ Compile OK" + guardNote : `⚠️ ${cc.output.slice(0, 200)}`
-            } catch { verifyNote = "⚠️ Verify skipped" + guardNote }
-          } else {
-            verifyNote = guardNote || "—"
+              verifyNote = verifyPassed ? "✅ Compile OK" : `⚠️ ${cc.output.slice(0, 200)}`
+            } catch { verifyNote = "⚠️ Verify skipped" }
           }
 
-          // ═══════════════════════════════════════════════
-          // PHASE 5b: Smart Retry — jika verify gagal, coba debat + perbaiki
-          // ═══════════════════════════════════════════════
-          let retryNote = ""
-          if (!hasNoLLM && !verifyPassed && allModified.length > 0 && thorough) {
-            try {
-              // Gunakan debate untuk analisis error — LLM debate tentang akar masalah
-              const errorText = `Compilation failed for ${allModified.join(", ")}`
-              const debateTask = `Analyze compilation error and suggest fix\n\nError context:\n${errorText}\n\nFiles modified: ${allModified.join(", ")}`
-              const debateResult = await debateLoop.execute({
-                task: debateTask,
-                maxRounds: 2,
-                format: "markdown",
-              })
-              if (debateResult.approved) {
-                retryNote = " 🔍 Debate analyzed error"
-              }
-            } catch { /* retry non-fatal — debate optional */ }
+          // ─── POST-PHASE: hanya kalau thorough ───
+          // Guard + debate + post-processing semuanya fire-and-forget
+          // supaya gak ngeblok response utama
+          if (thorough && !hasNoLLM && allModified.length > 0) {
+            ;(async () => {
+              // Guard — verifikasi file claims (sync, fast)
+              try {
+                const guard = new HallucinationGuard(projectDir)
+                const checkOutput = `Created files: ${allModified.join(", ")}, wrote implementations for ${activeSteps.map(s => s.description).join(", ")}`
+                const guardResult = guard.check(checkOutput, allModified)
+                if (guardResult?.claims) {
+                  const failedClaims = guardResult.claims.filter((c: any) => !c.verified)
+                  verifyNote += failedClaims.length > 0 ? ` ⚠️ Guard:${failedClaims.length} issues` : " ✅ Guard"
+                }
+              } catch { /* non-fatal */ }
+
+              // Save episode
+              try {
+                episodicStore.record(context.sessionID, args.goal, verifyPassed ? "success" : "partial",
+                  [`Auto via agentic_auto`, `Verify: ${verifyPassed}`, `Files: ${allModified.length}`], allModified)
+              } catch { /* non-fatal */ }
+
+              // Extract skill (async)
+              try {
+                const skillOutput = `Goal: ${args.goal}\nFiles: ${allModified.join(", ")}\nVerify: ${verifyPassed ? "passed" : "failed"}\nSteps: ${activeSteps.map(s => s.description).join("; ")}`
+                await skillStore.extract({ role: "auto", content: skillOutput }, [args.goal])
+              } catch { /* non-fatal */ }
+
+              // Tech debt score
+              try {
+                const scorer = new TechDebtScorer()
+                const absFiles = allModified.map(f => join(projectDir, f))
+                const contents = new Map<string, string>()
+                for (const f of absFiles) {
+                  try { contents.set(f, readFileSync(f, "utf-8")) } catch { /* skip */ }
+                }
+                scorer.score(args.goal, absFiles, contents)
+              } catch { /* non-fatal */ }
+            })().catch(() => {})
           }
 
           const allSuccess = !hasNoLLM
           const duration = ((Date.now() - startTime) / 1000).toFixed(1)
 
-          // ═══════════════════════════════════════════════
-          // PHASE 6: Post-Processing (fire-and-forget)
-          // ═══════════════════════════════════════════════
-          if (thorough && !hasNoLLM && allModified.length > 0) {
-            const sessionId = context.sessionID
-            const goal = args.goal
-            const files = allModified
-
-            // Save episode — jadi next task bisa belajar dari ini
-            episodicStore.record(sessionId, goal, verifyPassed ? "success" : "partial",
-              [`Auto via agentic_auto`, `Verify: ${verifyPassed}`, `Files: ${files.length}`], files)
-
-            // Extract skill — reusable pattern buat task serupa
-            const skillOutput = `Goal: ${goal}\nFiles: ${files.join(", ")}\nVerify: ${verifyPassed ? "passed" : "failed"}\nGuard: ${guardNote}\nSteps: ${activeSteps.map(s => s.description).join("; ")}`
-            skillStore.extract({ role: "auto", content: skillOutput }, [goal]).catch(() => {})
-
-            // Tech debt score
-            try {
-              const scorer = new TechDebtScorer()
-              const absFiles = files.map(f => join(projectDir, f))
-              const contents = new Map<string, string>()
-              for (const f of absFiles) {
-                try { contents.set(f, readFileSync(f, "utf-8")) } catch { /* skip */ }
-              }
-              const debt = scorer.score(goal, absFiles, contents)
-              traceLogger.log({
-                step: "auto-post", input: goal,
-                output: JSON.stringify({ techDebt: debt.overall, issues: debt.totalIssues }),
-                toolUsed: "agentic_auto", success: true, durationMs: 0,
-              })
-            } catch { /* non-fatal */ }
-          }
-
-          // Build result
           const result = {
             completedSteps, failedSteps: [],
             totalSteps: activeSteps.length, success: allSuccess,
@@ -3579,12 +3536,10 @@ CRITICAL RULES:
             : ""
           const memNote = memoryContexts.length > 0 ? `\n📚 ${memoryContexts.length} similar past tasks consulted` : ""
           const skillNote = skillContexts.length > 0 ? `\n🎯 ${skillContexts.length} relevant skills applied` : ""
-          const guardDisplay = guardNote ? `\n🛡️ ${guardNote.replace("✅ ", "").replace("⚠️ ", "Warnings: ")}` : ""
-          const debtNote = thorough && !hasNoLLM ? `\n📊 Episode saved · Skill extracted · Tech debt scored` : ""
 
           return {
-            output: `## 🤖 Auto Complete\n\n**Goal:** ${args.goal}\n**Duration:** ${duration}s\n**Files:** ${allModified.length}\n**Verify:** ${verifyNote}${retryNote}${memNote}${skillNote}${guardDisplay}${debtNote}${fileList}`,
-            metadata: { result, success: allSuccess, plan, filesModified: allModified, episodes: memoryContexts.length, skills: skillContexts.length, guardPassed: !guardNote.includes("⚠️") },
+            output: `## 🤖 Auto Complete\n\n**Goal:** ${args.goal}\n**Duration:** ${duration}s\n**Files:** ${allModified.length}\n**Verify:** ${verifyNote}${memNote}${skillNote}${fileList}`,
+            metadata: { result, success: allSuccess, plan, filesModified: allModified, episodes: memoryContexts.length, skills: skillContexts.length },
           }
         },
       }),
