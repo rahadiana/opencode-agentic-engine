@@ -175,10 +175,6 @@ export class Verifier {
 
     for (const { lang, file } of checks) {
       if (existsSync(resolve(projectDir, file))) {
-        if (lang === "javascript" && existsSync(resolve(projectDir, "tsconfig.json"))) {
-          this.detectedLang = "typescript"
-          return "typescript"
-        }
         this.detectedLang = lang
         return lang
       }

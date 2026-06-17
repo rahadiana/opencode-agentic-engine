@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync, watch } from "node:fs"
+import { readFileSync, writeFileSync, mkdirSync, existsSync, watch, statSync } from "node:fs"
 import { join } from "node:path"
 
 // ──────────────────────────────────────────────
@@ -102,6 +102,8 @@ export class ConfigLoader {
   private readonly configPath: string
   private readonly worktree: string
   private watcher: ReturnType<typeof watch> | null = null
+  private watchInterval: ReturnType<typeof setInterval> | null = null
+  private lastModified = 0
   private listeners: Array<(config: AgenticConfigSchema) => void> = []
 
   constructor(worktree: string) {
@@ -154,7 +156,7 @@ export class ConfigLoader {
     return this.config
   }
 
-  /** Watch config file for changes */
+  /** Watch config file for changes — uses fs.watch with polling fallback for reliability */
   startWatch(): void {
     if (this.watcher) return
     try {
@@ -166,6 +168,19 @@ export class ConfigLoader {
           }
         }
       })
+      // Polling fallback: fs.watch is unreliable on some platforms (macOS, NFS)
+      this.watchInterval = setInterval(() => {
+        try {
+          const stat = statSync(this.configPath)
+          if (stat.mtimeMs > this.lastModified) {
+            this.lastModified = stat.mtimeMs
+            this.load()
+            for (const listener of this.listeners) {
+              listener(this.config)
+            }
+          }
+        } catch { /* config file may not exist yet */ }
+      }, 5000)
     } catch {
       // File not exist yet or permission denied — skip watching
     }
@@ -176,6 +191,10 @@ export class ConfigLoader {
     if (this.watcher) {
       this.watcher.close()
       this.watcher = null
+    }
+    if (this.watchInterval) {
+      clearInterval(this.watchInterval)
+      this.watchInterval = null
     }
     this.listeners = []
   }

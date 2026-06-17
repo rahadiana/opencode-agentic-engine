@@ -161,32 +161,34 @@ export class HallucinationGuard {
   private verifyApiSignature(methodName: string, relativePath: string, absolutePath: string): boolean {
     try {
       const content = readFileSync(absolutePath, "utf-8")
+      // Escape regex special characters to prevent crash on method names like "foo(bar)"
+      const escaped = methodName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
       const isPython = relativePath.endsWith(".py")
       const isGo = relativePath.endsWith(".go")
       const isRust = relativePath.endsWith(".rs")
 
       if (isPython) {
-        const defPattern = new RegExp(`def\\s+${methodName}\\s*\\(`)
-        const classPattern = new RegExp(`class\\s+${methodName}\\s*[(:]`)
+        const defPattern = new RegExp(`def\\s+${escaped}\\s*\\(`)
+        const classPattern = new RegExp(`class\\s+${escaped}\\s*[(:]`)
         return defPattern.test(content) || classPattern.test(content)
       }
 
       if (isGo) {
-        const funcPattern = new RegExp(`func\\s+(?:\\(\\w+\\s+\\*?\\w+\\)\\s+)?${methodName}\\s*\\(`)
+        const funcPattern = new RegExp(`func\\s+(?:\\(\\w+\\s+\\*?\\w+\\)\\s+)?${escaped}\\s*\\(`)
         return funcPattern.test(content)
       }
 
       if (isRust) {
-        const fnPattern = new RegExp(`(?:pub\\s+)?fn\\s+${methodName}\\s*[<(]`)
-        const implPattern = new RegExp(`impl\\s+.*\\{[^}]*fn\\s+${methodName}\\s*[<(]`)
+        const fnPattern = new RegExp(`(?:pub\\s+)?fn\\s+${escaped}\\s*[<(]`)
+        const implPattern = new RegExp(`impl\\s+.*\\{[^}]*fn\\s+${escaped}\\s*[<(]`)
         return fnPattern.test(content) || implPattern.test(content)
       }
 
       const patterns = [
-        new RegExp(`(?:function|const|let|var|export\\s+(?:const|function|class|default|async\\s+function))\\s+${methodName}\\b`),
-        new RegExp(`${methodName}\\s*[=(:]`),
-        new RegExp(`(?:async\\s+)?${methodName}\\s*\\(`),
+        new RegExp(`(?:function|const|let|var|export\\s+(?:const|function|class|default|async\\s+function))\\s+${escaped}\\b`),
+        new RegExp(`${escaped}\\s*[=(:]`),
+        new RegExp(`(?:async\\s+)?${escaped}\\s*\\(`),
       ]
       return patterns.some(p => p.test(content))
     } catch {

@@ -21,7 +21,7 @@ import type { AgentRole, AgentTask } from "./agents/coordinator.js"
 import { Orchestrator, type WorkflowPipeline, type CrossValidationResult } from "./agents/orchestrator.js"
 import { SkillStore } from "./memory/skill-store.js"
 import { EpisodicStore } from "./memory/episodic-store.js"
-import { HallucinationGuard } from "./drift/hallucination-guard.js"
+import { HallucinationGuard, type ClaimResult } from "./drift/hallucination-guard.js"
 import { ParallelExecutor } from "./core/parallel.js"
 import { Dashboard } from "./observability/dashboard.js"
 import { CheckpointSystem } from "./drift/checkpoints.js"
@@ -301,12 +301,13 @@ agentic_status
     const sourceDir = join(worktree, "src")
     if (existsSync(sourceDir)) {
       const scanBatch: Record<string, string> = {}
-      const walkDir = (dir: string) => {
+      const walkDir = (dir: string, depth = 0) => {
+        if (depth > 10) return // Prevent infinite recursion from symlink loops
         try {
           for (const entry of readdirSync(dir, { withFileTypes: true })) {
             const full = join(dir, entry.name)
             if (entry.isDirectory() && !["node_modules", ".git", "dist", ".agentic"].includes(entry.name))
-              walkDir(full)
+              walkDir(full, depth + 1)
             else if (entry.isFile() && /\.(ts|tsx|js|jsx|mjs)$/.test(entry.name) && Object.keys(scanBatch).length < 100)
               try { scanBatch[full] = readFileSync(full, "utf-8") } catch {}
           }
@@ -726,7 +727,7 @@ agentic_status
             toolUsed: "agentic_plan",
             success: errors.length === 0,
             durationMs: 0,
-            metadata: { errors, complexity: plan.complexity, autoDecomposed: subtasks !== args.subtasks, llmDecomposed: !!args.llmDecompose },
+            metadata: { errors, complexity: plan.complexity, autoDecomposed: (!args.subtasks || args.subtasks.length === 0) && subtasks.length > 0, llmDecomposed: !!args.llmDecompose },
           })
 
           if (errors.length > 0) {
@@ -740,7 +741,7 @@ agentic_status
             `${i + 1}. **${s.id}** — ${s.description}${s.dependsOn.length ? ` (requires: ${s.dependsOn.join(", ")})` : ""}`
           ).join("\n")
 
-          const autoTag = subtasks !== args.subtasks ? " (auto-decomposed)" : ""
+          const autoTag = (!args.subtasks || args.subtasks.length === 0) && subtasks.length > 0 ? " (auto-decomposed)" : ""
 
           return {
             output: `## Plan Created${autoTag}\n\n**Goal:** ${plan.intent.goal}\n**Complexity:** ${plan.complexity}\n**Steps:** ${plan.estimatedSteps}\n\n### Steps\n${stepList}\n\nStart with \`agentic_execute\` for the first ready step.`,
@@ -906,12 +907,12 @@ agentic_status
             const guardResult = hallucinationGuard.check(args.output, args.filesModified ?? [])
 
             if (guardResult.claims.length > 0) {
-              const failedClaims = guardResult.claims.filter((c: any) => !c.verified)
+              const failedClaims = guardResult.claims.filter((c: ClaimResult) => !c.verified)
               const hallucinationRate = failedClaims.length / guardResult.claims.length
 
               if (failedClaims.length > 0) {
                 response += `⚠️ Detected ${failedClaims.length}/${guardResult.claims.length} unverified claims (hallucination rate: ${(hallucinationRate * 100).toFixed(1)}%)\n`
-                failedClaims.forEach((c: any) => {
+                failedClaims.forEach((c: ClaimResult) => {
                   response += `  ❌ ${c.type}: ${c.claim}\n`
                 })
 

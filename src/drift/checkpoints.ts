@@ -33,7 +33,7 @@ export class CheckpointSystem {
 
     // File deletion
     if (action.includes("delete") || action.includes("remove")) {
-      if (filesModified.some(f => f.endsWith(".ts") || f.endsWith(".js") || f.endsWith(".py") || f.endsWith(".go") || f.endsWith(".rs"))) {
+      if (filesModified.some(f => f.endsWith(".ts") || f.endsWith(".tsx") || f.endsWith(".js") || f.endsWith(".py") || f.endsWith(".go") || f.endsWith(".rs"))) {
         results.push({
           id: `${stepId}-delete`,
           type: "warning",

@@ -148,7 +148,8 @@ export class RouterAgent {
     matches.sort((a, b) => b.score - a.score)
     const top = matches[0]
     const totalKeywords = top.category.keywords.length
-    const confidence = Math.min(1.0, top.score / Math.max(1, totalKeywords * 0.3))
+    // Use higher denominator for small keyword sets to prevent over-confident routing
+    const confidence = Math.min(1.0, top.score / Math.max(2, totalKeywords * 0.5))
 
     // Only return if confidence is reasonable
     if (confidence < 0.3) return null

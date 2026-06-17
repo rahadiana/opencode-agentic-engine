@@ -152,10 +152,10 @@ export class AgentCoordinator {
 
     if (!relevantSkills && this.skillStore) {
       const foundSkills = this.skillStore.find(clonedTask.description).slice(0, 3)
-      relevantSkills = foundSkills.map((s: any) => ({
-        name: s.name,
+      relevantSkills = foundSkills.map((s) => ({
+        name: s.definition.meta.name,
         successRate: s.successRate,
-        steps: s.steps.map((step: any) => step.description).join(" → ")
+        steps: s.definition.workflow.steps.map((step) => step.description).join(" → ")
       }))
     }
 

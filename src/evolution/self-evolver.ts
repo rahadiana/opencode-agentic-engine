@@ -102,7 +102,7 @@ export class SelfEvolver {
     const failedSteps = this.stepStates.filter(s => !s.success).length
     const done = doneSteps + this.tasks.filter(t => t.status === "done").length
     const failed = failedSteps + this.tasks.filter(t => t.status === "failed").length
-    const total = done + failed || 1
+    const total = (done + failed) || 1
 
     const errorCategories = new Map<string, number>()
     for (const ep of this.episodes) {

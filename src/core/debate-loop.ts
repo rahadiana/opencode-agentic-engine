@@ -98,6 +98,7 @@ export class DebateLoop {
       }
 
       let draft = ""
+      let issues: string[] = []
       try {
         const draftResp = await this.llmEngine.call({
           systemPrompt: EXECUTOR_PROMPT,
@@ -108,12 +109,13 @@ export class DebateLoop {
         draft = draftResp.content
       } catch (error) {
         logParseError("executor call", error)
-        draft = `[Error generating draft: ${error}]`
+        // Short-circuit: don't continue debate with an error string as draft
+        issues = [`Executor failed: ${error}`]
+        break
       }
 
       // ── Step 2: Critic reviews ──
       let review = ""
-      let issues: string[] = []
       try {
         const criticResp = await this.llmEngine.call({
           systemPrompt: CRITIC_PROMPT,
