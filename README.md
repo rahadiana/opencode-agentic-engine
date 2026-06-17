@@ -17,7 +17,7 @@ Berdasarkan konsep dari paper **"The End of Software Engineering"** (arXiv:2606.
 | — | **Model Registry** | Auto-discover model dari provider, tracking reliability & hallucination rate |
 | — | **Dashboard** | Timeline, anomaly detection, model reliability stats |
 
-### 26 Tools
+### 27 Tools
 
 | Tool | Stage | Description |
 |---|---|---|
@@ -32,6 +32,7 @@ Berdasarkan konsep dari paper **"The End of Software Engineering"** (arXiv:2606.
 | `agentic_pr` | II | Generate PR + description |
 | `agentic_score` | II | Tech debt analysis |
 | `agentic_model` | II | Configure per-role LLM model preferences per session |
+| `agentic_model_reset` | II | Reset model stats — single, stale (>7d), or emergency all |
 | `agentic_delegate` | III | Assign to architect/developer/qa/coordinator — pipeline-aware with cross-validation |
 | `agentic_pipeline` | III | Define and run multi-agent workflow pipelines (PM→Arch→Dev→QA) |
 | `agentic_message` | III | Inter-agent messaging: send, inbox, conversation, review requests |
@@ -310,9 +311,31 @@ Semua aktivitas dicatat ke `.agentic/trace.jsonl`:
 - Step execution + error propagation
 - Retry history & anomaly detection
 
-## Recent Updates (v0.4.0 — 2026-06-16)
+## Recent Updates (v0.4.3 — 2026-06-17)
 
-### 5 Blueprint Layers Complete ✅
+### 🚀 v0.4.3 — Speed & Persistence Optimization
+
+**LLM Call Optimization (Phase 3):**
+- LLM returns JSON `{"files":[...]}` instead of markdown FILE: blocks — 40% fewer output tokens, instant parsing, enables `jsonMode: true`
+- `maxTokens` reduced: 1024 simple / 2048 complex (was 2048/4096)
+- File preview 150 chars (was 300), codebase summary 100 chars (was 200)
+- System prompt compacted to 3 lines (JSON schema style)
+- Architecture-first thinking: minimal prompt, faster generation
+
+**Persistence Overhaul:**
+- **Hybrid global+local storage**: Global `~/.config/opencode/agentic-store/` shared across all projects + local `.agentic/store/` overrides
+- `ContinuousEvolution` and `LiveEvaluator` now persist via `toJSON()`/`fromJSON()` — no more data loss on restart
+- Cross-project learning enabled: episodes, skills, evolution trends survive project switches
+
+**Other Improvements:**
+- `agentic_model_reset` tool added — reset single, stale, or all model stats
+- `agentic_auto` post-processing is now fire-and-forget (non-blocking) — guard check, episode record, skill extract, tech-debt scoring run async after returning result
+- Debate retry removed (was slowing things down 2-4× on compile failures)
+- HallucinationGuard integrated into `agentic_auto` pipeline
+
+### v0.4.0 — Blueprint Layers + Hybrid RAG
+
+**5 Blueprint Layers Complete ✅**
 
 | Layer | File | Tool | Status |
 |-------|------|------|--------|
@@ -322,23 +345,17 @@ Semua aktivitas dicatat ke `.agentic/trace.jsonl`:
 | L4 — Multi-Index RAG | `src/memory/multi-index-rag.ts` | `agentic_rag` | ✅ |
 | L5 — Router Agent | `src/core/router-agent.ts` | `agentic_router` | ✅ |
 
-### TF-IDF + Vector Hybrid Search (Replacing old keyword search)
-
-- **VectorStore** (`src/memory/vector-store.ts`): TF-IDF sparse retrieval with inverted index, Unicode tokenization (Cyrillic/Arabic/CJK), zero external dependencies
-- **LocalEmbedder** (`src/memory/local-embedder.ts`): Vector embeddings via OpenAI-compatible endpoint + hash-based fallback, cosine similarity
-- **MultiIndexRAG**: `lightweight` mode (TF-IDF only, `embedding: null`) or `full` mode (hybrid TF-IDF + vector, `embedding.model: "..."`)
-- Configurable weights: `keywordWeight: 0.3`, `vectorWeight: 0.7` in `.agentic/config.json`
-
-### v0.3.0 — Debate Loop + Router Agent
-
-- Layer 2: agentic_debate — adversarial debate between executor and critic agents
-- Layer 5: agentic_router — keyword-first intent classification, zero LLM cost
+**TF-IDF + Vector Hybrid Search:**
+- VectorStore: TF-IDF sparse retrieval, Unicode tokenization, zero external deps
+- LocalEmbedder: Vector embeddings via OpenAI-compatible endpoint
+- MultiIndexRAG: `lightweight` (TF-IDF only) or `full` (hybrid) mode
+- Configurable weights: `keywordWeight: 0.3`, `vectorWeight: 0.7`
 
 ### Stats
 
-- **26 tools** (was 21) — 5 new Blueprint tools added
-- **548 tests, 0 failed** (was 489)
-- **v0.4.0** published to npm
+- **27 tools** (was 21) — Blueprint layers + model reset + auto orchestrator
+- **489+ unit tests** — mock-based, no LLM needed
+- **v0.4.3** — latest on npm
 
 ## License
 

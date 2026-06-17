@@ -19,26 +19,10 @@ node_modules/
 *.swo
 *~
 
-# Documentation (keep essential ones only)
-ANALISIS_GAP_PAPER.md
-CARA_CEK_SELF_EVOLUTION.md
-COMPATIBILITY_REPORT.md
-GAP4_CONTOH_SCENARIO.md
-GAP4_SUMMARY.md
-KESESUAIAN_RINGKAS.md
-LAPORAN_AKHIR_LENGKAP.md
-LOKASI_SELF_LEARNING.md
-MISSION_COMPLETE.md
-PERBAIKAN_GAP4_LENGKAP.md
-PRIORITY2_COMPLETE.md
-REKOMENDASI_FIX_GAP.md
-SELF_EVOLUTION_SUMMARY.md
-MEMORY_DATA_SUMMARY.md
-PRODUCTION_READY_CHECKLIST.md
-MISSING_FEATURES_SUMMARY.md
-FINAL_SUMMARY.md
+# Documentation (keep only README + AGENTS)
+# (all other .md files already deleted from source)
 
-# Demo scripts (keep only the useful ones)
+# Demo scripts
 demo-self-evolution.mjs
 demo-populate-memory.mjs
 
