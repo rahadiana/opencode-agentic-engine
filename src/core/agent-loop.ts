@@ -4,12 +4,17 @@ import { Verifier } from "./verifier.js"
 import { ErrorAnalyzer } from "./error-analyzer.js"
 import { DependencyTracker } from "../drift/dependency-tracker.js"
 import { LLMEngine } from "./llm.js"
+import { ParallelExecutor } from "./parallel.js"
 
 export interface AgentLoopConfig {
   maxIterations: number
   autoRetry: boolean
   maxRetries: number
   verifyAfterEach: boolean
+  /** Max parallelism per phase (default: unlimited) */
+  maxParallelism?: number
+  /** Abort remaining steps in phase if one fails (default: false) */
+  abortOnFailure?: boolean
 }
 
 export interface LoopResult {
@@ -30,14 +35,17 @@ export class AgentLoop {
   private config: AgentLoopConfig
   private llm: LLMEngine
   private observers: LoopObserver[] = []
+  private parallelExec = new ParallelExecutor()
 
   constructor(llm: LLMEngine, config: Partial<AgentLoopConfig> = {}) {
     this.llm = llm
     this.config = {
-      maxIterations: config.maxIterations ?? 20,
+      maxIterations: config.maxIterations ?? 10,
       autoRetry: config.autoRetry ?? true,
       maxRetries: config.maxRetries ?? 3,
       verifyAfterEach: config.verifyAfterEach ?? true,
+      maxParallelism: config.maxParallelism,
+      abortOnFailure: config.abortOnFailure ?? false,
     }
   }
 
@@ -58,85 +66,35 @@ export class AgentLoop {
     const completedSteps: string[] = []
     const failedSteps: string[] = []
     let iteration = 0
+    const filesModifiedMap = new Map<string, string[]>()
 
     while (iteration < this.config.maxIterations) {
       iteration++
 
-      const nextStep = executor.getNextStep(sessionId)
-      if (!nextStep) break
+      const readySteps = executor.getReadySteps(sessionId)
+      if (readySteps.length === 0) break
 
-      let retryCount = 0
-      let stepSuccess = false
-      let stepOutput = ""
+      // Group ready steps into non-conflicting batches
+      const batches = this.batchSteps(readySteps, filesModifiedMap)
 
-      while (retryCount <= this.config.maxRetries) {
-        this.observers.forEach(o => o.onStepStart(nextStep.id, iteration))
+      for (const batch of batches) {
+        const results = await this.executeBatch(
+          batch, sessionId, executor, verifier, errorAnalyzer,
+          depTracker, projectDir, stepExecutor, fixExecutor,
+        )
 
-        const result = await stepExecutor(nextStep)
-
-        if (result.filesModified && result.filesModified.length > 0) {
-          depTracker.recordChange(sessionId, nextStep.id, result.filesModified)
-        }
-
-        stepSuccess = result.success
-        stepOutput = result.output
-
-        if (stepSuccess) {
-          if (this.config.verifyAfterEach) {
-            const verifyResult = result.filesModified.length > 0
-              ? verifier.verifyRelated(nextStep.id, projectDir, result.filesModified)
-              : verifier.verifyAll(nextStep.id, projectDir)
-
-            if (!verifyResult.passed) {
-              stepSuccess = false
-              stepOutput = `Verification failed: ${verifyResult.errors.join("\n")}`
-              const analysis = await errorAnalyzer.analyzeDeep(stepOutput, result.filesModified)
-              this.observers.forEach(o => o.onStepComplete(nextStep.id, false, analysis.suggestedFix))
-
-              if (!this.config.autoRetry) { retryCount++; break }
-
-              const repairResult = await this.attemptRepair(nextStep, stepOutput, analysis, fixExecutor)
-              if (!repairResult) {
-                retryCount++
-                break
-              }
-              continue
-            }
+        for (const r of results) {
+          if (r.filesModified.length > 0) {
+            filesModifiedMap.set(r.stepId, r.filesModified)
           }
-
-          // Record success only after verification passes
-          executor.recordResult(sessionId, {
-            stepId: nextStep.id,
-            success: true,
-            output: stepOutput,
-            filesModified: result.filesModified,
-            error: result.error,
-          })
-          completedSteps.push(nextStep.id)
-          this.observers.forEach(o => o.onStepComplete(nextStep.id, true, stepOutput))
-          break
+          if (r.success) {
+            completedSteps.push(r.stepId)
+          } else {
+            failedSteps.push(r.stepId)
+          }
         }
 
-        retryCount++
-        this.observers.forEach(o => o.onStepComplete(nextStep.id, false, stepOutput))
-
-        if (!this.config.autoRetry || retryCount > this.config.maxRetries) break
-
-        const analysis = await errorAnalyzer.analyzeDeep(stepOutput, result.filesModified ?? [])
-        const repairResult = await this.attemptRepair(nextStep, stepOutput, analysis, fixExecutor)
-        if (!repairResult) break
-      }
-
-      if (!stepSuccess) {
-        // Record failure after all retries exhausted
-        executor.recordResult(sessionId, {
-          stepId: nextStep.id,
-          success: false,
-          output: stepOutput,
-          filesModified: [],
-          error: stepOutput,
-        })
-        failedSteps.push(nextStep.id)
+        if (this.config.abortOnFailure && results.some(r => !r.success)) break
       }
     }
 
@@ -150,6 +108,149 @@ export class AgentLoop {
 
     this.observers.forEach(o => o.onLoopComplete(result))
     return result
+  }
+
+  private batchSteps(steps: Subtask[], filesModified: Map<string, string[]>): Subtask[][] {
+    if (steps.length <= 1) return [steps]
+    if (!this.config.maxParallelism) return [steps] // run all ready steps in one batch
+
+    const batches: Subtask[][] = []
+    const used = new Set<string>()
+
+    for (const step of steps) {
+      if (used.has(step.id)) continue
+      const batch: Subtask[] = [step]
+      used.add(step.id)
+
+      for (const other of steps) {
+        if (used.has(other.id)) continue
+        const conflict = this.hasConflict(step, other, filesModified)
+        if (!conflict && batch.length < this.config.maxParallelism) {
+          batch.push(other)
+          used.add(other.id)
+        }
+      }
+      batches.push(batch)
+    }
+
+    return batches
+  }
+
+  private hasConflict(a: Subtask, b: Subtask, filesModified: Map<string, string[]>): boolean {
+    const filesA = filesModified.get(a.id) ?? []
+    const filesB = filesModified.get(b.id) ?? []
+    return filesA.some(f => filesB.includes(f))
+  }
+
+  private async executeBatch(
+    batch: Subtask[],
+    sessionId: string,
+    executor: Executor,
+    verifier: Verifier,
+    errorAnalyzer: ErrorAnalyzer,
+    depTracker: DependencyTracker,
+    projectDir: string,
+    stepExecutor: (step: Subtask) => Promise<{ success: boolean; output: string; filesModified: string[]; error?: string }>,
+    fixExecutor?: (fix: string) => Promise<boolean>,
+  ): Promise<Array<{ stepId: string; success: boolean; filesModified: string[] }>> {
+    if (batch.length <= 1) {
+      const step = batch[0]
+      const r = await this.executeStepWithRetry(
+        step, sessionId, executor, verifier, errorAnalyzer,
+        depTracker, projectDir, stepExecutor, fixExecutor, 0,
+      )
+      return [r]
+    }
+
+    const promises = batch.map(step =>
+      this.executeStepWithRetry(
+        step, sessionId, executor, verifier, errorAnalyzer,
+        depTracker, projectDir, stepExecutor, fixExecutor, 0,
+      ),
+    )
+    return Promise.all(promises)
+  }
+
+  private async executeStepWithRetry(
+    step: Subtask,
+    sessionId: string,
+    executor: Executor,
+    verifier: Verifier,
+    errorAnalyzer: ErrorAnalyzer,
+    depTracker: DependencyTracker,
+    projectDir: string,
+    stepExecutor: (step: Subtask) => Promise<{ success: boolean; output: string; filesModified: string[]; error?: string }>,
+    fixExecutor?: (fix: string) => Promise<boolean>,
+    depth = 0,
+  ): Promise<{ stepId: string; success: boolean; filesModified: string[] }> {
+    let retryCount = 0
+    let stepSuccess = false
+    let stepOutput = ""
+    let filesModified: string[] = []
+
+    while (retryCount <= this.config.maxRetries) {
+      this.observers.forEach(o => o.onStepStart(step.id, depth + 1))
+
+      const result = await stepExecutor(step)
+
+      if (result.filesModified && result.filesModified.length > 0) {
+        depTracker.recordChange(sessionId, step.id, result.filesModified)
+        filesModified = result.filesModified
+      }
+
+      stepSuccess = result.success
+      stepOutput = result.output
+
+      if (stepSuccess) {
+        if (this.config.verifyAfterEach) {
+          const verifyResult = result.filesModified.length > 0
+            ? verifier.verifyRelated(step.id, projectDir, result.filesModified)
+            : verifier.verifyAll(step.id, projectDir)
+
+          if (!verifyResult.passed) {
+            stepSuccess = false
+            stepOutput = `Verification failed: ${verifyResult.errors.join("\n")}`
+            const analysis = await errorAnalyzer.analyzeDeep(stepOutput, result.filesModified)
+            this.observers.forEach(o => o.onStepComplete(step.id, false, analysis.suggestedFix))
+
+            if (!this.config.autoRetry) { retryCount++; break }
+
+            const repairResult = await this.attemptRepair(step, stepOutput, analysis, fixExecutor)
+            if (!repairResult) { retryCount++; break }
+            continue
+          }
+        }
+
+        executor.recordResult(sessionId, {
+          stepId: step.id,
+          success: true,
+          output: stepOutput,
+          filesModified,
+          error: result.error,
+        })
+        this.observers.forEach(o => o.onStepComplete(step.id, true, stepOutput))
+        return { stepId: step.id, success: true, filesModified }
+      }
+
+      retryCount++
+      this.observers.forEach(o => o.onStepComplete(step.id, false, stepOutput))
+
+      if (!this.config.autoRetry || retryCount > this.config.maxRetries) break
+
+      const analysis = await errorAnalyzer.analyzeDeep(stepOutput, filesModified)
+      const repairResult = await this.attemptRepair(step, stepOutput, analysis, fixExecutor)
+      if (!repairResult) break
+    }
+
+    executor.recordResult(sessionId, {
+      stepId: step.id,
+      success: false,
+      output: stepOutput,
+      filesModified: [],
+      error: stepOutput,
+    })
+
+    return { stepId: step.id, success: false, filesModified }
   }
 
   private async attemptRepair(

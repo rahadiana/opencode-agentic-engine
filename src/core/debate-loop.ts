@@ -80,7 +80,7 @@ export class DebateLoop {
   constructor(private llmEngine: LLMEngine) {}
 
   async execute(config: DebateConfig): Promise<DebateResult> {
-    const maxRounds = config.maxRounds ?? 3
+    const maxRounds = config.maxRounds ?? 2
     const format = config.format ?? "json"
     const rounds: DebateRound[] = []
     let currentDraft = ""

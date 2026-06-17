@@ -99,6 +99,21 @@ export class Executor {
     return null
   }
 
+  getReadySteps(sessionId: string): Subtask[] {
+    const state = this.states.get(sessionId)
+    if (!state) return []
+
+    const ready: Subtask[] = []
+    for (const step of state.plan.intent.subtasks) {
+      if (state.completedSteps.has(step.id)) continue
+      if (state.failedSteps.has(step.id)) continue
+      if (step.dependsOn.every(d => state.completedSteps.has(d))) {
+        ready.push(step)
+      }
+    }
+    return ready
+  }
+
   getBlockedSteps(sessionId: string): Array<{ id: string; description: string; blockedBy: string[] }> {
     const state = this.states.get(sessionId)
     if (!state) return []

@@ -75,20 +75,19 @@ export class LocalEmbedder {
   }
 
   private async defaultHttpCall(url: string, apiKey: string, body: unknown): Promise<unknown> {
-    const { execFileSync } = await import("node:child_process")
-    const payload = JSON.stringify(body)
-    const args = [
-      "-s", "-X", "POST", url,
-      "-H", "Content-Type: application/json",
-      "-H", `Authorization: Bearer ${apiKey}`,
-      "-d", payload,
-    ]
-    const output = execFileSync("curl", args, {
-      encoding: "utf-8",
-      timeout: 30000,
-      stdio: ["ignore", "pipe", "pipe"],
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 30000)
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
     })
-    return JSON.parse(output)
+    clearTimeout(timeout)
+    return resp.json()
   }
 
   /**

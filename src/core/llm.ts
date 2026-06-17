@@ -50,6 +50,8 @@ export class LLMEngine {
     searchEpisodes: (query: string) => Array<{ planGoal: string; outcome: string; timestamp: string }>
     findSkills: (query: string) => Array<{ name: string; successRate: number }>
   }
+  private responseCache = new Map<string, { response: LLMResponse; timestamp: number }>()
+  private readonly CACHE_TTL = 30_000 // 30s cache for identical requests
 
   constructor(config: Partial<LLMConfig> = {}) {
     this.config = {
@@ -121,10 +123,21 @@ export class LLMEngine {
     return this.config.model ?? "unknown"
   }
 
+  private getCacheKey(req: LLMRequest): string {
+    return `${this.config.provider}:${this.config.model}:${req.systemPrompt.slice(0, 100)}:${req.userPrompt.slice(0, 200)}:${req.jsonMode}`
+  }
+
   async call(req: LLMRequest): Promise<LLMResponse> {
     const startTime = Date.now()
     let success = false
     let response: LLMResponse
+
+    // Check cache for identical requests (TTL: 30s)
+    const cacheKey = this.getCacheKey(req)
+    const cached = this.responseCache.get(cacheKey)
+    if (cached && (Date.now() - cached.timestamp) < this.CACHE_TTL) {
+      return cached.response
+    }
 
     try {
       switch (this.config.provider) {
@@ -149,6 +162,11 @@ export class LLMEngine {
       logParseError('LLM call', error);
       response = { content: "LLM call threw an exception", finishReason: "error" }
       success = false
+    }
+
+    // Cache successful responses
+    if (success) {
+      this.responseCache.set(cacheKey, { response, timestamp: Date.now() })
     }
 
     const latency = Date.now() - startTime
@@ -487,29 +505,29 @@ export class LLMEngine {
 
   private async httpCall(url: string, apiKey: string, body: unknown, extraHeaders: Record<string, string> = {}): Promise<LLMResponse> {
     try {
-      const payload = JSON.stringify(body)
-      const args = [
-        "-s", "-X", "POST", url,
-        "-H", "Content-Type: application/json",
-        "-H", `Authorization: Bearer ${apiKey}`,
-      ]
-      for (const [k, v] of Object.entries(extraHeaders)) {
-        args.push("-H", `${k}: ${v}`)
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+        ...extraHeaders,
       }
-      args.push("-d", payload)
 
-      const output = execFileSync("curl", args, {
-        encoding: "utf-8",
-        timeout: 60000,
-        stdio: ["ignore", "pipe", "pipe"],
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 60000)
+
+      const resp = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
       })
+      clearTimeout(timeout)
 
       let data: Record<string, unknown>
+      const text = await resp.text()
       try {
-        data = JSON.parse(output)
+        data = JSON.parse(text)
       } catch {
-        // Response is not JSON — return raw content
-        return { content: output.slice(0, 4096) || "LLM returned non-JSON response" }
+        return { content: text.slice(0, 4096) || "LLM returned non-JSON response" }
       }
 
       const d = data as Record<string, any>
@@ -536,6 +554,9 @@ export class LLMEngine {
 
       return { content: JSON.stringify(data) }
     } catch (e) {
+      if ((e as Error).name === "AbortError") {
+        return { content: "LLM call timed out after 60s", finishReason: "timeout" }
+      }
       return { content: `LLM call failed: ${(e as Error).message}` }
     }
   }
