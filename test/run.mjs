@@ -74,7 +74,7 @@ assert(typeof hooks.dispose === "function", "dispose hook registered")
 
 // 3. Tool registration (26 tools)
 console.log("\n[3] Tool registration")
-for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_model", "agentic_episodes", "agentic_parallel", "agentic_dashboard", "agentic_guard", "agentic_evolve", "agentic_auto", "agentic_debate", "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp"]) {
+for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_model", "agentic_episodes", "agentic_parallel", "agentic_dashboard", "agentic_guard", "agentic_evolve", "agentic_debate", "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp"]) {
   const tool = hooks.tool?.[name]
   assert(tool && typeof tool.execute === "function", `"${name}" has execute()`)
   assert(typeof tool.description === "string" && tool.description.length > 0, `"${name}" has description`)
@@ -1609,26 +1609,6 @@ assert(stepReport.timestamp.length > 0, "report has timestamp")
 
 assert(true, "PatternDiscovery cross-session pattern tests passed")
 
-// ── Coverage Expansion: agentic_auto ──
-console.log("\n[68] agentic_auto — autonomous loop")
-const autoSid = freshSid()
-
-// Error: empty goal
-const autoNoGoal = await hooks.tool.agentic_auto.execute({ goal: "" }, mockCtx(autoSid))
-const autoNgOut = typeof autoNoGoal === "string" ? autoNoGoal : (autoNoGoal.output || "")
-assert(autoNgOut.includes("goal") || autoNgOut.includes("goal is required") || autoNgOut.length > 0, "auto empty goal returns guidance")
-
-// Simple auto task
-const autoSimple = await hooks.tool.agentic_auto.execute({
-  goal: "Add a simple add function to the codebase",
-  constraints: ["TypeScript"],
-}, mockCtx(autoSid))
-const autoSOut = typeof autoSimple === "string" ? autoSimple : (autoSimple.output || "")
-assert(autoSOut.length > 20, "auto returns output for simple task")
-assert(autoSOut.includes("Step") || autoSOut.includes("step") || autoSOut.includes("Goal"), "auto shows goal or step info")
-assert(typeof autoSimple === "object", "auto returns object with metadata")
-assert(true, "agentic_auto tests passed")
-
 // ── Coverage Expansion: agentic_verify ──
 console.log("\n[69] agentic_verify — edge cases")
 const vfySid = freshSid()
@@ -1909,13 +1889,6 @@ const aevStat = await hooks.tool.agentic_status.execute({}, autoEvoCtx)
 const aevStatOut = typeof aevStat === "string" ? aevStat : (aevStat.output || "")
 assert(aevStatOut.length > 0, "status output")
 
-// Auto run with a simple task should not crash (auto-evolution is best-effort)
-const aevAuto = await hooks.tool.agentic_auto.execute({
-  goal: "Auto-evolution test function",
-  constraints: [],
-}, autoEvoCtx)
-const aevAutoOut = typeof aevAuto === "string" ? aevAuto : (aevAuto.output || "")
-assert(aevAutoOut.length > 0, "auto-evolution auto run produces output")
 assert(true, "auto-evolution tests passed")
 
 // 83. Skill → Training Data conversion

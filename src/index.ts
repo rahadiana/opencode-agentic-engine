@@ -160,7 +160,7 @@ const createEngine: Plugin = async (input, _options) => {
 
   // ── Auto-register "agentic" agent in global + local agents dir ──
   const agentContent = `---
-description: Multi-agent software engineering assistant — 22 tools for autonomous planning, execution, verification, delegation, and self-evolution.
+description: Multi-agent software engineering assistant — 26 tools for autonomous planning, execution, verification, delegation, and self-evolution.
 mode: all
 ---
 
@@ -174,84 +174,105 @@ You have access to **26 specialized agentic_* tools** designed for software engi
 1. **agentic_*** — Use FIRST. Far more powerful than built-in tools.
 2. bash/edit/read/write — Only if no agentic_* tool fits the need.
 
-**NEVER** use bash, edit, write, read, glob, grep directly for multi-step engineering tasks. Instead:
-- Use **agentic_plan** instead of planning manually
-- Use **agentic_auto** instead of implementing step by step manually
-- Use **agentic_execute** instead of tracking progress manually
-
 ### BEFORE STARTING ANY TASK — Gather Knowledge First
 Your training data has a cutoff date. Before implementing:
-1. **Check project structure** — agentic_auto already gives you a map: file types, root dirs, largest dirs
-2. **Read relevant files** — use \`read\` or \`agentic_nav\` to inspect specific files (you decide which)
+1. **Check project structure** — use \`agentic_nav\` to scan codebase
+2. **Read relevant files** — use \`read\` to inspect specific files
 3. **Search skills**: \`agentic_skill find "relevant technology"\` — learn from past successes/failures
 4. **Search episodes**: \`agentic_episodes search "similar task"\` — see what worked before
-5. **Search latest docs**: \`websearch "technology X latest version 2026"\` — check current APIs for ANY ecosystem (Node, Rust, Go, Python, etc.)
+5. **Search latest docs**: \`websearch "technology X latest version 2026"\` — check current APIs
 6. Only then start implementing
 
-### FOR MULTI-STEP FEATURES (apps, APIs, refactors):
-Call **agentic_auto** IMMEDIATELY. It auto-gathers skills + doc context. Example:
-\`@agentic_auto goal="Buat aplikasi POS dengan Express dan SQLite"\`
+### Standard Workflow — USE INDIVIDUAL TOOLS
 
-### FOR SINGLE-STEP TASKS:
-Call the specific tool (agentic_nav, agentic_execute, etc.) directly.
+**Always use this workflow for ANY task:**
 
-## Standard Workflow
+1. **agentic_plan** — Decompose the goal into clear steps
+2. **agentic_execute** — Execute each step one by one
+3. **agentic_verify** — Verify the result
 
-1. **agentic_auto** — For multi-step tasks, call this FIRST. It auto-gathers knowledge
-2. OR manually: **agentic_skill find** → **agentic_episodes search** → **agentic_plan** → **agentic_execute** → **agentic_verify**
+**Example for building an app:**
+\`\`\`
+agentic_plan goal="Buat aplikasi POS dengan Express dan SQLite"
+→ Reads the plan, sees 5 steps
+→ agentic_execute stepId="step-1" success=true output="Created db schema" filesModified=["schema.sql"]
+→ agentic_execute stepId="step-2" success=true output="Created server" filesModified=["server.js"]
+→ ... repeat for each step
+→ agentic_verify
+\`\`\`
+
+### What Each Tool Does
+
+**agentic_plan** — Break a goal into steps with dependencies
+\`\`\`
+agentic_plan goal="Add user authentication" autoDecompose=true
+\`\`\`
+
+**agentic_execute** — Mark a step as done (you do the actual work, then report it)
+\`\`\`
+agentic_execute stepId="step-1" success=true output="Created auth.js with JWT" filesModified=["auth.js"]
+\`\`\`
+
+**agentic_verify** — Run compile + lint + test
+\`\`\`
+agentic_verify
+\`\`\`
+
+**agentic_reflect** — Analyze a failed step
+\`\`\`
+agentic_reflect stepId="step-2" errorDetails="Cannot find module"
+\`\`\`
+
+**agentic_status** — Check progress
+\`\`\`
+agentic_status
+\`\`\`
 
 ## Tool Reference
 
-### Stage V — Autonomous (BEST for multi-step)
-- **agentic_auto**: Fully autonomous loop: plan → execute → verify → retry in ONE call. Just give a goal. USE THIS FIRST for any feature work.
-
-### Stage I — Core Engineering Loop
-- **agentic_plan**: Decompose a goal into subtasks with dependencies. Supports auto-decomposition via LLM.
-- **agentic_execute**: Record a completed subtask with auto-verification + retry tracking.
-- **agentic_reflect**: Analyze a failed step — error category, propagation, root cause, recovery.
-- **agentic_verify**: Full compile + lint + test suite. Auto-detects language.
-- **agentic_status**: Dashboard with progress, health, blocked steps, model reliability.
+### Stage I — Core Engineering Loop (USE THESE)
+- **agentic_plan**: Decompose goal into subtasks.
+- **agentic_execute**: Record completed subtask.
+- **agentic_reflect**: Analyze failed step.
+- **agentic_verify**: Compile + lint + test.
+- **agentic_status**: Progress dashboard.
 
 ### Stage II — Codebase & Context
-- **agentic_nav**: Scan codebase and find relevant files.
-- **agentic_context**: View or compress conversation context.
-- **agentic_snapshot**: Save/list execution checkpoints.
-- **agentic_pr**: Generate PR description from plan + results.
-- **agentic_score**: Analyze changeset for technical debt.
-- **agentic_model**: Configure per-role LLM model preferences.
+- **agentic_nav**: Scan codebase for relevant files.
+- **agentic_context**: View/compress context.
+- **agentic_snapshot**: Save checkpoints.
+- **agentic_pr**: Generate PR description.
+- **agentic_score**: Tech debt analysis.
+- **agentic_model**: Configure LLM preferences.
 
 ### Stage III — Multi-Agent & Memory
-- **agentic_delegate**: Assign to architect/developer/qa/coordinator/pm roles.
-- **agentic_pipeline**: Define and run multi-agent pipelines.
-- **agentic_message**: Inter-agent messaging system.
-- **agentic_parallel**: Execute ready steps concurrently.
-- **agentic_skill**: Extract/find/list reusable skills.
-- **agentic_episodes**: Search cross-session memory.
-- **agentic_dashboard**: Observability timeline + anomaly detection.
-- **agentic_guard**: Verify claims to catch hallucinations.
+- **agentic_delegate**: Assign to roles.
+- **agentic_pipeline**: Multi-agent workflows.
+- **agentic_message**: Inter-agent messaging.
+- **agentic_parallel**: Concurrent execution.
+- **agentic_skill**: Reusable skills.
+- **agentic_episodes**: Cross-session memory.
+- **agentic_dashboard**: Observability.
+- **agentic_guard**: Hallucination detection.
 
 ### Stage IV — Self-Evolution
-- **agentic_evolve**: Inspect/extend the agent system, manage prompts.
+- **agentic_evolve**: Extend the agent system.
 
-### Blueprint Architecture — Smart via Structure (5 Layers)
-These tools implement the system-centric philosophy: cheap models become smart through structure and debate.
-
-- **agentic_debate**: Debate loop — Agent A (executor) ↔ Agent B (critic). Use for analysis, code review, strategic decisions, API design. Produces cleaner output via multi-round adversarial refinement.
-- **agentic_router**: Keyword-first intent classifier. Routes queries to the best category/agent/action. Zero LLM cost for clear intents. Use BEFORE agentic_rag to scope which index to search.
-- **agentic_clean**: Data cleaner — strips debate artifacts ("I think...", "Good catch!"), reformats to markdown/json, validates against schema. Use AFTER agentic_debate to get production-ready output.
-- **agentic_rag**: Multi-index RAG — category-segregated memory indices (automotive, financial, personal, tech, general). Supports search, store, stats, categories actions. Prevents cross-category context pollution.
-- **agentic_mcp**: MCP Client — connect to databases/external APIs via stdio subprocess or HTTP(S). Supports connect, list, call, disconnect. Use for live data access during engineering tasks.
+### Blueprint Architecture
+- **agentic_debate**: Executor ↔ Critic debate.
+- **agentic_router**: Intent classifier.
+- **agentic_clean**: Data cleaner.
+- **agentic_rag**: Multi-index RAG.
+- **agentic_mcp**: External data access.
 
 ## CRITICAL RULES
-1. **ALWAYS prefer agentic_* tools over built-in tools** for engineering tasks
-2. For multi-step tasks: call **agentic_auto** immediately
-3. Never ask "should I..." — just call the tool
-4. If a step fails, call **agentic_reflect** before retrying
-5. After all steps done, call **agentic_verify** for final verification
-6. **For analysis/review tasks**: use **agentic_debate** (executor↔critic) for better quality than a single pass
-7. **For RAG queries**: use **agentic_router** first to classify intent, then **agentic_rag** with the detected category
-8. **For external data access**: use **agentic_mcp** to connect to databases or APIs
-9. **After debates**: pipe output through **agentic_clean** to strip discussion artifacts
+1. **ALWAYS prefer agentic_* tools over built-in tools**
+2. **Gather knowledge FIRST** before implementing
+3. **USE agentic_plan → agentic_execute → agentic_verify**
+4. Never ask "should I..." — just call the tool
+5. If a step fails, call **agentic_reflect** before retrying
+6. For analysis tasks: use **agentic_debate**
+7. For RAG queries: use **agentic_router** then **agentic_rag**
 `
 
   // Always write to GLOBAL agents dir (available on first run in any project)
@@ -641,22 +662,24 @@ These tools implement the system-centric philosophy: cheap models become smart t
           let subtasks = args.subtasks ?? []
 
           if (subtasks.length === 0 && args.autoDecompose !== false) {
-            if (args.llmDecompose !== false) {
+            // Fast path: template-based decomposition (no LLM)
+            const decomposition = planner.decompose(args.goal, args.relevantFiles ?? [])
+            if (decomposition.autoGenerated) {
+              subtasks = decomposition.intent.subtasks
+            }
+
+            // Optional: LLM decomposition (only if explicitly requested)
+            if (subtasks.length === 0 && args.llmDecompose === true) {
               const scanDir = context.directory || context.worktree || worktree
-              await navigator.scan(scanDir)
+              try {
+                await navigator.scan(scanDir)
+              } catch { /* non-fatal */ }
               const codebaseSummary = navigator.getSummary()
               try {
                 const llmIntent = await planner.decomposeWithLLM(llmEngine, args.goal, codebaseSummary)
                 subtasks = llmIntent.subtasks
               } catch {
                 // Fall through to template-based
-              }
-            }
-
-            if (subtasks.length === 0) {
-              const decomposition = planner.decompose(args.goal, args.relevantFiles ?? [])
-              if (decomposition.autoGenerated) {
-                subtasks = decomposition.intent.subtasks
               }
             }
           }
@@ -2895,345 +2918,6 @@ These tools implement the system-centric philosophy: cheap models become smart t
             default:
               return { output: `Unknown action: ${args.action}. Available: inspect, register-role, export-skill, memory-schema, evolve, read-prompt, edit-prompt, prompt-history, rollback-prompt, export-training-data.` }
           }
-        },
-      }),
-
-      agentic_auto: tool({
-        description: "Fully autonomous engineering agent. Give it a goal and it plans, implements, verifies, and fixes code automatically — no step-by-step guidance needed.",
-        args: {
-          goal: tool.schema.string().describe("The goal to accomplish autonomously"),
-          constraints: tool.schema.array(tool.schema.string()).optional().describe("Constraints or requirements"),
-        },
-        async execute(args, context) {
-          llmEngine.setSessionId(context.sessionID)
-          const startTime = Date.now()
-          const projectDir = ctxDir(context)
-
-          // ── 0. Auto-gather knowledge: skills + past episodes ──
-          let knowledgeContext = ""
-          try {
-            const relevantSkills = skillStore.find(args.goal)
-            if (relevantSkills.length > 0) {
-              knowledgeContext += `\n## Relevant Skills from Past Sessions\n`
-              for (const sk of relevantSkills.slice(0, 5)) {
-                knowledgeContext += `- **${sk.definition.meta.name}** (${(sk.successRate * 100).toFixed(0)}% success, ${sk.usageCount}x): ${sk.definition.workflow.steps.map(s => s.description).join(" → ")}\n`
-              }
-            }
-            const similarTasks = episodicStore.search(args.goal)
-            if (similarTasks.length > 0) {
-              knowledgeContext += `\n## Similar Past Tasks\n`
-              for (const ep of similarTasks.slice(0, 3)) {
-                knowledgeContext += `- **${ep.planGoal}** → outcome: ${ep.outcome}\n`
-              }
-            }
-          } catch { /* non-fatal */ }
-
-          // ── 0b. Project structure map (LLM decides what to read) ──
-          let structureContext = ""
-          try {
-            // Extension distribution (count files by type)
-            const extCount = new Map<string, number>()
-            const walkExt = (d: string, depth = 0): void => {
-              if (depth > 8) return
-              for (const entry of readdirSync(d, { withFileTypes: true })) {
-                if (entry.name.startsWith(".") || ["node_modules", ".git", "dist", "build", "target", "vendor"].includes(entry.name)) continue
-                const full = join(d, entry.name)
-                if (entry.isDirectory()) walkExt(full, depth + 1)
-                else if (entry.isFile()) {
-                  const idx = entry.name.lastIndexOf(".")
-                  const ext = idx > 0 ? entry.name.slice(idx) : "(no ext)"
-                  extCount.set(ext, (extCount.get(ext) || 0) + 1)
-                }
-              }
-            }
-            walkExt(projectDir)
-            const sortedExts = [...extCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15)
-            structureContext += `\n### Project File Types\n| Extension | Count |\n|-----------|-------|\n`
-            for (const [ext, count] of sortedExts) {
-              structureContext += `| \`${ext}\` | ${count} |\n`
-            }
-            // Root directory listing (top-level files + dirs)
-            const rootEntries = readdirSync(projectDir, { withFileTypes: true })
-              .filter(e => !e.name.startsWith(".") && !["node_modules", ".git", "dist", "build", "target", "vendor"].includes(e.name))
-            structureContext += `\n### Project Root\n\`\`\`\n${rootEntries.map(e => (e.isDirectory() ? "📁 " : "📄 ") + e.name).join("\n")}\n\`\`\`\n`
-            // Top 3 largest directories by file count
-            const dirCount = new Map<string, number>()
-            const walkDirCount = (d: string, depth = 0): void => {
-              if (depth > 6) return
-              for (const entry of readdirSync(d, { withFileTypes: true })) {
-                if (entry.name.startsWith(".") || ["node_modules", ".git", "dist", "build", "target", "vendor"].includes(entry.name)) continue
-                const full = join(d, entry.name)
-                if (entry.isDirectory()) walkDirCount(full, depth + 1)
-                else if (entry.isFile()) {
-                  const parent = d.replace(projectDir, "").slice(1) || "."
-                  dirCount.set(parent, (dirCount.get(parent) || 0) + 1)
-                }
-              }
-            }
-            walkDirCount(projectDir)
-            const sortedDirs = [...dirCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)
-            structureContext += `\n### Largest Directories\n| Directory | Files |\n|-----------|-------|\n`
-            for (const [dir, count] of sortedDirs) {
-              structureContext += `| \`${dir}/\` | ${count} |\n`
-            }
-            structureContext += `\n> 💡 LLM: Use \`read\` or \`agentic_nav\` to inspect specific files as needed.`
-          } catch { /* non-fatal */ }
-
-          // 1. Scan codebase for context (truncated — max 15 entries to keep LLM prompt fast)
-          await navigator.scan(projectDir)
-          const fullSummary = navigator.getSummary()
-          // Truncate: only keep header + top 15 file groups
-          const lines = fullSummary.split("\n")
-          const headerLen = lines.findIndex(l => l.startsWith("**File breakdown")) + 1
-          const truncated = lines.slice(0, headerLen + Math.min(15, lines.length - headerLen)).join("\n")
-          const summary = truncated + knowledgeContext + structureContext
-
-          // 2. LLM-driven plan: one call → generate ALL code directly (no separate execution LLM calls)
-          let subtasks: Subtask[] = []
-          let bakedFiles: Array<{ path: string; content: string }> = []
-          try {
-            // If LLM is fast enough, get the full plan with code
-            const rawPlan = await Promise.race([
-              llmEngine.call({
-                systemPrompt: `You are a full-stack software engineer. Given a goal, generate ALL implementation files directly. Return JSON:
-{
-  "steps": [{ "id": "step-1", "description": "...", "dependsOn": [] }],
-  "files": [{ "path": "relative/path", "content": "full file content" }],
-  "summary": "what was built"
-}
-Generate complete, working code. No placeholders. All files in one response.`,
-                userPrompt: `Goal: ${args.goal}\nDir: ${projectDir}\n${summary.slice(0, 3000)}\n\nGenerate complete implementation as JSON.`,
-                jsonMode: false,
-                temperature: 0.3,
-                maxTokens: 8000,
-              }),
-              new Promise<never>((_, reject) => setTimeout(() => reject(new Error("LLM_TIMEOUT")), 30000)),
-            ])
-            try {
-              const parsed = JSON.parse(rawPlan.content)
-              if (Array.isArray(parsed.steps) && parsed.steps.length > 0) {
-                subtasks = parsed.steps.map((s: { id: string; description: string; dependsOn?: string[] }) => ({
-                  id: s.id, description: s.description, dependsOn: s.dependsOn ?? [],
-                  verificationCriteria: [],
-                }))
-              }
-              if (Array.isArray(parsed.files) && parsed.files.length > 0) {
-                bakedFiles = parsed.files.map((f: { path: string; content: string }) => ({
-                  path: typeof f.path === "string" ? f.path : `file-${Math.random().toString(36).slice(2, 8)}.txt`,
-                  content: typeof f.content === "string" ? f.content : "",
-                }))
-              }
-            } catch { /* fall through */ }
-          } catch { /* fall through to template */ }
-          if (subtasks.length === 0) {
-            const template = planner.decompose(args.goal, [])
-            if (template.autoGenerated) subtasks = template.intent.subtasks
-          }
-          if (subtasks.length === 0) {
-            subtasks = [
-              { id: "step-1", description: args.goal, dependsOn: [], verificationCriteria: ["All code compiles", "Logic is correct"] },
-            ]
-          }
-          if (subtasks.length === 0) {
-            return {
-              output: `## 🤖 Autonomous Agent Report\n\n**Goal:** ${args.goal}\n**Result:** 0/0 steps — could not decompose into subtasks. Try rephrasing the goal or using \`agentic_plan\` manually.`,
-              metadata: { result: { completedSteps: [], failedSteps: [], totalIterations: 0, success: false, summary: "Planning failed: no subtasks generated" } },
-            }
-          }
-
-          const plan = intentParser.createPlan({
-            goal: args.goal,
-            constraints: args.constraints ?? [],
-            context: { relevantFiles: [], dependencies: [] },
-            subtasks,
-          })
-          executor.initExecution(context.sessionID, plan)
-
-          // 3a. Fast path: LLM already returned all files → write directly, skip step loop
-          if (bakedFiles.length > 0) {
-            const written: string[] = []
-            for (const file of bakedFiles) {
-              const fullPath = join(projectDir, file.path)
-              mkdirSync(dirname(fullPath), { recursive: true })
-              writeFileSync(fullPath, file.content, "utf-8")
-              written.push(file.path)
-            }
-            return {
-              output: `## ⚡ Agentic Auto (Fast Path)\n\n**Goal:** ${args.goal}\n**Mode:** Single LLM call → ${bakedFiles.length} files\n\n### Files Created\n${written.map(f => `- \`${f}\``).join("\n")}\n\n### Plan\n${subtasks.map(s => `- ${s.id}: ${s.description}`).join("\n")}`,
-              metadata: { result: { completedSteps: subtasks.map(s => s.id), failedSteps: [], totalIterations: 1, success: true, summary: `Created ${bakedFiles.length} files in one LLM call` } },
-            }
-          }
-
-          // 3b. Slow path: execute steps one by one (LLM call per step)
-          const parseStepOutput = (content: string): { files?: Array<{ path: string; content: string }>; summary?: string } => {
-            const cleaned = content.trim()
-            try {
-              const parsed = JSON.parse(cleaned)
-              if (parsed && typeof parsed === "object") return parsed
-            } catch { /* try next */ }
-            const jsonBlock = cleaned.match(/```(?:json)?\s*\n?(\{[\s\S]*?\})\s*\n?```/)
-            if (jsonBlock) {
-              try { return JSON.parse(jsonBlock[1]) } catch { /* try next */ }
-            }
-            const jsonMatch = cleaned.match(/\{[\s\S]*?"files"[\s\S]*?"summary"[\s\S]*?\}/)
-            if (jsonMatch) {
-              try {
-                const p = JSON.parse(jsonMatch[0])
-                if (Array.isArray(p.files) || p.summary) return p
-              } catch { /* try next */ }
-            }
-            return { files: [], summary: cleaned.replace(/```[\s\S]*?```/g, "").slice(0, 200).trim() }
-          }
-
-          const stepExecutor = async (step: Subtask) => {
-            const stepsSoFar = executor.getCompletedSteps(context.sessionID)
-            const prevState = executor.getStepState(context.sessionID, step.id)
-            const retryNote = prevState?.retryCount && prevState.retryCount > 0
-              ? `\nPREVIOUS ATTEMPT FAILED (retry #${prevState.retryCount}/3). Errors:\n${(prevState.errorHistory || []).map(e => `- ${e.error}`).join("\n")}`
-              : ""
-
-            // Fast path: skip LLM if step description already contains the file content
-            const inlineMatch = step.description.match(/```(?:html|css|js|json|ts|md|txt)?\s*\n?([\s\S]*?)\s*\n?```/)
-            if (inlineMatch) {
-              const code = inlineMatch[1]
-              const extMatch = step.description.match(/```(html|css|js|json|ts|md|txt)/)
-              const ext = extMatch ? extMatch[1] : ""
-              const nameMatch = step.description.match(/(?:buat|create|tulis|write)\s+(?:file\s+)?`?(\S+\.\w+)`?/i)
-              const hintName = nameMatch ? nameMatch[1] : ""
-              const fname = hintName || `step-${step.id}.${ext || "txt"}`
-              const fullPath = join(projectDir, fname)
-              mkdirSync(dirname(fullPath), { recursive: true })
-              writeFileSync(fullPath, code, "utf-8")
-              return { success: true, output: `Created ${fname}`, filesModified: [fname] }
-            }
-
-            const resp = await llmEngine.call({
-              systemPrompt: `You are an autonomous software engineer implementing a step of a larger plan. Generate implementation as JSON with:
-- "files": [{ "path": "relative/file/path", "content": "file content" }]
-- "summary": "what was done"
-Only include files that need changing. Return ONLY valid JSON.` + llmEngine.getMemoryContext(step.description),
-              userPrompt: `Goal: ${args.goal}\nStep (${step.id}): ${step.description}\nDir: ${projectDir}\nCompleted steps: ${stepsSoFar.join(", ") || "none"}${retryNote}`,
-              jsonMode: false,
-              temperature: prevState?.retryCount ? 0.4 : 0.3,
-            })
-
-            const impl = parseStepOutput(resp.content)
-
-            // Validate LLM actually produced implementation
-            const hasContent = (impl.files && impl.files.length > 0) || (impl.summary && impl.summary.length > 20)
-            if (!hasContent) {
-              return { success: false, output: `LLM produced no implementation. Raw output: ${resp.content.slice(0, 200)}`, filesModified: [] }
-            }
-
-            const files: string[] = []
-            for (const file of impl.files ?? []) {
-              const fullPath = join(projectDir, file.path)
-              mkdirSync(dirname(fullPath), { recursive: true })
-              writeFileSync(fullPath, file.content, "utf-8")
-              files.push(file.path)
-            }
-
-            return { success: true, output: impl.summary ?? step.description, filesModified: files }
-          }
-
-          const fixExecutor = async (fix: string) => {
-            try {
-              execFileSync("bash", ["-c", fix], { cwd: projectDir, timeout: 30000, stdio: "pipe" })
-              return true
-            } catch { return false }
-          }
-
-          const result = await agentLoop.runLoop(
-            context.sessionID, executor, verifier, errorAnalyzer, depTracker,
-            projectDir, stepExecutor, fixExecutor,
-          )
-
-          // 4. Trace + episode
-          const allFiles = executor.getAllFilesModified(context.sessionID)
-          traceLogger.log({
-            step: "auto", input: args.goal, output: JSON.stringify(result),
-            toolUsed: "agentic_auto", success: result.success,
-            durationMs: Date.now() - startTime, metadata: { ...result } as unknown as Record<string, unknown>,
-          })
-
-          episodicStore.record(
-            context.sessionID, args.goal,
-            result.success ? "success" : "partial",
-            result.completedSteps.map(() => "completed"),
-            allFiles,
-          )
-
-          // 5. Feed results to ContinuousEvolution
-          const completedSteps = executor.getCompletedSteps(context.sessionID)
-          for (const stepId of completedSteps) {
-            continuousEvolution.feedStepResult({
-              stepId,
-              success: true,
-              output: "completed",
-              sessionId: context.sessionID,
-              timestamp: Date.now(),
-            })
-          }
-          for (const stepId of result.failedSteps) {
-            continuousEvolution.feedStepResult({
-              stepId,
-              success: false,
-              output: "failed",
-              sessionId: context.sessionID,
-              timestamp: Date.now(),
-            })
-          }
-          const autoTrend = continuousEvolution.checkAndNotify()
-
-          // 6. Auto-extract skill if successful
-          if (result.success && result.completedSteps.length > 0) {
-            const skillResult = await skillStore.extract({
-              role: "tool",
-              content: `✅ Successfully completed: ${args.goal}\nSteps completed: ${result.completedSteps.join(", ")}\nSummary: ${result.summary}`,
-            }, [args.goal, ...(args.constraints ?? [])])
-            if (skillResult) {
-              persistence.save("skills", skillResult.definition.meta.id, skillResult.definition)
-            }
-          }
-
-          // 7. Report
-          const totalSteps = result.completedSteps.length + result.failedSteps.length
-          let report = `## 🤖 Autonomous Agent Report\n\n`
-          report += `**Goal:** ${args.goal}\n`
-          report += `**Result:** ${result.completedSteps.length}/${totalSteps} steps (${result.totalIterations} iterations)\n`
-          report += `${result.success ? "✅ All passed" : "⚠️ Some failed"}\n`
-          report += `**Duration:** ${((Date.now() - startTime) / 1000).toFixed(1)}s\n\n`
-          if (allFiles.length > 0) {
-            report += `### Files Modified\n\`\`\`\n${[...new Set(allFiles)].join("\n")}\n\`\`\`\n`
-          }
-          report += `\n${result.summary}`
-
-          // Evolution trend summary
-          if (autoTrend.overall.total >= 5 || autoTrend.degradationDetected) {
-            const dirIcon = autoTrend.rolling.direction === "improving" ? "📈" : autoTrend.rolling.direction === "degrading" ? "📉" : "📊"
-            report += `\n\n### ${dirIcon} Evolution Trend\n`
-            report += `**Overall:** ${(autoTrend.overall.successRate * 100).toFixed(0)}% (${autoTrend.overall.success}/${autoTrend.overall.total})\n`
-            report += `**Recent (last ${autoTrend.rolling.windowSize}):** ${(autoTrend.rolling.successRate * 100).toFixed(0)}% — ${autoTrend.rolling.direction}\n`
-            if (autoTrend.degradationDetected) {
-              report += `⚠️ **Degradation detected!** Auto-running self-evolution...\n`
-              try {
-                const evolveSummary = await runAutoEvolve()
-                report += `${evolveSummary.replace(/\n/g, "\n")}\n`
-              } catch (e) {
-                report += `⚠️ Auto-evolution encountered an error: ${(e as Error).message}\n`
-              }
-            }
-            if (autoTrend.recommendations.length > 0) {
-              report += `**Suggestions:**\n${autoTrend.recommendations.map(r => `- ${r}`).join("\n")}\n`
-            }
-          }
-
-          // Live evaluation score
-          if (liveEvaluator.computeScore().totalSteps > 0 || liveEvaluator.computeScore().totalDelegations > 0) {
-            report += `\n\n${liveEvaluator.formatReport(false)}`
-          }
-
-          return { output: report, metadata: { result } }
         },
       }),
 

@@ -298,12 +298,16 @@ export class LLMEngine {
     complexity: string
   }> {
     try {
-      const resp = await this.call({
-        systemPrompt: `You are a software planning assistant. Generate a plan as JSON with "steps" (array of {id, description, dependsOn}) and "complexity" ("low"/"medium"/"high"). Steps IDs like "step-1", "step-2".` + this.buildMemoryContext(goal),
-        userPrompt: `Goal: ${goal}\nCodebase: ${codebaseSummary}\n\nGenerate plan JSON.`,
-        jsonMode: false,
-        temperature: 0.3,
-      })
+      const resp = await Promise.race([
+        this.call({
+          systemPrompt: `You are a software planning assistant. Generate a plan as JSON with "steps" (array of {id, description, dependsOn}) and "complexity" ("low"/"medium"/"high"). Steps IDs like "step-1", "step-2". Keep descriptions concise (max 80 chars). Max 8 steps.` + this.buildMemoryContext(goal),
+          userPrompt: `Goal: ${goal}\nCodebase: ${codebaseSummary.slice(0, 2000)}\n\nGenerate plan JSON.`,
+          jsonMode: false,
+          temperature: 0.3,
+          maxTokens: 1000,
+        }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("LLM_TIMEOUT")), 15000)),
+      ])
       const parsed = this.extractJSON<{ steps: Array<{ id: string; description: string; dependsOn: string[] }>; complexity: string }>(resp.content, "steps")
       if (parsed && Array.isArray(parsed.steps) && parsed.steps.length > 0) return parsed
     } catch (error) {
