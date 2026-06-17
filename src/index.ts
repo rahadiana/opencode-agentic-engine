@@ -3392,52 +3392,56 @@ agentic_status
           sessionStore.getOrCreate(context.sessionID).plan = plan
 
           // ═══════════════════════════════════════════════
-          // PHASE 3: Implement — architecture-first single LLM call
+          // PHASE 3: Implement — FAST single LLM call, return JSON
           // ═══════════════════════════════════════════════
           const fileContents: Record<string, string> = {}
           for (const f of relevantFiles) {
-            try { fileContents[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 300) } catch { /* skip */ }
+            try { fileContents[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 150) } catch { /* skip */ }
           }
 
           const filesBlock = Object.entries(fileContents)
-            .map(([p, c]) => `### ${p}\n\`\`\`\n${c}\n\`\`\``).join("\n\n")
+            .map(([p, c]) => `${p}:\n${c.slice(0, 100)}`).join("\n---\n")
           const contextHints = [...memoryContexts.slice(0, 2), ...skillContexts.slice(0, 1)].join("; ")
 
-          // Super-compact prompt — minimal token waste
-          const systemPrompt = `Senior engineer. Write COMPLETE files.
+          // LLM returns JSON — faster parsing, no FILE: blocks needed
+          const systemPrompt = `Return JSON array of {path, content}. Write COMPLETE file contents.
+Rules: ESM imports (.js) · match existing patterns · valid imports
+{"files":[{"path":"src/x.ts","content":"..."}]} or {"noChanges":true}`
 
-FILE: path/to/file.ext
-\`\`\`language
-... code ...
-\`\`\`
+          const userPrompt = `${args.goal}${args.constraints?.length ? `\nConstraints: ${args.constraints.join(", ")}` : ""}${contextHints ? `\nContext: ${contextHints}` : ""}\n\n${filesBlock || "(new)"}\n${codebaseSummary.slice(0, 100)}`
 
-Rules: complete files only · ESM imports (.js) · match existing patterns · valid imports · NO_CHANGES if nothing to change`
-
-          const userPrompt = `${args.goal}${args.constraints?.length ? `\nConstraints: ${args.constraints.join(", ")}` : ""}${contextHints ? `\nContext: ${contextHints}` : ""}\n\nCurrent files:\n${filesBlock || "(new project)"}\n\nCodebase: ${codebaseSummary.slice(0, 200)}\n\nGenerate file changes.`
-
-          // Adaptive maxTokens: simple task = 2048, complex = 4096
           const isSimple = args.goal.length < 80 && activeSteps.length < 3
-          const maxTokens = isSimple ? 2048 : 4096
+          const maxTokens = isSimple ? 1024 : 2048
 
           const llmResult = await llmEngine.call({
             systemPrompt, userPrompt,
-            temperature: 0.2, maxTokens,
+            temperature: 0.2, maxTokens, jsonMode: true,
           })
 
           const output = llmResult.content || ""
           const hasNoLLM = output.includes("[NO_LLM]") || output === "NO_LLM"
 
-          // Parse FILE: blocks from LLM output
+          // Parse JSON output
           const filesToWrite: Array<{ path: string; content: string }> = []
           if (!hasNoLLM) {
-            const fileRegex = /FILE:\s*(\S+)\n```(?:\w+)?\n([\s\S]*?)```/g
-            let m: RegExpExecArray | null
-            while ((m = fileRegex.exec(output)) !== null) {
-              filesToWrite.push({ path: m[1].replace(/^\/+/, ""), content: m[2] })
-            }
-            if (filesToWrite.length === 0 && !output.includes("NO_CHANGES")) {
-              const cb = output.match(/```(?:\w+)?\n([\s\S]*?)```/)
-              if (cb) filesToWrite.push({ path: relevantFiles[0]?.replace(/^\/+/, "") || "src/index.ts", content: cb[1] })
+            try {
+              const parsed = JSON.parse(output)
+              if (parsed.files && Array.isArray(parsed.files)) {
+                for (const f of parsed.files) {
+                  if (f.path && f.content) filesToWrite.push({ path: f.path, content: f.content })
+                }
+              }
+            } catch {
+              // Fallback: parse FILE: blocks from markdown
+              const fbRegex = /FILE:\s*(\S+)\n```(?:\w+)?\n([\s\S]*?)```/g
+              let fbMatch: RegExpExecArray | null
+              while ((fbMatch = fbRegex.exec(output)) !== null) {
+                filesToWrite.push({ path: fbMatch[1].replace(/^\/+/, ""), content: fbMatch[2] })
+              }
+              if (filesToWrite.length === 0 && !output.includes("NO_CHANGES") && !output.includes('"noChanges"')) {
+                const cbMatch = output.match(/```(?:\w+)?\n([\s\S]*?)```/)
+                if (cbMatch) filesToWrite.push({ path: relevantFiles[0]?.replace(/^\/+/, "") || "src/index.ts", content: cbMatch[1] })
+              }
             }
           }
 
