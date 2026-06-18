@@ -1,4 +1,5 @@
 import type { Subtask, Plan } from "./intent-parser"
+import type { DomainRegistry } from "./domain-registry"
 
 export interface ExecutionResult {
   stepId: string
@@ -32,24 +33,23 @@ export interface ExecutionState {
 export class Executor {
   private maxRetries = 3
   private states = new Map<string, ExecutionState>()
+  private domainRegistry: DomainRegistry | null = null
 
-  /** Per-error-category retry limits (Gap #13: adaptive retry policies).
-   *  Different error types need different retry strategies:
-   *  - compile/type: usually deterministic, 3 retries
-   *  - test: flaky tests may need fewer retries
-   *  - import: file-not-found won't fix by retrying
-   *  - runtime: environmental, worth a few retries
+  setDomainRegistry(registry: DomainRegistry): void {
+    this.domainRegistry = registry
+  }
+
+  /** Per-error-category retry limits (domain-agnostic).
+   *  Domain-specific categories (e.g. compile/type/test) are added
+   *  by domain packs when they register error matchers.
    */
   private retryPolicies = new Map<string, number>([
-    ["compile", 3],
-    ["type", 3],
-    ["test", 2],
-    ["import", 1],
     ["runtime", 3],
+    ["error", 3],
     ["unknown", 3],
   ])
 
-  /** Set max retries for a specific error category. Default categories: compile, type, test, import, runtime, unknown */
+  /** Set max retries for a specific error category. */
   setRetryPolicy(category: string, maxRetries: number): void {
     this.retryPolicies.set(category, maxRetries)
   }
@@ -197,14 +197,20 @@ export class Executor {
     return (ss?.retryCount ?? 0) < this.maxRetries
   }
 
-  /** Detect error category from error text */
+  /** Detect error category from error text — domain-aware */
   private detectErrorCategory(errorText: string): string {
+    // First: try domain-specific error matchers
+    if (this.domainRegistry) {
+      const matchers = this.domainRegistry.getErrorMatchers()
+      for (const matcher of matchers) {
+        const result = matcher.match(errorText)
+        if (result && result.matched) return result.category
+      }
+    }
+    // Fallback: domain-agnostic heuristic
     const lower = errorText.toLowerCase()
-    if (lower.includes("cannot find module") || lower.includes("module not found") || lower.includes("import") || lower.includes("require")) return "import"
-    if (lower.includes("type") && (lower.includes("not assignable") || lower.includes("is not a type") || lower.includes("property") || lower.includes("does not exist"))) return "type"
-    if (lower.includes("compile") || lower.includes("tsc") || lower.includes("syntax error") || lower.includes("unexpected token")) return "compile"
-    if (lower.includes("test") || lower.includes("assert") || (lower.includes("expected") && lower.includes("to be")) || lower.includes("expect.")) return "test"
     if (lower.includes("timeout") || lower.includes("econnrefused") || lower.includes("etimedout") || lower.includes("network")) return "runtime"
+    if (lower.includes("error") || lower.includes("fail")) return "error"
     return "unknown"
   }
 

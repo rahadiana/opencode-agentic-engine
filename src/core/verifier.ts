@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
+import type { DomainRegistry, VerifierStrategy } from "./domain-registry.js"
 import type { LLMEngine } from "./llm.js"
 
 export type SupportedLanguage = "typescript" | "python" | "go" | "rust" | "javascript" | "unknown"
@@ -87,6 +88,7 @@ const LANGUAGE_CONFIGS: Record<SupportedLanguage, LanguageConfig> = {
 export class Verifier {
   private detectedLang: SupportedLanguage = "unknown"
   private llm: LLMEngine | null = null
+  private domainRegistry: DomainRegistry | null = null
 
   setLLM(llm: LLMEngine): void {
     this.llm = llm
@@ -94,6 +96,10 @@ export class Verifier {
 
   hasLLM(): boolean {
     return this.llm !== null
+  }
+
+  setDomainRegistry(registry: DomainRegistry): void {
+    this.domainRegistry = registry
   }
 
   async verifySemantic(stepId: string, intent: string, changedFiles: string[], projectDir: string): Promise<CheckResult> {
@@ -117,8 +123,9 @@ export class Verifier {
       `### ${path}\n\`\`\`\n${content.slice(0, 2000)}\n\`\`\``
     ).join("\n\n")
 
+    const domainName = this.domainRegistry?.getCurrentDomain() ?? "generic"
     const resp = await this.llm.call({
-      systemPrompt: "You are a semantic verification assistant. Given an intent/goal and the code changes made, determine if the changes correctly implement the intent. Consider: edge cases, completeness, correctness. Respond as JSON with keys: passed (boolean), reasoning (string), issuesFound (array of strings). If the code correctly implements the intent, passed must be true.",
+      systemPrompt: `You are a semantic verification assistant. Given an intent/goal and the changes made in the "${domainName}" domain, determine if the changes correctly implement the intent. Consider: edge cases, completeness, correctness. Respond as JSON with keys: passed (boolean), reasoning (string), issuesFound (array of strings).`,
       userPrompt: `## Intent\n${intent}\n\n## Changed Files\n${filesBlock}\n\nVerify if these changes correctly implement the intent. Return JSON.`,
       jsonMode: true,
       temperature: 0.1,
@@ -139,13 +146,25 @@ export class Verifier {
   }
 
   async verifyAllDeep(stepId: string, projectDir: string, intent?: string, changedFiles?: string[], requireSemanticCheck = false): Promise<VerificationResult> {
-    const checks: CheckResult[] = [
-      this.verifyCompile(projectDir),
-    ]
-    if (this.detectedLang !== "unknown") {
-      checks.push(this.verifyLint(projectDir))
+    const checks: CheckResult[] = []
+
+    const strategies = this.domainRegistry?.getVerifiers() ?? []
+    if (strategies.length > 0) {
+      for (const strategy of strategies) {
+        try {
+          const result = await strategy.verify({ stepId, projectDir, output: intent ?? "", filesModified: changedFiles ?? [], intent: intent ?? "" })
+          checks.push({ name: strategy.name, passed: result.passed, output: result.output })
+        } catch (e: unknown) {
+          checks.push({ name: strategy.name, passed: false, output: String(e) })
+        }
+      }
+    } else {
+      checks.push(this.verifyCompile(projectDir))
+      if (this.detectedLang !== "unknown") {
+        checks.push(this.verifyLint(projectDir))
+      }
+      checks.push(this.verifyTests(projectDir))
     }
-    checks.push(this.verifyTests(projectDir))
 
     if (this.llm && intent && changedFiles && changedFiles.length > 0) {
       const semantic = await this.verifySemantic(stepId, intent, changedFiles, projectDir)

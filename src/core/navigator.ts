@@ -1,4 +1,4 @@
-import { readdir, readFile, stat, access } from "node:fs/promises"
+import { readdir, readFile, stat } from "node:fs/promises"
 import type { Dirent } from "node:fs"
 import { join, extname, basename, dirname } from "node:path"
 
@@ -14,30 +14,165 @@ export interface ModuleInfo {
 export interface ProjectIndex {
   root: string
   modules: ModuleInfo[]
-  language: "typescript" | "javascript" | "python" | "unknown"
+  detectedLangs: string[]
+  primaryLanguage: string | null
   hasTests: boolean
   testDir: string | null
   srcDir: string | null
 }
 
+export interface LanguageConfig {
+  name: string
+  projectFiles: string[]
+  sourceExtensions: string[]
+  testExtensions: string[]
+  testDirNames: string[]
+  srcDirNames: string[]
+  skipDirs: string[]
+  importPattern: RegExp
+  exportPattern: RegExp
+}
+
+const BUILTIN_LANGUAGES: LanguageConfig[] = [
+  {
+    name: "typescript",
+    projectFiles: ["tsconfig.json"],
+    sourceExtensions: [".ts", ".tsx", ".mts"],
+    testExtensions: [".test.ts", ".spec.ts", ".test.tsx", ".spec.tsx"],
+    testDirNames: ["test", "tests", "spec", "__tests__"],
+    srcDirNames: ["src", "lib", "app"],
+    skipDirs: ["node_modules", "dist", ".git", ".agentic"],
+    importPattern: /import\s+.*?from\s+['"](.+?)['"]/,
+    exportPattern: /export\s+(const|function|class|interface|type|default)\s+(\w+)/,
+  },
+  {
+    name: "javascript",
+    projectFiles: ["package.json"],
+    sourceExtensions: [".js", ".jsx", ".mjs", ".cjs"],
+    testExtensions: [".test.js", ".spec.js", ".test.jsx", ".spec.jsx"],
+    testDirNames: ["test", "tests", "spec", "__tests__"],
+    srcDirNames: ["src", "lib", "app"],
+    skipDirs: ["node_modules", "dist", ".git", ".agentic"],
+    importPattern: /(?:import\s+.*?from\s+['"](.+?)['"])|(?:require\(['"](.+?)['"]\))/,
+    exportPattern: /(?:module\.exports\s*=|export\s+(?:default\s+)?(?:const|function|class))\s+(\w+)/,
+  },
+  {
+    name: "python",
+    projectFiles: ["pyproject.toml", "setup.py", "requirements.txt"],
+    sourceExtensions: [".py"],
+    testExtensions: ["_test.py", "test_.py", "_test.py", ".test.py"],
+    testDirNames: ["test", "tests"],
+    srcDirNames: ["src", "app", "lib"],
+    skipDirs: ["__pycache__", ".git", ".venv", "venv", "env", ".agentic"],
+    importPattern: /(?:import\s+(\w+))|(?:from\s+(\w+)\s+import)/,
+    exportPattern: /(?:def|class|async\s+def)\s+(\w+)/,
+  },
+  {
+    name: "php",
+    projectFiles: ["composer.json"],
+    sourceExtensions: [".php"],
+    testExtensions: ["Test.php"],
+    testDirNames: ["test", "tests"],
+    srcDirNames: ["src", "app", "lib"],
+    skipDirs: ["vendor", ".git", ".agentic"],
+    importPattern: /use\s+([\w\\]+)/,
+    exportPattern: /(?:class|interface|trait|function)\s+(\w+)/,
+  },
+  {
+    name: "go",
+    projectFiles: ["go.mod"],
+    sourceExtensions: [".go"],
+    testExtensions: ["_test.go"],
+    testDirNames: [],
+    srcDirNames: ["cmd", "pkg", "internal", "lib"],
+    skipDirs: [".git", ".agentic", "vendor"],
+    importPattern: /(?:"([^"]+)"|`([^`]+)`)/,
+    exportPattern: /func\s+(\w+)/,
+  },
+  {
+    name: "rust",
+    projectFiles: ["Cargo.toml"],
+    sourceExtensions: [".rs"],
+    testExtensions: [".test.rs"],
+    testDirNames: ["test", "tests"],
+    srcDirNames: ["src", "lib"],
+    skipDirs: ["target", ".git", ".agentic"],
+    importPattern: /use\s+(\w+(?:::\w+)*)/,
+    exportPattern: /(?:pub\s+)?fn\s+(\w+)/,
+  },
+  {
+    name: "java",
+    projectFiles: ["pom.xml", "build.gradle", "build.gradle.kts"],
+    sourceExtensions: [".java"],
+    testExtensions: ["Test.java"],
+    testDirNames: ["test", "tests", "src/test"],
+    srcDirNames: ["src/main", "src", "app", "lib"],
+    skipDirs: [".git", ".agentic", "target", "build", ".gradle"],
+    importPattern: /import\s+([\w.]+)/,
+    exportPattern: /(?:class|interface|enum|record)\s+(\w+)/,
+  },
+  {
+    name: "generic",
+    projectFiles: [],
+    sourceExtensions: [".md", ".txt", ".yaml", ".yml", ".json", ".toml", ".csv", ".xml", ".html", ".css"],
+    testExtensions: [],
+    testDirNames: [],
+    srcDirNames: [],
+    skipDirs: [".git", ".agentic", "node_modules", "vendor", "target", "__pycache__"],
+    importPattern: /./,
+    exportPattern: /./,
+  },
+]
+
 export class CodebaseNavigator {
   private index: ProjectIndex | null = null
+  private languages: LanguageConfig[] = [...BUILTIN_LANGUAGES]
+  private useGenericFallback = false
+
+  setLanguages(langs: LanguageConfig[]): void {
+    this.languages = langs
+    this.index = null
+  }
+
+  setUseGenericFallback(fallback: boolean): void {
+    this.useGenericFallback = fallback
+  }
 
   async scan(root: string): Promise<ProjectIndex> {
-    if (this.index) return this.index
-
+    this.index = null
     const modules: ModuleInfo[] = []
-    const srcDir = await this.findDir(root, ["src", "lib", "app", "source"])
-    const testDir = await this.findDir(root, ["test", "tests", "spec", "__tests__"])
+
+    const detected = await this.detectProjectLanguages(root)
+    const primary = detected.length > 0 ? detected[0] : null
+    const langConfig = primary ? this.languages.find(l => l.name === primary) ?? this.languages[this.languages.length - 1] : this.languages[this.languages.length - 1]
+
+    const srcDir = langConfig.srcDirNames.length > 0 ? await this.findDir(root, langConfig.srcDirNames) : null
+    const testDir = langConfig.testDirNames.length > 0 ? await this.findDir(root, langConfig.testDirNames) : null
 
     const scanDir = srcDir ?? root
-    await this.walk(scanDir, modules, root)
+    await this.walk(scanDir, modules, root, langConfig)
 
     const hasTests = testDir !== null
-    const language = this.detectLanguage(modules)
+    if (testDir && langConfig.sourceExtensions.length > 0) {
+      await this.walk(testDir, modules, root, langConfig)
+    }
 
-    this.index = { root, modules, language, hasTests, testDir, srcDir }
+    this.index = { root, modules, detectedLangs: detected, primaryLanguage: primary, hasTests, testDir, srcDir }
     return this.index
+  }
+
+  private async detectProjectLanguages(root: string): Promise<string[]> {
+    const detected: string[] = []
+    for (const lang of this.languages) {
+      for (const pf of lang.projectFiles) {
+        try {
+          await stat(join(root, pf))
+          if (!detected.includes(lang.name)) detected.push(lang.name)
+          break
+        } catch { }
+      }
+    }
+    return detected
   }
 
   findRelevantFiles(taskDescription: string, maxFiles = 10): string[] {
@@ -48,7 +183,6 @@ export class CodebaseNavigator {
       .split(/[\s,_\-.:/]+/)
       .filter(w => w.length > 2)
 
-    // Detect if the task is specifically about tests
     const isTestTask = /\b(test|spec|verify|assert|qa)\b/i.test(taskDescription)
 
     const scored = this.index.modules.map(m => {
@@ -63,8 +197,7 @@ export class CodebaseNavigator {
         if (m.exports.some(e => e.toLowerCase().includes(kw))) score += 8
       }
 
-      // Penalize test files only if the task is NOT about tests
-      if (!isTestTask && (m.ext === ".test.ts" || m.ext === ".spec.ts")) score -= 2
+      if (!isTestTask && m.ext.match(/test|spec/)) score -= 2
 
       return { path: m.path, score }
     })
@@ -77,20 +210,31 @@ export class CodebaseNavigator {
   }
 
   getTestFiles(sourceFile: string): string[] {
-    if (!this.index) return []
+    if (!this.index || !this.index.primaryLanguage) return []
+    const langConfig = this.languages.find(l => l.name === this.index!.primaryLanguage)
+    if (!langConfig || langConfig.testExtensions.length === 0) return []
+
     const stem = basename(sourceFile, extname(sourceFile))
     const dir = dirname(sourceFile)
 
-    const candidates = [
-      join(dir, `${stem}.test.ts`),
-      join(dir, `${stem}.spec.ts`),
-      join(dir, "__tests__", `${stem}.test.ts`),
-    ]
+    const candidates: string[] = []
+    for (const testExt of langConfig.testExtensions) {
+      if (testExt.startsWith("_")) {
+        candidates.push(join(dir, `${stem}${testExt}`))
+      } else if (testExt.endsWith(".php")) {
+        candidates.push(join(dir, `${stem}${testExt}`))
+      } else {
+        candidates.push(join(dir, `${stem}${testExt}`))
+        candidates.push(join(dir, "__tests__", `${stem}${testExt}`))
+      }
+    }
 
     if (this.index.testDir) {
       const relDir = dir.replace(this.index.srcDir ?? this.index.root, "")
-      candidates.push(join(this.index.testDir, relDir, `${stem}.test.ts`))
-      candidates.push(join(this.index.testDir, `${stem}.test.ts`))
+      for (const testExt of langConfig.testExtensions) {
+        candidates.push(join(this.index.testDir, relDir, `${stem}${testExt}`))
+        candidates.push(join(this.index.testDir, `${stem}${testExt}`))
+      }
     }
 
     return candidates.filter(t => this.index!.modules.some(m => m.path === t))
@@ -102,7 +246,7 @@ export class CodebaseNavigator {
     const i = this.index
     return [
       `**Root:** ${i.root}`,
-      `**Language:** ${i.language}`,
+      `**Language:** ${i.primaryLanguage ?? "unknown"}${i.detectedLangs.length > 1 ? ` (also: ${i.detectedLangs.slice(1).join(", ")})` : ""}`,
       `**Modules:** ${i.modules.length} files`,
       `**Tests:** ${i.hasTests ? `Yes (${i.testDir})` : "No test directory found"}`,
       `**Source:** ${i.srcDir ?? i.root}`,
@@ -121,10 +265,6 @@ export class CodebaseNavigator {
     return [...groups].sort((a, b) => b[1] - a[1])
   }
 
-  /**
-   * Check if a path is a system/OS directory that should never be scanned.
-   * Prevents navigator from scanning /lib, /usr, /var, etc. when root is "/".
-   */
   private isSystemDirectory(dirPath: string): boolean {
     const systemPrefixes = [
       "/lib", "/usr", "/var", "/etc", "/boot", "/sys", "/proc",
@@ -135,66 +275,56 @@ export class CodebaseNavigator {
   }
 
   private async findDir(root: string, names: string[]): Promise<string | null> {
-    // Safety: never scan from root "/" or system directories
     if (this.isSystemDirectory(root)) return null
-
     for (const name of names) {
       const p = join(root, name)
       try {
-        // Safety: reject if resolved path escapes root or is a system directory
         const resolved = await stat(p)
         if (!resolved.isDirectory()) continue
         if (this.isSystemDirectory(p)) continue
         return p
-      } catch { /* skip */ }
+      } catch { }
     }
     return null
   }
 
-  private async walk(dir: string, modules: ModuleInfo[], root: string, depth = 0): Promise<void> {
-    // Safety: limit recursion depth to prevent scanning entire filesystem
+  private async walk(dir: string, modules: ModuleInfo[], root: string, lang: LanguageConfig, depth = 0): Promise<void> {
     if (depth > 10) return
-
-    // Safety: never walk into system directories
     if (this.isSystemDirectory(dir)) return
 
-    // Safety: stop if we've escaped the root directory
     const resolvedDir = dir.replace(/\/+$/, "")
     const resolvedRoot = root.replace(/\/+$/, "")
-    if (resolvedDir !== resolvedRoot && !resolvedDir.startsWith(resolvedRoot + "/")) {
-      return
-    }
+    if (resolvedDir !== resolvedRoot && !resolvedDir.startsWith(resolvedRoot + "/")) return
 
     let entries: Dirent[]
-    try {
-      entries = await readdir(dir, { withFileTypes: true })
-    } catch {
-      return
-    }
+    try { entries = await readdir(dir, { withFileTypes: true }) } catch { return }
 
     for (const entry of entries) {
       const fullPath = join(dir, entry.name)
       if (entry.isDirectory()) {
-        if (entry.name === "node_modules" || entry.name === ".git" || entry.name === "dist" || entry.name === ".agentic") continue
-        await this.walk(fullPath, modules, root, depth + 1)
+        if (lang.skipDirs.includes(entry.name)) continue
+        await this.walk(fullPath, modules, root, lang, depth + 1)
       } else if (entry.isFile()) {
         const ext = extname(entry.name)
-        if (![".ts", ".tsx", ".js", ".jsx", ".mjs", ".mts"].includes(ext)) continue
+        if (!lang.sourceExtensions.includes(ext)) continue
 
         let size = 0
-        try { size = (await stat(fullPath)).size } catch { /* skip */ }
+        try { size = (await stat(fullPath)).size } catch { }
 
         const imports: string[] = []
         const exports: string[] = []
         try {
           const content = await readFile(fullPath, "utf-8")
           for (const line of content.split("\n")) {
-            const impMatch = line.match(/import\s+.*?from\s+['"](.+?)['"]/)
-            if (impMatch) imports.push(impMatch[1])
-            const expMatch = line.match(/export\s+(const|function|class|interface|type|default)\s+(\w+)/)
-            if (expMatch) exports.push(expMatch[2])
+            const impMatch = line.match(lang.importPattern)
+            if (impMatch) {
+              const captured = impMatch[1] ?? impMatch[2]
+              if (captured) imports.push(captured)
+            }
+            const expMatch = line.match(lang.exportPattern)
+            if (expMatch) exports.push(expMatch[expMatch.length - 1])
           }
-        } catch { /* skip */ }
+        } catch { }
 
         modules.push({
           path: fullPath,
@@ -206,14 +336,5 @@ export class CodebaseNavigator {
         })
       }
     }
-  }
-
-  private detectLanguage(modules: ModuleInfo[]): ProjectIndex["language"] {
-    const ts = modules.filter(m => [".ts", ".tsx", ".mts"].includes(m.ext)).length
-    const js = modules.filter(m => [".js", ".jsx", ".mjs"].includes(m.ext)).length
-    if (ts > js) return "typescript"
-    if (js > ts) return "javascript"
-    if (ts + js > 0) return "unknown"
-    return "unknown"
   }
 }

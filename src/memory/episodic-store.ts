@@ -7,7 +7,8 @@ export interface Episode {
   summary: string
   outcome: "success" | "partial" | "failed"
   decisions: string[]
-  filesChanged: string[]
+  filesChanged?: string[]
+  domain?: string
   timestamp: string
   tags: string[]
 }
@@ -28,7 +29,7 @@ export class EpisodicStore {
     this.onRecord = cb
   }
 
-  record(sessionId: string, planGoal: string, outcome: Episode["outcome"], decisions: string[], filesChanged: string[]): Episode {
+  record(sessionId: string, planGoal: string, outcome: Episode["outcome"], decisions: string[], filesChanged?: string[], domain?: string): Episode {
     const episode: Episode = {
       id: `ep-${Date.now()}`,
       sessionId,
@@ -37,6 +38,7 @@ export class EpisodicStore {
       outcome,
       decisions,
       filesChanged,
+      domain,
       timestamp: new Date().toISOString(),
       tags: this.extractTags(planGoal, decisions),
     }
@@ -53,7 +55,8 @@ export class EpisodicStore {
         e.planGoal.toLowerCase().includes(q) ||
         e.tags.some(t => t.includes(q)) ||
         e.decisions.some(d => d.toLowerCase().includes(q)) ||
-        e.filesChanged.some(f => f.toLowerCase().includes(q))
+        (e.domain?.toLowerCase().includes(q) ?? false) ||
+        (e.filesChanged?.some(f => f.toLowerCase().includes(q)) ?? false)
       )
       .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
       .slice(0, 10)

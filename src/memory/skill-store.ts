@@ -165,39 +165,23 @@ export class SkillStore {
 
   private inferAction(stepDesc: string): string {
     const lower = stepDesc.toLowerCase()
-    if (lower.includes("create") || lower.includes("add") || lower.includes("write")) return "create"
-    if (lower.includes("delete") || lower.includes("remove")) return "delete"
-    if (lower.includes("modify") || lower.includes("update") || lower.includes("edit") || lower.includes("change")) return "modify"
-    if (lower.includes("install") || lower.includes("setup")) return "install"
-    if (lower.includes("test") || lower.includes("verify") || lower.includes("check")) return "verify"
-    if (lower.includes("run") || lower.includes("exec")) return "execute"
-    if (lower.includes("review") || lower.includes("audit") || lower.includes("inspect")) return "review"
+    if (lower.includes("create") || lower.includes("add") || lower.includes("write") || lower.includes("build") || lower.includes("develop")) return "create"
+    if (lower.includes("delete") || lower.includes("remove") || lower.includes("hapus")) return "delete"
+    if (lower.includes("modify") || lower.includes("update") || lower.includes("edit") || lower.includes("change") || lower.includes("ubah")) return "modify"
+    if (lower.includes("research") || lower.includes("cari") || lower.includes("search") || lower.includes("find")) return "research"
+    if (lower.includes("test") || lower.includes("verify") || lower.includes("check") || lower.includes("cek")) return "verify"
+    if (lower.includes("run") || lower.includes("exec") || lower.includes("execute") || lower.includes("jalankan")) return "execute"
+    if (lower.includes("review") || lower.includes("audit") || lower.includes("inspect") || lower.includes("review")) return "review"
+    if (lower.includes("plan") || lower.includes("rencana") || lower.includes("design") || lower.includes("desain")) return "plan"
+    if (lower.includes("learn") || lower.includes("belajar") || lower.includes("study") || lower.includes("pelajari")) return "learn"
     return "execute"
   }
 
-  private inferToolForStep(stepDesc: string): string | undefined {
-    const lower = stepDesc.toLowerCase()
-    if (lower.includes("read") || lower.includes("check file")) return "read"
-    if (lower.includes("write") || lower.includes("create file")) return "write"
-    if (lower.includes("edit") || lower.includes("modify")) return "edit"
-    if (lower.includes("run") || lower.includes("test") || lower.includes("exec")) return "bash"
-    if (lower.includes("install") || lower.includes("npm") || lower.includes("pip")) return "bash"
-    if (lower.includes("search") || lower.includes("find")) return "grep"
+  private inferToolForStep(_stepDesc: string): string | undefined {
     return undefined
   }
 
-  private inferTools(content: string): string[] {
-    const tools: string[] = []
-    const toolPatterns: Array<{ pattern: RegExp; tool: string }> = [
-      { pattern: /\b(read|Read)\b/, tool: "read" },
-      { pattern: /\b(edit|Edit)\b/, tool: "edit" },
-      { pattern: /\b(write|Write)\b/, tool: "write" },
-      { pattern: /\b(bash|Bash|exec|run)\b/, tool: "bash" },
-      { pattern: /\b(grep|search|find)\b/, tool: "grep" },
-    ]
-    for (const { pattern, tool } of toolPatterns) {
-      if (pattern.test(content)) tools.push(tool)
-    }
-    return [...new Set(tools)]
+  private inferTools(_content: string): string[] {
+    return []
   }
 }

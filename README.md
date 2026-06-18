@@ -1,6 +1,6 @@
 # OpenCode Agentic Engine
 
-> **Plugin OpenCode** yang mengimplementasikan *agentic software engineering* workflow — autonomous planning, multi-agent collaboration, skill-based learning, model reliability tracking, dan self-evolution.
+> **Plugin OpenCode** yang mengimplementasikan *agentic software engineering* workflow — domain-agnostic, autonomous planning, multi-agent collaboration, skill-based learning, model reliability tracking, dan self-evolution.
 
 Berdasarkan konsep dari paper **"The End of Software Engineering"** (arXiv:2606.05608).
 
@@ -17,7 +17,7 @@ Berdasarkan konsep dari paper **"The End of Software Engineering"** (arXiv:2606.
 | — | **Model Registry** | Auto-discover model dari provider, tracking reliability & hallucination rate |
 | — | **Dashboard** | Timeline, anomaly detection, model reliability stats |
 
-### 27 Tools
+### 26 Tools
 
 | Tool | Stage | Description |
 |---|---|---|
@@ -32,7 +32,6 @@ Berdasarkan konsep dari paper **"The End of Software Engineering"** (arXiv:2606.
 | `agentic_pr` | II | Generate PR + description |
 | `agentic_score` | II | Tech debt analysis |
 | `agentic_model` | II | Configure per-role LLM model preferences per session |
-| `agentic_model_reset` | II | Reset model stats — single, stale (>7d), or emergency all |
 | `agentic_delegate` | III | Assign to architect/developer/qa/coordinator — pipeline-aware with cross-validation |
 | `agentic_pipeline` | III | Define and run multi-agent workflow pipelines (PM→Arch→Dev→QA) |
 | `agentic_message` | III | Inter-agent messaging: send, inbox, conversation, review requests |
@@ -219,27 +218,32 @@ File ini di-watch — perubahan langsung diterapkan tanpa restart plugin.
 
 ```
 src/
-├── index.ts               # Plugin entry: registers 26 tools + hooks
-├── core/                  # Core engine
-│   ├── intent-parser.ts   # Parses user intent → Plan structure
-│   ├── planner.ts         # Auto-decompose (create/fix/refactor/test templates)
-│   ├── executor.ts        # Step execution state, retry tracking
-│   ├── verifier.ts        # Compile + test verification (execFileSync)
-│   ├── error-analyzer.ts  # Categorizes errors (import/type/compile/test/runtime)
-│   ├── navigator.ts       # Codebase file scanning + relevance scoring
-│   ├── git.ts             # Git commit, history, PR description generation
-│   ├── tech-debt-scorer.ts# Coupling/size/scope/patterns analysis
-│   └── parallel.ts        # Dependency-based concurrency + conflict detection
-├── agents/                # Multi-agent system
-│   ├── coordinator.ts     # Delegates to agent roles, auto-suggests role, message bus
-│   ├── orchestrator.ts    # Multi-agent workflow pipelines + cross-validation
-│   └── role-registry.ts   # Built-in + custom agent definitions (extensible)
-├── drift/                 # Context & safety
-│   ├── dependency-tracker.ts   # Per-session file change + error propagation
-│   ├── context-compressor.ts   # Sliding window + key info extraction
-│   ├── checkpoints.ts          # Risk evaluation: BLOCK/REVIEW/WARNING
-│   └── hallucination-guard.ts  # File/func/import claim verification
-├── memory/                # Persistent memory
+├── index.ts                 # Plugin entry: registers 26 tools + hooks
+├── core/
+│   ├── domain-registry.ts   # Domain pack system: tools, verifiers, error matchers
+│   ├── domains/             # Built-in domain packs (generic, code)
+│   │   ├── generic.ts
+│   │   └── code.ts
+│   ├── planner.ts           # Domain-aware auto-decompose (generic + code templates)
+│   ├── executor.ts          # Step execution, domain-aware error categorization
+│   ├── verifier.ts          # Compile + test verification (execFileSync)
+│   ├── error-analyzer.ts    # Error categorization
+│   ├── navigator.ts         # Multi-language codebase scanning (TS/JS/Py/PHP/Go/Rust/Java)
+│   ├── prompt-builder.ts    # Dynamic agent prompt per active domain
+│   ├── intent-parser.ts     # Parses user intent → Plan structure
+│   ├── git.ts               # Git commit, history, PR description generation
+│   ├── tech-debt-scorer.ts  # Coupling/size/scope/patterns analysis
+│   └── parallel.ts          # Dependency-based concurrency + conflict detection
+├── agents/                  # Multi-agent system
+│   ├── coordinator.ts       # Delegates to agent roles, auto-suggests role, message bus
+│   ├── orchestrator.ts      # Multi-agent workflow pipelines + cross-validation
+│   └── role-registry.ts     # Built-in + custom agent definitions (extensible)
+├── drift/                   # Context & safety
+│   ├── dependency-tracker.ts     # Per-session file change + error propagation
+│   ├── context-compressor.ts     # Sliding window + key info extraction
+│   ├── checkpoints.ts            # Risk evaluation: BLOCK/REVIEW/WARNING
+│   └── hallucination-guard.ts    # File/func/import claim verification
+├── memory/                  # Persistent memory
 │   ├── session-store.ts     # Conversation turns + plan + progress
 │   ├── skill-store.ts       # Skill extraction, search, failure reporting
 │   ├── skill-format.ts      # Self-describing agentic-skill/v1 schema
@@ -250,21 +254,21 @@ src/
 │   ├── local-embedder.ts    # Local embedding for vector search
 │   └── persistence.ts       # Model stats persistence
 ├── evaluation/
-│   └── live-evaluator.ts   # 5-dimensi real-time scoring dari tool hooks
+│   └── live-evaluator.ts    # 5-dimensi real-time scoring dari tool hooks
 ├── evolution/
-│   ├── self-evolver.ts     # Auto-improvement analysis
+│   ├── self-evolver.ts       # Auto-improvement analysis
 │   └── continuous-evolution.ts # Continuous self-evolution pipeline
 └── observability/
-    ├── trace-logger.ts     # JSONL trace writer (buffered, auto-flush)
-    └── dashboard.ts        # Timeline + stats + anomaly detection
+    ├── trace-logger.ts       # JSONL trace writer (buffered, auto-flush)
+    └── dashboard.ts          # Timeline + stats + anomaly detection
 ```
 
-> **Note:** Selain diagram di atas, `memory/skill-training.ts` menyediakan konversi skill → training data (JSONL/instructions) dan `evaluation/live-evaluator.ts` menyediakan 5-dimensi real-time scoring dari tool hooks.
+> **Note:** Domain packs (`core/domains/`) mendefinisikan tool set, verifier, error matchers, dan decomposition rules per domain. Prompt agent di-generate dinamis via `prompt-builder.ts` sesuai domain aktif. `navigator.ts` mendukung 8 bahasa (TS, JS, Python, PHP, Go, Rust, Java, Generic) dengan auto-deteksi dari project files.
 
 ## Testing
 
 ```bash
-# Unit tests (548 tests, mock-based, no LLM needed)
+# Unit tests (544 tests, mock-based, no LLM needed)
 node test/run.mjs
 
 # Simulates opencode auto-discovery
@@ -285,7 +289,7 @@ node test/e2e-llm.mjs
 # SWE-bench mock mode (no LLM)
 LLM_OFF=true node test/swebench-harness.mjs
 
-# Docker pipeline (7 layers, 548 unit + E2E tests)
+# Docker pipeline (7 layers, 544 unit + E2E tests)
 ./test-container.sh
 ```
 
@@ -311,7 +315,22 @@ Semua aktivitas dicatat ke `.agentic/trace.jsonl`:
 - Step execution + error propagation
 - Retry history & anomaly detection
 
-## Recent Updates (v0.4.3 — 2026-06-17)
+## Recent Updates (v0.5.0 — 2026-06-18)
+
+### 🚀 v0.5.0 — Domain-Agnostic Architecture
+
+**Core engine domain-agnostic:**
+- **Domain packs**: `domain-registry.ts` + `core/domains/{generic,code}.ts` — setiap domain mendefinisikan tool set, verifier, error matchers, dan decomposition rules sendiri
+- **Planner**: 4 generic templates (research/create/review/improve) untuk non-code tasks; code templates tetap backward-compatible dengan filtering via `activeDomain`
+- **Executor**: `detectErrorCategory()` pakai domain error matchers dulu, fallback generic heuristic (timeout/error/unknown). Retry policies agnostik (3 entries: runtime=3, error=3, unknown=3)
+- **Navigator**: **Multi-language** — 8 `LanguageConfig` bawaan (typescript, javascript, python, php, go, rust, java, generic). Auto-detect project language dari project files. Import/export pattern per bahasa, skip dirs spesifik
+- **Prompt builder** (`prompt-builder.ts`): Generate agent prompt dinamis per domain — tool count akurat, deskripsi relevan. Auto-regenerate pada domain switch
+
+**Lainnya:**
+- `DecompositionRule` + `domain?` field — filter hanya rule yang relevan untuk domain aktif
+- Built-in generic templates selalu aktif; domain-registered rules hanya aktif saat domain cocok
+- Agent loop `attemptRepair()` tidak lagi hardcode code categories
+- Prompt file (`agentic.md`) diperbarui otomatis tiap domain switch
 
 ### 🚀 v0.4.3 — Speed & Persistence Optimization
 
@@ -353,9 +372,9 @@ Semua aktivitas dicatat ke `.agentic/trace.jsonl`:
 
 ### Stats
 
-- **27 tools** (was 21) — Blueprint layers + model reset + auto orchestrator
-- **489+ unit tests** — mock-based, no LLM needed
-- **v0.4.3** — latest on npm
+- **26 tools** (was 21) — 5 stages + 5 blueprints
+- **544 unit tests** — mock-based, no LLM needed
+- **v0.5.0** — latest on npm
 
 ## License
 

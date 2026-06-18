@@ -5,6 +5,9 @@ import { execFileSync } from "node:child_process"
 import { join, dirname } from "node:path"
 import { fileURLToPath } from "node:url"
 import { tmpdir, homedir } from "node:os"
+import { DomainRegistry, type DomainPack } from "./core/domain-registry.js"
+import { genericDomain } from "./core/domains/generic.js"
+import { codeDomain } from "./core/domains/code.js"
 import { IntentParser, type TaskIntent, type Subtask } from "./core/intent-parser.js"
 import { Executor } from "./core/executor.js"
 import { Verifier } from "./core/verifier.js"
@@ -47,6 +50,7 @@ import { RouterAgent } from "./core/router-agent.js"
 import { DataCleaner } from "./core/data-cleaner.js"
 import { MultiIndexRAG } from "./memory/multi-index-rag.js"
 import { MCPClient } from "./core/mcp-client.js"
+import { buildAgentPrompt, type ToolEntry } from "./core/prompt-builder.js"
 
 // ── Build-time version injected by esbuild define ──
 declare const __VERSION__: string
@@ -158,142 +162,74 @@ const createEngine: Plugin = async (input, _options) => {
   const config = configLoader.load()
   configLoader.startWatch()
 
-  // ── Auto-register "agentic" agent in global + local agents dir ──
-  const agentContent = `---
-description: Multi-agent software engineering assistant — 26 tools for autonomous planning, execution, verification, delegation, and self-evolution.
-mode: all
----
+  // ── Tool registry (shared between prompt builder and tool definitions) ──
+  const TOOL_REGISTRY: ToolEntry[] = [
+    { name: "agentic_plan", description: "Create a structured execution plan with auto-decompose." },
+    { name: "agentic_execute", description: "Record completion of a subtask with auto-verify and error recovery." },
+    { name: "agentic_reflect", description: "Analyze a failed step with error propagation tracing." },
+    { name: "agentic_verify", description: "Run full verification: compile + lint + test suite." },
+    { name: "agentic_status", description: "Show execution dashboard: progress, blocked steps, file changes." },
+    { name: "agentic_nav", description: "Scan the project codebase and find relevant files." },
+    { name: "agentic_context", description: "View and compress the execution context." },
+    { name: "agentic_snapshot", description: "Save or restore execution checkpoints." },
+    { name: "agentic_pr", description: "Generate a pull request description from execution data." },
+    { name: "agentic_score", description: "Score the current changeset for technical debt." },
+    { name: "agentic_model", description: "Configure per-role LLM model preferences." },
+    { name: "agentic_delegate", description: "Assign a task to a specialized agent role." },
+    { name: "agentic_pipeline", description: "Define and run multi-agent workflow pipelines." },
+    { name: "agentic_message", description: "Inter-agent messaging system for coordination." },
+    { name: "agentic_parallel", description: "Analyze or execute steps concurrently." },
+    { name: "agentic_skill", description: "Manage reusable skills extracted from task completions." },
+    { name: "agentic_episodes", description: "Browse cross-session memory and past outcomes." },
+    { name: "agentic_dashboard", description: "Generate observability dashboard from execution traces." },
+    { name: "agentic_guard", description: "Verify truthfulness of claims in step outputs." },
+    { name: "agentic_evolve", description: "Inspect and extend the agent system itself." },
+    { name: "agentic_auto", description: "Fully autonomous loop: plan → execute → verify → retry." },
+    { name: "agentic_debate", description: "Debate loop between two agents for thorough analysis." },
+    { name: "agentic_router", description: "Lightweight intent classifier for routing." },
+    { name: "agentic_clean", description: "Clean raw text by stripping debate artifacts." },
+    { name: "agentic_rag", description: "Multi-index RAG with category-segregated search." },
+    { name: "agentic_mcp", description: "MCP client for external tools and APIs." },
+  ]
 
-# Agentic Engineering Agent
+  // ── Helper: write agent prompt file for current domain ──
+  function writeAgentPrompt(domainOverride?: DomainPack) {
+    const pack = domainOverride ?? domainRegistry.getCurrentPack() ?? genericDomain
+    const content = buildAgentPrompt(pack, TOOL_REGISTRY, worktree)
+    try {
+      const globalAgentsDir = join(homedir(), ".config", "opencode", "agents")
+      mkdirSync(globalAgentsDir, { recursive: true })
+      writeFileSync(join(globalAgentsDir, "agentic.md"), content, "utf-8")
+    } catch { /* non-fatal */ }
+    try {
+      const localAgentsDir = join(worktree, ".opencode", "agents")
+      mkdirSync(localAgentsDir, { recursive: true })
+      writeFileSync(join(localAgentsDir, "agentic.md"), content, "utf-8")
+    } catch { /* non-fatal */ }
+  }
 
-## 🚨 CRITICAL RULES
-
-You have access to **26 specialized agentic_* tools** designed for software engineering. **YOU MUST PREFER THESE TOOLS OVER BUILT-IN TOOLS** for any software engineering task.
-
-### Tool Preference Hierarchy (HIGHEST first):
-1. **agentic_*** — Use FIRST. Far more powerful than built-in tools.
-2. bash/edit/read/write — Only if no agentic_* tool fits the need.
-
-### BEFORE STARTING ANY TASK — Gather Knowledge First
-Your training data has a cutoff date. Before implementing:
-1. **Check project structure** — use \`agentic_nav\` to scan codebase
-2. **Read relevant files** — use \`read\` to inspect specific files
-3. **Search skills**: \`agentic_skill find "relevant technology"\` — learn from past successes/failures
-4. **Search episodes**: \`agentic_episodes search "similar task"\` — see what worked before
-5. **Search latest docs**: \`websearch "technology X latest version 2026"\` — check current APIs
-6. Only then start implementing
-
-### Standard Workflow — USE INDIVIDUAL TOOLS
-
-**Always use this workflow for ANY task:**
-
-1. **agentic_plan** — Decompose the goal into clear steps
-2. **agentic_execute** — Execute each step one by one
-3. **agentic_verify** — Verify the result
-
-**Example for building an app:**
-\`\`\`
-agentic_plan goal="Buat aplikasi POS dengan Express dan SQLite"
-→ Reads the plan, sees 5 steps
-→ agentic_execute stepId="step-1" success=true output="Created db schema" filesModified=["schema.sql"]
-→ agentic_execute stepId="step-2" success=true output="Created server" filesModified=["server.js"]
-→ ... repeat for each step
-→ agentic_verify
-\`\`\`
-
-### What Each Tool Does
-
-**agentic_plan** — Break a goal into steps with dependencies
-\`\`\`
-agentic_plan goal="Add user authentication" autoDecompose=true
-\`\`\`
-
-**agentic_execute** — Mark a step as done (you do the actual work, then report it)
-\`\`\`
-agentic_execute stepId="step-1" success=true output="Created auth.js with JWT" filesModified=["auth.js"]
-\`\`\`
-
-**agentic_verify** — Run compile + lint + test
-\`\`\`
-agentic_verify
-\`\`\`
-
-**agentic_reflect** — Analyze a failed step
-\`\`\`
-agentic_reflect stepId="step-2" errorDetails="Cannot find module"
-\`\`\`
-
-**agentic_status** — Check progress
-\`\`\`
-agentic_status
-\`\`\`
-
-## Tool Reference
-
-### Stage I — Core Engineering Loop (USE THESE)
-- **agentic_plan**: Decompose goal into subtasks.
-- **agentic_execute**: Record completed subtask.
-- **agentic_reflect**: Analyze failed step.
-- **agentic_verify**: Compile + lint + test.
-- **agentic_status**: Progress dashboard.
-
-### Stage II — Codebase & Context
-- **agentic_nav**: Scan codebase for relevant files.
-- **agentic_context**: View/compress context.
-- **agentic_snapshot**: Save checkpoints.
-- **agentic_pr**: Generate PR description.
-- **agentic_score**: Tech debt analysis.
-- **agentic_model**: Configure LLM preferences.
-
-### Stage III — Multi-Agent & Memory
-- **agentic_delegate**: Assign to roles.
-- **agentic_pipeline**: Multi-agent workflows.
-- **agentic_message**: Inter-agent messaging.
-- **agentic_parallel**: Concurrent execution.
-- **agentic_skill**: Reusable skills.
-- **agentic_episodes**: Cross-session memory.
-- **agentic_dashboard**: Observability.
-- **agentic_guard**: Hallucination detection.
-
-### Stage IV — Self-Evolution
-- **agentic_evolve**: Extend the agent system.
-
-### Blueprint Architecture
-- **agentic_debate**: Executor ↔ Critic debate.
-- **agentic_router**: Intent classifier.
-- **agentic_clean**: Data cleaner.
-- **agentic_rag**: Multi-index RAG.
-- **agentic_mcp**: External data access.
-
-## CRITICAL RULES
-1. **ALWAYS prefer agentic_* tools over built-in tools**
-2. **Gather knowledge FIRST** before implementing
-3. **USE agentic_plan → agentic_execute → agentic_verify**
-4. Never ask "should I..." — just call the tool
-5. If a step fails, call **agentic_reflect** before retrying
-6. For analysis tasks: use **agentic_debate**
-7. For RAG queries: use **agentic_router** then **agentic_rag**
-`
-
-  // Always write to GLOBAL agents dir (available on first run in any project)
-  try {
-    const globalAgentsDir = join(homedir(), ".config", "opencode", "agents")
-    mkdirSync(globalAgentsDir, { recursive: true })
-    writeFileSync(join(globalAgentsDir, "agentic.md"), agentContent, "utf-8")
-  } catch { /* non-fatal */ }
-
-  // Also write to PROJECT agents dir (for project-specific config)
-  try {
-    const localAgentsDir = join(worktree, ".opencode", "agents")
-    mkdirSync(localAgentsDir, { recursive: true })
-    writeFileSync(join(localAgentsDir, "agentic.md"), agentContent, "utf-8")
-  } catch { /* non-fatal: agent file is optional */ }
+  // Write initial prompt (generic domain by default)
+  writeAgentPrompt(genericDomain)
 
   const intentParser = new IntentParser()
   const executor = new Executor()
   const verifier = new Verifier()
   const errorAnalyzer = new ErrorAnalyzer()
+  const domainRegistry = new DomainRegistry()
+  domainRegistry.register(genericDomain)
+  domainRegistry.register(codeDomain)
+  domainRegistry.activate("generic")
+  executor.setDomainRegistry(domainRegistry)
+  errorAnalyzer.setDomainRegistry(domainRegistry)
   const planner = new Planner()
+  // Register ALL domain decomposition rules upfront (tagged by domain)
+  for (const pack of domainRegistry.getAll()) {
+    if (pack.decompositionRules) {
+      for (const rule of pack.decompositionRules) {
+        planner.registerRule({ ...rule, domain: pack.name })
+      }
+    }
+  }
   const navigator = new CodebaseNavigator()
   const depTracker = new DependencyTracker()
   // Build initial file-level dependency graph from project source
@@ -347,6 +283,7 @@ agentic_status
   orchestrator.setLLMEngine(llmEngine)
   errorAnalyzer.setLLM(llmEngine)
   verifier.setLLM(llmEngine)
+  verifier.setDomainRegistry(domainRegistry)
 
   const agentRuntime = new AgentRuntime()
   agentRuntime.setOpencodeClient(input.client)
@@ -670,7 +607,8 @@ agentic_status
 
           if (subtasks.length === 0 && args.autoDecompose !== false) {
             // Fast path: template-based decomposition (no LLM)
-            const decomposition = planner.decompose(args.goal, args.relevantFiles ?? [])
+            const activeDomain = domainRegistry.getCurrentDomain() ?? undefined
+            const decomposition = planner.decompose(args.goal, args.relevantFiles ?? [], activeDomain)
             if (decomposition.autoGenerated) {
               subtasks = decomposition.intent.subtasks
             }
@@ -828,6 +766,13 @@ agentic_status
           llmEngine.setSessionId(context.sessionID)
           const startTime = Date.now()
           const projectDir = ctxDir(context)
+
+          const domainPack = domainRegistry.activateFor(args.output)
+          if (domainPack) {
+            const prevDomain = sessionStore.getOrCreate(context.sessionID).currentDomain
+            sessionStore.getOrCreate(context.sessionID).currentDomain = domainPack.name
+            if (domainPack.name !== prevDomain) writeAgentPrompt(domainPack)
+          }
           
           const taskType = detectTaskType(args.output)
           
@@ -1034,6 +979,7 @@ agentic_status
                 allSuccess ? "success" : "partial",
                 decisions,
                 allFiles,
+                domainRegistry.getCurrentDomain() ?? undefined,
               )
             }
           }
@@ -2217,7 +2163,7 @@ agentic_status
             let output = `## 🧠 Episodic Memory (TF-IDF): "${args.query}"\n\n`
             output += episodes.map(e => {
               const score = tfidfResults.find(r => r.doc.id === `ep:${e.sessionId}`)?.score.toFixed(2) ?? "?"
-              return `- **${e.outcome === "success" ? "✅" : e.outcome === "partial" ? "⚠️" : "❌"} ${e.planGoal}**\n  TF-IDF Score: ${score} | Files: ${e.filesChanged.length} | ${e.timestamp.slice(0, 10)}`
+              return `- **${e.outcome === "success" ? "✅" : e.outcome === "partial" ? "⚠️" : "❌"} ${e.planGoal}**\n  TF-IDF Score: ${score} | Files: ${(e.filesChanged ?? []).length} | ${e.timestamp.slice(0, 10)}`
             }).join("\n")
             return { output }
           }
@@ -2958,6 +2904,7 @@ agentic_status
               result.approved ? "success" : "partial",
               [`${result.totalRounds} rounds`, `Approved: ${result.approved}`, result.revisionSummary],
               [],
+              domainRegistry.getCurrentDomain() ?? undefined,
             )
           } catch { /* non-fatal */ }
 
@@ -3502,7 +3449,8 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
               // Save episode
               try {
                 episodicStore.record(context.sessionID, args.goal, verifyPassed ? "success" : "partial",
-                  [`Auto via agentic_auto`, `Verify: ${verifyPassed}`, `Files: ${allModified.length}`], allModified)
+                  [`Auto via agentic_auto`, `Verify: ${verifyPassed}`, `Files: ${allModified.length}`], allModified,
+                  domainRegistry.getCurrentDomain() ?? undefined)
               } catch { /* non-fatal */ }
 
               // Extract skill (async)

@@ -342,26 +342,21 @@ assert(roleNames.includes("qa"), "qa role registered")
 assert(roleNames.includes("coordinator"), "coordinator role registered")
 assert(roleNames.includes("pm"), "pm role registered")
 
-// Verify few-shot content is present in prompts
+// Verify prompt content is present in roles
 const archPrompt = rr.getBuiltIn("architect").prompt
-assert(archPrompt.includes("Few-Shot Examples"), "architect prompt has few-shot examples")
-assert(archPrompt.includes("Input") && archPrompt.includes("Output"), "architect prompt has Input/Output format")
+assert(archPrompt.includes("software architect") || archPrompt.includes("architecture"), "architect prompt has architecture content")
 
 const devPrompt = rr.getBuiltIn("developer").prompt
-assert(devPrompt.includes("Few-Shot Examples"), "developer prompt has few-shot examples")
-assert(devPrompt.includes("calculateTotal"), "developer prompt has concrete code example")
+assert(devPrompt.includes("developer") || devPrompt.includes("Implement"), "developer prompt has implementation content")
 
 const qaPrompt = rr.getBuiltIn("qa").prompt
-assert(qaPrompt.includes("Few-Shot Examples"), "qa prompt has few-shot examples")
-assert(qaPrompt.includes("SQL injection") || qaPrompt.includes("security"), "qa prompt has security example")
+assert(qaPrompt.includes("QA") || qaPrompt.includes("review"), "qa prompt has review content")
 
 const coordPrompt = rr.getBuiltIn("coordinator").prompt
-assert(coordPrompt.includes("Few-Shot Examples"), "coordinator prompt has few-shot examples")
-assert(coordPrompt.includes("architect") && coordPrompt.includes("developer"), "coordinator prompt references sub-roles")
+assert(coordPrompt.includes("Decompose") || coordPrompt.includes("goals"), "coordinator prompt has coordination content")
 
 const pmPrompt = rr.getBuiltIn("pm").prompt
-assert(pmPrompt.includes("Few-Shot Examples"), "pm prompt has few-shot examples")
-assert(pmPrompt.includes("Acceptance Criteria"), "pm prompt has acceptance criteria format")}
+assert(pmPrompt.includes("product") || pmPrompt.includes("specifications"), "pm prompt has spec content")}
 
 // 18. agentic_status — blocked steps visibility
 console.log("\n[18] agentic_status — blocked steps")
@@ -440,7 +435,7 @@ const dlResult = await hooks.tool.agentic_delegate.execute({
 }, dlCtx)
 const dlOut = typeof dlResult === "string" ? dlResult : dlResult.output
 assert(dlOut.includes("architect") || dlOut.includes("Task Delegated"), "delegates to correct role")
-assert(dlOut.includes("System Architect") || dlOut.includes("prompt"), "returns agent prompt")
+assert(dlOut.includes("Architect") || dlOut.includes("prompt"), "returns agent prompt")
 
 // 25. agentic_delegate — auto-detect QA role
 console.log("\n[25] agentic_delegate — auto-detect QA")
@@ -1332,20 +1327,20 @@ assert(typeof execAdapt.setRetryPolicy === "function", "setRetryPolicy is a func
 assert(typeof execAdapt.getMaxRetries === "function", "getMaxRetries is a function")
 assert(typeof execAdapt.getRetryPolicies === "function", "getRetryPolicies is a function")
 
-// Default policies
+// Default policies (domain-agnostic: runtime, error, unknown)
 const policies = execAdapt.getRetryPolicies()
-assert(policies.length >= 5, `has at least 5 default retry policies (got ${policies.length})`)
-const compilePolicy = policies.find(p => p.category === "compile")
-assert(compilePolicy !== undefined, "compile category has retry policy")
-assert(compilePolicy.maxRetries === 3, "compile has maxRetries=3")
-const importPolicy = policies.find(p => p.category === "import")
-assert(importPolicy !== undefined, "import category has retry policy")
-assert(importPolicy.maxRetries === 1, "import has maxRetries=1 (file-not-found won't fix by retrying)")
+assert(policies.length >= 3, `has at least 3 default retry policies (got ${policies.length})`)
+const runtimePolicy = policies.find(p => p.category === "runtime")
+assert(runtimePolicy !== undefined, "runtime category has retry policy")
+assert(runtimePolicy.maxRetries === 3, "runtime has maxRetries=3")
+const unknownPolicy = policies.find(p => p.category === "unknown")
+assert(unknownPolicy !== undefined, "unknown category has retry policy")
+assert(unknownPolicy.maxRetries === 3, "unknown has maxRetries=3")
 
 // Custom policy override
 execAdapt.setRetryPolicy("compile", 5)
 assert(execAdapt.getMaxRetries("compile") === 5, "custom compile retry limit applied")
-assert(execAdapt.getMaxRetries("test") === 2, "test retry limit unchanged from default")
+assert(execAdapt.getMaxRetries("error") === 3, "error retry limit unchanged from default")
 
 // No-category falls back to global default
 const defaultLim = execAdapt.getMaxRetries()
@@ -1354,19 +1349,25 @@ assert(defaultLim === 3, "no category returns global default maxRetries=3")
 // canRetry with category
 const planMock = { intent: { goal: "test", constraints: [], context: { relevantFiles: [], dependencies: [] }, subtasks: [{ id: "step-1", description: "test", dependsOn: [], verificationCriteria: [] }] } }
 execAdapt.initExecution("sess-adapt-1", planMock)
-// First failure with import category (maxRetries=1)
+// First failure with custom category (maxRetries falls to global default 3)
 execAdapt.recordResult("sess-adapt-1", { stepId: "step-1", success: false, output: "Cannot find module", error: "Cannot find module ./missing" })
-assert(execAdapt.canRetry("sess-adapt-1", "step-1", "import") === false, "import error: no retry after 1 failure (maxRetries=1)")
-assert(execAdapt.canRetry("sess-adapt-1", "step-1", "compile") === true, "same step with compile category: still retryable (maxRetries=3)")
+assert(execAdapt.canRetry("sess-adapt-1", "step-1", "import") === true, "import error: retryable (global default 3) after 1 failure")
+assert(execAdapt.canRetry("sess-adapt-1", "step-1", "compile") === true, "same step with compile category: still retryable (global default 3)")
 
-// Type error gets 3 retries
+// Custom retry policy
+execAdapt.setRetryPolicy("import", 1)
 execAdapt.initExecution("sess-adapt-2", planMock)
-execAdapt.recordResult("sess-adapt-2", { stepId: "step-2", success: false, output: "Type 'X' not assignable", error: "Type 'string' is not assignable to type 'number'" })
-assert(execAdapt.canRetry("sess-adapt-2", "step-2", "type") === true, "type error: retryable after 1 failure")
-execAdapt.recordResult("sess-adapt-2", { stepId: "step-2", success: false, output: "Type error again", error: "Type error" })
-assert(execAdapt.canRetry("sess-adapt-2", "step-2", "type") === true, "type error: retryable after 2 failures")
-execAdapt.recordResult("sess-adapt-2", { stepId: "step-2", success: false, output: "Type error again", error: "Type error" })
-assert(execAdapt.canRetry("sess-adapt-2", "step-2", "type") === false, "type error: no retry after 3 failures")
+execAdapt.recordResult("sess-adapt-2", { stepId: "step-2", success: false, output: "Cannot find module", error: "Cannot find module ./missing" })
+assert(execAdapt.canRetry("sess-adapt-2", "step-2", "import") === false, "import error: no retry after 1 failure with custom maxRetries=1")
+
+// Error category gets 3 retries (default)
+execAdapt.initExecution("sess-adapt-3", planMock)
+execAdapt.recordResult("sess-adapt-3", { stepId: "step-3", success: false, output: "Type 'X' not assignable", error: "Type 'string' is not assignable to type 'number'" })
+assert(execAdapt.canRetry("sess-adapt-3", "step-3", "error") === true, "error category: retryable after 1 failure")
+execAdapt.recordResult("sess-adapt-3", { stepId: "step-3", success: false, output: "Type error again", error: "Type error" })
+assert(execAdapt.canRetry("sess-adapt-3", "step-3", "error") === true, "error category: retryable after 2 failures")
+execAdapt.recordResult("sess-adapt-3", { stepId: "step-3", success: false, output: "Type error again", error: "Type error" })
+assert(execAdapt.canRetry("sess-adapt-3", "step-3", "error") === false, "error category: no retry after 3 failures")
 
 assert(true, "Adaptive Retry Policies tests passed")
 

@@ -1,7 +1,7 @@
 import { RoleRegistry, type AgentDef, type CustomAgentDef } from "./role-registry.js"
 import type { SkillStore } from "../memory/skill-store.js"
 
-export type AgentRole = "architect" | "developer" | "qa" | "coordinator" | "pm"
+export type AgentRole = "architect" | "developer" | "qa" | "coordinator" | "pm" | "analyst" | "builder" | "reviewer" | "planner"
 
 export interface AgentTask {
   id: string

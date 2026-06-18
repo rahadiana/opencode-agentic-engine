@@ -234,7 +234,7 @@ export class PatternDiscovery {
     const coChangeMatrix = new Map<string, Map<string, number>>()  // filePath → { coFile → count }
 
     for (const ep of episodes) {
-      const files = ep.filesChanged
+      const files = ep.filesChanged ?? []
       if (files.length === 0) continue
 
       for (const file of files) {
@@ -311,7 +311,7 @@ export class PatternDiscovery {
 
     // Pattern 1: Sessions with many file changes tend to fail more
     const highChangeSessions = episodes.filter(e =>
-      e.filesChanged.length >= 5 && sessionIds.includes(e.sessionId)
+      (e.filesChanged?.length ?? 0) >= 5 && sessionIds.includes(e.sessionId)
     )
     if (highChangeSessions.length >= 2) {
       const outcomes = this.countOutcomes(highChangeSessions)

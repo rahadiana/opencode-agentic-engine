@@ -11,6 +11,7 @@ export interface SessionState {
   plan?: import("../core/intent-parser").Plan
   artifacts: Map<string, string>
   currentTaskType?: string
+  currentDomain?: string
 }
 
 export interface ExecutorSnapshot {

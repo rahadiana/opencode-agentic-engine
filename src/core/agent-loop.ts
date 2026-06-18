@@ -274,11 +274,10 @@ export class AgentLoop {
       // LLM repair failed, but we can still try basic fixes
     }
 
-    // Only allow retry for deterministic/recoverable error categories
-    if (analysis && (analysis.category === "import" || analysis.category === "compile" || analysis.category === "type")) {
+    // Only allow retry if analysis suggests recovery (domain-agnostic)
+    if (analysis && analysis.category !== "unknown") {
       return true
     }
-    // Runtime errors, test failures, and unknown errors — do not auto-retry without explicit fix
     return false
   }
 }
