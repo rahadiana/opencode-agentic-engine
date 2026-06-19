@@ -59,7 +59,9 @@
     "test:swebench-llm": "OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_MODEL=qwen2.5:0.5b node test/swebench-harness.mjs",
     "prepublishOnly": "npm run build"
   },
-  "dependencies": {},
+  "dependencies": {
+    "stopwords-iso": "^1.1.0"
+  },
   "peerDependencies": {
     "@opencode-ai/plugin": ">=1.3.3"
   },
