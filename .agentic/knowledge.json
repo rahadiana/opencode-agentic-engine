@@ -1,58 +1,119 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-06-19T19:35:00Z",
+  "last_updated": "2026-06-19T19:45:00Z",
   "sessions": [
     {
-      "session_id": "noise-audit-stopwords-multilingual",
+      "session_id": "opencode-noise-audit-docs-multilingual",
       "date": "2026-06-19",
-      "commits": "4b4999d → 916b733 (9 commits)",
-      "summary": "Noise tolerance audit + centralized multilingual stop words integration",
+      "total_commits": 15,
+      "commit_range": "db37ab4 → bf11354",
+      "commits": [
+        "db37ab4 docs: add README.md for all src/ subfolders + fix tsconfig types + postbuild hook",
+        "881fec0 docs: update AGENTS.md — full architecture tree with all 60+ files and README docs",
+        "989480e docs: add todo.md for all src/ subfolders + root aggregator (270 findings)",
+        "2c96c22 fix: resolve 8 HIGH severity issues in src/core/",
+        "87a7eeb fix: resolve all HIGH severity issues across agents/drift/memory",
+        "217e31a fix: resolve remaining 13 HIGH issues - evaluation/observability/evolution",
+        "5b54652 docs: update root todo.md — mark all 52 HIGH as resolved",
+        "9f4dcb0 fix: resolve all MEDIUM (128) + LOW (90) items across 7 folders",
+        "f634f68 docs: update all todo.md — mark 270/270 items resolved",
+        "4b4999d docs: add COLLABORATION_SCENARIOS.md — 27-tool chaining reference, multi-agent workflows, fine-tuning pipeline",
+        "f0b0782 fix: noise tolerance improvements across skills, memory, and evolution systems",
+        "916b733 feat: centralized multilingual stop words via stopwords-iso (58 languages, 19k+ words)",
+        "800e8a7 feat: cross-session knowledge artifact + auto-load on init",
+        "e73e00e chore: add cross-session knowledge artifact (force-tracked)",
+        "bf11354 chore: add stopwords-iso dependency"
+      ],
+      "summary": "Complete overhaul: docs, code audit, noise tolerance, multilingual stop words",
       "achievements": [
-        "Noise audit across skills/memory/evolution — 10 vulnerabilities fixed (+403/-58 lines)",
-        "7+ web searches on noise handling best practices (sliding window, paper references)",
-        "Centralized stop word module via stopwords-iso (58 languages, 19.188 unique words)",
-        "Created src/memory/stopwords.ts with isStopWord(), filterStopWords(), getStopWordStats()",
-        "skill-store.ts and episodic-store.ts now import centralized stop words",
-        "Sliding window success rate (last 20) replaces cumulative for all metrics",
-        "Semantic gate (≥2 action verbs + min 60 chars) for skill extraction",
-        "Hysteresis (60-120s cooldown) for auto-evolution triggers",
-        "Sustained degradation check (3 consecutive bucket drops)",
-        "Created COLLABORATION_SCENARIOS.md (899 lines) — 27 tool chaining patterns",
-        "All 641 unit tests passing after all changes"
+        "1. README.md created for all 7 src/ subfolders (core 538 lines, agents 129, drift 96, memory 174, evaluation 30, observability 28, evolution 50)",
+        "2. AGENTS.md updated with full 60+ file architecture tree",
+        "3. Build fixed: tsconfig 'types': ['node'] + postbuild auto-copy to opencode cache",
+        "4. Code audit: 270 findings across 7 subfolders (52 HIGH, 128 MEDIUM, 90 LOW)",
+        "5. ALL 270 findings fixed across 59 files (+2,383 / -1,349 lines)",
+        "6. COLLABORATION_SCENARIOS.md (899 lines): 27-tool chaining, multi-agent pipelines, fine-tuning, workflow templates",
+        "7. Noise tolerance audit: 10 vulnerabilities across skills/memory/evolution systems",
+        "8. 7+ web searches: arXiv papers, sliding window research, noise handling best practices",
+        "9. Noise fixes: sliding window (last 20), semantic gate (≥2 verbs + 60 chars), TF-IDF scoring",
+        "10. Centralized stop word module: src/memory/stopwords.ts via stopwords-iso (58 languages, 19.188 unique words)",
+        "11. skill-store.ts & episodic-store.ts now import from centralized stopwords module",
+        "12. Hysteresis (60-120s cooldown) + sustained degradation (3 bucket drops) for auto-evolution",
+        "13. Cross-session knowledge artifact: .agentic/knowledge.json with auto-load on plugin init",
+        "14. stopwords-iso added as npm dependency",
+        "15. All 641 unit tests passing after every change",
+        "16. Telegram notifications for every push (token in scripts/telegram.sh)"
       ],
       "key_decisions": [
-        "EN-first + ID-second + 56 other languages via stopwords-iso",
-        "Sliding window success rate for accuracy over cumulative",
-        "TF-IDF relevance scoring for skill search",
-        "Multi-language success markers (EN + ID + emoji)",
-        "Auto-evolution requires sustained degradation (3 bucket drops) + hysteresis"
+        "Separate postbuild hook instead of inline build script (cleaner npm lifecycle)",
+        "postbuild only runs if opencode cache dir exists (no error if missing)",
+        "scripts/telegram.sh added to .gitignore to prevent bot token leak",
+        "tsconfig 'types': ['node'] instead of changing lib to 'dom'",
+        "Fixed 270 findings by priority: HIGH → MEDIUM → LOW via 7 parallel sub-agents",
+        "Sliding window (last 20) replaces cumulative for all metrics (more accurate)",
+        "Semantic gate: ≥2 action verbs + min 60 chars for skill extraction",
+        "TF-IDF relevance scoring with recency + success bonuses for skill search",
+        "Multi-language strategy: English-first, Indonesian-second, 56 other languages via stopwords-iso",
+        "Auto-evolution requires sustained degradation (3 consecutive bucket drops) + 2min cooldown",
+        "Knowledge artifact force-tracked despite .agentic/ being gitignored"
       ],
       "files_created": [
-        "src/memory/stopwords.ts",
+        "src/core/README.md", "src/agents/README.md", "src/drift/README.md",
+        "src/memory/README.md", "src/evaluation/README.md", "src/observability/README.md",
+        "src/evolution/README.md",
+        "src/core/todo.md", "src/agents/todo.md", "src/drift/todo.md",
+        "src/memory/todo.md", "src/evaluation/todo.md", "src/observability/todo.md",
+        "src/evolution/todo.md", "todo.md (root aggregator)",
         "COLLABORATION_SCENARIOS.md",
+        "src/memory/stopwords.ts",
         ".agentic/knowledge.json"
       ],
       "files_modified": [
-        "src/memory/skill-store.ts",
-        "src/memory/episodic-store.ts",
-        "src/evolution/self-evolver.ts",
-        "src/evolution/continuous-evolution.ts",
-        "src/index.ts",
-        "test/run.mjs"
+        "tsconfig.json", "esbuild.config.mjs", "package.json", "package-lock.json",
+        "AGENTS.md", ".gitignore",
+        "src/index.ts", "test/run.mjs",
+        "src/core/config.ts", "src/core/event-bus.ts", "src/core/executor.ts",
+        "src/core/git.ts", "src/core/llm.ts", "src/core/navigator.ts",
+        "src/core/parallel.ts", "src/core/planner.ts", "src/core/prompt-builder.ts",
+        "src/core/prompt-template.ts", "src/core/verifier.ts",
+        "src/agents/coordinator.ts", "src/agents/orchestrator.ts",
+        "src/drift/checkpoints.ts", "src/drift/hallucination-guard.ts",
+        "src/drift/pattern-discovery.ts",
+        "src/memory/episodic-store.ts", "src/memory/skill-store.ts",
+        "src/memory/vector-store.ts", "src/memory/local-embedder.ts",
+        "src/memory/skill-format.ts", "src/memory/skill-training.ts",
+        "src/memory/multi-index-rag.ts", "src/memory/persistence.ts",
+        "src/memory/session-store.ts", "src/memory/schema-version.ts",
+        "src/evaluation/live-evaluator.ts",
+        "src/observability/dashboard.ts", "src/observability/trace-logger.ts",
+        "src/evolution/self-evolver.ts", "src/evolution/continuous-evolution.ts",
+        "src/core/auto-retry.ts", "src/core/agent-loop.ts",
+        "src/core/budget-tracker.ts", "src/core/debate-loop.ts",
+        "src/core/domain-registry.ts", "src/core/error-analyzer.ts",
+        "src/core/execution-helpers.ts", "src/core/fine-tuning.ts",
+        "src/core/formal-model.ts", "src/core/mcp-client.ts",
+        "src/core/model-registry.ts", "src/core/router-agent.ts",
+        "src/core/task-classifier.ts", "src/core/tech-debt-scorer.ts",
+        "src/core/intent-parser.ts", "src/core/data-cleaner.ts",
+        "src/core/id-chain.ts", "src/core/event-taxonomy.ts",
+        "src/agents/agent-runtime.ts", "src/agents/role-registry.ts",
+        "src/drift/context-compressor.ts", "src/drift/dependency-tracker.ts",
+        "src/domains/*.ts (all 6 domain files)"
       ]
     }
   ],
   "skills": [
     {
       "name": "Multilingual Stop Words Integration",
-      "description": "Centralized stop word module using stopwords-iso (58 languages)",
+      "description": "Centralized stop word module using stopwords-iso (58 languages, 19,188 unique words)",
       "module": "src/memory/stopwords.ts",
       "api": ["STOP_WORDS", "isStopWord()", "filterStopWords()", "getStopWordStats()"],
-      "consumers": ["skill-store.ts", "episodic-store.ts"]
+      "consumers": ["skill-store.ts", "episodic-store.ts"],
+      "fallback": "Bundled EN+ID minimal set if package unavailable",
+      "commit": "916b733"
     },
     {
       "name": "Noise-Tolerant Sliding Window Pattern",
-      "description": "Sliding window metrics, semantic gates, hysteresis for noise reduction",
+      "description": "Sliding window metrics, semantic gates, hysteresis for noise reduction in skills/memory/evolution",
       "files": ["skill-store.ts", "self-evolver.ts", "continuous-evolution.ts"],
       "key_parameters": {
         "window_size": 20,
@@ -60,7 +121,36 @@
         "min_action_verbs": 2,
         "hysteresis_ms": 60000,
         "sustained_buckets": 3
-      }
+      },
+      "commit": "f0b0782"
+    },
+    {
+      "name": "270-Finding Code Audit & Fix Methodology",
+      "description": "Systematic code quality audit across 7 subfolders with parallel sub-agent fixes",
+      "method": "Create todo.md per folder → prioritize HIGH/MEDIUM/LOW → fix via 7 parallel sub-agents → mark resolved",
+      "results": "52 HIGH + 128 MEDIUM + 90 LOW = 270 findings fixed across 59 files (+2,383 / -1,349 lines)",
+      "commits": "989480e → f634f68 (range of 7 fix commits)"
+    },
+    {
+      "name": "Cross-Session Knowledge Artifact",
+      "description": "Persistent session knowledge stored in .agentic/knowledge.json, auto-loaded on plugin init",
+      "location": ".agentic/knowledge.json",
+      "load_mechanism": "globalThis.__agenticKnowledge via readFileSync in src/index.ts init",
+      "documentation": "src/memory/README.md",
+      "commit": "800e8a7"
+    },
+    {
+      "name": "Agentic Tool Chaining & Multi-Agent Pipeline",
+      "description": "27-tool chaining reference, multi-agent workflows, fine-tuning pipeline, workflow templates",
+      "reference": "COLLABORATION_SCENARIOS.md (899 lines)",
+      "patterns": [
+        "Fundamental chains: plan→execute→verify, plan→delegate→message, debate→execute→verify",
+        "Multi-agent pipeline: PM→Architect→Developer→QA with cross-validation",
+        "Memory workflows: skill extract→find→reuse, episode search→learn→adapt",
+        "Fine-tuning: skills→training data→OpenAI fine-tuning→custom model",
+        "Autonomous: agentic_auto (single call: plan+execute+verify+learn)"
+      ],
+      "commit": "4b4999d"
     }
   ]
 }
