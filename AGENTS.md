@@ -8,6 +8,7 @@ Plugin OpenCode yang mengimplementasikan agentic software engineering workflow b
 
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
+                    # postbuild: auto-copy ke ~/.cache/opencode/packages/ (jika ada)
 node test/run.mjs   # 489 unit tests (mock, no LLM needed)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
@@ -22,39 +23,86 @@ node test/e2e-llm.mjs       # LLM E2E: 19 tests (auto: OpenCode Free)
 
 ```
 src/
-├── index.ts               # Plugin entry: registers 21 tools + hooks
-├── core/
-│   ├── intent-parser.ts    # Parses user intent → Plan structure
-│   ├── planner.ts          # Auto-decompose (create/fix/refactor/test templates)
-│   ├── executor.ts         # Step execution state, retry tracking
-│   ├── verifier.ts         # Compile + test verification (execFileSync)
-│   ├── error-analyzer.ts   # Categorizes errors (import/type/compile/test/runtime)
-│   ├── navigator.ts        # Codebase file scanning + relevance scoring
-│   ├── git.ts              # Git commit, history, PR description generation
-│   ├── tech-debt-scorer.ts # Coupling/size/scope/patterns analysis
-│   └── parallel.ts         # Dependency-based concurrency + conflict detection
-├── agents/
-│   ├── coordinator.ts      # Delegates to agent roles, auto-suggests role, message bus
-│   ├── orchestrator.ts     # Multi-agent workflow pipelines + cross-validation
-│   └── role-registry.ts    # Built-in + custom agent definitions (extensible)
-├── drift/
-│   ├── dependency-tracker.ts   # Per-session file change + error propagation
-│   ├── context-compressor.ts   # Sliding window + key info extraction
-│   ├── checkpoints.ts          # Risk evaluation: BLOCK/REVIEW/WARNING
-│   └── hallucination-guard.ts  # File/func/import claim verification
-├── memory/
-│   ├── session-store.ts     # Conversation turns + plan + progress
-│   ├── skill-store.ts       # Skill extraction, search, failure reporting
-│   ├── skill-format.ts      # Self-describing agentic-skill/v1 schema
-│   ├── episodic-store.ts    # Cross-session memory with versioned schema
-│   └── schema-version.ts    # Memory schema envelope + migration system
+├── index.ts                   # Plugin entry: registers 21 tools + hooks
+├── README.md                  # → Dokumentasi fungsi per folder untuk AI context
+│
+├── core/                      # Inti engine: planning, execution, verification
+│   ├── README.md              # Dokumentasi 29 file + 6 domain
+│   ├── agent-loop.ts          # Autonomous loop: plan → execute → verify → retry
+│   ├── auto-retry.ts          # Exponential backoff + jitter retry logic
+│   ├── budget-tracker.ts      # Token/steps/time/cost budget enforcement
+│   ├── config.ts              # Plugin config, env vars, defaults
+│   ├── data-cleaner.ts        # Strip debate artifacts, format output
+│   ├── debate-loop.ts         # Executor ↔ Critic AI debate for analysis
+│   ├── domain-registry.ts     # Domain-specific code generation (code/data/devops/..)
+│   ├── error-analyzer.ts      # Categorizes errors (import/type/compile/test/runtime)
+│   ├── event-bus.ts           # Pub/sub event bus for tool hooks
+│   ├── event-taxonomy.ts      # Event type taxonomy schema
+│   ├── execution-helpers.ts   # Shared execution primitives
+│   ├── executor.ts            # Step execution state, retry tracking
+│   ├── fine-tuning.ts         # Convert skills → training data pipeline
+│   ├── formal-model.ts        # Formal verification model
+│   ├── git.ts                 # Git commit, history, PR description generation
+│   ├── id-chain.ts            # Chain-of-thought ID generation
+│   ├── intent-parser.ts       # Parses user intent → Plan structure
+│   ├── llm.ts                 # LLM integration (OpenAI-compatible API)
+│   ├── mcp-client.ts          # MCP client for external tools/APIs
+│   ├── model-registry.ts      # Per-role LLM model preferences
+│   ├── navigator.ts           # Codebase file scanning + relevance scoring
+│   ├── parallel.ts            # Dependency-based concurrency + conflict detection
+│   ├── planner.ts             # Auto-decompose (create/fix/refactor/test templates)
+│   ├── prompt-builder.ts      # Dynamic prompt construction
+│   ├── prompt-template.ts     # XML-based prompt templates (head/body/footer)
+│   ├── router-agent.ts        # Intent classification + routing
+│   ├── task-classifier.ts     # Task type classification
+│   ├── tech-debt-scorer.ts    # Coupling/size/scope/patterns analysis
+│   └── verifier.ts            # Compile + test verification (execFileSync)
+│   └── domains/               # Domain-specific generators
+│       ├── code.ts, data-science.ts, devops.ts
+│       ├── generic.ts, mobile.ts, security.ts
+│
+├── agents/                    # Multi-agent coordination
+│   ├── README.md              # Dokumentasi 4 file
+│   ├── agent-runtime.ts       # Agent sub-process spawner
+│   ├── coordinator.ts         # Delegates to agent roles, auto-suggests role, msg bus
+│   ├── orchestrator.ts        # Multi-agent workflow pipelines + cross-validation
+│   └── role-registry.ts       # Built-in + custom agent definitions (extensible)
+│
+├── drift/                     # Error detection & recovery
+│   ├── README.md              # Dokumentasi 5 file
+│   ├── checkpoints.ts         # Risk evaluation: BLOCK/REVIEW/WARNING
+│   ├── context-compressor.ts  # Sliding window + key info extraction
+│   ├── dependency-tracker.ts  # Per-session file change + error propagation
+│   ├── hallucination-guard.ts # File/func/import claim verification
+│   └── pattern-discovery.ts   # Error pattern discovery
+│
+├── memory/                    # Cross-session & in-session memory
+│   ├── README.md              # Dokumentasi 10 file
+│   ├── episodic-store.ts      # Cross-session memory with versioned schema
+│   ├── local-embedder.ts      # Local text embedding (API-based)
+│   ├── multi-index-rag.ts     # Multi-index RAG with category segregation
+│   ├── persistence.ts         # File-based JSON persistence
+│   ├── schema-version.ts      # Memory schema envelope + migration system
+│   ├── session-store.ts       # Conversation turns + plan + progress
+│   ├── skill-format.ts        # Self-describing agentic-skill/v1 schema
+│   ├── skill-store.ts         # Skill extraction, search, failure reporting
+│   ├── skill-training.ts      # Convert skill → training data (JSONL/instructions)
+│   └── vector-store.ts        # Vector similarity search
+│
 ├── evaluation/
-│   └── live-evaluator.ts   # 5-dimensi real-time scoring dari tool hooks
+│   ├── README.md              # Dokumentasi 1 file
+│   └── live-evaluator.ts      # 5-dimensi real-time scoring dari tool hooks
+│
+├── evolution/                 # Self-evolution system (Stage IV)
+│   ├── README.md              # Dokumentasi 2 file
+│   ├── continuous-evolution.ts # Continuous evolution loop
+│   └── self-evolver.ts        # Agent prompt evolution
+│
 └── observability/
-    ├── trace-logger.ts      # JSONL trace writer (buffered, auto-flush)
-    └── dashboard.ts         # Timeline + stats + anomaly detection
+    ├── README.md              # Dokumentasi 2 file
+    ├── dashboard.ts           # Timeline + stats + anomaly detection
+    └── trace-logger.ts        # JSONL trace writer (buffered, auto-flush)
 ```
-Note: `memory/skill-training.ts` juga ada — konversi skill → training data (JSONL/instructions).
 
 ## 21 Tools
 
