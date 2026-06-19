@@ -2,7 +2,7 @@ import type { Plugin, PluginModule } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin"
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, cpSync, rmSync, mkdtempSync } from "node:fs"
 import { execFileSync } from "node:child_process"
-import { join, dirname } from "node:path"
+import { join, dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { tmpdir, homedir } from "node:os"
 import { DomainRegistry, type DomainPack } from "./core/domain-registry.js"
@@ -480,6 +480,18 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
   for (const sk of savedSkills) {
     skillStore.importFromEnvelope(JSON.stringify(createMemoryEnvelope(sk.data, "skill")))
   }
+
+  // Load cross-session knowledge artifact
+  try {
+    const knowledgePath = resolve(worktree, ".agentic", "knowledge.json")
+    const knowledgeRaw = readFileSync(knowledgePath, "utf-8")
+    const knowledge = JSON.parse(knowledgeRaw)
+    if (knowledge?.sessions?.length > 0) {
+      console.debug(`[init] Loaded ${knowledge.sessions.length} prior session(s) from knowledge.json`)
+    }
+    // Store in a global for tool access
+    ;(globalThis as any).__agenticKnowledge = knowledge
+  } catch { /* knowledge.json may not exist yet — first session */ }
 
   // Restore persisted prompt states (Stage IV: versioned prompt history) — global
   const savedPrompts = persistence.loadAll<Array<{ role: string; history: PromptEntry[] }>>("prompts") // global

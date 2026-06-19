@@ -172,3 +172,19 @@ Sparse Vector Store (TF-IDF) tanpa dependensi eksternal. Inverted index per kate
 | `VectorStore.size` (getter) | — | `number` | Total dokumen terindex |
 | `VectorStore.categories` (getter) | — | `string[]` | Daftar kategori |
 | `VectorStore.docCountOf` | `category: string` | `number` | Jumlah dokumen per kategori |
+
+---
+### File Knowledge Lintas-Sesi
+
+📄 **`.agentic/knowledge.json`** — Menyimpan ringkasan pengetahuan dari sesi-sesi sebelumnya.
+Berisi daftar session, skill yang sudah dibangun, key decisions, dan file yang dimodifikasi.
+Dipakai untuk loading knowledge otomatis pada sesi berikutnya.
+
+**Struktur:**
+```json
+{
+  "schema_version": 1,
+  "sessions": [{ "session_id", "summary", "achievements", "key_decisions", "files_created", "files_modified" }],
+  "skills": [{ "name", "description", "module", "api", "consumers" }]
+}
+```
