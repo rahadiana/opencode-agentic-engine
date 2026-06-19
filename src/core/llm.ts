@@ -27,7 +27,13 @@ export interface LLMRequest {
 
 export interface LLMResponse {
   content: string
-  usage?: { promptTokens: number; completionTokens: number }
+  usage?: {
+    promptTokens: number
+    completionTokens: number
+    reasoningTokens?: number
+    cacheReadTokens?: number
+    cacheWriteTokens?: number
+  }
   finishReason?: string
 }
 
@@ -39,6 +45,7 @@ const DEFAULT_MODELS: Record<string, string> = {
 }
 
 import type { ModelRegistry } from "./model-registry.js"
+import type { BudgetTracker } from "./budget-tracker.js"
 
 export class LLMEngine {
   private config: LLMConfig
@@ -50,6 +57,7 @@ export class LLMEngine {
     searchEpisodes: (query: string) => Array<{ planGoal: string; outcome: string; timestamp: string }>
     findSkills: (query: string) => Array<{ name: string; successRate: number }>
   }
+  private budgetTracker?: BudgetTracker
   private responseCache = new Map<string, { response: LLMResponse; timestamp: number }>()
   private readonly CACHE_TTL = 30_000 // 30s cache for identical requests
 
@@ -109,6 +117,10 @@ export class LLMEngine {
 
   setModelRegistry(registry: ModelRegistry): void {
     this.modelRegistry = registry
+  }
+
+  setBudgetTracker(tracker: BudgetTracker): void {
+    this.budgetTracker = tracker
   }
 
   setSessionStore(store: import("../memory/session-store.js").SessionStore): void {
@@ -175,6 +187,18 @@ export class LLMEngine {
       ? this.sessionStore.getOrCreate(this.pluginSessionId).currentTaskType
       : undefined
     this.modelRegistry?.recordCall(this.getCurrentModel(), success, latency, taskType)
+
+    // Feed token usage to BudgetTracker
+    if (success && response.usage && this.budgetTracker) {
+      this.budgetTracker.recordTokens(
+        this.getCurrentModel(),
+        response.usage.promptTokens,
+        response.usage.completionTokens,
+        response.usage.reasoningTokens ?? 0,
+        response.usage.cacheReadTokens ?? 0,
+        response.usage.cacheWriteTokens ?? 0,
+      )
+    }
 
     return response
   }
@@ -538,7 +562,13 @@ export class LLMEngine {
       if (d.content) {
         return {
           content: typeof d.content === "string" ? d.content : d.content[0]?.text ?? JSON.stringify(d.content),
-          usage: d.usage ? { promptTokens: d.usage.input_tokens ?? 0, completionTokens: d.usage.output_tokens ?? 0 } : undefined,
+          usage: d.usage ? {
+            promptTokens: d.usage.input_tokens ?? 0,
+            completionTokens: d.usage.output_tokens ?? 0,
+            reasoningTokens: d.usage.reasoning_tokens ?? d.usage.reasoning ?? 0,
+            cacheReadTokens: d.usage.cache_read_input_tokens ?? d.usage.cache?.read ?? 0,
+            cacheWriteTokens: d.usage.cache_creation_input_tokens ?? d.usage.cache?.write ?? 0,
+          } : undefined,
           finishReason: d.stop_reason,
         }
       }
@@ -547,7 +577,13 @@ export class LLMEngine {
       if (choice) {
         return {
           content: choice.message?.content ?? JSON.stringify(choice),
-          usage: d.usage ? { promptTokens: d.usage.prompt_tokens ?? 0, completionTokens: d.usage.completion_tokens ?? 0 } : undefined,
+          usage: d.usage ? {
+            promptTokens: d.usage.prompt_tokens ?? d.usage.input_tokens ?? 0,
+            completionTokens: d.usage.completion_tokens ?? d.usage.output_tokens ?? 0,
+            reasoningTokens: d.usage.reasoning_tokens ?? 0,
+            cacheReadTokens: d.usage.cache_read_input_tokens ?? d.usage.cache?.read ?? 0,
+            cacheWriteTokens: d.usage.cache_creation_input_tokens ?? d.usage.cache?.write ?? 0,
+          } : undefined,
           finishReason: choice.finish_reason,
         }
       }

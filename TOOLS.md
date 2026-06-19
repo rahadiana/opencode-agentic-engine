@@ -2,7 +2,7 @@
 
 > **Plugin**: opencode-agentic-engine  
 > **Version**: 0.4.4  
-> **Total Tools**: 27 (Stage I–V + Blueprint)
+> **Total Tools**: 28 (Stage I–V + Blueprint)
 
 ---
 
@@ -219,6 +219,29 @@ Reset statistik model untuk recovery dari degraded performance.
 Recovery dari performance degradation dengan mereset statistik model. Berguna saat model mengalami timeout, retry storms, atau silent failures.
 
 **Stage**: II
+
+---
+
+### agentic_budget
+
+Budget enforcement tool (PDP layer). Set limits per scope (session/task) and configure behavior (hard-stop / warn / request-approval).
+
+| Parameter | Tipe | Required | Deskripsi |
+|-----------|------|----------|-----------|
+| `action` | `"set" \| "get" \| "status" \| "reset"` | ✅ | Operation to perform |
+| `scope` | `"session" \| "task"` | ❌ | Budget scope (default: `"session"`) |
+| `maxTokens` | `number` | ❌ | Max total tokens (input+output+reasoning+cache) |
+| `maxSteps` | `number` | ❌ | Max subtask steps |
+| `maxTimeMs` | `number` | ❌ | Max wall-clock time in ms |
+| `maxCostUsd` | `number` | ❌ | Max total cost in USD |
+| `onExceeded` | `"hard-stop" \| "warn" \| "request-approval"` | ❌ | Behavior when limit exceeded (default: `"hard-stop"`) |
+| `modelPrices` | `Record<string, {input:number, output:number}>` | ❌ | Ad-hoc model price overrides |
+
+**Deskripsi**:  
+Tracks tokens, steps, time, and cost per session/task. PEP check runs synchronously before every `agentic_execute`, `bash_tool`, and `agentic_mcp` call. Supports fail-fast order (steps → time → tokens → cost). Approval pause excludes waiting time from `elapsedMs`.
+
+**Stage**: II  
+**LLM-dependent**: Tidak
 
 ---
 

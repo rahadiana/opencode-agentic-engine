@@ -27,8 +27,8 @@ const hooks = await mod.AgenticEngine({
 
 const toolNames = Object.keys(hooks.tool || {})
 console.log("OK AgenticEngine initialized, tools:", toolNames.join(", "))
-if (toolNames.length < 21) {
-  console.error("FAIL: expected 21+ tools, got", toolNames.length)
+if (toolNames.length < 28) {
+  console.error("FAIL: expected 28+ tools, got", toolNames.length)
   process.exit(1)
 }
 

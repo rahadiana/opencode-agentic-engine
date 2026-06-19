@@ -1,5 +1,6 @@
 import type { Subtask, Plan } from "./intent-parser"
 import type { DomainRegistry } from "./domain-registry"
+import type { BudgetTracker } from "./budget-tracker"
 
 export interface ExecutionResult {
   stepId: string
@@ -34,9 +35,14 @@ export class Executor {
   private maxRetries = 3
   private states = new Map<string, ExecutionState>()
   private domainRegistry: DomainRegistry | null = null
+  private budgetTracker: BudgetTracker | null = null
 
   setDomainRegistry(registry: DomainRegistry): void {
     this.domainRegistry = registry
+  }
+
+  setBudgetTracker(tracker: BudgetTracker): void {
+    this.budgetTracker = tracker
   }
 
   /** Per-error-category retry limits (domain-agnostic).
@@ -145,6 +151,7 @@ export class Executor {
     if (result.success) {
       state.completedSteps.add(result.stepId)
       state.failedSteps.delete(result.stepId) // Clear from failed if succeeded after retry
+      this.budgetTracker?.recordStep()
     } else {
       stepState.retryCount++
       stepState.errorHistory.push({

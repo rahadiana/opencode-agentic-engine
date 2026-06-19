@@ -2397,12 +2397,95 @@ const p4Result = await hooks.tool.agentic_auto.execute({
 const p4Out = typeof p4Result === "string" ? p4Result : (p4Result.output || "")
 assert(p4Out.length > 20, "auto with pipeline goal returns output")
 assert(p4Out.includes("Goal") || p4Out.includes("Auto"), "output mentions goal or auto")
-assert(true, "agentic_auto pipeline delegation tests passed")
+  assert(true, "agentic_auto pipeline delegation tests passed")
+
+  // ── BudgetTracker unit tests (inside runAll) ──
+  console.log("\n[B1] BudgetTracker — class unit tests")
+  const { BudgetTracker: BT } = await import(pluginDist)
+
+  const bt1 = new BT()
+  bt1.recordTokens("openai/gpt-4o", 1000, 500)
+  assert(bt1.totalTokens === 1500, "B1a total tokens = input+output")
+  assert(Math.abs(bt1.totalCostUsd - 7.50) < 0.001, "B1b cost = $7.50")
+  bt1.recordStep()
+  assert(bt1.steps === 1, "B1c steps recorded")
+  assert(bt1.check("session") === null, "B1d no limits = null")
+  bt1.setLimits("session", { maxTokens: 1000 })
+  const ev1 = bt1.check("session")
+  assert(ev1 !== null, "B1e limit exceeded returns event")
+  assert(ev1.metric === "tokens", "B1f exceeded metric = tokens")
+  bt1.reset("task")
+  assert(bt1.totalTokens === 0, "B1g after reset: tokens = 0")
+
+  // Merge semantics
+  const bt2 = new BT()
+  bt2.setLimits("task", { maxTokens: 500 }, "warn")
+  bt2.setLimits("task", { maxSteps: 10 })
+  assert(bt2.getLimits("task").maxTokens === 500, "B1h merge: maxTokens tetap 500")
+  assert(bt2.getLimits("task").maxSteps === 10, "B1i merge: maxSteps jadi 10")
+
+  // Cache & reasoning
+  const bt3 = new BT()
+  bt3.recordTokens("anthropic/claude-sonnet-4", 100, 50, 30, 10000, 500)
+  assert(bt3.totalTokens === 10680, "B1j cache+reasoning tokens summed")
+  assert(bt3.totalCostUsd > 4.0, "B1k cost includes cache pricing")
+
+  // Fail-fast order
+  const bt4 = new BT()
+  bt4.setLimits("session", { maxSteps: 1, maxTokens: 100000 })
+  bt4.recordStep()
+  bt4.recordStep()
+  assert(bt4.check("session").metric === "steps", "B1l fail-fast: steps before tokens")
+
+  // getState
+  const btState = bt2.getState(["session", "task"])
+  assert(btState.length === 2, "B1m getState returns both scopes")
+  assert(btState[0].scope === "session", "B1n state[0] = session")
+
+  // Approval pause
+  const bt5 = new BT()
+  bt5.setLimits("session", { maxTimeMs: 60000 })
+  bt5.pauseApproval()
+  assert(bt5.elapsedMs < 100, "B1o elapsed ~0 saat pause")
+  bt5.resumeApproval()
+
+  // Unknown model fallback
+  const bt6 = new BT()
+  bt6.recordTokens("custom-model/xyz", 1000, 500)
+  assert(bt6.totalCostUsd > 0, "B1p unknown model falls back to default")
+  assert(true, "B1z BudgetTracker all unit tests passed")
+
+  // ── agentic_budget tool tests (inside runAll) ──
+  console.log("\n[B2] agentic_budget — tool integration")
+  const bSid = freshSid()
+  const bCtx = mockCtx(bSid)
+  assert(typeof hooks.tool.agentic_budget?.execute === "function", "B2a tool registered")
+
+  const bSet = await hooks.tool.agentic_budget.execute({ action: "set", scope: "session", maxTokens: 50000, maxSteps: 100, maxTimeMs: 300000 }, bCtx)
+  assert((bSet.output || "").includes("50000"), "B2b set response shows maxTokens")
+
+  const bStatus = await hooks.tool.agentic_budget.execute({ action: "status", scope: "session" }, bCtx)
+  const sOut = bStatus.output || ""
+  assert(sOut.includes("Tokens") && sOut.includes("Steps") && sOut.includes("Time") && sOut.includes("Cost"), "B2c status shows all rows")
+
+  const bGet = await hooks.tool.agentic_budget.execute({ action: "get", scope: "session" }, bCtx)
+  assert((bGet.output || "").includes("50000"), "B2d get shows maxTokens")
+
+  const bReset = await hooks.tool.agentic_budget.execute({ action: "reset", scope: "session" }, bCtx)
+  assert((bReset.output || "").includes("reset"), "B2e reset confirmation")
+
+  const bWarn = await hooks.tool.agentic_budget.execute({ action: "set", scope: "task", maxTokens: 100, onExceeded: "warn" }, bCtx)
+  assert((bWarn.output || "").includes("warn"), "B2f onExceeded=warn reflected")
+
+  const bPrice = await hooks.tool.agentic_budget.execute({ action: "set", scope: "task", maxTokens: 1000, maxCostUsd: 5.00, modelPrices: { "my-model/v1": { input: 1.0, output: 4.0 } } }, bCtx)
+  assert((bPrice.output || "").includes("1000"), "B2g model price override accepted")
+
+  const bBad = await hooks.tool.agentic_budget.execute({ action: "invalid", scope: "session" }, bCtx)
+  assert((bBad.output || "").includes("Unknown"), "B2h invalid action handled")
+  assert(true, "B2z agentic_budget tool tests passed")
 }
 
 await runAll()
-
-console.log(`\n${"=".repeat(40)}`)
 console.log(`Results: ${passed} passed, ${failed} failed`)
 if (failed === 0) console.log("ALL TESTS PASSED")
 process.exit(failed > 0 ? 1 : 0)
