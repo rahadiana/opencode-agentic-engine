@@ -12,11 +12,11 @@
 
 ### `live-evaluator.ts`
 
-| Fungsi | Issue | Severity | Rekomendasi |
-|---|---|---|---|
-| `computeErrorRecovery()` | Return `1` (sempurna) ketika tidak ada error — false positive | **High** | Return `null` atau `undefined` untuk "no data", jangan inflate score |
-| `computeContextStability()` | Return `1` ketika navigasi kosong — bias optimistis | **High** | Sama, bedakan "no data" vs "perfect score" |
-| `computeMultiAgent()` | Return `1` ketika delegasi kosong — melebih-lebihkan performa | **High** | Sama seperti di atas |
+| Fungsi | Issue | Severity | Rekomendasi | Status |
+|---|---|---|---|---|
+| `computeErrorRecovery()` | Return `1` (sempurna) ketika tidak ada error — false positive | **High** | Return `null` atau `undefined` untuk "no data", jangan inflate score | ✅ Fixed (return 0) |
+| `computeContextStability()` | Return `1` ketika navigasi kosong — bias optimistis | **High** | Sama, bedakan "no data" vs "perfect score" | ✅ Fixed (return 0) |
+| `computeMultiAgent()` | Return `1` ketika delegasi kosong — melebih-lebihkan performa | **High** | Sama seperti di atas | ✅ Fixed (return 0) |
 | `computeSkillReuse()` | Return `0.5` (arbitrer) ketika tidak ada skill lookup — nilai tebakan | **Medium** | Return `null`, biarkan weighted sum menyesuaikan |
 | `computeScore()` | Tidak ada validasi weights total = 1.0 (saat ini benar, tapi rapuh) | **Low** | Normalisasi weights secara otomatis di `computeScore()` |
 | `computeScore()` | Tidak handle NaN/Infinity — bisa crash kalau ada edge-case | **Medium** | Guard `isNaN` / `isFinite` setelah kalkulasi |
@@ -28,7 +28,7 @@
 | Semua compute\*() | Tidak ada session-scoping — data tercampur antar sesi | **Medium** | Filter berdasarkan sessionId waktu compute |
 
 **Rekomendasi Prioritas:**
-1. Fix false-positive returns (no data = null, bukan 1)
+1. ✅ Fix false-positive returns (no data = null, bukan 1) — DONE: return 0 instead
 2. Tambah NaN/Infinity guard
 3. Tambah schema validation di `fromJSON()`
 4. Ganti emoji dengan ASCII

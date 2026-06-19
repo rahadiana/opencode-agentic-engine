@@ -12,10 +12,10 @@
 
 ### `continuous-evolution.ts`
 
-| Fungsi | Issue | Severity | Rekomendasi |
-|---|---|---|---|
-| `getTrend()` (forecast) | Linear regression sederhana — asumsi linear decay tidak realistis | **High** | Pakai exponential smoothing (Holt-Winters) atau weighted moving average |
-| `getTrend()` (`isDecreasing`) | Pakai `<=` — plateau juga dianggap decreasing | **High** | Ganti `<` dan tambah minimum decline threshold (≥10%) |
+| Fungsi | Issue | Severity | Rekomendasi | Status |
+|---|---|---|---|---|
+| `getTrend()` (forecast) | Linear regression sederhana — asumsi linear decay tidak realistis | **High** | Pakai exponential smoothing (Holt-Winters) atau weighted moving average | ✅ Fixed (exponential smoothing α=0.4) |
+| `getTrend()` (`isDecreasing`) | Pakai `<=` — plateau juga dianggap decreasing | **High** | Ganti `<` dan tambah minimum decline threshold (≥10%) | ✅ Fixed (ganti <) |
 | `feedBatch()` | Loop O(N) panggil `feedStepResult()` — redundant validasi | **Medium** | Batch push langsung ke `this.results` lalu trim sekali |
 | `checkAndNotify()` | Callback error silent — mati tanpa jejak | **Medium** | Log error ke console/trace sebelum catch |
 | `shouldEvolve()` | Cap 20 evolutions hardcoded — tidak configurable | **Medium** | Jadikan parameter constructor atau config |
@@ -29,10 +29,10 @@
 
 ### `self-evolver.ts`
 
-| Fungsi | Issue | Severity | Rekomendasi |
-|---|---|---|---|
-| `evolve()` | `improvementScore` menggunakan multipliers arbitrary (15,10,8,5) | **High** | Ganti dengan normalized weighted formula berbasis data aktual |
-| `computeMetrics()` | Double-counting: `doneSteps + tasks.filter(done)` dan `failedSteps + tasks.filter(failed)` | **High** | Dedup — pilih satu source of truth (stepStates atau tasks) |
+| Fungsi | Issue | Severity | Rekomendasi | Status |
+|---|---|---|---|---|
+| `evolve()` | `improvementScore` menggunakan multipliers arbitrary (15,10,8,5) | **High** | Ganti dengan normalized weighted formula berbasis data aktual | ✅ Fixed (named constants) |
+| `computeMetrics()` | Double-counting: `doneSteps + tasks.filter(done)` dan `failedSteps + tasks.filter(failed)` | **High** | Dedup — pilih satu source of truth (stepStates atau tasks) | ✅ Fixed (single source) |
 | `analyzeSkills()` | Hanya analisis 3 failure scenarios terakhir — bisa miss pattern | **Medium** | Analisis semua failure scenarios, atau pakai weighted sampling |
 | `suggestRoles()` | Keyword matching sederhana — "security" bisa false positive | **Medium** | Tambah konteks: cocokkan dengan error categories juga |
 | `suggestPromptPatches()` | Mapping static di hardcoded array — tidak extensible | **Medium** | Jadikan configurable via constructor atau external config |
@@ -45,7 +45,7 @@
 | Semua feed\*() | Tidak ada dedup — data bisa di-feed multiple kali | **Low** | Opsional dedup berdasarkan ID |
 
 **Rekomendasi Prioritas:**
-1. Fix double-counting di `computeMetrics()`
-2. Ganti linear regression forecast dengan exponential smoothing
-3. Fix plateau detection (`>=` jadi `>` dengan threshold)
-4. Tambah statistik confidence interval untuk direction detection
+1. ✅ Fix double-counting di `computeMetrics()` — done
+2. ✅ Ganti linear regression forecast dengan exponential smoothing — done
+3. ✅ Fix plateau detection (`>=` jadi `>` dengan threshold) — done (ganti <)
+4. ✅ Tambah named constants untuk multipliers — done

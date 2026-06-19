@@ -49,6 +49,13 @@ export interface EvolutionReport {
   improvementScore: number // 0-100, higher = more evolving
 }
 
+const WEIGHT_SKILL_PATCH = 15  // per skill patch suggestion
+const WEIGHT_ROLE_SUGGESTION = 10 // per new role suggestion
+const WEIGHT_PROMPT_PATCH = 8    // per prompt patch detected
+const WEIGHT_APPLIED_PATCH = 5   // per auto-applied patch
+const WEIGHT_SUCCESS_RATE = 20   // success rate scaling
+const WEIGHT_RECOMMENDATION = 5  // per recommendation
+
 export class SelfEvolver {
   private skills: SkillRecord[] = []
   private episodes: Episode[] = []
@@ -84,12 +91,12 @@ export class SelfEvolver {
     }
 
     const improvementScore = Math.min(100, Math.round(
-      (skillPatches.length * 15) +
-      (roleSuggestions.length * 10) +
-      (promptPatches.length * 8) +
-      (appliedPatches.length * 5) + // Small bonus for identified patches (actual application requires RoleRegistry)
-      (metrics.successRate * 20) +
-      (metrics.recommendations.length * 5)
+      (skillPatches.length * WEIGHT_SKILL_PATCH) +
+      (roleSuggestions.length * WEIGHT_ROLE_SUGGESTION) +
+      (promptPatches.length * WEIGHT_PROMPT_PATCH) +
+      (appliedPatches.length * WEIGHT_APPLIED_PATCH) +
+      (metrics.successRate * WEIGHT_SUCCESS_RATE) +
+      (metrics.recommendations.length * WEIGHT_RECOMMENDATION)
     ))
 
     return { metrics, skillPatches, roleSuggestions, promptPatches, improvementScore }
@@ -98,10 +105,13 @@ export class SelfEvolver {
   private computeMetrics(): EvolutionMetrics {
     const sessions = new Set(this.episodes.map(e => e.sessionId))
     const totalSteps = this.stepStates.length || this.tasks.length
-    const doneSteps = this.stepStates.filter(s => s.success).length
-    const failedSteps = this.stepStates.filter(s => !s.success).length
-    const done = doneSteps + this.tasks.filter(t => t.status === "done").length
-    const failed = failedSteps + this.tasks.filter(t => t.status === "failed").length
+    const useStepStates = this.stepStates.length > 0
+    const done = useStepStates
+      ? this.stepStates.filter(s => s.success).length
+      : this.tasks.filter(t => t.status === "done").length
+    const failed = useStepStates
+      ? this.stepStates.filter(s => !s.success).length
+      : this.tasks.filter(t => t.status === "failed").length
     const total = (done + failed) || 1
 
     const errorCategories = new Map<string, number>()
@@ -179,7 +189,11 @@ export class SelfEvolver {
       totalSteps,
       successRate: total > 0 ? done / total : 0,
       retryRate: retryFraction,
-      avgRetriesPerFailure: failed > 0 ? failedSteps / failed : 0,
+      avgRetriesPerFailure: failed > 0
+        ? useStepStates
+          ? this.stepStates.length / Math.max(failed, 1)
+          : this.tasks.length / Math.max(failed, 1)
+        : 0,
       topErrorCategories: topErrors,
       skillEffectiveness: skillEff,
       toolUsage: toolStats,

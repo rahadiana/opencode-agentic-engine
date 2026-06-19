@@ -31,6 +31,12 @@ export interface Anomaly {
 }
 
 export class Dashboard {
+  private concurrencyWindowMs: number
+
+  constructor(concurrencyWindowMs = 2000) {
+    this.concurrencyWindowMs = concurrencyWindowMs
+  }
+
   generate(traces: TraceEntry[], _sessionStart: number): DashboardData {
     const timeline: TimelineEvent[] = traces.map(t => ({
       time: t.timestamp,
@@ -102,14 +108,14 @@ export class Dashboard {
 
   private computePeakConcurrency(traces: TraceEntry[]): number {
     if (traces.length === 0) return 0
-    // Sort by timestamp, then use sweep line with 2-second window
+    // Sort by timestamp, then use sweep line with configurable window
     const sorted = traces.map(t => new Date(t.timestamp).getTime()).sort((a, b) => a - b)
     let max = 0
     let concurrent = 0
     let j = 0
     for (let i = 0; i < sorted.length; i++) {
-      // Move window start forward (2-second window)
-      while (j < i && sorted[i] - sorted[j] > 2000) {
+      // Move window start forward
+      while (j < i && sorted[i] - sorted[j] > this.concurrencyWindowMs) {
         concurrent--
         j++
       }
@@ -153,54 +159,51 @@ export class Dashboard {
       }
     }
 
-    // Loop detection: same tool/step repeating without progress
-    const sequence: Array<{ step: string; tool: string; idx: number }> = []
-    for (let i = 0; i < traces.length; i++) {
-      sequence.push({ step: traces[i].step, tool: traces[i].toolUsed, idx: i })
-    }
-
-    for (let cycleLen = 2; cycleLen <= 5; cycleLen++) {
-      for (let start = 0; start + cycleLen * 2 < sequence.length; start++) {
-        const cycle1 = sequence.slice(start, start + cycleLen)
-        const cycle2 = sequence.slice(start + cycleLen, start + cycleLen * 2)
-        const isRepeat = cycle1.every((c, i) =>
-          c.step === cycle2[i].step && c.tool === cycle2[i].tool
-        )
-        if (isRepeat) {
-          const toolNames = [...new Set(cycle1.map(c => c.tool))].join(", ")
-          anomalies.push({
-            type: "loop",
-            description: `Repeating pattern detected: ${toolNames} x ${cycleLen} steps at index ${start}`,
-            detectedAt: traces[start + cycleLen * 2]?.timestamp ?? new Date().toISOString(),
-            tool: toolNames,
-            count: cycleLen,
-          })
-          break
-        }
+    // Loop detection: same tool/step repeating without progress (Map-based O(n))
+    const seen = new Map<string, number>()
+    const maxLookback = 100
+    const startIdx = Math.max(0, traces.length - maxLookback)
+    for (let i = startIdx; i < traces.length; i++) {
+      const key = `${traces[i].step}|${traces[i].toolUsed}`
+      const prev = seen.get(key)
+      if (prev !== undefined && i - prev <= 5) {
+        anomalies.push({
+          type: "loop",
+          description: `Repeating pattern: ${traces[i].toolUsed} at index ${prev} and ${i}`,
+          detectedAt: traces[i].timestamp,
+          tool: traces[i].toolUsed,
+          count: 2,
+        })
+        break
+      }
+      seen.set(key, i)
+      // Evict old entries to keep map bounded
+      if (seen.size > maxLookback * 2) {
+        for (const [k] of seen) { seen.delete(k); break }
       }
     }
 
-    // Silent failures (false success claims with failed verify)
-    let lastVerifyFailed = false
-    let lastFailedVerifyStep = ""
+    // Silent failures (false success claims with failed verify — match by stepId)
+    const verifyFailures = new Map<string, string>()
     for (const t of traces) {
-      if (t.step.startsWith("verify:") && !t.success) {
-        lastVerifyFailed = true
-        lastFailedVerifyStep = t.step
+      const prefix = "verify:"
+      if (t.step.startsWith(prefix) && !t.success) {
+        verifyFailures.set(t.step.slice(prefix.length), t.timestamp)
       }
-      if (t.step.startsWith("execute:") && t.success) {
-        if (lastVerifyFailed) {
+    }
+    for (const t of traces) {
+      const prefix = "execute:"
+      if (t.step.startsWith(prefix) && t.success) {
+        const stepId = t.step.slice(prefix.length)
+        const failedAt = verifyFailures.get(stepId)
+        if (failedAt) {
           anomalies.push({
             type: "silent_failure",
-            description: `Step reported success but verification "${lastFailedVerifyStep}" had previously failed`,
+            description: `Step "${stepId}" reported success but verification had failed`,
             detectedAt: t.timestamp,
             tool: t.toolUsed,
           })
-          lastVerifyFailed = false
         }
-      }
-      if (t.step.startsWith("execute:") && !t.success) {
-        lastVerifyFailed = false
       }
     }
 

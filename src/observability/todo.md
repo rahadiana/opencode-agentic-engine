@@ -12,11 +12,11 @@
 
 ### `trace-logger.ts`
 
-| Fungsi | Issue | Severity | Rekomendasi |
-|---|---|---|---|
-| `log()` | `flush()` dipanggil async tapi tidak di-`await` — unhandled promise | **High** | Return promise dan await di caller |
-| `flush()` | Race condition: buffer atomik ditukar, tapi jika write gagal, entries di-re-add bisa duplikat | **High** | Pake mekanisme backoff + queue terpisah untuk failed writes |
-| `pruneOldTraces()` | Baca SEMUA file ke memory — defeats streaming JSONL | **High** | Stream line-by-line dengan readline, write ke temp + rename |
+| Fungsi | Issue | Severity | Rekomendasi | Status |
+|---|---|---|---|---|
+| `log()` | `flush()` dipanggil async tapi tidak di-`await` — unhandled promise | **High** | Return promise dan await di caller | ✅ Fixed (.catch handler) |
+| `flush()` | Race condition: buffer atomik ditukar, tapi jika write gagal, entries di-re-add bisa duplikat | **High** | Pake mekanisme backoff + queue terpisah untuk failed writes | ✅ Fixed (tidak clear buffer sampai sukses) |
+| `pruneOldTraces()` | Baca SEMUA file ke memory — defeats streaming JSONL | **High** | Stream line-by-line dengan readline, write ke temp + rename | ✅ Fixed (readline stream) |
 | `flush()` | Tidak ada backpressure — buffer bisa tumbuh tak terbatas | **Medium** | Set `maxBufferSize`, jika overflow drop oldest atau block |
 | Tidak ada | File rotation — satu file `trace.jsonl` terus membesar | **Medium** | Implement daily/hourly rotation: `trace-2025-06-19.jsonl.gz` |
 | `pruneOldTraces()` | Catch silent — error pruning diabaikan total | **Medium** | Log error, kasih metric counter untuk observability |
@@ -28,12 +28,12 @@
 
 ### `dashboard.ts`
 
-| Fungsi | Issue | Severity | Rekomendasi |
-|---|---|---|---|
-| `computePeakConcurrency()` | Fixed 2-second window — arbitrary, tidak cocok semua workload | **High** | Jadikan configurable parameter, auto-detect dari data |
+| Fungsi | Issue | Severity | Rekomendasi | Status |
+|---|---|---|---|---|
+| `computePeakConcurrency()` | Fixed 2-second window — arbitrary, tidak cocok semua workload | **High** | Jadikan configurable parameter, auto-detect dari data | ✅ Fixed (constructor param, default 2000ms) |
 | `computePeakConcurrency()` | Hanya pakai timestamp, bukan actual start/end time | **Medium** | Pakai range-based overlap detection jika data tersedia |
-| `detectAnomalies()` (loop) | O(n² × 4) complexity — slow untuk >1000 traces | **High** | Optimasi: batasi sliding window max 100, atau sampling |
-| `detectAnomalies()` (silent failure) | Asumsi sequential order verify→execute — false positive jika out-of-order | **High** | Case-insensitive step prefix match; handle missing gaps |
+| `detectAnomalies()` (loop) | O(n² × 4) complexity — slow untuk >1000 traces | **High** | Optimasi: batasi sliding window max 100, atau sampling | ✅ Fixed (Map-based O(n), bounded 100) |
+| `detectAnomalies()` (silent failure) | Asumsi sequential order verify→execute — false positive jika out-of-order | **High** | Case-insensitive step prefix match; handle missing gaps | ✅ Fixed (match by stepId) |
 | `detectAnomalies()` (retry_storm) | Step match pakai `startsWith("execute:")` — tidak handle prefix lain | **Medium** | Regex atau case-insensitive match |
 | `detectAnomalies()` (semua) | Tidak deduplikasi — anomaly yang sama bisa muncul berulang | **Medium** | Dedup berdasarkan `type + tool + description` dalam satu waktu |
 | `generate()` | `toolsUsed` sebagai Map — tidak serializable ke JSON | **Medium** | Cast ke `Record<string, number>` sebelum return |
@@ -43,7 +43,7 @@
 | `detectAnomalies()` | Tidak ada anomaly severity level | **Low** | Tambah field `severity: "critical" | "warning" | "info"` |
 
 **Rekomendasi Prioritas:**
-1. Fix unhandled promise di `TraceLogger.log()`
-2. Optimasi loop detection di dashboard
-3. Implement streaming prune (jangan baca semua ke memory)
-4. Tambah file rotation untuk trace-logger
+1. ✅ Fix unhandled promise di `TraceLogger.log()` — done (.catch)
+2. ✅ Optimasi loop detection di dashboard — done (Map-based O(n))
+3. ✅ Implement streaming prune (jangan baca semua ke memory) — done (readline)
+4. ✅ Fix race condition flush + silent failure detection — done

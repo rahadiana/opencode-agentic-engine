@@ -80,7 +80,7 @@ export class LiveEvaluator {
    */
   computeErrorRecovery(): number {
     const total = this.errorRecoveries.length
-    if (total === 0) return 1 // no errors = perfect recovery
+    if (total === 0) return 0 // no errors = no data to score
     const recovered = this.errorRecoveries.filter(e => e.recovered).length
     return recovered / total
   }
@@ -91,7 +91,7 @@ export class LiveEvaluator {
    */
   computeContextStability(): number {
     const total = this.navigations.length
-    if (total === 0) return 1 // no nav = stable (nothing drifted)
+    if (total === 0) return 0 // no nav = no data to score
     const focused = this.navigations.filter(n => n.focused).length
     return focused / total
   }
@@ -102,7 +102,7 @@ export class LiveEvaluator {
    */
   computeMultiAgent(): number {
     const total = this.delegations.length
-    if (total === 0) return 1 // no delegation = not relevant
+    if (total === 0) return 0 // no delegation = no data to score
     const successes = this.delegations.filter(d => d.success).length
     return successes / total
   }

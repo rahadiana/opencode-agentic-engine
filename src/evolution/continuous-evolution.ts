@@ -148,29 +148,34 @@ export class ContinuousEvolution {
       }
       forecast.bucketRates = bucketRates
 
-      // Simple linear regression: if rates are consistently decreasing, extrapolate
+      // Exponential smoothing: weighted average, recent buckets weighted more
       const isDecreasing = bucketRates.length >= 3 &&
-        bucketRates.slice(1).every((r, i) => r <= bucketRates[i]) &&
+        bucketRates.slice(1).every((r, i) => r < bucketRates[i]) &&
         bucketRates[0] > bucketRates[bucketRates.length - 1]
 
       if (isDecreasing) {
-        // Compute average decline per bucket
-        const totalDecline = bucketRates[0] - bucketRates[bucketRates.length - 1]
-        const avgDecline = totalDecline / (bucketRates.length - 1)
+        // Exponential weighted smoothing: recent buckets get more weight
+        let smoothed = bucketRates[0]
+        const alpha = 0.4
+        for (let i = 1; i < bucketRates.length; i++) {
+          smoothed = alpha * bucketRates[i] + (1 - alpha) * smoothed
+        }
 
-        // Predict next window rate
-        const nextRate = Math.max(0, bucketRates[bucketRates.length - 1] - avgDecline)
+        // Predict next window rate using smoothed value
+        const nextRate = Math.max(0, Math.min(1, smoothed))
         forecast.nextWindowRate = nextRate
         forecast.critical = nextRate < 0.5
 
         // Estimate when rate would cross 50%
+        const declineRate = bucketRates[0] - bucketRates[bucketRates.length - 1]
+        const avgDecline = declineRate / (bucketRates.length - 1)
         if (bucketRates[bucketRates.length - 1] > 0.5 && avgDecline > 0) {
           const stepsToCross = Math.ceil((bucketRates[bucketRates.length - 1] - 0.5) / avgDecline) * bucketSize
           forecast.stepsUntilCritical = stepsToCross
         }
 
         if (forecast.critical) {
-          recommendations.push(`🔮 **Forecast:** Performance projected to drop to ${(nextRate * 100).toFixed(0)}% in the next window. ${forecast.stepsUntilCritical ? `Critical threshold (~50%) expected in ~${forecast.stepsUntilCritical} steps.` : "Consider proactive evolution analysis."}`)
+          recommendations.push(`Forecast: Performance projected to drop to ${(nextRate * 100).toFixed(0)}% in the next window. ${forecast.stepsUntilCritical ? `Critical threshold (~50%) expected in ~${forecast.stepsUntilCritical} steps.` : "Consider proactive evolution analysis."}`)
         }
       }
     }
