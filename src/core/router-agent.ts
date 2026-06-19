@@ -57,10 +57,12 @@ const DEFAULT_CATEGORIES: RouteCategory[] = [
     suggestedTools: [],
     suggestedRagIndex: "knowledge-personal",
   },
-  {
+    {
     id: "tech",
     name: "Teknologi",
-    keywords: ["code", "kode", "program", "aplikasi", "website", "database", "api", "server", "bug", "feature", "deploy", "git", "npm", "docker", "typescript", "react", "node", "python", "rust", "backend", "frontend", "fullstack"],
+    keywords: ["code", "kode", "program", "aplikasi", "website", "database", "api", "server", "bug", "feature", "deploy", "git", "npm", "docker", "typescript", "react", "node", "python", "rust", "backend", "frontend", "fullstack", "javascript", "java", "go", "php", "html", "css", "sql", "linux", "macos", "windows", "config", "setup", "install", "error", "test", "build", "compile", "fix", "refactor", "implement", "module", "class", "function", "import", "export", "interface", "type", "variable", "array", "object", "string", "number", "boolean", "async", "await", "promise", "callback", "middleware", "route", "controller", "service", "model", "view", "component", "hook", "state", "props", "event", "handler", "listener", "socket", "stream", "buffer", "file", "dir", "folder", "path", "url", "http", "https", "fetch", "ajax", "json", "xml", "yaml", "toml", "markdown", "readme", "license", "changelog", "test", "spec", "mock", "stub", "spy", "assert", "expect", "should", "suite", "benchmark", "perf", "optimize", "secure", "auth", "login", "register", "token", "jwt", "oauth", "session", "cookie", "cache", "queue", "worker", "thread", "process", "cluster", "scale", "load", "stress", "monitor", "log", "debug", "trace", "metric", "alert", "notification", "email", "sms", "push", "websocket", "graphql", "rest", "grpc", "soap", "microservice", "monolith", "serverless", "lambda", "container", "kubernetes", "k8s", "pod", "service", "ingress", "helm", "chart", "ansible", "terraform", "ci", "cd", "pipeline", "action", "workflow", "job", "cron", "schedule", "event", "message", "broker", "kafka", "rabbitmq", "redis", "mongo", "postgres", "mysql", "sqlite", "orm", "query", "schema", "migration", "seed", "transaction", "index", "key", "foreign", "primary", "unique", "constraint", "trigger", "procedure", "function", "view", "table", "column", "row", "cell", "data", "information", "content", "document", "file", "attachment", "upload", "download", "sync", "async", "batch", "real", "time", "stream", "live", "realtime", "ssr", "csr", "spa", "pwa", "mobile", "desktop", "cli", "gui", "terminal", "console", "shell", "bash", "zsh", "sh", "script", "command", "argument", "flag", "option", "param", "env", "variable", "config", "setting", "preference", "default", "custom", "override", "inherit", "extend", "mixin", "trait", "impl", "abstract", "concrete", "static", "dynamic", "typed", "untyped", "safe", "nullable", "optional", "required", "readonly", "mutable", "immutable", "pure", "side", "effect", "monad", "functor", "pipe", "compose", "curry", "partial", "recursive", "iterative", "loop", "while", "for", "each", "map", "filter", "reduce", "find", "some", "every", "includes", "sort", "reverse", "concat", "slice", "splice", "split", "join", "replace", "match", "search", "indexof", "tolowercase", "touppercase", "trim", "pad", "repeat", "flat", "flatmap", "entries", "keys", "values", "assign", "freeze", "seal", "define", "proxy", "reflect", "symbol", "iterator", "generator", "yield", "next", "throw", "return", "try", "catch", "finally", "throw", "error", "exception", "stack", "trace", "message", "name", "cause", "reject", "resolve", "settle", "race", "all", "allsettled", "anys", "prototype", "proto", "constructor", "new", "instanceof", "typeof", "void", "delete", "in", "with", "this", "super", "class", "extends", "implements", "interface", "enum", "namespace", "module", "declare", "export", "import", "require", "from", "as", "default", "readonly", "private", "public", "protected", "static", "abstract", "virtual", "override", "sealed", "final", "const", "let", "var", "function", "return", "if", "else", "switch", "case", "break", "continue", "default", "throw", "try", "catch", "finally", "for", "while", "do", "in", "of", "async", "await", "yield", "generator", "arrow", "lambda", "closure", "scope", "block", "hoist", "iife", "module", "commonjs", "esm", "umd", "amd", "system", "bundle", "pack", "chunk", "tree", "shake", "minify", "uglify", "compress", "gzip", "brotli", "cache", "store", "persist", "memoize", "debounce", "throttle", "cancel", "abort", "signal", "timeout", "interval", "delay", "request", "response", "header", "body", "status", "method", "get", "post", "put", "patch", "delete", "head", "options", "connect", "trace"],
+
+
     description: "Pengembangan perangkat lunak, programming, dan teknologi",
     suggestedTools: [],
     suggestedRagIndex: "knowledge-tech",
@@ -167,57 +169,11 @@ export class RouterAgent {
   }
 
   /**
-   * Full routing with optional LLM refinement for ambiguous cases.
+   * Keyword-only routing — zero LLM cost. Falls back to "general" with low confidence.
    */
   async route(input: string): Promise<RouteMatch> {
-    // Step 1: Try fast keyword routing
     const keywordResult = this.keywordRoute(input)
 
-    // Step 2: If good confidence from keywords, return it
-    if (keywordResult && keywordResult.confidence >= 0.6) {
-      return keywordResult
-    }
-
-    // Step 3: If LLM available, use it for ambiguous cases
-    if (this.llmEngine) {
-      try {
-        const categoriesList = this.categories
-          .map(c => `- ${c.id}: "${c.name}" — ${c.description} (keywords: ${c.keywords.slice(0, 10).join(", ") || "none"})`)
-          .join("\n")
-
-        const resp = await this.llmEngine.call({
-          systemPrompt: ROUTER_SYSTEM_PROMPT.replace("{CATEGORIES_LIST}", categoriesList),
-          userPrompt: `User input: "${input}"\n\nDetermine the best matching category.`,
-          temperature: 0.1,
-          maxTokens: 512,
-          jsonMode: true,
-        })
-
-        const parsed = this.tryParseJSON(resp.content)
-        if (parsed && typeof parsed.category === "string") {
-          const catId = parsed.category as string
-          const matchedCat = this.categories.find(c => c.id === catId)
-          const confidence = typeof parsed.confidence === "number" ? parsed.confidence : 0.5
-          const intentStr = typeof parsed.intent === "string" ? parsed.intent : `Terkait ${matchedCat?.name || catId}`
-          const reasoningStr = typeof parsed.reasoning === "string" ? parsed.reasoning : keywordResult?.reasoning || `LLM classification: ${catId}`
-
-          return {
-            input,
-            intent: intentStr || `Terkait ${matchedCat?.name || catId}`,
-            category: catId,
-            confidence: Math.max(confidence, keywordResult?.confidence ?? 0),
-            usedLlm: true,
-            suggestedTools: matchedCat?.suggestedTools ?? [],
-            suggestedRagIndex: matchedCat?.suggestedRagIndex ?? "knowledge-general",
-            reasoning: reasoningStr,
-          }
-        }
-      } catch (error) {
-        logParseError("router llm call", error)
-      }
-    }
-
-    // Step 4: Fallback to keyword result or general
     if (keywordResult) {
       return keywordResult
     }
@@ -231,7 +187,7 @@ export class RouterAgent {
       usedLlm: false,
       suggestedTools: generalCat?.suggestedTools ?? [],
       suggestedRagIndex: generalCat?.suggestedRagIndex ?? "knowledge-general",
-      reasoning: "Tidak ada keyword yang cocok, fallback ke general",
+      reasoning: "No keyword match, fallback ke general",
     }
   }
 
