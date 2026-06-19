@@ -56,11 +56,12 @@ export class ContinuousEvolution {
   private results: StepResult[] = []
   private degradationCallbacks: DegradationCallback[] = []
   private lastEvolveSession: string | null = null
+  private lastEvolveTime = 0
   private evolveCount = 0
   private maxEvolvePerSession: number
   private trendCache: { key: string; trend: PerformanceTrend } | null = null
 
-  constructor(windowSize = 20, maxEvolvePerSession = 20) {
+  constructor(windowSize = 30, maxEvolvePerSession = 10) {
     this.windowSize = windowSize
     this.maxEvolvePerSession = maxEvolvePerSession
   }
@@ -258,34 +259,56 @@ export class ContinuousEvolution {
   /**
    * Decide whether to auto-trigger evolution analysis.
    * Returns null if no trigger needed, or an EvolutionTrigger explaining why.
+   * Includes hysteresis to prevent rapid re-triggering from transient noise.
    */
   shouldEvolve(sessionId: string): EvolutionTrigger | null {
     const trend = this.getTrend()
 
-    // Don't evolve twice in the same session
-    if (this.lastEvolveSession === sessionId) return null
+    // Hysteresis: don't evolve if same session or within cooldown period
+    if (this.lastEvolveSession === sessionId) {
+      // Allow re-trigger after 2 minutes if degradation worsened
+      if (this.lastEvolveTime > 0 && Date.now() - this.lastEvolveTime < 120000) return null
+    }
 
     // Cap total evolutions to prevent infinite loops (configurable)
     if (this.evolveCount >= this.maxEvolvePerSession) return null
 
-    // Trigger 1: Degradation
+    // Require minimum data points before evolution triggers
+    if (this.results.length < 10) return null
+
+    // Trigger 1: Degradation — requires sustained degradation, not single dip
     if (trend.degradationDetected) {
-      this.lastEvolveSession = sessionId
-      this.evolveCount++
-      return {
-        reason: `Auto-evolution triggered by performance degradation: ${(trend.rolling.successRate * 100).toFixed(0)}% success rate in recent window`,
-        type: "degradation",
-        metrics: {
-          recentRate: trend.rolling.successRate,
-          overallRate: trend.overall.successRate,
-          anomalyRatio: trend.anomalyCount / Math.max(trend.overall.total, 1),
-        },
+      // Check that degradation is sustained over at least 3 checks
+      // by looking at the bucket rates
+      const bucketRates = trend.forecast.bucketRates
+      const isSustained = bucketRates.length >= 3 &&
+        bucketRates.slice(-3).every((r, i, arr) =>
+          i === 0 || r < arr[i - 1] // strictly decreasing
+        )
+
+      // Only trigger if sustained degradation or very low rate (<0.4)
+      if (isSustained || trend.rolling.successRate < 0.4) {
+        this.lastEvolveSession = sessionId
+        this.lastEvolveTime = Date.now()
+        this.evolveCount++
+        return {
+          reason: `Auto-evolution triggered by ${isSustained ? "sustained" : "severe"} performance degradation: ${(trend.rolling.successRate * 100).toFixed(0)}% success rate in recent window`,
+          type: "degradation",
+          metrics: {
+            recentRate: trend.rolling.successRate,
+            overallRate: trend.overall.successRate,
+            anomalyRatio: trend.anomalyCount / Math.max(trend.overall.total, 1),
+          },
+        }
       }
+      // Single dip: log but don't trigger
+      return null
     }
 
-    // Trigger 2: Milestone — every 50 completed steps, auto-evolve
-    if (this.results.length > 0 && this.results.length % 50 === 0) {
+    // Trigger 2: Milestone — every 100 completed steps (up from 50)
+    if (this.results.length > 0 && this.results.length % 100 === 0 && this.results.length >= 100) {
       this.lastEvolveSession = sessionId
+      this.lastEvolveTime = Date.now()
       this.evolveCount++
       return {
         reason: `Milestone reached: ${this.results.length} steps completed. Periodic evolution analysis.`,
@@ -305,7 +328,9 @@ export class ContinuousEvolution {
   reset(): void {
     this.results = []
     this.lastEvolveSession = null
+    this.lastEvolveTime = 0
     this.evolveCount = 0
+    this.trendCache = null
   }
 
   /** Get raw counts */

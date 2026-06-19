@@ -111,17 +111,64 @@ export class EpisodicStore {
 
   search(query: string): Episode[] {
     const q = query.toLowerCase()
-    const qTokens = new Set(q.split(/\s+/).filter(t => t.length > 0))
-    return this.episodes
-      .filter(e =>
-        e.planGoal.toLowerCase().includes(q) ||
-        e.tags.some(t => qTokens.has(t)) ||
-        e.decisions.some(d => d.toLowerCase().includes(q)) ||
-        (e.domain?.toLowerCase().includes(q) ?? false) ||
-        (e.filesChanged?.some(f => f.toLowerCase().includes(q)) ?? false)
-      )
-      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    const qTokens = new Set(q.split(/\s+/).filter(t => t.length > 2))
+    if (qTokens.size === 0) {
+      return [...this.episodes]
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+        .slice(0, 10)
+    }
+
+    // Relevance scoring: token overlap + recency
+    const scored = this.episodes.map(e => {
+      let score = 0
+      const goal = e.planGoal.toLowerCase()
+      const decisions = e.decisions.map(d => d.toLowerCase())
+      const tags = e.tags
+
+      // Token overlap with planGoal (highest weight)
+      let overlap = 0
+      const goalTokens = new Set(goal.split(/\s+/).filter(t => t.length > 2))
+      for (const qt of qTokens) {
+        if (goal.includes(qt)) score += 5
+        if (goalTokens.has(qt)) score += 3
+        if (tags.some(t => t.includes(qt))) score += 2
+        if (decisions.some(d => d.includes(qt))) score += 1
+        if (e.filesChanged?.some(f => f.toLowerCase().includes(qt))) score += 2
+        if (e.domain?.toLowerCase().includes(qt)) score += 2
+        overlap += goalTokens.has(qt) ? 1 : 0
+      }
+
+      // TF score
+      if (goalTokens.size > 0) {
+        score += (overlap / Math.max(goalTokens.size, 1)) * 5
+      }
+
+      // Recency bonus (up to +3 for today)
+      const daysSince = (Date.now() - new Date(e.timestamp).getTime()) / 86400000
+      if (daysSince < 1) score += 3
+      else if (daysSince < 7) score += 2
+      else if (daysSince < 30) score += 1
+
+      // Success bonus
+      if (e.outcome === "success") score += 1
+
+      return { episode: e, score }
+    })
+      .filter(s => s.score > 0)
+      .sort((a, b) => b.score - a.score)
       .slice(0, 10)
+      .map(s => s.episode)
+
+    return scored.length > 0
+      ? scored
+      : [...this.episodes]
+          .filter(e =>
+            e.planGoal.toLowerCase().includes(q) ||
+            e.decisions.some(d => d.toLowerCase().includes(q)) ||
+            (e.filesChanged?.some(f => f.toLowerCase().includes(q)) ?? false)
+          )
+          .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+          .slice(0, 10)
   }
 
   getRecent(limit = 10): Episode[] {
@@ -177,9 +224,50 @@ export class EpisodicStore {
   }
 
   private extractTags(goal: string, decisions: string[]): string[] {
-    const stopWords = new Set(["this", "that", "with", "from", "have", "been", "were", "they", "them", "their", "what", "which", "when", "where", "will", "would", "could", "should", "about", "then", "than", "just", "also", "very", "more", "some", "such", "only", "other", "into", "over", "after", "before", "between", "through", "during", "because", "therefore", "however", "without", "within", "along", "across", "being", "doing", "having", "thing", "make", "made", "take", "took", "need", "want", "used", "using", "might", "must", "still", "well", "back", "much", "each", "every", "both", "few", "most"])
+    // Extended stop words — domain-specific for software engineering
+    const stopWords = new Set([
+      // General English stop words
+      "this", "that", "with", "from", "have", "been", "were", "they", "them", "their",
+      "what", "which", "when", "where", "will", "would", "could", "should", "about",
+      "then", "than", "just", "also", "very", "more", "some", "such", "only", "other",
+      "into", "over", "after", "before", "between", "through", "during", "because",
+      "therefore", "however", "without", "within", "along", "across", "being", "doing",
+      "having", "thing", "make", "made", "take", "took", "need", "want", "used",
+      "using", "might", "must", "still", "well", "back", "much", "each", "every",
+      "both", "few", "most", "yet", "already", "always", "never", "often", "sometimes",
+      // Software engineering generic words (not domain-specific)
+      "step", "steps", "task", "tasks", "code", "file", "files", "function", "class",
+      "method", "variable", "type", "data", "value", "name", "line", "lines", "test",
+      "tests", "bug", "fix", "feature", "implement", "implementation", "change",
+      "changes", "add", "added", "adding", "remove", "removed", "removing", "update",
+      "updated", "updating", "create", "created", "creating", "delete", "deleted",
+      "modify", "modified", "modification", "refactor", "refactored", "refactoring",
+      "first", "second", "third", "next", "last", "final", "initial", "previous",
+      "current", "need", "needs", "needed", "work", "works", "working", "way",
+      "done", "complete", "completed", "completion", "finish", "finished",
+      "start", "started", "begin", "began", "beginning",
+      // Indonesian stop words
+      "yang", "dan", "di", "ke", "dari", "ini", "itu", "dengan", "untuk", "pada",
+      "adalah", "akan", "telah", "sudah", "bisa", "dapat", "tidak", "atau", "saya",
+      "kami", "kita", "mereka", "dia", "anda", "juga", "karena", "jika", "saat",
+      "setelah", "sebelum", "sangat", "semua", "tetapi", "namun",
+      "selesai", "sukses", "berhasil", "langkah", "tugas", "buat", "baru",
+    ])
+
     const words = [...goal.split(/\s+/), ...decisions.join(" ").split(/\s+/)]
-    return [...new Set(words.filter(w => w.length > 3 && !stopWords.has(w.toLowerCase())).map(w => w.toLowerCase()))]
+    const raw = words
+      .filter(w => w.length > 3 && !stopWords.has(w.toLowerCase()))
+      .map(w => w.toLowerCase())
+
+    // TF-based deduplication: only keep tags that appear at least twice
+    const freq = new Map<string, number>()
+    for (const w of raw) freq.set(w, (freq.get(w) ?? 0) + 1)
+
+    return [...freq.entries()]
+      .filter(([, count]) => count >= 2 || raw.length < 10)  // if few words, keep all
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([word]) => word)
   }
 
   snapshot(): Episode[] {

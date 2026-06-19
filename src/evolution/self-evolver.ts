@@ -69,6 +69,12 @@ export class SelfEvolver {
   private autoApplyHighMax = 5
   private autoApplyMediumMin = 10
 
+  // Sliding window for success rate calculation
+  private readonly successWindowSize = 20
+  // Hysteresis: minimum gap between auto-evolve triggers for same session
+  private readonly minEvolveIntervalMs = 60000  // 1 minute
+  private lastEvolveTime = 0
+
   feedSkills(skills: SkillRecord[]): void { this.skills = skills }
   feedEpisodes(episodes: Episode[]): void {
     this.episodes = (episodes ?? []).filter(e => {
@@ -126,18 +132,30 @@ export class SelfEvolver {
     const sessions = new Set(this.episodes.map(e => e.sessionId))
     const useStepStates = this.stepStates.length > 0
 
-    // Weight success by task complexity (step count per task)
+    // Sliding window: only consider last N steps for current success rate
+    const windowSize = this.successWindowSize
     let weightedDone = 0
     let weightedTotal = 0
+    let slidingDone = 0
+    let slidingTotal = 0
+
     if (useStepStates) {
       weightedDone = this.stepStates.filter(s => s.success).length
       weightedTotal = this.stepStates.length
+      // Sliding window over recent steps
+      const recent = this.stepStates.slice(-windowSize)
+      slidingDone = recent.filter(s => s.success).length
+      slidingTotal = recent.length
     } else {
       for (const task of this.tasks) {
         weightedTotal += 1
         if (task.status === "done") weightedDone += 1
       }
+      const recent = this.tasks.slice(-windowSize)
+      slidingDone = recent.filter(t => t.status === "done").length
+      slidingTotal = recent.length
     }
+
     const totalSteps = weightedTotal || this.stepStates.length || this.tasks.length
     const done = weightedDone
     const failed = useStepStates
@@ -145,6 +163,9 @@ export class SelfEvolver {
       : this.tasks.filter(t => t.status === "failed").length
     const total = done + failed
     const safeTotal = total || 1
+
+    // Use sliding window rate for recommendations (more current)
+    const effectiveSuccessRate = slidingTotal > 0 ? slidingDone / slidingTotal : (safeTotal > 0 ? done / safeTotal : 0)
 
     const errorCategories = new Map<string, number>()
     for (const ep of this.episodes) {
@@ -184,7 +205,10 @@ export class SelfEvolver {
 
     const recommendations: string[] = []
 
-    if (safeTotal > 0 && done / safeTotal < 0.5) {
+    // Use sliding window rate for more relevant recommendations
+    if (effectiveSuccessRate < 0.5 && slidingTotal >= 5) {
+      recommendations.push(`Recent success rate is ${(effectiveSuccessRate * 100).toFixed(0)}% (last ${slidingTotal} steps). Consider more granular task decomposition in agentic_plan.`)
+    } else if (safeTotal > 0 && done / safeTotal < 0.5 && slidingTotal < 5) {
       recommendations.push("Task success rate is below 50%. Consider more granular task decomposition in agentic_plan.")
     }
 
@@ -201,8 +225,8 @@ export class SelfEvolver {
     }
 
     const retryFraction = failed / Math.max(safeTotal, 1)
-    if (retryFraction > 0.3) {
-      recommendations.push("High retry rate (>30%). Consider adding more explicit verification criteria to plan steps.")
+    if (retryFraction > 0.3 && effectiveSuccessRate < 0.7) {
+      recommendations.push("High retry rate (>30%) with low recent success rate. Consider adding more explicit verification criteria to plan steps.")
     }
 
     for (const step of this.stepStates) {
@@ -218,7 +242,8 @@ export class SelfEvolver {
     return {
       totalSessions: sessions.size,
       totalSteps,
-      successRate: safeTotal > 0 ? done / safeTotal : 0,
+      // Use sliding window rate when available, fall back to cumulative
+      successRate: effectiveSuccessRate,
       retryRate: retryFraction,
       avgRetriesPerFailure: failed > 0
         ? useStepStates
@@ -310,7 +335,7 @@ export class SelfEvolver {
     }
 
     const significantKeywords = [...failKeywords.entries()]
-      .filter(([, count]) => count >= 2)
+      .filter(([, count]) => count >= 3)  // Higher threshold to reduce noise-induced role suggestions
       .sort((a, b) => b[1] - a[1])
 
     for (const [keyword, count] of significantKeywords) {
