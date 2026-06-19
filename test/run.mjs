@@ -1806,10 +1806,10 @@ const skNoExtract = await hooks.tool.agentic_skill.execute({ action: "extract", 
 const skNeOut = typeof skNoExtract === "string" ? skNoExtract : (skNoExtract.output || "")
 assert(skNeOut.includes("No execution") || skNeOut.includes("no execution") || skNeOut.includes("not found"), "skill extract from non-existent step handled")
 
-// List with no skills (fresh session)
+// List — shows existing skills or empty state
 const skList2 = await hooks.tool.agentic_skill.execute({ action: "list" }, mockCtx(skSid))
 const skList2Out = typeof skList2 === "string" ? skList2 : (skList2.output || "")
-assert(skList2Out.includes("No skills") || skList2Out.includes("no skills"), "skill list with no skills handled")
+assert(skList2Out.includes("Library") || skList2Out.includes("No skills") || skList2Out.includes("no skills"), "skill list returns library or empty state")
 assert(true, "agentic_skill edge case tests passed")
 
 // ── Coverage Expansion: agentic_episodes ──

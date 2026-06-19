@@ -167,13 +167,14 @@ export class SkillStore {
         relevance += overlapCount / Math.max(textTokens.size, 1) * 5  // TF score
       }
 
-      // Recency bonus: skills used in last 7 days get +2
-      const lastUsed = new Date(s.lastUsed).getTime()
-      const daysSinceUse = (Date.now() - lastUsed) / 86400000
-      if (daysSinceUse < 7) relevance += 2
-
-      // Success rate bonus
-      relevance += s.successRate * 3
+      // Only apply recency + success rate bonuses if there's some text match
+      const hasTextMatch = overlapCount > 0 || relevance > 0
+      if (hasTextMatch) {
+        const lastUsed = new Date(s.lastUsed).getTime()
+        const daysSinceUse = (Date.now() - lastUsed) / 86400000
+        if (daysSinceUse < 7) relevance += 2
+        relevance += s.successRate * 3
+      }
 
       return { record: s, relevance }
     })

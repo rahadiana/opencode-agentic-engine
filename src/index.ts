@@ -3597,41 +3597,101 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
             case "store": {
               const cat = args.category || multiIndexRAG.autoCategory(args.title || args.content || args.query || "")
               const title = args.title || args.query || "untitled"
+              const content = args.content || ""
 
-              if (args.type === "skill" && args.content) {
-                // Store as a skill record
+              if (args.type === "skill" && content) {
+                // Extract keywords from content (filter common words)
+                const words = content.toLowerCase().match(/\b[a-z]{4,}\b/g) ?? []
+                const freq = new Map<string, number>()
+                for (const w of words) freq.set(w, (freq.get(w) ?? 0) + 1)
+                const keywords = [...freq.entries()]
+                  .sort((a, b) => b[1] - a[1])
+                  .slice(0, 10)
+                  .map(([w]) => w)
+
+                // Parse content into multi-step workflow
+                const lines = content.split("\n").map(l => l.trim()).filter(l => l.length > 0)
+                const steps = lines
+                  .filter(l => /^\d+[.)]|^[-*]\s/.test(l) || l.length > 30)
+                  .slice(0, 8)
+                  .map((l, i) => ({
+                    action: l.toLowerCase().includes("create") || l.toLowerCase().includes("implement") ? "create"
+                      : l.toLowerCase().includes("fix") || l.toLowerCase().includes("update") ? "modify"
+                      : l.toLowerCase().includes("test") || l.toLowerCase().includes("verify") ? "verify"
+                      : l.toLowerCase().includes("search") || l.toLowerCase().includes("research") ? "research"
+                      : "execute",
+                    description: l.replace(/^[\d\s.)*-]+/, "").slice(0, 200),
+                    tool: l.toLowerCase().includes("search") ? "agentic_nav"
+                      : l.toLowerCase().includes("plan") ? "agentic_plan"
+                      : l.toLowerCase().includes("test") || l.toLowerCase().includes("verify") ? "agentic_verify"
+                      : l.toLowerCase().includes("delegate") ? "agentic_delegate"
+                      : undefined,
+                    expectedOutput: `Step ${i + 1} completed`,
+                  }))
+
+                if (steps.length === 0) {
+                  steps.push({
+                    action: "execute",
+                    description: content.slice(0, 200),
+                    tool: undefined,
+                    expectedOutput: "Completed",
+                  })
+                }
+
+                // Create proper agentic-skill/v1 format definition
+                const def = createSkillDefinition(
+                  title,
+                  title,
+                  keywords,
+                  steps.map(s => ({
+                    action: s.action,
+                    description: s.description,
+                    tool: s.tool,
+                    expectedOutput: s.expectedOutput,
+                  })),
+                  [cat],
+                )
+
+                // Build full SkillRecord for RAG + SkillStore
                 const skillRecord = {
-                  definition: {
-                    meta: { id: `rag-skill-${Date.now()}`, name: title, description: args.content.slice(0, 200), version: "1.0.0" },
-                    trigger: { pattern: title, keywords: title.split(/\s+/) },
-                    workflow: { steps: [{ action: "execute", description: args.content.slice(0, 500), expectedOutput: "completed" }], maxRetries: 2 },
-                    quality: { successRate: 1.0, usageCount: 1, failureScenarios: [] },
-                    audit: { created: new Date().toISOString(), lastUsed: new Date().toISOString(), lastModified: new Date().toISOString(), modifiedBy: "agent" },
-                  },
+                  definition: def,
                   usageCount: 1,
                   successRate: 1.0,
+                  successWindow: [true],
                   lastUsed: new Date().toISOString(),
-                } as any // Simple skill record for RAG storage
+                }
+
+                // Index in RAG for in-session search
                 multiIndexRAG.indexSkill(cat, skillRecord)
+
+                // Also persist to SkillStore (disk-backed, survives restart)
+                skillStore.importFromEnvelope(JSON.stringify(createMemoryEnvelope(def, "skill")))
+                persistence.save("skills", def.meta.id, def)
+
+                return {
+                  output: `## ✅ Stored as Skill (agentic-skill/v1)\n\n**Category:** ${cat}\n**Title:** ${title}\n**Steps:** ${steps.length}\n**Keywords:** ${keywords.join(", ")}\n\nSkill saved to both RAG (in-session) and SkillStore (disk-persistent).`,
+                  metadata: { category: cat, skillId: def.meta.id },
+                }
               } else {
                 // Store as an episode
+                const decisions = content ? content.split("\n").filter(l => l.startsWith("-") || l.startsWith("*")).map(l => l.replace(/^[-*\s]+/, "")).slice(0, 10) : []
                 const episode = {
                   id: `rag-ep-${Date.now()}`,
                   sessionId: context.sessionID,
                   planGoal: title,
-                  summary: (args.content || args.query || "").slice(0, 500),
+                  summary: content.slice(0, 500),
                   outcome: "success" as const,
-                  decisions: [],
+                  decisions,
                   filesChanged: [],
                   timestamp: new Date().toISOString(),
-                  tags: title.split(/\s+/).filter(w => w.length > 3).map(w => w.toLowerCase()),
+                  tags: content.toLowerCase().match(/\b[a-z]{4,}\b/g)?.slice(0, 8) ?? [],
                 }
                 multiIndexRAG.indexEpisode(cat, episode)
-              }
 
-              return {
-                output: `## ✅ Stored in RAG\n\n**Category:** ${cat}\n**Title:** ${title}\n**Type:** ${args.type || "episode"}`,
-                metadata: { category: cat },
+                return {
+                  output: `## ✅ Stored as Episode\n\n**Category:** ${cat}\n**Title:** ${title}\n**Tags:** ${episode.tags.join(", ")}`,
+                  metadata: { category: cat },
+                }
               }
             }
 
