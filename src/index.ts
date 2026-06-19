@@ -57,6 +57,7 @@ import { DataCleaner } from "./core/data-cleaner.js"
 import { MultiIndexRAG } from "./memory/multi-index-rag.js"
 import { MCPClient } from "./core/mcp-client.js"
 import { buildAgenticSystemInstructions, type ToolEntry } from "./core/prompt-builder.js"
+import { ToolRouter, type RoutingContext } from "./core/tool-router.js"
 
 // ── Build-time version injected by esbuild define ──
 declare const __VERSION__: string
@@ -172,33 +173,33 @@ const createEngine: Plugin = async (input, _options) => {
 
   // ── Tool registry (shared between prompt builder and tool definitions) ──
   const TOOL_REGISTRY: ToolEntry[] = [
-    { name: "agentic_plan", description: "Create a structured execution plan with auto-decompose." },
-    { name: "agentic_execute", description: "Record completion of a subtask with auto-verify and error recovery." },
-    { name: "agentic_reflect", description: "Analyze a failed step with error propagation tracing." },
-    { name: "agentic_verify", description: "Run full verification: compile + lint + test suite." },
-    { name: "agentic_status", description: "Show execution dashboard: progress, blocked steps, file changes." },
-    { name: "agentic_nav", description: "Scan the project codebase and find relevant files." },
-    { name: "agentic_context", description: "View and compress the execution context." },
-    { name: "agentic_snapshot", description: "Save or restore execution checkpoints." },
-    { name: "agentic_pr", description: "Generate a pull request description from execution data." },
-    { name: "agentic_score", description: "Score the current changeset for technical debt." },
-    { name: "agentic_model", description: "Configure per-role LLM model preferences." },
-    { name: "agentic_delegate", description: "Assign a task to a specialized agent role." },
-    { name: "agentic_pipeline", description: "Define and run multi-agent workflow pipelines." },
-    { name: "agentic_message", description: "Inter-agent messaging system for coordination." },
-    { name: "agentic_parallel", description: "Analyze or execute steps concurrently." },
-    { name: "agentic_skill", description: "Manage reusable skills extracted from task completions." },
-    { name: "agentic_episodes", description: "Browse cross-session memory and past outcomes." },
-    { name: "agentic_dashboard", description: "Generate observability dashboard from execution traces." },
-    { name: "agentic_guard", description: "Verify truthfulness of claims in step outputs." },
-    { name: "agentic_evolve", description: "Inspect and extend the agent system itself." },
-    { name: "agentic_auto", description: "Fully autonomous loop: plan → execute → verify → retry." },
-    { name: "agentic_debate", description: "Debate loop between two agents for thorough analysis." },
-    { name: "agentic_router", description: "Lightweight intent classifier for routing." },
-    { name: "agentic_clean", description: "Clean raw text by stripping debate artifacts." },
-    { name: "agentic_rag", description: "Multi-index RAG with category-segregated search." },
-    { name: "agentic_mcp", description: "MCP client for external tools and APIs." },
-    { name: "agentic_finetune", description: "End-to-end fine-tuning pipeline: prepare dataset, save file, upload to OpenAI, create and monitor fine-tuning job." },
+    { name: "agentic_plan", description: "Break a goal into subtasks. Use when starting a new multi-step task." },
+    { name: "agentic_execute", description: "Mark a step complete with auto-verify. Use after finishing each subtask." },
+    { name: "agentic_reflect", description: "Analyze a failed step: error category + propagation trace. Use after a step fails." },
+    { name: "agentic_verify", description: "Run compile + lint + tests. Use to validate changes before committing." },
+    { name: "agentic_status", description: "Show execution progress, blocked steps, and file changes. Use to check what's left." },
+    { name: "agentic_nav", description: "Scan codebase for relevant files by keyword. Use before implementing to understand structure." },
+    { name: "agentic_context", description: "Compress and summarize conversation when approaching token limits." },
+    { name: "agentic_snapshot", description: "Save or restore a checkpoint of current plan and file changes." },
+    { name: "agentic_pr", description: "Generate a PR description from plan + step results and optionally create via gh CLI." },
+    { name: "agentic_score", description: "Analyze technical debt: coupling, complexity, patterns. Use after refactoring." },
+    { name: "agentic_model", description: "Configure which LLM model each agent role uses for the session." },
+    { name: "agentic_delegate", description: "Assign work to an architect, developer, QA, or coordinator role." },
+    { name: "agentic_pipeline", description: "Define and run a staged pipeline: PM → Architect → Developer → QA." },
+    { name: "agentic_message", description: "Send messages between agent roles, request reviews, check inbox." },
+    { name: "agentic_parallel", description: "Analyze dependency graph and run ready steps concurrently." },
+    { name: "agentic_skill", description: "Extract, search, and reuse skills from successful task patterns." },
+    { name: "agentic_episodes", description: "Search past session outcomes and decisions across projects." },
+    { name: "agentic_dashboard", description: "View timeline, stats, anomaly detection, and model reliability." },
+    { name: "agentic_guard", description: "Re-check truthfulness of file/function/import claims. Auto-runs on execute." },
+    { name: "agentic_evolve", description: "Inspect system state, register custom roles, export skills, manage prompts." },
+    { name: "agentic_auto", description: "One-call autonomous loop: plan → execute → verify → retry. use for simple tasks." },
+    { name: "agentic_debate", description: "Multi-turn executor ↔ critic debate for deep analysis of complex questions." },
+    { name: "agentic_router", description: "Classify user intent into categories and route to the right knowledge index." },
+    { name: "agentic_clean", description: "Strip debate artifacts and reformat raw text to clean markdown or JSON." },
+    { name: "agentic_rag", description: "Store, search, and retrieve knowledge across category-segregated indexes." },
+    { name: "agentic_mcp", description: "Connect to external servers (DB, APIs) via stdio or HTTP to call remote tools." },
+    { name: "agentic_finetune", description: "End-to-end pipeline: prepare training data from skills, upload to OpenAI, create and monitor fine-tuning jobs." },
   ]
 
   // ── Sub-agent detection (dynamic via RoleRegistry + fallback signatures) ──
@@ -451,6 +452,9 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
   const routerAgent = new RouterAgent(llmEngine)
   const dataCleaner = new DataCleaner(llmEngine)
   const mcpClient = new MCPClient()
+  const toolRouter = new ToolRouter()
+  toolRouter.setDescriptions(TOOL_REGISTRY)
+  const recentToolCalls: string[] = []  // last 20 tool calls for routing context
 
   contextCompressor.setLLM(llmEngine)
   verifier.detectLanguage(worktree)
@@ -4612,9 +4616,38 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
         // Role-aware minimal injection
         injection = buildSubAgentInjection(subAgent.role, subAgent.tools)
       } else {
-        // Full prompt for parent agent
+        // Full prompt for parent agent — use ToolRouter to select relevant subset
         const pack = currentInjectDomain ?? domainRegistry.getCurrentPack() ?? genericDomain
-        injection = buildAgenticSystemInstructions(pack, TOOL_REGISTRY)
+
+        // Build routing context from recent tool calls and system text
+        const routingCtx: RoutingContext = {
+          taskInput: systemText.slice(-2000),  // last 2k chars of system prompt
+          recentTools: recentToolCalls,
+          domain: pack.name,
+          isSubAgent: false,
+        }
+
+        const { selected } = toolRouter.selectTools(routingCtx)
+        const toolListText = toolRouter.buildToolList(selected)
+        const alwaysExposeHint = toolRouter.buildAlwaysExposeHint()
+        const searchHint = toolRouter.buildSearchToolsHint()
+
+        // Build filtered TOOL_REGISTRY from selected tools (for backward compat with prompt-builder)
+        const filteredRegistry: ToolEntry[] = selected.map(t => ({ name: t.name, description: t.description }))
+        const hasTools = filteredRegistry.length > 0
+
+        if (hasTools) {
+          injection = buildAgenticSystemInstructions(pack, filteredRegistry, { isRouted: true, showDiscoveryHint: true })
+
+          // Append tool list + discovery hints
+          injection += `\n\n### Selected Tools for This Task (${selected.length} of 29)\n\n`
+          injection += toolListText
+          injection += alwaysExposeHint
+          injection += searchHint
+        } else {
+          // Fallback: show all domain-appropriate tools if router returned nothing
+          injection = buildAgenticSystemInstructions(pack, TOOL_REGISTRY)
+        }
       }
 
       if (output.system.length > 0) {
@@ -4625,11 +4658,17 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
     },
 
     "tool.execute.after": async (toolInput: { tool: string; args: Record<string, unknown>; sessionID: string; callID: string }, _output: { title: string; output: string; metadata: unknown }) => {
+      // Record tool call for ToolRouter adaptive routing (keep last 20)
+      const toolName = toolInput.tool
+      toolRouter.recordCall(toolName, true, 0)
+      recentToolCalls.push(toolName)
+      if (recentToolCalls.length > 20) recentToolCalls.shift()
+
       traceLogger.log({
         step: "tool",
         input: JSON.stringify(toolInput.args ?? {}),
         output: "completed",
-        toolUsed: toolInput.tool,
+        toolUsed: toolName,
         success: true,
         durationMs: 0,
       })
@@ -4756,4 +4795,5 @@ export { PersistenceLayer } from "./memory/persistence.js"
 export { EpisodicStore } from "./memory/episodic-store.js"
 export { STOP_WORDS, isStopWord, filterStopWords, getStopWordStats } from "./memory/stopwords.js"
 export { PromptTemplate } from "./core/prompt-template.js"
+export { ToolRouter } from "./core/tool-router.js"
 export { buildAgentPrompt, buildAgenticSystemInstructions, buildGenericAgentPrompt } from "./core/prompt-builder.js"

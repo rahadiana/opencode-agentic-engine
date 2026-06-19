@@ -1,9 +1,15 @@
 import type { DomainPack } from "./domain-registry.js"
 import { PromptTemplate } from "./prompt-template.js"
-
 export interface ToolEntry {
   name: string
   description: string
+}
+
+export interface ToolListConfig {
+  /** Whether to show the search_tools discovery hint */
+  showDiscoveryHint?: boolean
+  /** Whether this is a routed prompt (dynamic tool selection) */
+  isRouted?: boolean
 }
 
 const CORE_TOOLS = ["agentic_plan", "agentic_execute", "agentic_verify", "agentic_reflect", "agentic_status"]
@@ -33,8 +39,9 @@ export function buildAgentPrompt(
 export function buildAgenticSystemInstructions(
   domain: DomainPack,
   allTools: ToolEntry[],
+  config?: ToolListConfig,
 ): string {
-  return buildTemplate(domain, allTools).render()
+  return buildTemplate(domain, allTools, config).render()
 }
 
 /**
@@ -55,7 +62,7 @@ export function buildGenericAgentPrompt(allTools: ToolEntry[]): string {
 
   t.identity(
     `You have access to **${genericTools.length} specialized agentic_* tools**. ` +
-    `PREFER agentic_* tools over built-in tools for any task.`,
+    `Use them when they fit. Built-in tools (\`read\`, \`edit\`, \`bash\`, \`grep\`, \`webfetch\`, \`write\`) are always available.`,
   )
 
   t.instructions(
@@ -67,15 +74,16 @@ export function buildGenericAgentPrompt(allTools: ToolEntry[]): string {
 
   t.instructions(
     `## Available Tools\n\n` +
-    genericTools.map(x => `- **${x.name}**: ${x.description.length > 80 ? x.description.slice(0, 77) + "..." : x.description}`).join("\n"),
+    genericTools.map(x => `- **${x.name}**: ${x.description.length > 80 ? x.description.slice(0, 77) + "..." : x.description}`).join("\n") +
+    `\n\n> 💡 **Need a different tool?** Use \`search_tools("what you need")\` to discover additional tools.`,
   )
 
   t.guardrails(
     `## Rules\n\n` +
-    `1. Prefer agentic_* tools over built-in tools\n` +
-    `2. Gather knowledge first via \`agentic_skill find\` and \`agentic_episodes search\`\n` +
-    `3. Use agentic_plan → agentic_execute → agentic_verify\n` +
-    `4. Never ask "should I" — just call the tool`,
+    `1. Gather knowledge first before implementing\n` +
+    `2. Use plan → implement → verify workflow\n` +
+    `3. Never ask "should I" — just call the tool\n` +
+    `4. Built-in tools (\`read\`, \`edit\`, \`bash\`, \`grep\`, \`webfetch\`, \`write\`) are always available`,
   )
 
   return t.renderWithFrontmatter(
@@ -85,12 +93,13 @@ export function buildGenericAgentPrompt(allTools: ToolEntry[]): string {
 
 // ── Internal template builder ──
 
-function buildTemplate(domain: DomainPack, allTools: ToolEntry[]): PromptTemplate {
+function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolListConfig): PromptTemplate {
   const domainName = domain.name
   const isCodeDomain = domainName === "code"
 
   const relevantToolNames = domain.tools ?? allTools.map(t => t.name)
   const relevantTools = allTools.filter(t => relevantToolNames.includes(t.name))
+  const isRouted = config?.isRouted ?? false
 
   const hasMemory = relevantTools.some(t => MEMORY_TOOLS.includes(t.name))
   const hasDebate = relevantTools.some(t => t.name === "agentic_debate")
@@ -106,11 +115,18 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[]): PromptTemplat
   // HEAD — <identity> : who the agent IS
   // ═══════════════════════════════════════════════════════════
 
-  // Critical tool naming
-  t.identity(
-    `You have access to **${relevantTools.length} specialized agentic_* tools**. ` +
-    `YOU MUST PREFER THESE TOOLS OVER BUILT-IN TOOLS for any task within this domain.`,
-  )
+  // Tool listing header
+  if (isRouted) {
+    t.identity(
+      `The following agentic tools have been **selected based on your current task** from a pool of 29 available tools. ` +
+      `Use them when they fit. Built-in tools (\`read\`, \`edit\`, \`bash\`, \`grep\`, \`webfetch\`, \`write\`) are always available.`,
+    )
+  } else {
+    t.identity(
+      `You have access to **${relevantTools.length} specialized agentic_* tools**. ` +
+      `Use them when they fit. Built-in tools (\`read\`, \`edit\`, \`bash\`, \`grep\`, \`webfetch\`, \`write\`) are always available.`,
+    )
+  }
 
   t.identity(
     `⚠️ **REMINDER**: ALL specialized tools use the "agentic_" prefix (e.g. "agentic_plan", "agentic_execute", "agentic_verify"). ` +
@@ -120,12 +136,6 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[]): PromptTemplat
   t.identity(
     `⚠️ **WEB TOOL NAME**: The web search tool is called **"webfetch"** — NOT "websearch", NOT "search_web", NOT "browser". ` +
     `Always use \`webfetch\`.`,
-  )
-
-  t.identity(
-    `### Tool Preference Hierarchy (HIGHEST first):\n` +
-    `1. **agentic_*** — Use FIRST. Far more powerful than built-in tools.\n` +
-    `2. bash/edit/read/write — Only if no agentic_* tool fits the need.`,
   )
 
   // Knowledge gathering checklist
@@ -148,13 +158,16 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[]): PromptTemplat
 
   // Standard workflow — the only tool guidance the LLM needs;
   // specific tool names + descriptions are handled natively by OpenCode's function calling.
-  let workflow = `### Standard Workflow — USE INDIVIDUAL TOOLS\n\n`
-  workflow += `**Always use this workflow for ANY task:**\n\n`
-  workflow += `1. **agentic_plan** — Decompose the goal into clear steps\n`
-  workflow += `2. **agentic_execute** — Execute each step one by one\n`
-  workflow += `3. **agentic_verify** — Verify the result`
+  let workflow = `### Recommended Approach\n\n`
+  workflow += `**General pattern:** Plan → Implement → Verify\n\n`
+  workflow += `1. Use a planning tool to break down the goal into clear steps\n`
+  workflow += `2. Execute each step, using the right tool for each sub-task\n`
+  workflow += `3. Verify results when complete`
   if (hasAuto) {
-    workflow += `\n\nOr use **agentic_auto** for fully autonomous execution (plan → execute → verify → retry in one call)`
+    workflow += `\n\nOr use **agentic_auto** for fully autonomous execution (plan + execute + verify + retry in one call)`
+  }
+  if (!isRouted) {
+    workflow += `\n\n> 💡 **Tip:** Need a different tool? Use \`search_tools("what you need")\` to discover and load additional tools on demand.`
   }
   t.instructions(workflow)
 
@@ -163,11 +176,10 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[]): PromptTemplat
   // ═══════════════════════════════════════════════════════════
 
   const guardrailItems: string[] = [
-    "ALWAYS prefer agentic_* tools over built-in tools",
     "Gather knowledge FIRST before implementing",
-    "USE agentic_plan → agentic_execute → agentic_verify",
+    "USE the workflow: plan → implement → verify",
     'Never ask "should I..." — just call the tool',
-    "If a step fails, call agentic_reflect before retrying",
+    "If a step fails, analyze it before retrying",
   ]
   if (hasDebate) guardrailItems.push("For analysis tasks: use agentic_debate")
   if (hasRouter && hasRag) guardrailItems.push("For knowledge queries: use agentic_router then agentic_rag")

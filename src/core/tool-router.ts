@@ -1,0 +1,299 @@
+import type { ToolEntry } from "./prompt-builder.js"
+
+// ── Enhanced tool metadata for routing ────────────────────────────
+export interface ToolMeta extends ToolEntry {
+  keywords: string[]
+  category: "core" | "memory" | "analysis" | "coordination" | "meta" | "blueprint"
+  usageCount: number
+  successRate: number
+  avgLatencyMs: number
+  lastUsed: number
+}
+
+export interface RoutingContext {
+  /** The current user message / task description */
+  taskInput: string
+  /** Recent tool call history (last ~10) */
+  recentTools: string[]
+  /** Current domain name (code, data-science, devops, etc.) */
+  domain: string
+  /** Whether this is a sub-agent call */
+  isSubAgent: boolean
+}
+
+export interface RoutingResult {
+  tool: ToolMeta
+  score: number
+  reasons: string[]
+}
+
+// ── Built-in tools that are always available ──────────────────────
+const ALWAYS_EXPOSE = new Set(["read", "edit", "bash", "grep", "webfetch", "write"])
+
+// ── Colocation groups: tools that are often used together ─────────
+const TOOL_COLOCATIONS: Record<string, string[]> = {
+  plan: ["agentic_plan", "agentic_execute", "agentic_verify", "agentic_reflect"],
+  delegate: ["agentic_delegate", "agentic_message", "agentic_pipeline"],
+  search: ["agentic_nav", "agentic_rag", "grep", "glob", "read"],
+  memory: ["agentic_skill", "agentic_episodes", "agentic_context", "agentic_rag"],
+  debug: ["agentic_reflect", "agentic_guard", "agentic_dashboard", "grep", "read"],
+  evolve: ["agentic_evolve", "agentic_skill", "agentic_dashboard"],
+}
+
+// ── Default enhanced metadata for all agentic tools ────────────────
+const DEFAULT_METAS: Record<string, Partial<ToolMeta>> = {
+  agentic_plan: { keywords: ["plan", "decompose", "break-down", "step", "subtask", "template"], category: "core" },
+  agentic_execute: { keywords: ["execute", "run", "do", "implement", "step-result", "record", "complete"], category: "core" },
+  agentic_reflect: { keywords: ["error", "fail", "debug", "analyze", "diagnose", "retry", "recover"], category: "analysis" },
+  agentic_verify: { keywords: ["verify", "test", "compile", "lint", "validate", "check", "ci"], category: "core" },
+  agentic_status: { keywords: ["status", "progress", "dashboard", "blocked", "health", "summary"], category: "core" },
+  agentic_nav: { keywords: ["search", "find", "file", "codebase", "scan", "explore", "lookup", "nav"], category: "core" },
+  agentic_context: { keywords: ["compress", "context", "token", "summary", "condense"], category: "memory" },
+  agentic_snapshot: { keywords: ["checkpoint", "snapshot", "save", "restore", "rollback", "backup"], category: "core" },
+  agentic_pr: { keywords: ["pull-request", "pr", "github", "merge", "commit", "git", "description"], category: "core" },
+  agentic_score: { keywords: ["debt", "quality", "score", "coupling", "maintainability", "tech-debt"], category: "analysis" },
+  agentic_model: { keywords: ["model", "llm", "config", "provider", "gpt", "claude"], category: "meta" },
+  agentic_delegate: { keywords: ["delegate", "assign", "agent", "role", "architect", "developer", "qa"], category: "coordination" },
+  agentic_pipeline: { keywords: ["pipeline", "workflow", "chain", "stage", "pm", "architect"], category: "coordination" },
+  agentic_message: { keywords: ["message", "inbox", "conversation", "review", "ask", "notify"], category: "coordination" },
+  agentic_parallel: { keywords: ["parallel", "concurrent", "race", "dependency", "simultaneous"], category: "coordination" },
+  agentic_skill: { keywords: ["skill", "extract", "learn", "pattern", "template", "reuse"], category: "memory" },
+  agentic_episodes: { keywords: ["episode", "history", "past", "session", "memory", "recall"], category: "memory" },
+  agentic_dashboard: { keywords: ["dashboard", "timeline", "anomaly", "stats", "trace", "observability"], category: "meta" },
+  agentic_guard: { keywords: ["hallucination", "verify", "truth", "claim", "check", "audit"], category: "analysis" },
+  agentic_evolve: { keywords: ["evolve", "evolusi", "self-improve", "upgrade", "inspect", "register"], category: "meta" },
+  agentic_auto: { keywords: ["auto", "autonomous", "loop", "one-shot", "automatic", "end-to-end"], category: "core" },
+  agentic_debate: { keywords: ["debate", "discuss", "argue", "analysis", "critic", "review-loop"], category: "analysis" },
+  agentic_router: { keywords: ["classify", "route", "intent", "categorize", "direct"], category: "blueprint" },
+  agentic_clean: { keywords: ["clean", "strip", "format", "reformat", "remove-artifact"], category: "blueprint" },
+  agentic_rag: { keywords: ["rag", "search", "knowledge", "store", "retrieve", "index"], category: "memory" },
+  agentic_mcp: { keywords: ["mcp", "external", "connect", "server", "api", "tool-call"], category: "blueprint" },
+  agentic_finetune: { keywords: ["finetune", "fine-tune", "training", "dataset", "openai", "model"], category: "blueprint" },
+}
+
+// ── Keyword-based routing strategy ────────────────────────────────
+function keywordScore(tool: ToolMeta, input: string): number {
+  const lower = input.toLowerCase()
+  let score = 0
+  for (const kw of tool.keywords) {
+    if (lower.includes(kw)) score += 2
+  }
+  // Name match
+  const toolName = tool.name.toLowerCase().replace("agentic_", "")
+  if (lower.includes(toolName)) score += 3
+  // Description match
+  const desc = tool.description.toLowerCase()
+  const inputWords = lower.split(/\s+/).filter(w => w.length > 3)
+  for (const w of inputWords) {
+    if (desc.includes(w)) score += 1
+  }
+  return score
+}
+
+// ── Recency/usage bonus ──────────────────────────────────────────
+function usageBonus(tool: ToolMeta): number {
+  let bonus = 0
+  // Favor tools with proven success
+  if (tool.successRate > 0.8 && tool.usageCount > 0) bonus += 2
+  // Slight demotion for tools that have failed
+  if (tool.successRate < 0.3 && tool.usageCount > 2) bonus -= 1
+  return bonus
+}
+
+// ── Colocation bonus: if recent tools include related tool, boost ─
+function colocationBonus(tool: ToolMeta, recentTools: string[]): number {
+  const recentSet = new Set(recentTools)
+  for (const [, group] of Object.entries(TOOL_COLOCATIONS)) {
+    if (group.includes(tool.name)) {
+      for (const member of group) {
+        if (member !== tool.name && recentSet.has(member)) return 3
+      }
+    }
+  }
+  return 0
+}
+
+// ── Infer task type from input ────────────────────────────────────
+function inferTaskType(input: string): string[] {
+  const lower = input.toLowerCase()
+  const types: string[] = []
+  if (/plan|decompose|break.*down|subtask/i.test(lower)) types.push("plan")
+  if (/implement|create|write|build|add.*feature|fix.*bug/i.test(lower)) types.push("implement")
+  if (/search|find|where|lookup|locate|cari/i.test(lower)) types.push("search")
+  if (/debug|error|fail|bug|issue|troubleshoot/i.test(lower)) types.push("debug")
+  if (/test|verify|check|validate|audit/i.test(lower)) types.push("verify")
+  if (/delegate|assign|send|role|agent\b/i.test(lower)) types.push("delegate")
+  if (/refactor|clean|improve|optimize|restructure/i.test(lower)) types.push("refactor")
+  if (/memory|recall|skill*|learn|before|history/i.test(lower)) types.push("memory")
+  if (/evolve|upgrade|self.*improv|register/i.test(lower)) types.push("evolve")
+  if (/deploy|release|publish|ci|cd/i.test(lower)) types.push("deploy")
+  return types
+}
+
+// ── ToolRouter ────────────────────────────────────────────────────
+export class ToolRouter {
+  private metas: Map<string, ToolMeta> = new Map()
+  private toolCallHistory: Map<string, { count: number; successes: number; totalLatency: number; lastUsed: number }> = new Map()
+  private allocatedToolCount = 6  // default: show 6 agentic tools + always-expose built-ins
+
+  constructor() {
+    for (const [name, meta] of Object.entries(DEFAULT_METAS)) {
+      this.metas.set(name, {
+        name,
+        description: "",
+        keywords: meta.keywords ?? [],
+        category: meta.category ?? "blueprint",
+        usageCount: 0,
+        successRate: 1.0,
+        avgLatencyMs: 0,
+        lastUsed: 0,
+      })
+    }
+  }
+
+  /** Update tool descriptions from the registered TOOL_REGISTRY */
+  setDescriptions(entries: ToolEntry[]): void {
+    for (const e of entries) {
+      const existing = this.metas.get(e.name)
+      if (existing) {
+        existing.description = e.description
+      }
+    }
+  }
+
+  /** Record a tool call result for adaptive routing */
+  recordCall(name: string, success: boolean, latencyMs: number): void {
+    const existing = this.toolCallHistory.get(name) ?? { count: 0, successes: 0, totalLatency: 0, lastUsed: 0 }
+    existing.count++
+    if (success) existing.successes++
+    existing.totalLatency += latencyMs
+    existing.lastUsed = Date.now()
+    this.toolCallHistory.set(name, existing)
+
+    // Sync to meta
+    const meta = this.metas.get(name)
+    if (meta) {
+      meta.usageCount = existing.count
+      meta.successRate = existing.count > 0 ? existing.successes / existing.count : 1.0
+      meta.avgLatencyMs = existing.count > 0 ? existing.totalLatency / existing.count : 0
+      meta.lastUsed = existing.lastUsed
+    }
+  }
+
+  /** Get the current tool usage stats (for dashboard) */
+  getStats(): Record<string, { count: number; successRate: number; avgLatency: number }> {
+    const stats: Record<string, { count: number; successRate: number; avgLatency: number }> = {}
+    for (const [name, meta] of this.metas) {
+      stats[name] = { count: meta.usageCount, successRate: meta.successRate, avgLatency: meta.avgLatencyMs }
+    }
+    return stats
+  }
+
+  /**
+   * Select the top-K agentic tools for the current context.
+   * Always exposes built-in tools (read, edit, bash, grep, etc) without listing them.
+   * Uses: keyword scoring + colocation + usage stats → ranked → top K
+   */
+  selectTools(context: RoutingContext, topK = this.allocatedToolCount): { selected: ToolMeta[]; reasons: string } {
+    const { taskInput, recentTools } = context
+
+    const scored: RoutingResult[] = []
+    const allToolNames = [...this.metas.keys()]
+
+    for (const name of allToolNames) {
+      const tool = this.metas.get(name)!
+      const kwScore = keywordScore(tool, taskInput)
+      const colo = colocationBonus(tool, recentTools)
+      const usage = usageBonus(tool)
+      const total = kwScore + colo + usage
+
+      const reasons: string[] = []
+      if (kwScore > 0) reasons.push(`keyword:${kwScore}`)
+      if (colo > 0) reasons.push(`colocation:${colo}`)
+      if (usage !== 0) reasons.push(`usage:${usage}`)
+
+      scored.push({ tool, score: total, reasons })
+    }
+
+    // Sort by score descending, then by usage count descending (most proven first)
+    scored.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score
+      return b.tool.usageCount - a.tool.usageCount
+    })
+
+    // Take top K with score > 0, plus always include tools from colocation groups
+    // of the top-scoring tool
+    const selectedNames = new Set<string>()
+    const topTools = scored.filter(s => s.score > 0).slice(0, topK)
+    for (const t of topTools) selectedNames.add(t.tool.name)
+
+    // If top tool has a colocation group, include those too (ensures plan→execute→verify works)
+    if (topTools.length > 0) {
+      const topName = topTools[0].tool.name
+      for (const [, group] of Object.entries(TOOL_COLOCATIONS)) {
+        if (group.includes(topName)) {
+          for (const member of group) {
+            if (!selectedNames.has(member)) {
+              const m = this.metas.get(member)
+              if (m) { selectedNames.add(member); topTools.push({ tool: m, score: 0, reasons: ["colocation-auto"] }) }
+            }
+          }
+          break
+        }
+      }
+    }
+
+    // Ensure minimum useful set: if task is about planning, include plan→execute→verify
+    const taskTypes = inferTaskType(taskInput)
+    for (const tt of taskTypes) {
+      const group = TOOL_COLOCATIONS[tt]
+      if (group) {
+        for (const member of group) {
+          if (!selectedNames.has(member)) {
+            const m = this.metas.get(member)
+            if (m) { selectedNames.add(member); topTools.push({ tool: m, score: 1, reasons: [`task:${tt}`] }) }
+          }
+        }
+      }
+    }
+
+    // Build reason summary
+    const reasonMap = new Map<string, number>()
+    for (const t of topTools) {
+      for (const r of t.reasons) {
+        reasonMap.set(r, (reasonMap.get(r) ?? 0) + 1)
+      }
+    }
+    const reasonSummary = [...reasonMap.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([r, c]) => `${r}(${c})`).join(", ")
+
+    return {
+      selected: [...selectedNames].map(n => this.metas.get(n)!).filter(Boolean),
+      reasons: reasonSummary || "fallback: all tools shown",
+    }
+  }
+
+  /** Build the tool listing text for prompt injection */
+  buildToolList(selected: ToolMeta[]): string {
+    if (selected.length === 0) return ""
+    return selected.map(t =>
+      `- **${t.name}**: ${t.description}`
+    ).join("\n")
+  }
+
+  /** Build the always-expose tool reminder */
+  buildAlwaysExposeHint(): string {
+    return `\n\nAdditionally, these built-in tools are always available: \`${[...ALWAYS_EXPOSE].join("`, `")}\`.`
+  }
+
+  /** Build the search_tools meta-tool hint */
+  buildSearchToolsHint(): string {
+    return `\n\n> 💡 **Need a different tool?** Use \`search_tools("what you need")\` to discover and load additional tools.`
+  }
+
+  /** Set how many agentic tools to show (default: 6) */
+  setAllocatedToolCount(n: number): void {
+    this.allocatedToolCount = Math.max(3, Math.min(15, n))
+  }
+}
