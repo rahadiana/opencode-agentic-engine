@@ -23,6 +23,12 @@ export interface LLMRequest {
   maxTokens?: number
   temperature?: number
   jsonMode?: boolean
+  /** Source context untuk event llm.response — terisi jika dari agentic_execute step */
+  sourceStepId?: string
+  /** Source context untuk event llm.response — terisi jika dari pipeline stage */
+  sourceTaskId?: string
+  /** Source context untuk event llm.response — terisi jika dari pipeline multi-stage */
+  sourcePipelineRunId?: string
 }
 
 export interface LLMResponse {
@@ -217,6 +223,9 @@ export class LLMEngine {
           costUsd: cost,
           success,
           durationMs: latency,
+          sourceStepId: req.sourceStepId,
+          sourceTaskId: req.sourceTaskId,
+          sourcePipelineRunId: req.sourcePipelineRunId,
         },
       } as any)
     }

@@ -256,11 +256,18 @@ Return your analysis as JSON with:
 
     for (const stage of pipeline.stages) {
       // ── Synchronous budget check BEFORE each stage (direct call, not event) ──
+      // Cek kedua scope — strictest-wins (sesuai desain awal agentic_budget)
       if (budgetTracker) {
-        const budgetStatus = budgetTracker.check("session")
-        if (budgetStatus) {
+        const sessionStatus = budgetTracker.check("session")
+        if (sessionStatus) {
           budgetExceeded = true
-          verifyNote = `⛔ Budget exceeded: ${budgetStatus.metric} (${budgetStatus.current} > ${budgetStatus.limit})`
+          verifyNote = `⛔ Budget exceeded (session): ${sessionStatus.metric} (${sessionStatus.current} > ${sessionStatus.limit})`
+          break
+        }
+        const taskStatus = budgetTracker.check("task")
+        if (taskStatus) {
+          budgetExceeded = true
+          verifyNote = `⛔ Budget exceeded (task): ${taskStatus.metric} (${taskStatus.current} > ${taskStatus.limit})`
           break
         }
       }
@@ -288,6 +295,8 @@ Return your analysis as JSON with:
         const llmOut = await this.llmEngine!.call({
           systemPrompt: sp, userPrompt: up,
           temperature: 0.2, maxTokens: 2048, jsonMode: true,
+          sourceTaskId: stageTaskId,
+          sourcePipelineRunId: runId,
         })
         raw = llmOut.content || ""
       } catch (err) {
@@ -326,26 +335,24 @@ Return your analysis as JSON with:
       }
 
       // ── Blocking completion record: guard + skill + step count ──
-      // Gunakan shared recordCompletion() sehingga guard/skill/budget jalan
-      // untuk KEDUA jalur (agentic_execute dan pipeline).
-      if (params.hallucinationGuard && params.skillStore && budgetTracker) {
-        await recordCompletion({
-          sessionID,
-          taskId: stageTaskId,
-          pipelineRunId: runId,
-          output: raw,
-          filesModified: allFiles,
-          durationMs: Date.now() - stageStartTime,
-          role: stage.role,
-          skipSkillExtract: stage.role !== "developer" || allFiles.length === 0,
-        }, {
-          budgetTracker,
-          hallucinationGuard: params.hallucinationGuard,
-          skillStore: params.skillStore,
-          configLoader: params.configLoader,
-          eventBus: params.eventBus,
-        })
-      }
+      // TANPA AND-gate — setiap concern independen di dalam recordCompletion().
+      // Guard gak butuh skill, skill gak butuh budget, masing-masing jalan sendiri.
+      await recordCompletion({
+        sessionID,
+        taskId: stageTaskId,
+        pipelineRunId: runId,
+        output: raw,
+        filesModified: allFiles,
+        durationMs: Date.now() - stageStartTime,
+        role: stage.role,
+        skipSkillExtract: stage.role !== "developer" || allFiles.length === 0,
+      }, {
+        budgetTracker,
+        hallucinationGuard: params.hallucinationGuard,
+        skillStore: params.skillStore,
+        configLoader: params.configLoader,
+        eventBus: params.eventBus,
+      })
 
       completedStageCount++
     }

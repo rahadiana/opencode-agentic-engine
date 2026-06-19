@@ -101,9 +101,12 @@ export function parseFileEntries(raw: string): FileWriteEntry[] {
 // ── Completion recording (blocking) ──
 
 export interface CompletionDeps {
-  budgetTracker: BudgetTracker
-  hallucinationGuard: HallucinationGuard
-  skillStore: SkillStore
+  /** BudgetTracker — step count selalu dicatat jika ada */
+  budgetTracker?: BudgetTracker
+  /** HallucinationGuard — auto-check jika ada dan filesModified non-kosong */
+  hallucinationGuard?: HallucinationGuard
+  /** SkillStore — auto-extract jika ada, role=developer, dan filesModified non-kosong */
+  skillStore?: SkillStore
   configLoader?: ConfigLoader
   eventBus?: EventBus
 }
@@ -131,13 +134,14 @@ export interface CompletionResult {
 
 /**
  * Blocking completion record — runs guard check + skill extraction + step record.
+ * Setiap concern independen: guard gak butuh skill, skill gak butuh budget.
  * Dipanggil OLEH KEDUA jalur (agentic_execute, executePipeline) sehingga
  * guard/skill/budget tidak bisa bypass.
  *
  * Prinsip desain (konfirmasi reviewer):
- * - Guard check: selalu jalan (no-op kalau filesModified kosong)
- * - Skill extraction: hanya jalan untuk role "developer" dengan filesModified non-kosong
- * - Step recording: selalu jalan (untuk budget step count)
+ * - Budget step count: dicatat jika budgetTracker tersedia
+ * - Guard check: jalan jika hallucinationGuard tersedia dan filesModified non-kosong
+ * - Skill extraction: hanya jalan untuk role "developer" dengan filesModified
  */
 export async function recordCompletion(
   record: CompletionRecord,
@@ -146,11 +150,11 @@ export async function recordCompletion(
   let guardPassed = true
   let skillExtracted = false
 
-  // 1. Budget step count
-  deps.budgetTracker.recordStep()
+  // 1. Budget step count — independent
+  deps.budgetTracker?.recordStep()
 
-  // 2. Hallucination guard (blocking, auto-check)
-  if (record.filesModified.length > 0) {
+  // 2. Hallucination guard — independent
+  if (deps.hallucinationGuard && record.filesModified.length > 0) {
     const guardResult = deps.hallucinationGuard.check(record.output, record.filesModified)
     guardPassed = guardResult.passed
 
@@ -172,9 +176,9 @@ export async function recordCompletion(
     }
   }
 
-  // 3. Skill extraction — ONLY for developer stage with files
+  // 3. Skill extraction — independent, ONLY for developer stage with files
   const autoExtract = deps.configLoader?.get().agent.autoSkillExtract ?? false
-  if (autoExtract && !record.skipSkillExtract &&
+  if (autoExtract && deps.skillStore && !record.skipSkillExtract &&
       record.role === "developer" && record.filesModified.length > 0) {
     try {
       const skill = await deps.skillStore.extract(
