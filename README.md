@@ -315,22 +315,24 @@ Semua aktivitas dicatat ke `.agentic/trace.jsonl`:
 - Step execution + error propagation
 - Retry history & anomaly detection
 
-## Recent Updates (v0.5.0 — 2026-06-18)
+## Recent Updates (v0.4.4 — 2026-06-19)
 
-### 🚀 v0.5.0 — Domain-Agnostic Architecture
+### 🚀 v0.4.4 — Domain-Agnostic + Sub-Agent Integration
 
-**Core engine domain-agnostic:**
+**Domain-agnostic architecture:**
 - **Domain packs**: `domain-registry.ts` + `core/domains/{generic,code}.ts` — setiap domain mendefinisikan tool set, verifier, error matchers, dan decomposition rules sendiri
 - **Planner**: 4 generic templates (research/create/review/improve) untuk non-code tasks; code templates tetap backward-compatible dengan filtering via `activeDomain`
 - **Executor**: `detectErrorCategory()` pakai domain error matchers dulu, fallback generic heuristic (timeout/error/unknown). Retry policies agnostik (3 entries: runtime=3, error=3, unknown=3)
-- **Navigator**: **Multi-language** — 8 `LanguageConfig` bawaan (typescript, javascript, python, php, go, rust, java, generic). Auto-detect project language dari project files. Import/export pattern per bahasa, skip dirs spesifik
-- **Prompt builder** (`prompt-builder.ts`): Generate agent prompt dinamis per domain — tool count akurat, deskripsi relevan. Auto-regenerate pada domain switch
+- **Navigator**: **Multi-language** — 8 `LanguageConfig` bawaan (typescript, javascript, python, php, go, rust, java, generic). Auto-detect project language dari project files
+- **Prompt builder** (`prompt-builder.ts`): Generate agent prompt dinamis per domain — auto-regenerate pada domain switch
 
-**Lainnya:**
-- `DecompositionRule` + `domain?` field — filter hanya rule yang relevan untuk domain aktif
-- Built-in generic templates selalu aktif; domain-registered rules hanya aktif saat domain cocok
-- Agent loop `attemptRepair()` tidak lagi hardcode code categories
-- Prompt file (`agentic.md`) diperbarui otomatis tiap domain switch
+**Sub-agents otomatis di main workflow:**
+- **Domain packs**: `code.ts` + `generic.ts` — tambah `agentic_pipeline`, `agentic_message`, `agentic_parallel` ke tool list agent
+- **`agentic_plan`**: deteksi pipeline cocok (feature-dev/fix-verify/refactor-review) & tampilkan saran di output
+- **`agentic_execute`**: setelah 2× retry gagal, otomatis suggest `agentic_delegate` ke specialist (qa/developer/architect)
+- **`agentic_parallel`**: delegate-based runner — register tiap step via `coordinator.delegate()` + enrich context dari shared memory
+- **`agentic_auto`**: complex task jalankan pipeline delegation (developer → QA → cross-validation), bukan monolithic LLM call
+- **555 unit tests** (was 544) — 11 test baru untuk sub-agent integration
 
 ### 🚀 v0.4.3 — Speed & Persistence Optimization
 
@@ -373,8 +375,8 @@ Semua aktivitas dicatat ke `.agentic/trace.jsonl`:
 ### Stats
 
 - **26 tools** (was 21) — 5 stages + 5 blueprints
-- **544 unit tests** — mock-based, no LLM needed
-- **v0.5.0** — latest on npm
+- **555 unit tests** — mock-based, no LLM needed
+- **v0.4.4** — latest on npm
 
 ## License
 
