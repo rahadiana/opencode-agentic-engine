@@ -1,5 +1,7 @@
-import type { SharedMemoryEntry } from "./coordinator.js"
+import type { SharedMemoryEntry, AgentCoordinator } from "./coordinator.js"
 import type { LLMEngine } from "../core/llm.js"
+import { mkdirSync, writeFileSync } from "node:fs"
+import { join, dirname } from "node:path"
 
 export interface PipelineStage {
   role: string
@@ -197,6 +199,130 @@ Return your analysis as JSON with:
     }
 
     return parts.join("\n")
+  }
+
+  /**
+   * Internal pipeline orchestrator — runs all stages via LLM, no manual delegation needed.
+   * Reused by both `agentic_pipeline run` and `agentic_auto` (Stage V).
+   * Returns { results: Map<role, output>, allFiles: string[], pipelineReview: string, hasNoLLM: bool }
+   */
+  async executePipeline(params: {
+    pipeline: WorkflowPipeline
+    runId: string
+    goal: string
+    constraints?: string[]
+    projectDir: string
+    codebaseSummary: string
+    filesBlock: string
+    memoryContexts: string[]
+    skillContexts: string[]
+    coordinator: AgentCoordinator
+    sessionID: string
+  }): Promise<{
+    results: Map<string, { output: string; issues: string[]; validatedBy: string[] }>
+    allFiles: string[]
+    pipelineReview: string
+    hasNoLLM: boolean
+    verifyNote: string
+  }> {
+    const { pipeline, runId, goal, constraints, projectDir, codebaseSummary, filesBlock, memoryContexts, skillContexts, coordinator, sessionID } = params
+    const allFiles: string[] = []
+    let pipelineReview = ""
+    let verifyNote = ""
+    let hasNoLLM = false
+
+    const sysPrompts: Record<string, string> = {
+      pm: `You are a PM. Define requirements and acceptance criteria concisely. Return JSON: {"spec": "...", "criteria": ["..."]}`,
+      architect: `You are an architect. Design architecture and interface contracts. Return JSON: {"architecture": "...", "interfaces": [{...}], "designNotes": "..."}`,
+      developer: `Return JSON array of {path, content}. Write COMPLETE file contents. Rules: ESM imports (.js) · match existing patterns · valid imports. {"files":[{"path":"src/x.ts","content":"..."}]} or {"noChanges":true}`,
+      qa: `You are QA. Review the implementation for correctness, edge cases, and regressions. Return JSON: {"issues": [{"severity":"error|warning|info","description":"...","file":"..."}], "summary": "verdict", "passed": true/false}`,
+      coordinator: `You are a coordinator. Verify pipeline completion and consistency. Return JSON: {"summary": "...", "gaps": ["..."], "approved": true/false}`,
+    }
+
+    for (const stage of pipeline.stages) {
+      const stageTaskId = `pipeline-${stage.role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+
+      coordinator.delegate(stage.role, {
+        id: stageTaskId, assignedTo: stage.role,
+        description: `${goal} — ${stage.description}`,
+        input: stage.description, status: "running",
+        pipelineRunId: runId,
+      }, sessionID, 0)
+
+      coordinator.writeSharedMemory(`pipeline:${stage.role}:start`, stage.description, stage.role)
+
+      const pipelineContextHints = [...memoryContexts.slice(0, 2), ...skillContexts.slice(0, 1)].join("; ")
+      const stageCtx = this.buildContextForRole(stage.role, runId, coordinator.getAllSharedMemory())
+      const sp = sysPrompts[stage.role] ?? `You are ${stage.role}. Complete your task. Return JSON output.`
+
+      const up = `Goal: ${goal}${constraints?.length ? `\nConstraints: ${constraints.join(", ")}` : ""}${pipelineContextHints ? `\nPast tasks: ${pipelineContextHints}` : ""}${stageCtx ? `\n\nContext from previous stages:\n${stageCtx}` : ""}\n${stage.role} task: ${stage.description}\n${filesBlock || "(new)"}\n${codebaseSummary.slice(0, 100)}`
+
+      const llmOut = await this.llmEngine!.call({
+        systemPrompt: sp, userPrompt: up,
+        temperature: 0.2, maxTokens: 2048, jsonMode: true,
+      })
+
+      const raw = llmOut.content || ""
+      const isFail = raw.includes("[NO_LLM]") || raw === "NO_LLM"
+      if (isFail) { hasNoLLM = true; break }
+
+      coordinator.updateTask(sessionID, stageTaskId, "done", raw.slice(0, 1000))
+
+      if (stage.role === "developer") {
+        try {
+          const parsed = JSON.parse(raw)
+          if (parsed.files && Array.isArray(parsed.files)) {
+            for (const f of parsed.files) {
+              if (f.path && f.content) {
+                const absPath = join(projectDir, f.path)
+                mkdirSync(dirname(absPath), { recursive: true })
+                writeFileSync(absPath, f.content, "utf-8")
+                allFiles.push(f.path)
+              }
+            }
+          }
+        } catch {
+          const fbRegex = /FILE:\s*(\S+)\n```(?:\w+)?\n([\s\S]*?)```/g
+          let m: RegExpExecArray | null
+          while ((m = fbRegex.exec(raw)) !== null) {
+            const absPath = join(projectDir, m[1].replace(/^\/+/, ""))
+            mkdirSync(dirname(absPath), { recursive: true })
+            writeFileSync(absPath, m[2], "utf-8")
+            allFiles.push(m[1].replace(/^\/+/, ""))
+          }
+        }
+        coordinator.writeSharedMemory("pipeline:files", allFiles.join(", "), "developer")
+      }
+
+      if (stage.role === "qa") {
+        try {
+          const qaParsed = JSON.parse(raw)
+          pipelineReview = qaParsed.summary?.slice(0, 200) ?? raw.slice(0, 200)
+          if (!qaParsed.passed) verifyNote = `⚠️ QA: ${qaParsed.summary?.slice(0, 100) ?? "issues found"}`
+          else verifyNote = "✅ QA passed"
+        } catch { pipelineReview = raw.slice(0, 200) }
+      }
+    }
+
+    // Cross-validate between stages
+    try {
+      const allStageResults = this.getAllStageResults(runId)
+      if (allStageResults.size >= 2) {
+        const xv = await this.crossValidate("coordinator", goal, allStageResults)
+        if (!xv.passed) verifyNote += ` ⚠️ Cross-validation: ${xv.issues.length} issues`
+      }
+    } catch { /* non-fatal */ }
+
+    const allPipelineStages = pipeline.stages.map(s => s.role)
+    coordinator.writeSharedMemory("pipeline:stages", allPipelineStages.join(","), "coordinator")
+
+    return {
+      results: this.getAllStageResults(runId),
+      allFiles,
+      pipelineReview,
+      hasNoLLM,
+      verifyNote,
+    }
   }
 
   getSuggestedPipeline(description: string): string {

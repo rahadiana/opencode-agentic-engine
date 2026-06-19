@@ -378,7 +378,7 @@ Menampilkan timeline, statistics, tool usage, anomaly detection, dan model relia
 
 ### agentic_guard
 
-Halusinasi detection — verifikasi klaim step output.
+Manual re-run hallucination guard. **Auto-check sudah berjalan otomatis** di dalam `agentic_execute` (jika `autoHallucinationCheck: true` di config). Tool ini hanya diperlukan untuk: (a) re-check step lama setelah file berubah, (b) audit step yang dijalankan saat auto-check disabled, atau (c) breakdown detail per-claim.
 
 | Parameter | Tipe | Required | Deskripsi |
 |-----------|------|----------|-----------|
@@ -386,6 +386,8 @@ Halusinasi detection — verifikasi klaim step output.
 
 **Deskripsi**:  
 Cek bahwa file yang direferensikan benar-benar ada, fungsi yang diklaim ada di kode, dan imports valid. Mencegah LLM hallucinations sebelum merusak codebase.
+
+⚠️ **Jangan panggil redundan** — auto-check sudah berjalan otomatis di `agentic_execute` pada setiap step sukses.
 
 **Stage**: III
 
@@ -611,9 +613,10 @@ agentic_debate → agentic_clean → agentic_rag store
 1. **Session scoping**: Semua state di-track per `sessionID`, tidak pernah cross-session leak.
 2. **LLM auto-detect**: OpenCode Free auto-terdeteksi (tidak perlu API key).
 3. **Preferensi Model**: `agentic_model` bisa set model berbeda per role dalam satu sesi.
-4. **Skill Extraction**: Skills otomatis diekstrak dari step sukses (jika `autoSkillExtract: true`).
-5. **Guard selalu dijalankan**: Setiap `agentic_execute` auto-verifikasi klaim output.
-6. **Docker**: Setiap fitur baru harus nambah Docker layer di `Dockerfile.test`.
+4. **Skill Extraction**: Skills otomatis diekstrak dari step sukses (jika `autoSkillExtract: true` di global config — parameter ini ada di `agent` section `opencode.json`, bukan parameter tool). Sudah ter-wire di `agentic_execute`.
+5. **Guard otomatis di `agentic_execute`**: Setiap step sukses auto-dicek halusinasinya (jika `autoHallucinationCheck: true` di config). `agentic_guard` standalone hanya untuk re-run manual / audit — jangan panggil redundan.
+6. **ID Hierarchy**: Semua ID bersarang secara konseptual: `sessionID` ⊃ `pipelineRunId` ⊃ `taskId` ⊃ `stepId`. Setiap tool menerima `sessionID` otomatis dari konteks. `agentic_pipeline run` sekarang internal-orchestrator (seperti `agentic_auto`) — tidak perlu manual chain per stage.
+7. **Docker**: Setiap fitur baru harus nambah Docker layer di `Dockerfile.test`.
 
 ---
 

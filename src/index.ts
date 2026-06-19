@@ -754,7 +754,7 @@ const createEngine: Plugin = async (input, _options) => {
       agentic_execute: tool({
         description: "Record completion of a subtask. Auto-verifies compilation on success. Includes error recovery guidance + error propagation analysis on failure. Supports user feedback for continuous learning.",
         args: {
-          stepId: tool.schema.string().describe("The ID of the step that was executed"),
+          stepId: tool.schema.string().describe("The ID of the step that was executed (leaf in ID chain: sessionID ⊃ pipelineRunId ⊃ taskId ⊃ stepId)"),
           success: tool.schema.boolean().describe("Whether the step completed successfully"),
           output: tool.schema.string().describe("Summary of what was done — what files changed, what was implemented"),
           filesModified: tool.schema.array(tool.schema.string()).optional().describe("List of files that were modified or created in this step"),
@@ -954,6 +954,19 @@ const createEngine: Plugin = async (input, _options) => {
               sessionId: context.sessionID,
               timestamp: startTime,
             })
+
+            // Auto-skill extraction (P0a: wire autoSkillExtract config)
+            if (configLoader.get().agent.autoSkillExtract) {
+              try {
+                const skill = await skillStore.extract(
+                  { role: "developer", content: args.output },
+                  [args.stepId, ...(args.filesModified ?? [])]
+                )
+                if (skill) {
+                  response += `\n### 🧠 Auto-Skill\nExtracted skill: \`${skill.definition.meta.id}\` — ${skill.definition.meta.name}\n`
+                }
+              } catch { /* non-fatal */ }
+            }
           }
 
           const progress = executor.getProgress(context.sessionID)
@@ -1051,7 +1064,7 @@ const createEngine: Plugin = async (input, _options) => {
       agentic_reflect: tool({
         description: "Analyze a failed step. Diagnoses the error category, traces error propagation across the step chain, and suggests a recovery plan.",
         args: {
-          stepId: tool.schema.string().describe("The ID of the failed step to analyze"),
+            stepId: tool.schema.string().describe("The ID of the failed step to analyze (in ID chain: sessionID ⊃ stepId)"),
           errorDetails: tool.schema.string().optional().describe("Additional error context (full stack trace, test output, etc.)"),
           attemptedFix: tool.schema.string().optional().describe("What you tried to fix the error (if any)"),
         },
@@ -1457,20 +1470,40 @@ const createEngine: Plugin = async (input, _options) => {
 
               coordinator.writeSharedMemory(`pipeline:run:${runId}`, `Started pipeline ${pipeline.name}`, "coordinator")
 
-              let out = `## 🚀 Pipeline Run Started\n\n`
-              out += `**Pipeline:** ${pipeline.name} (\`${args.pipelineId}\`)\n`
-              out += `**Run ID:** \`${runId}\`\n\n`
-              out += `### Stages\n`
-              out += pipeline.stages.map((s, i) => {
-                const prefix = i === 0 ? "▶" : "⏳"
-                const category = s.model ?? roleRegistry.suggestModel(s.role)
-                const resolved = modelRegistry.resolveAlias(category)
-                const modelLabel = resolved.length > 0 && resolved[0] !== category ? `${resolved[0]} (${category})` : category
-                return `${prefix} **${s.role}** — ${s.description} (model: ${modelLabel})`
-              }).join("\n")
-              out += `\n\n### Next Step\nDelegate tasks to each stage. Start with \`agentic_delegate\` for the first role: **${pipeline.stages[0].role}**.`
+              // Internal orchestration — no manual delegation needed
+              let out = `## 🚀 Pipeline Run: ${pipeline.name}\n\n`
+              out += `**Run ID:** \`${runId}\`\n`
+              out += `**Stages:** ${pipeline.stages.map(s => s.role).join(" → ")}\n\n`
 
-              return { output: out, metadata: { runId, pipelineId: args.pipelineId } }
+              const codebaseSummary = navigator.getSummary()
+              const filesBlock = ""
+              const memoryContexts = episodicStore.search(args.pipelineId).slice(0, 3).map(e => `${e.planGoal}: ${e.outcome}`)
+              const skillContexts = skillStore.find(args.pipelineId).map(s => `${s.definition.meta.id}: ${s.definition.meta.name}`)
+
+              const piperesult = await orchestrator.executePipeline({
+                pipeline,
+                runId,
+                goal: args.pipelineId,
+                projectDir: ctxDir(context),
+                codebaseSummary,
+                filesBlock,
+                memoryContexts,
+                skillContexts,
+                coordinator,
+                sessionID: context.sessionID,
+              })
+
+              if (piperesult.hasNoLLM) {
+                out += `❌ LLM unavailable — pipeline aborted.\n`
+                return { output: out }
+              }
+
+              out += `✅ All stages completed.\n`
+              out += `**Files modified:** ${piperesult.allFiles.length > 0 ? piperesult.allFiles.join(", ") : "(none)"}\n`
+              if (piperesult.pipelineReview) out += `**QA review:** ${piperesult.pipelineReview}\n`
+              if (piperesult.verifyNote) out += `**Verification:** ${piperesult.verifyNote}\n`
+
+              return { output: out, metadata: { runId, filesModified: piperesult.allFiles.length } }
             }
 
             case "status": {
@@ -1661,7 +1694,7 @@ const createEngine: Plugin = async (input, _options) => {
           description: tool.schema.string().describe("What this agent should do"),
           role: tool.schema.enum(["architect", "developer", "qa", "coordinator", "pm"]).optional().describe("Target role (auto-detected if omitted)"),
           context: tool.schema.string().optional().describe("Additional context or instructions for the agent"),
-          pipelineRunId: tool.schema.string().optional().describe("Pipeline run ID to associate this task with a pipeline stage"),
+          pipelineRunId: tool.schema.string().optional().describe("Pipeline run ID (format: `run-{sessionID}-{pipelineId}`). Links this task into the ID chain: sessionID ⊃ pipelineRunId ⊃ taskId ⊃ stepId"),
           result: tool.schema.string().optional().describe("Task result (set when completing a task to trigger downstream stages and cross-validation)"),
           status: tool.schema.enum(["pending", "running", "done", "failed"]).optional().describe("Set the task status"),
           requestReview: tool.schema.boolean().optional().describe("Request review from a downstream role after completing this task"),
@@ -2535,9 +2568,9 @@ const createEngine: Plugin = async (input, _options) => {
       }),
 
       agentic_guard: tool({
-        description: "Verify the truthfulness of claims made in step outputs. Checks that files referenced actually exist, functions claimed exist in code, and imports are valid. Use to catch LLM hallucinations before they corrupt the codebase.",
+        description: "MANUAL re-run of the hallucination guard. NOTE: Guard already runs automatically inside `agentic_execute` on every successful step (if `autoHallucinationCheck: true` in config). This standalone tool is only needed for: (a) re-checking an older step after files changed, (b) auditing a step that was executed while auto-check was disabled, or (c) getting a detailed per-claim breakdown. Do NOT call redundantly — the auto-check already ran.",
         args: {
-          stepId: tool.schema.string().describe("The step ID whose output to verify"),
+          stepId: tool.schema.string().describe("The step ID whose output to verify (in ID chain: sessionID ⊃ stepId)"),
         },
         async execute(args, context) {
           const stepState = executor.getStepState(context.sessionID, args.stepId)
@@ -3497,96 +3530,32 @@ const createEngine: Plugin = async (input, _options) => {
           let hasNoLLM = false
 
           if (usePipeline) {
-            // ── Pipeline path: delegate developer + QA stages ──
+            // ── Pipeline path: reuse shared internal orchestrator ──
             const pipelineRunId = `run-${context.sessionID}-${pipelineId}`
             orchestrator.startRun(pipelineRunId, pipelineId)
 
-            for (const stage of pipeline.stages) {
-              const stageTaskId = `auto-${stage.role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+            const piperesult = await orchestrator.executePipeline({
+              pipeline,
+              runId: pipelineRunId,
+              goal: args.goal,
+              constraints: args.constraints,
+              projectDir,
+              codebaseSummary,
+              filesBlock,
+              memoryContexts,
+              skillContexts,
+              coordinator,
+              sessionID: context.sessionID,
+            })
 
-              coordinator.delegate(stage.role, {
-                id: stageTaskId, assignedTo: stage.role,
-                description: `${args.goal} — ${stage.description}`,
-                input: stage.description, status: "running",
-                pipelineRunId,
-              }, context.sessionID, 0)
-
-              coordinator.writeSharedMemory(`auto:${stage.role}:start`, stage.description, stage.role)
-
-              const stageCtx = orchestrator.buildContextForRole(stage.role, pipelineRunId, coordinator.getAllSharedMemory())
-              const pipelineContextHints = [...memoryContexts.slice(0, 2), ...skillContexts.slice(0, 1)].join("; ")
-
-              const sysPrompts: Record<string, string> = {
-                pm: `You are a PM. Define requirements and acceptance criteria concisely. Return JSON: {"spec": "...", "criteria": ["..."]}`,
-                architect: `You are an architect. Design architecture and interface contracts. Return JSON: {"architecture": "...", "interfaces": [{...}], "designNotes": "..."}`,
-                developer: `Return JSON array of {path, content}. Write COMPLETE file contents. Rules: ESM imports (.js) · match existing patterns · valid imports. {"files":[{"path":"src/x.ts","content":"..."}]} or {"noChanges":true}`,
-                qa: `You are QA. Review the implementation for correctness, edge cases, and regressions. Return JSON: {"issues": [{"severity":"error|warning|info","description":"...","file":"..."}], "summary": "verdict", "passed": true/false}`,
-                coordinator: `You are a coordinator. Verify pipeline completion and consistency. Return JSON: {"summary": "...", "gaps": ["..."], "approved": true/false}`,
-              }
-              const sp = sysPrompts[stage.role] ?? `You are ${stage.role}. Complete your task. Return JSON output.`
-
-              const up = `Goal: ${args.goal}${args.constraints?.length ? `\nConstraints: ${args.constraints.join(", ")}` : ""}${pipelineContextHints ? `\nPast tasks: ${pipelineContextHints}` : ""}${stageCtx ? `\n\nContext from previous stages:\n${stageCtx}` : ""}\n${stage.role} task: ${stage.description}\n${filesBlock || "(new)"}\n${codebaseSummary.slice(0, 100)}`
-
-              const llmOut = await llmEngine.call({
-                systemPrompt: sp, userPrompt: up,
-                temperature: 0.2, maxTokens: 2048, jsonMode: true,
-              })
-
-              const raw = llmOut.content || ""
-              const isFail = raw.includes("[NO_LLM]") || raw === "NO_LLM"
-              if (isFail) { hasNoLLM = true; break }
-
-              coordinator.updateTask(context.sessionID, stageTaskId, "done", raw.slice(0, 1000))
-
-              if (stage.role === "developer") {
-                try {
-                  const parsed = JSON.parse(raw)
-                  if (parsed.files && Array.isArray(parsed.files)) {
-                    for (const f of parsed.files) {
-                      if (f.path && f.content) {
-                        const absPath = join(projectDir, f.path)
-                        mkdirSync(dirname(absPath), { recursive: true })
-                        writeFileSync(absPath, f.content, "utf-8")
-                        allModified.push(f.path)
-                      }
-                    }
-                  }
-                } catch {
-                  const fbRegex = /FILE:\s*(\S+)\n```(?:\w+)?\n([\s\S]*?)```/g
-                  let m: RegExpExecArray | null
-                  while ((m = fbRegex.exec(raw)) !== null) {
-                    const absPath = join(projectDir, m[1].replace(/^\/+/, ""))
-                    mkdirSync(dirname(absPath), { recursive: true })
-                    writeFileSync(absPath, m[2], "utf-8")
-                    allModified.push(m[1].replace(/^\/+/, ""))
-                  }
-                }
-                coordinator.writeSharedMemory("auto:files", allModified.join(", "), "developer")
-              }
-
-              if (stage.role === "qa") {
-                try {
-                  const qaParsed = JSON.parse(raw)
-                  pipelineReview = qaParsed.summary?.slice(0, 200) ?? raw.slice(0, 200)
-                  if (!qaParsed.passed) verifyNote = `⚠️ QA: ${qaParsed.summary?.slice(0, 100) ?? "issues found"}`
-                  else verifyNote = "✅ QA passed"
-                } catch { pipelineReview = raw.slice(0, 200) }
-              }
-            }
-
-            // Cross-validate between stages
-            try {
-              const allStageResults = orchestrator.getAllStageResults(pipelineRunId)
-              if (allStageResults.size >= 2) {
-                const xv = await orchestrator.crossValidate("coordinator", args.goal, allStageResults)
-                if (!xv.passed) verifyNote += ` ⚠️ Cross-validation: ${xv.issues.length} issues`
-              }
-            } catch { /* non-fatal */ }
-
-            const allPipelineStages = pipeline.stages.map(s => s.role)
-            coordinator.writeSharedMemory("pipeline:auto:stages", allPipelineStages.join(","), "coordinator")
+            hasNoLLM = piperesult.hasNoLLM
+            pipelineReview = piperesult.pipelineReview
+            verifyNote = piperesult.verifyNote
+            allModified.push(...piperesult.allFiles)
 
             // Record execution
+            const allPipelineStages = pipeline.stages.map(s => s.role)
+            coordinator.writeSharedMemory("pipeline:auto:stages", allPipelineStages.join(","), "coordinator")
             for (const step of activeSteps) {
               depTracker.recordChange(context.sessionID, step.id, allModified)
               executor.recordResult(context.sessionID, {
