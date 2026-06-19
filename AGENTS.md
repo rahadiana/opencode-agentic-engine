@@ -104,7 +104,7 @@ src/
     └── trace-logger.ts        # JSONL trace writer (buffered, auto-flush)
 ```
 
-## 21 Tools
+## 29 Tools
 
 | Tool | Stage | Description |
 |---|---|---|
@@ -118,7 +118,8 @@ src/
 | agentic_snapshot | II | Save/list execution checkpoints |
 | agentic_pr | II | Generate PR + description |
 | agentic_score | II | Tech debt analysis |
-| agentic_model + agentic_model_reset | II | Configure per-role LLM model preferences per session |
+| agentic_model | II | Configure per-role LLM model preferences per session |
+| agentic_model_reset | II | Reset model statistics to recover from degraded performance |
 | agentic_budget | II | Set/view/reset resource budget limits (tokens, steps, time, cost) |
 | agentic_delegate | III | Assign to architect/developer/qa/coordinator — pipeline-aware with cross-validation |
 | agentic_pipeline | III | Define and run multi-agent workflow pipelines (PM→Arch→Dev→QA) |
@@ -135,6 +136,7 @@ src/
 | agentic_clean | Blueprint | Strip debate artifacts + format output |
 | agentic_rag | Blueprint | Multi-index RAG with category segregation |
 | agentic_mcp | Blueprint | MCP client for external tools/APIs |
+| agentic_finetune | III | End-to-end fine-tuning pipeline: prepare, upload, create/monitor jobs |
 
 ## Conventions
 

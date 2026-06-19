@@ -17,7 +17,7 @@ Berdasarkan konsep dari paper **"The End of Software Engineering"** (arXiv:2606.
 | — | **Model Registry** | Auto-discover model dari provider, tracking reliability & hallucination rate |
 | — | **Dashboard** | Timeline, anomaly detection, model reliability stats |
 
-### 26 Tools
+### 29 Tools
 
 | Tool | Stage | Description |
 |---|---|---|
@@ -32,6 +32,8 @@ Berdasarkan konsep dari paper **"The End of Software Engineering"** (arXiv:2606.
 | `agentic_pr` | II | Generate PR + description |
 | `agentic_score` | II | Tech debt analysis |
 | `agentic_model` | II | Configure per-role LLM model preferences per session |
+| `agentic_model_reset` | II | Reset model stats to recover from degraded performance |
+| `agentic_budget` | II | Set/view/reset budget limits (tokens, steps, time, cost) |
 | `agentic_delegate` | III | Assign to architect/developer/qa/coordinator — pipeline-aware with cross-validation |
 | `agentic_pipeline` | III | Define and run multi-agent workflow pipelines (PM→Arch→Dev→QA) |
 | `agentic_message` | III | Inter-agent messaging: send, inbox, conversation, review requests |
@@ -40,6 +42,7 @@ Berdasarkan konsep dari paper **"The End of Software Engineering"** (arXiv:2606.
 | `agentic_episodes` | III | Cross-session memory search |
 | `agentic_dashboard` | III | Timeline + anomaly detection |
 | `agentic_guard` | III | Hallucination detection |
+| `agentic_finetune` | III | Fine-tuning pipeline: prepare → upload → create/monitor jobs |
 | `agentic_evolve` | IV | Inspect + extend the agent system |
 | `agentic_auto` | V | Fully autonomous agent loop (plan→execute→verify→retry in one call) |
 | `agentic_debate` | 🏗 Blueprint | Debate loop — Agent A (executor) ↔ Agent B (critic) |
@@ -218,7 +221,7 @@ File ini di-watch — perubahan langsung diterapkan tanpa restart plugin.
 
 ```
 src/
-├── index.ts                 # Plugin entry: registers 26 tools + hooks
+├── index.ts                 # Plugin entry: registers 29 tools + hooks
 ├── core/
 │   ├── domain-registry.ts   # Domain pack system: tools, verifiers, error matchers
 │   ├── domains/             # Built-in domain packs (generic, code)
@@ -315,7 +318,7 @@ Semua aktivitas dicatat ke `.agentic/trace.jsonl`:
 - Step execution + error propagation
 - Retry history & anomaly detection
 
-## Recent Updates (v0.4.4 — 2026-06-19)
+## Recent Updates (v0.4.5 — 2026-06-19)
 
 ### 🚀 v0.4.4 — Domain-Agnostic + Sub-Agent Integration
 
@@ -374,9 +377,9 @@ Semua aktivitas dicatat ke `.agentic/trace.jsonl`:
 
 ### Stats
 
-- **26 tools** (was 21) — 5 stages + 5 blueprints
-- **555 unit tests** — mock-based, no LLM needed
-- **v0.4.4** — latest on npm
+- **29 tools** (was 21) — 5 stages + 5 blueprints
+- **663 unit tests** — mock-based, no LLM needed
+- **v0.4.5** — latest release
 
 ## License
 

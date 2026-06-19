@@ -72,9 +72,9 @@ catch (e) { assert(false, `AgenticEngine() threw: ${e.message}`) }
 assert(hooks && typeof hooks === "object", "hooks is an object")
 assert(typeof hooks.dispose === "function", "dispose hook registered")
 
-// 3. Tool registration (27 tools)
+// 3. Tool registration (29 tools)
 console.log("\n[3] Tool registration")
-for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_model", "agentic_episodes", "agentic_parallel", "agentic_dashboard", "agentic_guard", "agentic_evolve", "agentic_auto", "agentic_debate", "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp"]) {
+for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_model", "agentic_model_reset", "agentic_budget", "agentic_episodes", "agentic_parallel", "agentic_dashboard", "agentic_guard", "agentic_evolve", "agentic_auto", "agentic_debate", "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp", "agentic_finetune"]) {
   const tool = hooks.tool?.[name]
   assert(tool && typeof tool.execute === "function", `"${name}" has execute()`)
   assert(typeof tool.description === "string" && tool.description.length > 0, `"${name}" has description`)
@@ -1605,6 +1605,62 @@ const listAfterClearOut = typeof listAfterClear === "string" ? listAfterClear : 
 assert(listAfterClearOut.includes("No model preferences"), "list shows empty after clear all")
 
 assert(true, "agentic_model session model preference tests passed")
+
+// 66b. agentic_model_reset — reset model statistics
+console.log("\n[66b] agentic_model_reset — reset model stats")
+const mrSid = freshSid()
+const mrCtx = mockCtx(mrSid)
+assert(typeof hooks.tool.agentic_model_reset === "object", "agentic_model_reset tool registered")
+assert(typeof hooks.tool.agentic_model_reset.execute === "function", "agentic_model_reset has execute")
+
+// reset-all (safe in test)
+const resetAllRes = await hooks.tool.agentic_model_reset.execute({ action: "reset-all" }, mrCtx)
+const resetAllOut = typeof resetAllRes === "string" ? resetAllRes : resetAllRes.output
+assert(resetAllOut.includes("EMERGENCY"), "reset-all confirms emergency reset")
+
+// reset without model
+const noModelReset = await hooks.tool.agentic_model_reset.execute({ action: "reset" }, mrCtx)
+const noModelResetOut = typeof noModelReset === "string" ? noModelReset : noModelReset.output
+assert(noModelResetOut.includes("Provide a `model`"), "reset without model returns error")
+
+// reset-stale
+const staleRes = await hooks.tool.agentic_model_reset.execute({ action: "reset-stale" }, mrCtx)
+const staleOut = typeof staleRes === "string" ? staleRes : staleRes.output
+assert(staleOut.includes("No stale") || staleOut.includes("Reset"), "reset-stale returns result")
+
+// unknown action
+const unknownReset = await hooks.tool.agentic_model_reset.execute({ action: "unknown" }, mrCtx)
+const unknownResetOut = typeof unknownReset === "string" ? unknownReset : unknownReset.output
+assert(unknownResetOut.includes("Unknown action"), "unknown action returns error")
+
+assert(true, "agentic_model_reset tests passed")
+
+// 66c. agentic_budget — budget limits (basic tool registration)
+console.log("\n[66c] agentic_budget — tool registration check")
+const bSid2 = freshSid()
+const bCtx2 = mockCtx(bSid2)
+assert(typeof hooks.tool.agentic_budget === "object", "agentic_budget tool registered")
+assert(typeof hooks.tool.agentic_budget.execute === "function", "agentic_budget has execute")
+
+// Unknown action (always works)
+const unknownBudget = await hooks.tool.agentic_budget.execute({ action: "unknown" }, bCtx2)
+const unknownBudgetOut = typeof unknownBudget === "string" ? unknownBudget : unknownBudget.output
+assert(unknownBudgetOut.includes("Unknown action"), "budget unknown action returns error")
+
+assert(true, "agentic_budget tool registration tests passed")
+
+// 66d. agentic_finetune — tool registration check
+console.log("\n[66d] agentic_finetune — tool registration")
+assert(typeof hooks.tool.agentic_finetune === "object", "agentic_finetune tool registered")
+assert(typeof hooks.tool.agentic_finetune.execute === "function", "agentic_finetune has execute")
+assert(typeof hooks.tool.agentic_finetune.args.action === "object", "agentic_finetune has action arg")
+
+// unknown action
+const unknownFt = await hooks.tool.agentic_finetune.execute({ action: "nonexistent" }, mockCtx(freshSid()))
+const unknownFtOut = typeof unknownFt === "string" ? unknownFt : unknownFt.output
+assert(unknownFtOut.includes("Unknown action"), "agentic_finetune unknown action returns error")
+
+assert(true, "agentic_finetune tool registration tests passed")
 
 // 67. PatternDiscovery — cross-session pattern analysis
 console.log("\n[67] PatternDiscovery — cross-session patterns")

@@ -186,6 +186,8 @@ const createEngine: Plugin = async (input, _options) => {
     { name: "agentic_pr", description: "Generate PR description from plan + step results. Use when task is complete and verified. Avoid if no plan was created. Key: `action` — \"generate\" (default) or \"create\" (via gh CLI)." },
     { name: "agentic_score", description: "Analyze technical debt: coupling, complexity, patterns. Use after refactoring or before finalizing. Key: `files` (optional — defaults to all modified)." },
     { name: "agentic_model", description: "Configure which LLM model per agent role for the session. Use to switch models without config file changes. Key: `action` (set/get/list/clear), `role`, `model` name." },
+    { name: "agentic_model_reset", description: "Reset model statistics to recover from degraded performance. Use when models become unreliable. Key: `action` (reset/reset-stale/reset-all), `model` name. Example: reset `model=\"gpt-4o\"`." },
+    { name: "agentic_budget", description: "Set, view, or reset resource budget limits (tokens, steps, time, cost). Use to prevent runaway loops. Acts as circuit breaker for autonomous execution. Key: `action` (set/get/status/reset), `scope` (session/task). Example: budget `action=set maxSteps=10`." },
     { name: "agentic_delegate", description: "Assign work to architect/developer/QA/coordinator. Use for complex sub-tasks needing specialist context. Avoid for trivial edits. Key: `taskId`, `description`, `role`. Supports pipeline auto-advance." },
     { name: "agentic_pipeline", description: "Define and run multi-agent pipelines: PM → Architect → Developer → QA. Use for end-to-end feature development. Key: `action` (define/list/run/status/suggest), `stages`." },
     { name: "agentic_message", description: "Send messages between agent roles, request reviews, check inbox. Use in multi-agent workflows. Key: `action` (send/inbox/conversation/mark-read), `to`, `message`." },
@@ -4642,7 +4644,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
           injection = buildAgenticSystemInstructions(pack, filteredRegistry, { isRouted: true, showDiscoveryHint: true })
 
           // Append tool list + discovery hints
-          injection += `\n\n### Selected Tools for This Task (${selected.length} of 29)\n\n`
+          injection += `\n\n### Selected Tools for This Task (${selected.length} of ${TOOL_REGISTRY.length})\n\n`
           injection += toolListText
           injection += alwaysExposeHint
           injection += searchHint
