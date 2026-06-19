@@ -43,13 +43,15 @@ You have access to **${relevantTools.length} specialized agentic_* tools**. **YO
 
 ⚠️ **REMINDER**: ALL specialized tools use the "agentic_" prefix (e.g. "agentic_plan", "agentic_execute", "agentic_verify"). There is NO tool named just "execute", "plan", "verify", etc. Always include the prefix.
 
+⚠️ **WEB TOOL NAME**: The web search tool is called **"webfetch"** — NOT "websearch", NOT "search_web", NOT "browser". Always use \`webfetch\`.
+
 ### Tool Preference Hierarchy (HIGHEST first):
 1. **agentic_*** — Use FIRST. Far more powerful than built-in tools.
 2. bash/edit/read/write — Only if no agentic_* tool fits the need.
 
 ### BEFORE STARTING ANY TASK — Gather Knowledge First
 Your training data has a cutoff date. Before implementing:
-${hasNav ? `1. **Check project structure** — use \`agentic_nav\` to scan codebase\n` : ""}${isCodeDomain ? `2. **Read relevant files** — use \`read\` to inspect specific files\n` : ""}${hasMemory ? `3. **Search skills**: \`agentic_skill find "relevant topic"\` — learn from past successes/failures\n4. **Search episodes**: \`agentic_episodes search "similar task"\` — see what worked before\n` : ""}5. **Search latest docs**: \`websearch "topic latest 2026"\` — check current info
+${hasNav ? `1. **Check project structure** — use \`agentic_nav\` to scan codebase\n` : ""}${isCodeDomain ? `2. **Read relevant files** — use \`read\` to inspect specific files\n` : ""}${hasMemory ? `3. **Search skills**: \`agentic_skill find "relevant topic"\` — learn from past successes/failures\n4. **Search episodes**: \`agentic_episodes search "similar task"\` — see what worked before\n` : ""}5. **Search latest docs**: \`webfetch\` — check current info
 6. Only then start implementing
 
 ### Standard Workflow — USE INDIVIDUAL TOOLS
@@ -108,6 +110,21 @@ ${hasDebate ? `6. For analysis tasks: use **agentic_debate**\n` : ""}${hasRouter
 `
 
   return prompt
+}
+
+/**
+ * Build agentic system instructions WITHOUT YAML frontmatter.
+ * Used for dynamic injection via `experimental.chat.system.transform` hook
+ * so domain switches take effect instantly without file I/O.
+ */
+export function buildAgenticSystemInstructions(
+  domain: DomainPack,
+  allTools: ToolEntry[],
+): string {
+  const full = buildAgentPrompt(domain, allTools)
+  // Strip YAML frontmatter (lines between --- delimiters)
+  const stripped = full.replace(/^---\n[\s\S]*?\n---\n\n/, "")
+  return stripped
 }
 
 export function buildGenericAgentPrompt(allTools: ToolEntry[]): string {

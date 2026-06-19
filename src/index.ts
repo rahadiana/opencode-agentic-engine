@@ -56,7 +56,7 @@ import { RouterAgent } from "./core/router-agent.js"
 import { DataCleaner } from "./core/data-cleaner.js"
 import { MultiIndexRAG } from "./memory/multi-index-rag.js"
 import { MCPClient } from "./core/mcp-client.js"
-import { buildAgentPrompt, type ToolEntry } from "./core/prompt-builder.js"
+import { buildAgenticSystemInstructions, type ToolEntry } from "./core/prompt-builder.js"
 
 // ── Build-time version injected by esbuild define ──
 declare const __VERSION__: string
@@ -201,23 +201,22 @@ const createEngine: Plugin = async (input, _options) => {
     { name: "agentic_finetune", description: "End-to-end fine-tuning pipeline: prepare dataset, save file, upload to OpenAI, create and monitor fine-tuning job." },
   ]
 
-  // ── Helper: write agent prompt file for current domain ──
-  // Smart cache with persisted hash to avoid unnecessary writes across restarts.
-  let lastPromptHash = ""
-  function writeAgentPrompt(domainOverride?: DomainPack, force = false) {
-    const pack = domainOverride ?? domainRegistry.getCurrentPack() ?? genericDomain
-    const content = buildAgentPrompt(pack, TOOL_REGISTRY)
+  // ── Static agent file: minimal bootstrap identity ──
+  // ALL dynamic instructions (tools, CRITICAL RULES, domain context)
+  // are injected per-LLM-call via `experimental.chat.system.transform` hook.
+  // This avoids file I/O latency, stale prompts, and corrupt-agent errors.
+  let currentInjectDomain: DomainPack = genericDomain
+  function writeStaticAgentFile() {
+    const content = `---
+description: Agentic Engineering Agent — autonomous software engineering with planning, execution, and verification
+mode: all
+---
 
-    // djb2 hash
-    let hash = 5381
-    for (let i = 0; i < content.length; i++) hash = ((hash << 5) + hash + content.charCodeAt(i)) | 0
-    const hashStr = String(hash >>> 0)
+# Agentic Engineering Agent
 
-    if (!force && hashStr === lastPromptHash) return
-
-    lastPromptHash = hashStr
-    try { persistence.save("_meta", "agentic-hash", hashStr) } catch { /* no persistence yet */ }
-
+You are an autonomous software engineering agent.
+Your full instructions, tool list, and domain-specific rules are injected dynamically into every LLM call by the agentic-engine plugin.
+`
     try {
       const globalAgentsDir = join(homedir(), ".config", "opencode", "agents")
       mkdirSync(globalAgentsDir, { recursive: true })
@@ -229,6 +228,7 @@ const createEngine: Plugin = async (input, _options) => {
       writeFileSync(join(localAgentsDir, "agentic.md"), content, "utf-8")
     } catch { /* non-fatal */ }
   }
+  writeStaticAgentFile()
 
   // Write initial prompt (deferred — after persistence is available for smart cache)
 
@@ -378,13 +378,6 @@ const createEngine: Plugin = async (input, _options) => {
   })
   new AgentLoop(llmEngine, { maxIterations: 10, autoRetry: true, maxRetries: 2, verifyAfterEach: false })
   const persistence = new PersistenceLayer(worktree)
-  // Restore prompt hash from disk (survives restart — skips rewrite if content unchanged)
-  try {
-    const savedHash = persistence.load<string>("_meta", "agentic-hash")
-    if (savedHash) lastPromptHash = savedHash
-  } catch { /* non-fatal */ }
-  // Write initial prompt — smart cache prevents rewrite if content hasn't changed
-  writeAgentPrompt(genericDomain)
   // Build RAG config from config file
   const ragConfig: import("./memory/multi-index-rag.js").RAGConfig = {
     keywordWeight: config.memory.search.keywordWeight,
@@ -876,7 +869,9 @@ const createEngine: Plugin = async (input, _options) => {
           if (domainPack) {
             const prevDomain = sessionStore.getOrCreate(context.sessionID).currentDomain
             sessionStore.getOrCreate(context.sessionID).currentDomain = domainPack.name
-            if (domainPack.name !== prevDomain) writeAgentPrompt(domainPack)
+            if (domainPack.name !== prevDomain) {
+              currentInjectDomain = domainPack
+            }
           }
           
           const taskType = detectTaskType(args.output)
@@ -4469,6 +4464,21 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
         },
       }),
 
+    },
+
+    // ── Dynamic system prompt injection per LLM call ──
+    // Replaces file-based prompt writing. The static `agentic.md` provides minimal
+    // bootstrap identity; this hook injects the full TOOL_REGISTRY, CRITICAL RULES,
+    // domain-specific instructions, and web tool name reminders.
+    // Domain switches take effect instantly — hook fires on every LLM request.
+    "experimental.chat.system.transform": async (_input: { sessionID?: string; model: unknown }, output: { system: string[] }) => {
+      const pack = currentInjectDomain ?? domainRegistry.getCurrentPack() ?? genericDomain
+      const instructions = buildAgenticSystemInstructions(pack, TOOL_REGISTRY)
+      if (output.system.length > 0) {
+        output.system[output.system.length - 1] += "\n\n" + instructions
+      } else {
+        output.system.push(instructions)
+      }
     },
 
     "tool.execute.after": async (toolInput: { tool: string; args: Record<string, unknown>; sessionID: string; callID: string }, _output: { title: string; output: string; metadata: unknown }) => {
