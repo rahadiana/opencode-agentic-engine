@@ -49,10 +49,10 @@ const LANGUAGE_CONFIGS: Record<SupportedLanguage, VerifierLanguageConfig> = {
     testFileExts: [".test.js", ".spec.js", ".test.jsx", ".spec.jsx"],
   },
   python: {
-    compileCmd: (_dir) => ({ bin: "python", args: ["-m", "py_compile", "-q", "."], timeout: 30000 }),
+    compileCmd: (_dir) => ({ bin: "python", args: ["-m", "compileall", ".", "-q"], timeout: 30000 }),
     testCmd: (_dir, pattern) => {
       const args = ["-m", "pytest", "-q"]
-      if (pattern) args.push(pattern)
+      if (pattern) args.push("-k", pattern)
       return { bin: "python", args, timeout: 60000 }
     },
     fileExts: [".py"],

@@ -1,6 +1,14 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs"
 import { resolve, isAbsolute } from "node:path"
 
+// Known npm packages to avoid false positives on import checks
+const KNOWN_NPM_PACKAGES = new Set([
+  "react", "vue", "express", "lodash", "zod", "axios", "chalk", "commander",
+  "dotenv", "fs-extra", "glob", "tslib", "typescript", "vitest", "jest",
+  "eslint", "prettier", "dayjs", "uuid", "path", "os", "crypto", "stream",
+  "util", "events", "http", "https", "net", "fs", "child_process",
+])
+
 export interface HallucinationCheck {
   passed: boolean
   claims: ClaimResult[]
@@ -13,6 +21,7 @@ export interface ClaimResult {
   verified: boolean
   actual?: string
   expected?: string
+  severity?: "error" | "warning"
 }
 
 export class HallucinationGuard {
@@ -24,17 +33,21 @@ export class HallucinationGuard {
 
   check(executionOutput: string, modifiedFiles: string[]): HallucinationCheck {
     const claims: ClaimResult[] = []
+    const modifiedSet = new Set(modifiedFiles.map(f => f.replace(/^\.\//, "")))
 
     const fileClaims = this.extractFileClaims(executionOutput)
     for (const claim of fileClaims) {
       const resolved = this.resolveSafe(claim)
       const exists = resolved ? existsSync(resolved) : false
+      // File claimed but just doesn't exist yet (e.g., temp file or about-to-be-created)
+      const isKnownModified = modifiedSet.has(claim) || modifiedSet.has(claim.replace(/^\.\//, ""))
       claims.push({
         claim,
         type: "file_exists",
-        verified: exists,
+        verified: exists || isKnownModified,
         actual: exists ? "exists" : "does not exist",
         expected: "exists",
+        severity: isKnownModified && !exists ? "warning" : "error",
       })
     }
 
@@ -53,6 +66,14 @@ export class HallucinationGuard {
 
     const importClaims = this.extractImportClaims(executionOutput)
     for (const claim of importClaims) {
+      // Skip well-known npm packages to avoid false positives
+      const pkgName = claim.split("/")[0]?.replace(/^@/, "") ?? claim
+      if (KNOWN_NPM_PACKAGES.has(pkgName)) continue
+
+      // Check if it's a relative import (starts with ./ or ../ or /)
+      const isRelative = /^[./]/.test(claim)
+      if (!isRelative) continue
+
       const resolved = this.resolveSafe(claim)
       const exists = resolved ? existsSync(resolved) : false
       claims.push({
@@ -77,15 +98,16 @@ export class HallucinationGuard {
       })
     }
 
-    const passed = claims.every(c => c.verified)
-    const failedCount = claims.filter(c => !c.verified).length
+    const criticalFails = claims.filter(c => !c.verified && c.severity !== "warning")
+    const passed = criticalFails.length === 0
+    const totalFails = claims.filter(c => !c.verified).length
 
     return {
       passed,
       claims,
       summary: passed
         ? "All claims verified."
-        : `${failedCount} unverified claim(s) found. These statements may be hallucinations.`,
+        : `${totalFails} unverified claim(s) found. ${criticalFails.length} critical, ${totalFails - criticalFails.length} warnings.`,
     }
   }
 

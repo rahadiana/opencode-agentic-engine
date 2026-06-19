@@ -4,6 +4,7 @@ import { Verifier } from "./verifier.js"
 import { ErrorAnalyzer } from "./error-analyzer.js"
 import { DependencyTracker } from "../drift/dependency-tracker.js"
 import { LLMEngine } from "./llm.js"
+import { BudgetTracker } from "./budget-tracker.js"
 
 export interface AgentLoopConfig {
   maxIterations: number
@@ -34,7 +35,12 @@ export class AgentLoop {
   private config: AgentLoopConfig
   private llm: LLMEngine
   private observers: LoopObserver[] = []
+  private budgetTracker?: BudgetTracker
 
+  /** Rolling window for repetition detection */
+  private callHistory: Array<{ stepId: string; ts: number; hash: string }> = []
+  private readonly WINDOW_MS = 60_000
+  private readonly MAX_IDENTICAL_CALLS = 5
 
   constructor(llm: LLMEngine, config: Partial<AgentLoopConfig> = {}) {
     this.llm = llm
@@ -46,6 +52,18 @@ export class AgentLoop {
       maxParallelism: config.maxParallelism,
       abortOnFailure: config.abortOnFailure ?? false,
     }
+  }
+
+  setBudgetTracker(tracker: BudgetTracker): void {
+    this.budgetTracker = tracker
+  }
+
+  private detectLoop(callKey: string): boolean {
+    const now = Date.now()
+    this.callHistory.push({ stepId: callKey, ts: now, hash: callKey })
+    const window = this.callHistory.filter(c => now - c.ts < this.WINDOW_MS)
+    const identical = window.filter(c => c.hash === callKey).length
+    return identical > this.MAX_IDENTICAL_CALLS
   }
 
   addObserver(observer: LoopObserver): void {
@@ -68,6 +86,18 @@ export class AgentLoop {
     const filesModifiedMap = new Map<string, string[]>()
 
     while (iteration < this.config.maxIterations) {
+      // Circuit breaker: check budget before each iteration
+      if (this.budgetTracker) {
+        const sessionExceeded = this.budgetTracker.check("session")
+        if (sessionExceeded) {
+          return {
+            completedSteps, failedSteps, totalIterations: iteration,
+            success: false,
+            summary: `Budget exceeded (${sessionExceeded.metric}: ${sessionExceeded.current}/${sessionExceeded.limit})`,
+          }
+        }
+      }
+
       iteration++
 
       const readySteps = executor.getReadySteps(sessionId)
@@ -202,6 +232,21 @@ export class AgentLoop {
     let filesModified: string[] = []
 
     while (retryCount <= this.config.maxRetries) {
+      // Circuit breaker: check budget before each retry
+      if (this.budgetTracker) {
+        const budgetEvent = this.budgetTracker.check("session")
+        if (budgetEvent) {
+          stepOutput = `Budget exceeded (${budgetEvent.metric}: ${budgetEvent.current}/${budgetEvent.limit})`
+          break
+        }
+      }
+
+      // Repetition detection: same step + same retry context = stuck loop
+      if (this.detectLoop(`${step.id}:retry=${retryCount}`)) {
+        stepOutput = `Infinite loop detected: step ${step.id} repeated ${this.MAX_IDENTICAL_CALLS}+ times in ${this.WINDOW_MS / 1000}s`
+        break
+      }
+
       this.observers.forEach(o => o.onStepStart(step.id, depth + 1))
 
       const stepPromise = stepExecutor(step)

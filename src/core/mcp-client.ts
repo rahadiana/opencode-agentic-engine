@@ -125,12 +125,46 @@ export class MCPClient {
   }
 
   /**
+   * Get server config securely (without exposing credentials).
+   * Internal use only — does not expose headers/API keys.
+   */
+  getServerInfo(serverName: string): { name: string; transport: MCPTransport; connected: boolean; toolCount: number } | null {
+    const conn = this.connections.get(serverName)
+    if (!conn) return null
+    return {
+      name: serverName,
+      transport: conn.config.transport,
+      connected: conn.connected,
+      toolCount: conn.tools.length,
+    }
+  }
+
+  /**
    * Call a tool on a connected MCP server.
    */
   async callTool(serverName: string, toolName: string, args: Record<string, unknown> = {}): Promise<MCPCallResult> {
     const conn = this.connections.get(serverName)
     if (!conn || !conn.connected) {
       throw new Error(`Not connected to MCP server "${serverName}"`)
+    }
+
+    // Validate tool exists and args match schema
+    const tool = conn.tools.find(t => t.name === toolName)
+    if (!tool) {
+      throw new Error(`Tool "${toolName}" not found on server "${serverName}". Available tools: ${conn.tools.map(t => t.name).join(", ")}`)
+    }
+
+    // Validate args against tool schema if available
+    if (tool.parameters?.properties) {
+      const schema = tool.parameters as { required?: string[]; properties: Record<string, { type?: string }> }
+      // Check required params
+      if (schema.required) {
+        for (const req of schema.required) {
+          if (args[req] === undefined) {
+            throw new Error(`Missing required argument "${req}" for tool "${toolName}"`)
+          }
+        }
+      }
     }
 
     const startTime = Date.now()
@@ -195,6 +229,67 @@ export class MCPClient {
 
   // ── Stdio Transport ──
 
+  /**
+   * Check if a response chunk contains a complete JSON-RPC message.
+   * MCP uses newline-delimited JSON — each complete line is a message.
+   */
+  private parseMessages(buffer: string): { messages: unknown[]; remainder: string } {
+    const messages: unknown[] = []
+    const lines = buffer.split("\n")
+    const remainder = lines.pop() || "" // Keep incomplete last line
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      try {
+        messages.push(JSON.parse(trimmed))
+      } catch {
+        // Incomplete JSON — might span multiple lines in content field
+        // Try brace-counting as fallback
+        try {
+          const parsed = this.parseBraceBalanced(line)
+          if (parsed !== null) messages.push(parsed)
+        } catch { /* skip unparseable line */ }
+      }
+    }
+
+    return { messages, remainder }
+  }
+
+  /**
+   * Fallback JSON parser using brace counting for messages
+   * where content contains newlines.
+   */
+  private parseBraceBalanced(input: string): unknown | null {
+    let braceDepth = 0
+    let inString = false
+    let escapeNext = false
+    let startIdx = -1
+
+    for (let i = 0; i < input.length; i++) {
+      const ch = input[i]
+      if (escapeNext) {
+        escapeNext = false
+      } else if (ch === "\\" && inString) {
+        escapeNext = true
+      } else if (ch === '"') {
+        inString = !inString
+      } else if (!inString) {
+        if (ch === "{") {
+          if (startIdx === -1) startIdx = i
+          braceDepth++
+        } else if (ch === "}") {
+          braceDepth--
+          if (braceDepth === 0 && startIdx !== -1) {
+            const candidate = input.slice(startIdx, i + 1)
+            return JSON.parse(candidate)
+          }
+        }
+      }
+    }
+    return null
+  }
+
   private async connectStdio(name: string, config: MCPConfig): Promise<MCPTool[]> {
     if (!config.command) {
       throw new Error("stdio transport requires a 'command'")
@@ -203,6 +298,7 @@ export class MCPClient {
     return new Promise((resolve, reject) => {
       const proc = spawn(config.command!, config.args ?? [], {
         stdio: ["pipe", "pipe", "pipe"],
+        shell: false, // Explicitly prevent shell injection
       })
 
       // Manual timeout since spawn() ignores timeout option
@@ -225,35 +321,83 @@ export class MCPClient {
       this.connections.set(name, state)
 
       let settled = false
-      const stdout: string[] = []
+      let initResolved = false // Track if initialize response received
 
       proc.stdout?.on("data", (data: Buffer) => {
         const chunk = data.toString()
         state.buffer += chunk
-        stdout.push(chunk)
 
-        // Try to find JSON-RPC response in buffer
-        const lines = state.buffer.split("\n")
-        state.buffer = lines.pop() || "" // Keep incomplete last line
+        const { messages, remainder } = this.parseMessages(state.buffer)
+        state.buffer = remainder
 
-        for (const line of lines) {
-          if (!line.trim()) continue
-          try {
-            const msg = JSON.parse(line)
-            if (msg.id === 1 && msg.result) {
-              const tools = (msg.result.tools || msg.result.tools || []).map((t: { name: string; description?: string; inputSchema?: Record<string, unknown> }) => ({
-                name: t.name,
-                description: t.description || "",
-                parameters: t.inputSchema || {},
-              }))
-              state.tools = tools
+        for (const msg of messages) {
+          const rpc = msg as { id?: number; method?: string; result?: { protocolVersion?: string; capabilities?: Record<string, unknown>; tools?: Array<{ name: string; description?: string; inputSchema?: Record<string, unknown> }> }; error?: { message?: string } }
 
-              if (!settled) {
-                settled = true
-                resolve(tools)
-              }
+          // Handle initialize response
+          if (rpc.id === 1 && rpc.result) {
+            initResolved = true
+
+            // Send initialized notification (required by spec)
+            const notifMsg = JSON.stringify({
+              jsonrpc: "2.0",
+              method: "notifications/initialized",
+            })
+
+            try {
+              proc.stdin?.write(notifMsg + "\n")
+            } catch { /* ignore */ }
+
+            // Now send tools/list (id: 2)
+            const listMsg = JSON.stringify({
+              jsonrpc: "2.0",
+              id: 2,
+              method: "tools/list",
+              params: {},
+            })
+
+            try {
+              proc.stdin?.write(listMsg + "\n")
+            } catch { /* ignore */ }
+
+            continue
+          }
+
+          // Handle initialize error
+          if (rpc.id === 1 && rpc.error) {
+            if (!settled) {
+              settled = true
+              clearTimeout(timeoutId)
+              reject(new Error(`MCP initialize failed: ${rpc.error.message || JSON.stringify(rpc.error)}`))
             }
-          } catch { /* JSON parse error — still accumulating */ }
+            return
+          }
+
+          // Handle tools/list response (id: 2)
+          if (rpc.id === 2 && rpc.result) {
+            const tools = (rpc.result.tools || []).map((t: { name: string; description?: string; inputSchema?: Record<string, unknown> }) => ({
+              name: t.name,
+              description: t.description || "",
+              parameters: t.inputSchema || {},
+            }))
+            state.tools = tools
+
+            if (!settled) {
+              settled = true
+              clearTimeout(timeoutId)
+              resolve(tools)
+            }
+            continue
+          }
+
+          // Handle tools/list error
+          if (rpc.id === 2 && rpc.error) {
+            if (!settled) {
+              settled = true
+              clearTimeout(timeoutId)
+              reject(new Error(`MCP tools/list failed: ${rpc.error.message || JSON.stringify(rpc.error)}`))
+            }
+            return
+          }
         }
       })
 
@@ -264,6 +408,7 @@ export class MCPClient {
       proc.on("error", (err) => {
         if (!settled) {
           settled = true
+          clearTimeout(timeoutId)
           reject(new Error(`MCP stdio error: ${err.message}`))
         }
       })
@@ -271,16 +416,19 @@ export class MCPClient {
       proc.on("close", (code) => {
         if (!settled) {
           settled = true
+          clearTimeout(timeoutId)
           // Even if closed, we might have gotten tool list
           if (state.tools.length > 0) {
             resolve(state.tools)
+          } else if (initResolved) {
+            reject(new Error(`MCP process exited (code ${code}) before sending tools/list response`))
           } else {
-            reject(new Error(`MCP process exited with code ${code}`))
+            reject(new Error(`MCP process exited with code ${code} — check command: ${config.command}`))
           }
         }
       })
 
-      // Send initialize + list_tools
+      // Send initialize (id: 1) — wait for response before sending tools/list
       const initMsg = JSON.stringify({
         jsonrpc: "2.0",
         id: 1,
@@ -292,34 +440,22 @@ export class MCPClient {
         },
       })
 
-      const listMsg = JSON.stringify({
-        jsonrpc: "2.0",
-        id: 2,
-        method: "tools/list",
-        params: {},
-      })
-
       // Small delay to let process start
       setTimeout(() => {
         try {
-          proc.stdin?.write(initMsg + "\n")
-          setTimeout(() => {
-            try {
-              proc.stdin?.write(listMsg + "\n")
-            } catch { /* ignore */ }
-          }, 500)
-
-          // Timeout: resolve with whatever we have
-          setTimeout(() => {
+          if (!proc.stdin || proc.stdin.destroyed) {
             if (!settled) {
               settled = true
               clearTimeout(timeoutId)
-              resolve(state.tools.length > 0 ? state.tools : [])
+              reject(new Error("MCP process stdin not available"))
             }
-          }, STDIO_TIMEOUT)
+            return
+          }
+          proc.stdin.write(initMsg + "\n")
         } catch (err) {
           if (!settled) {
             settled = true
+            clearTimeout(timeoutId)
             reject(err)
           }
         }
@@ -346,49 +482,25 @@ export class MCPClient {
 
       let settled = false
       let resultBuffer = ""
-      let braceDepth = 0
-      let inString = false
-      let escapeNext = false
 
       const onData = (data: Buffer) => {
-        const chunk = data.toString()
-        resultBuffer += chunk
+        if (settled) return
+        resultBuffer += data.toString()
 
-        // Find complete JSON objects using brace counting (handles newlines in content)
-        let i = 0
-        while (i < resultBuffer.length) {
-          const ch = resultBuffer[i]
-          if (escapeNext) {
-            escapeNext = false
-          } else if (ch === "\\" && inString) {
-            escapeNext = true
-          } else if (ch === '"') {
-            inString = !inString
-          } else if (!inString) {
-            if (ch === "{") braceDepth++
-            else if (ch === "}") {
-              braceDepth--
-              if (braceDepth === 0) {
-                // Found a complete JSON object
-                const candidate = resultBuffer.slice(0, i + 1)
-                resultBuffer = resultBuffer.slice(i + 1)
-                i = -1 // Reset loop
-                try {
-                  const msg = JSON.parse(candidate)
-                  if (msg.id === callId) {
-                    cleanup()
-                    if (msg.error) {
-                      reject(new Error(msg.error.message || String(msg.error)))
-                    } else {
-                      resolve(msg.result?.content || msg.result || null)
-                    }
-                    return
-                  }
-                } catch { /* not valid JSON, continue */ }
-              }
+        const { messages, remainder } = this.parseMessages(resultBuffer)
+        resultBuffer = remainder
+
+        for (const msg of messages) {
+          const rpc = msg as { id?: number; error?: { message?: string }; result?: { content?: unknown } }
+          if (rpc.id === callId) {
+            cleanup()
+            if (rpc.error) {
+              reject(new Error(rpc.error.message || String(rpc.error)))
+            } else {
+              resolve(rpc.result?.content || rpc.result || null)
             }
+            return
           }
-          i++
         }
       }
 
@@ -437,17 +549,50 @@ export class MCPClient {
       throw new Error("HTTP transport requires a 'url'")
     }
 
-    const body = JSON.stringify({
+    // Step 1: Send initialize request
+    const initBody = JSON.stringify({
       jsonrpc: "2.0",
       id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2024-11-05",
+        capabilities: {},
+        clientInfo: { name: "opencode-agentic-engine", version: "0.3.0" },
+      },
+    })
+
+    const initResponse = await this.httpRequest(config.url, initBody, config.headers, HTTP_TIMEOUT)
+    const initParsed = JSON.parse(initResponse)
+
+    if (initParsed.error) {
+      throw new Error(`MCP initialize failed: ${initParsed.error.message || JSON.stringify(initParsed.error)}`)
+    }
+
+    // Step 2: Send initialized notification (no response expected)
+    const notifBody = JSON.stringify({
+      jsonrpc: "2.0",
+      method: "notifications/initialized",
+    })
+
+    // Fire-and-forget: no response expected
+    this.httpRequest(config.url, notifBody, config.headers, HTTP_TIMEOUT).catch(() => {})
+
+    // Step 3: Send tools/list
+    const listBody = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 2,
       method: "tools/list",
       params: {},
     })
 
-    const response = await this.httpRequest(config.url, body, config.headers, HTTP_TIMEOUT)
-    const parsed = JSON.parse(response)
+    const listResponse = await this.httpRequest(config.url, listBody, config.headers, HTTP_TIMEOUT)
+    const listParsed = JSON.parse(listResponse)
 
-    const tools: MCPTool[] = (parsed.result?.tools || []).map((t: { name: string; description?: string; inputSchema?: Record<string, unknown> }) => ({
+    if (listParsed.error) {
+      throw new Error(`MCP tools/list failed: ${listParsed.error.message || JSON.stringify(listParsed.error)}`)
+    }
+
+    const tools: MCPTool[] = (listParsed.result?.tools || []).map((t: { name: string; description?: string; inputSchema?: Record<string, unknown> }) => ({
       name: t.name,
       description: t.description || "",
       parameters: t.inputSchema || {},
@@ -495,6 +640,7 @@ export class MCPClient {
         headers: {
           "Content-Type": "application/json",
           "Content-Length": Buffer.byteLength(body),
+          "MCP-Protocol-Version": "2024-11-05",
           ...(headers || {}),
         },
         timeout,

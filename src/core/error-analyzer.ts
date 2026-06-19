@@ -65,7 +65,7 @@ export class ErrorAnalyzer {
     if (msg.includes("test") && (msg.includes("failed") || msg.includes("assert") || msg.includes("expect"))) {
       return { category: "test", summary: "Test failure", likelyRootCause: "Code change broke existing behavior", suggestedFix: "Review failing test assertions", affectedFiles: modifiedFiles, severity: "medium" }
     }
-    if (/(?:error|throw|cannot|undefined|null)/.test(msg) && /throw|cannot|undefined|null/.test(msg)) {
+    if (/(?:cannot read property|cannot read properties|of undefined|null|is not a function|is not defined|TypeError|ReferenceError)/.test(msg)) {
       return { category: "runtime", summary: "Runtime error", likelyRootCause: "A code path hitting unexpected state", suggestedFix: "Add defensive checks at the point of failure", affectedFiles: modifiedFiles, severity: "high" }
     }
     return { category: "unknown", summary: "Unclassified error", likelyRootCause: "Error does not match known patterns", suggestedFix: "Review the error manually", affectedFiles: modifiedFiles, severity: "medium" }
