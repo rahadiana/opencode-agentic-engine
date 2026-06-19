@@ -40,6 +40,27 @@ const TOOL_COLOCATIONS: Record<string, string[]> = {
   evolve: ["agentic_evolve", "agentic_skill", "agentic_dashboard"],
 }
 
+// ── Tool consolidation: tools with overlapping roles (from evaluation notes) ──
+// Maps consolidated tool → primary tool(s) + when to use each
+const TOOL_CONSOLIDATION: Record<string, { primary: string[]; note: string }> = {
+  agentic_auto: { primary: ["agentic_plan", "agentic_execute", "agentic_verify"], note: "agentic_auto wraps plan+execute+verify. Use for simple tasks; use individual tools for complex ones." },
+  agentic_debate: { primary: ["agentic_reflect", "agentic_router"], note: "agentic_debate is executor↔critic deep analysis. For simple analysis, use agentic_reflect or agentic_router instead." },
+  agentic_router: { primary: ["agentic_rag", "agentic_episodes"], note: "agentic_router classifies intent before RAG search. Use agentic_rag directly if you already know the category." },
+}
+
+// ── Anti-keywords: when to AVOID a tool (from "To Call or Not to Call" framework) ──
+const TOOL_ANTI_KEYWORDS: Record<string, string[]> = {
+  agentic_plan: ["execute", "implement", "write code", "fix bug"],
+  agentic_execute: ["plan", "decompose", "break down"],
+  agentic_verify: ["plan", "search", "find"],
+  agentic_delegate: ["simple", "trivial", "small", "quick", "typo"],
+  agentic_pipeline: ["simple", "quick", "small", "typo", "single-step"],
+  agentic_auto: ["complex", "multi-domain", "cross", "delegate", "pipeline"],
+  agentic_debate: ["search", "lookup", "find", "fetch", "simple fact"],
+  agentic_reflect: ["success", "completed", "done"],
+  agentic_guard: ["create", "implement", "write", "build"],
+}
+
 // ── Default enhanced metadata for all agentic tools ────────────────
 const DEFAULT_METAS: Record<string, Partial<ToolMeta>> = {
   agentic_plan: { keywords: ["plan", "decompose", "break-down", "step", "subtask", "template"], category: "core" },
@@ -69,6 +90,18 @@ const DEFAULT_METAS: Record<string, Partial<ToolMeta>> = {
   agentic_rag: { keywords: ["rag", "search", "knowledge", "store", "retrieve", "index"], category: "memory" },
   agentic_mcp: { keywords: ["mcp", "external", "connect", "server", "api", "tool-call"], category: "blueprint" },
   agentic_finetune: { keywords: ["finetune", "fine-tune", "training", "dataset", "openai", "model"], category: "blueprint" },
+}
+
+// ── Anti-keyword penalty (from "To Call or Not to Call" framework) ──
+function antiKeywordPenalty(tool: ToolMeta, input: string): number {
+  const lower = input.toLowerCase()
+  const antiKeywords = TOOL_ANTI_KEYWORDS[tool.name]
+  if (!antiKeywords) return 0
+  let penalty = 0
+  for (const ak of antiKeywords) {
+    if (lower.includes(ak)) penalty += 3
+  }
+  return -penalty
 }
 
 // ── Keyword-based routing strategy ────────────────────────────────
@@ -136,6 +169,11 @@ export class ToolRouter {
   private toolCallHistory: Map<string, { count: number; successes: number; totalLatency: number; lastUsed: number }> = new Map()
   private allocatedToolCount = 6  // default: show 6 agentic tools + always-expose built-ins
 
+  // ── Transition probability graph (AutoTool-inspired: arXiv:2511.14650) ──
+  // Tracks which tools follow which — used for inertia-based scoring
+  private transitionGraph: Map<string, Map<string, number>> = new Map() // fromTool → { toTool: count }
+  private lastTool: string | null = null
+
   constructor() {
     for (const [name, meta] of Object.entries(DEFAULT_METAS)) {
       this.metas.set(name, {
@@ -178,6 +216,36 @@ export class ToolRouter {
       meta.avgLatencyMs = existing.count > 0 ? existing.totalLatency / existing.count : 0
       meta.lastUsed = existing.lastUsed
     }
+
+    // ── Transition tracking (AutoTool: tool usage inertia) ──
+    if (this.lastTool && this.lastTool !== name) {
+      if (!this.transitionGraph.has(this.lastTool)) {
+        this.transitionGraph.set(this.lastTool, new Map())
+      }
+      const targets = this.transitionGraph.get(this.lastTool)!
+      targets.set(name, (targets.get(name) ?? 0) + 1)
+    }
+    this.lastTool = name
+  }
+
+  /** Get transition probability from one tool to another (0-1) */
+  getTransitionProbability(from: string, to: string): number {
+    const targets = this.transitionGraph.get(from)
+    if (!targets || targets.size === 0) return 0
+    const total = [...targets.values()].reduce((s, c) => s + c, 0)
+    return (targets.get(to) ?? 0) / total
+  }
+
+  /** Build the consolidation hints for tool descriptions */
+  buildConsolidationHint(toolName: string): string {
+    const c = TOOL_CONSOLIDATION[toolName]
+    if (!c) return ""
+    return ` | Overlaps with: ${c.primary.join(", ")} — ${c.note}`
+  }
+
+  /** Get all consolidation entries */
+  getConsolidationMap(): Record<string, { primary: string[]; note: string }> {
+    return { ...TOOL_CONSOLIDATION }
   }
 
   /** Get the current tool usage stats (for dashboard) */
@@ -199,18 +267,33 @@ export class ToolRouter {
 
     const scored: RoutingResult[] = []
     const allToolNames = [...this.metas.keys()]
+    const lastTool = recentTools.length > 0 ? recentTools[recentTools.length - 1] : null
 
     for (const name of allToolNames) {
       const tool = this.metas.get(name)!
       const kwScore = keywordScore(tool, taskInput)
       const colo = colocationBonus(tool, recentTools)
       const usage = usageBonus(tool)
-      const total = kwScore + colo + usage
+
+      // ── Anti-keyword penalty (arXiv:2605.00737 "To Call or Not to Call") ──
+      const antiPenalty = antiKeywordPenalty(tool, taskInput)
+
+      // ── Transition probability bonus (AutoTool: arXiv:2511.14650) ──
+      let transitionBonus = 0
+      if (lastTool && this.transitionGraph.has(lastTool)) {
+        const prob = this.getTransitionProbability(lastTool, name)
+        if (prob > 0.3) transitionBonus = 3  // strong inertia
+        else if (prob > 0.1) transitionBonus = 1  // weak inertia
+      }
+
+      const total = kwScore + colo + usage + antiPenalty + transitionBonus
 
       const reasons: string[] = []
       if (kwScore > 0) reasons.push(`keyword:${kwScore}`)
       if (colo > 0) reasons.push(`colocation:${colo}`)
       if (usage !== 0) reasons.push(`usage:${usage}`)
+      if (antiPenalty < 0) reasons.push(`anti-match:${antiPenalty}`)
+      if (transitionBonus > 0) reasons.push(`inertia:${transitionBonus}`)
 
       scored.push({ tool, score: total, reasons })
     }
@@ -277,9 +360,10 @@ export class ToolRouter {
   /** Build the tool listing text for prompt injection */
   buildToolList(selected: ToolMeta[]): string {
     if (selected.length === 0) return ""
-    return selected.map(t =>
-      `- **${t.name}**: ${t.description}`
-    ).join("\n")
+    return selected.map(t => {
+      const hint = this.buildConsolidationHint(t.name)
+      return `- **${t.name}**: ${t.description}${hint}`
+    }).join("\n")
   }
 
   /** Build the always-expose tool reminder */
