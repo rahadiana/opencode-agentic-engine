@@ -1,0 +1,49 @@
+# src/observability — Code Review & Optimization Todo
+
+## Web Search Best Practices
+- **Grafana dashboard best practices**: RED method (Rate, Errors, Duration) untuk services; USE method (Utilization, Saturation, Errors) untuk infrastruktur
+- **JSONL best practices**: Stream jangan slurp; kompres dengan gzip/zstd; gunakan readline untuk line-by-line processing
+- **Structured logging (Node.js)**: Pino/tslog untuk JSONL production; Async buffer dengan backpressure; jangan re-add entries di catch tanpa guard
+- **OpenTelemetry**: Standard instrumentation untuk traces + metrics + logs
+
+---
+
+## Temuan per File
+
+### `trace-logger.ts`
+
+| Fungsi | Issue | Severity | Rekomendasi |
+|---|---|---|---|
+| `log()` | `flush()` dipanggil async tapi tidak di-`await` — unhandled promise | **High** | Return promise dan await di caller |
+| `flush()` | Race condition: buffer atomik ditukar, tapi jika write gagal, entries di-re-add bisa duplikat | **High** | Pake mekanisme backoff + queue terpisah untuk failed writes |
+| `pruneOldTraces()` | Baca SEMUA file ke memory — defeats streaming JSONL | **High** | Stream line-by-line dengan readline, write ke temp + rename |
+| `flush()` | Tidak ada backpressure — buffer bisa tumbuh tak terbatas | **Medium** | Set `maxBufferSize`, jika overflow drop oldest atau block |
+| Tidak ada | File rotation — satu file `trace.jsonl` terus membesar | **Medium** | Implement daily/hourly rotation: `trace-2025-06-19.jsonl.gz` |
+| `pruneOldTraces()` | Catch silent — error pruning diabaikan total | **Medium** | Log error, kasih metric counter untuk observability |
+| `log()` | Batch size hardcoded 10 — tidak adaptif | **Low** | Jadikan configurable di constructor |
+| `init()` | Tidak ada error handling jika mkdir gagal | **Medium** | Throw atau return structured error |
+| `flush()` | Tidak ada compression — file besar bisa GB | **Medium** | Tambah opsi gzip streaming (zlib) |
+| `log()` | Tidak ada log level filtering | **Low** | Tambah field `level: "info" | "warn" | "error"` |
+| `dispose()` | Tidak ada mutex — dipanggil concurrent bisa partial write | **Low** | Guard dengan lock sederhana |
+
+### `dashboard.ts`
+
+| Fungsi | Issue | Severity | Rekomendasi |
+|---|---|---|---|
+| `computePeakConcurrency()` | Fixed 2-second window — arbitrary, tidak cocok semua workload | **High** | Jadikan configurable parameter, auto-detect dari data |
+| `computePeakConcurrency()` | Hanya pakai timestamp, bukan actual start/end time | **Medium** | Pakai range-based overlap detection jika data tersedia |
+| `detectAnomalies()` (loop) | O(n² × 4) complexity — slow untuk >1000 traces | **High** | Optimasi: batasi sliding window max 100, atau sampling |
+| `detectAnomalies()` (silent failure) | Asumsi sequential order verify→execute — false positive jika out-of-order | **High** | Case-insensitive step prefix match; handle missing gaps |
+| `detectAnomalies()` (retry_storm) | Step match pakai `startsWith("execute:")` — tidak handle prefix lain | **Medium** | Regex atau case-insensitive match |
+| `detectAnomalies()` (semua) | Tidak deduplikasi — anomaly yang sama bisa muncul berulang | **Medium** | Dedup berdasarkan `type + tool + description` dalam satu waktu |
+| `generate()` | `toolsUsed` sebagai Map — tidak serializable ke JSON | **Medium** | Cast ke `Record<string, number>` sebelum return |
+| `formatForDisplay()` | Menggunakan emoji (`📈`, `✅`, `❌`, `⚠️`) | **Low** | Ganti dengan ASCII `[OK]` `[FAIL]` `[WARN]` |
+| `formatForDisplay()` | Timeline hardcoded "last 20" — tidak ada parameter | **Low** | Jadikan parameter opsional, default 20 |
+| `statistics` | Tidak ada percentiles latency (p50, p95, p99) | **Medium** | Tambah `latencyPercentiles: { p50, p95, p99 }` |
+| `detectAnomalies()` | Tidak ada anomaly severity level | **Low** | Tambah field `severity: "critical" | "warning" | "info"` |
+
+**Rekomendasi Prioritas:**
+1. Fix unhandled promise di `TraceLogger.log()`
+2. Optimasi loop detection di dashboard
+3. Implement streaming prune (jangan baca semua ke memory)
+4. Tambah file rotation untuk trace-logger
