@@ -81,12 +81,14 @@ const DEFAULT_CATEGORIES: RouteCategory[] = [
 
 export class RouterAgent {
   private categories: RouteCategory[]
+  private llmEngine: LLMEngine | null
 
   constructor(
-    _llmEngine?: LLMEngine,
+    llmEngine?: LLMEngine,
     categories?: RouteCategory[],
   ) {
     this.categories = categories ?? DEFAULT_CATEGORIES
+    this.llmEngine = llmEngine ?? null
   }
 
   setCategories(categories: RouteCategory[]): void {
@@ -95,6 +97,15 @@ export class RouterAgent {
 
   getCategories(): RouteCategory[] {
     return [...this.categories]
+  }
+
+  /** Update the LLM engine reference */
+  setLLM(llm: LLMEngine): void {
+    this.llmEngine = llm
+  }
+
+  hasLLM(): boolean {
+    return this.llmEngine !== null
   }
 
   /**
@@ -149,15 +160,55 @@ export class RouterAgent {
   }
 
   /**
-   * Keyword-only routing — zero LLM cost. Falls back to "general" with low confidence.
+   * Routing with LLM fallback — keyword first, LLM if confidence < threshold.
    */
   async route(input: string): Promise<RouteMatch> {
     const keywordResult = this.keywordRoute(input)
 
-    if (keywordResult) {
+    // Jika keyword confidence >= 0.3, pakai keyword result
+    if (keywordResult && keywordResult.confidence >= 0.3) {
       return keywordResult
     }
 
+    // LLM fallback: jika keyword gagal (null or < 0.3) dan LLM tersedia
+    if (this.llmEngine) {
+      try {
+        const categoryList = this.categories
+          .filter(c => c.id !== "general")
+          .map(c => `- "${c.id}": ${c.description}`)
+          .join("\n")
+
+        const resp = await this.llmEngine.call({
+          systemPrompt: `You are an intent classifier. Given user input, classify it into one of these categories:\n\n${categoryList}\n\n- "general": anything else\n\nReturn ONLY a JSON object with keys: category (string), confidence (0.0-1.0), reasoning (string). No other text.`,
+          userPrompt: `Classify this input: "${input}"`,
+          temperature: 0.1,
+          jsonMode: true,
+        })
+
+        const cleaned = resp.content.trim()
+        const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          const catId = parsed.category || "general"
+          const matchedCat = this.categories.find(c => c.id === catId)
+          const confidence = Math.min(1, Math.max(0, parsed.confidence ?? 0.5))
+          return {
+            input,
+            intent: matchedCat ? `Terkait ${matchedCat.name}` : "Pengetahuan umum",
+            category: catId,
+            confidence: parseFloat(confidence.toFixed(2)),
+            usedLlm: true,
+            suggestedTools: matchedCat?.suggestedTools ?? [],
+            suggestedRagIndex: matchedCat?.suggestedRagIndex ?? "knowledge-general",
+            reasoning: parsed.reasoning ?? `LLM classified as ${catId}`,
+          }
+        }
+      } catch {
+        // LLM fallback failed — fall through to general
+      }
+    }
+
+    // Ultimate fallback: general category
     const generalCat = this.categories.find(c => c.id === "general")
     return {
       input,
@@ -167,7 +218,9 @@ export class RouterAgent {
       usedLlm: false,
       suggestedTools: generalCat?.suggestedTools ?? [],
       suggestedRagIndex: generalCat?.suggestedRagIndex ?? "knowledge-general",
-      reasoning: "No keyword match, fallback ke general",
+      reasoning: keywordResult
+        ? `Keyword confidence too low (${keywordResult.confidence}), fallback ke general`
+        : "No keyword match, fallback ke general",
     }
   }
 

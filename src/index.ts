@@ -8,6 +8,10 @@ import { tmpdir, homedir } from "node:os"
 import { DomainRegistry, type DomainPack } from "./core/domain-registry.js"
 import { genericDomain } from "./core/domains/generic.js"
 import { codeDomain } from "./core/domains/code.js"
+import { securityDomain } from "./core/domains/security.js"
+import { devopsDomain } from "./core/domains/devops.js"
+import { dataScienceDomain } from "./core/domains/data-science.js"
+import { mobileDomain } from "./core/domains/mobile.js"
 import { IntentParser, type TaskIntent } from "./core/intent-parser.js"
 import { Executor } from "./core/executor.js"
 import { Verifier } from "./core/verifier.js"
@@ -43,6 +47,7 @@ import { PersistenceLayer } from "./memory/persistence.js"
 import { ModelRegistry } from "./core/model-registry.js"
 import { ConfigLoader } from "./core/config.js"
 import { BudgetTracker } from "./core/budget-tracker.js"
+import { AutoRetryManager } from "./core/auto-retry.js"
 import { EventBus } from "./core/event-bus.js"
 import { PatternDiscovery } from "./drift/pattern-discovery.js"
 import { LiveEvaluator } from "./evaluation/live-evaluator.js"
@@ -153,6 +158,18 @@ const createEngine: Plugin = async (input, _options) => {
   const config = configLoader.load()
   configLoader.startWatch()
 
+  // ── Project identity (for scoped memory isolation) ──
+  // Derive projectId from worktree path basename or input.project.name.
+  // Used to isolate episodes/evolution/evaluation per-project while keeping
+  // skills/models/prompts shared globally.
+  const projectId = ((): string => {
+    // Prefer explicit project name from input
+    if ((input as any).project?.name) return (input as any).project.name
+    // Fallback to worktree dirname, sanitised
+    const name = worktree.split("/").filter(Boolean).pop() || "unknown"
+    return name.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 64)
+  })()
+
   // ── Tool registry (shared between prompt builder and tool definitions) ──
   const TOOL_REGISTRY: ToolEntry[] = [
     { name: "agentic_plan", description: "Create a structured execution plan with auto-decompose." },
@@ -181,6 +198,7 @@ const createEngine: Plugin = async (input, _options) => {
     { name: "agentic_clean", description: "Clean raw text by stripping debate artifacts." },
     { name: "agentic_rag", description: "Multi-index RAG with category-segregated search." },
     { name: "agentic_mcp", description: "MCP client for external tools and APIs." },
+    { name: "agentic_finetune", description: "End-to-end fine-tuning pipeline: prepare dataset, save file, upload to OpenAI, create and monitor fine-tuning job." },
   ]
 
   // ── Helper: write agent prompt file for current domain ──
@@ -211,6 +229,10 @@ const createEngine: Plugin = async (input, _options) => {
   const domainRegistry = new DomainRegistry()
   domainRegistry.register(genericDomain)
   domainRegistry.register(codeDomain)
+  domainRegistry.register(securityDomain)
+  domainRegistry.register(devopsDomain)
+  domainRegistry.register(dataScienceDomain)
+  domainRegistry.register(mobileDomain)
   domainRegistry.activate("generic")
   executor.setDomainRegistry(domainRegistry)
   errorAnalyzer.setDomainRegistry(domainRegistry)
@@ -366,28 +388,28 @@ const createEngine: Plugin = async (input, _options) => {
     modelRegistry.fromJSON(m.data)
   }
 
-  // Restore persisted evolution trend + evaluator score
-  const savedEvo = persistence.load<{ results: any[]; evolveCount: number; windowSize: number }>("evolution", "trend")
+  // Restore persisted evolution trend + evaluator score (scoped per project)
+  const savedEvo = persistence.load<{ results: any[]; evolveCount: number; windowSize: number }>("evolution", "trend", projectId)
   if (savedEvo) continuousEvolution.fromJSON(savedEvo)
-  const savedEval = persistence.load<any>("evaluation", "live")
+  const savedEval = persistence.load<any>("evaluation", "live", projectId)
   if (savedEval) liveEvaluator.fromJSON(savedEval)
 
-  // Restore persisted episodes and skills
-  const savedEpisodes = persistence.loadAll<{ planGoal: string; outcome: string; decisions: string[]; filesChanged: string[]; sessionId: string; timestamp: string; tags: string[] }>("episodes")
+  // Restore persisted episodes (scoped per project)
+  const savedEpisodes = persistence.loadAll<{ planGoal: string; outcome: string; decisions: string[]; filesChanged: string[]; sessionId: string; timestamp: string; tags: string[]; projectId?: string }>("episodes", projectId)
   for (const ep of savedEpisodes) {
-    episodicStore.record(ep.data.sessionId, ep.data.planGoal, ep.data.outcome as "success" | "partial" | "failed", ep.data.decisions, ep.data.filesChanged)
+    episodicStore.record(ep.data.sessionId, ep.data.planGoal, ep.data.outcome as "success" | "partial" | "failed", ep.data.decisions, ep.data.filesChanged, undefined, projectId)
   }
-  // Auto-save episodes when recorded
+  // Auto-save episodes when recorded (scoped per project)
   episodicStore.setPersistenceCallback((episode) => {
-    persistence.save("episodes", episode.sessionId, episode)
+    persistence.save("episodes", episode.sessionId, episode, projectId)
   })
-  const savedSkills = persistence.loadAll<import("./memory/skill-format.js").SkillDefinition>("skills")
+  const savedSkills = persistence.loadAll<import("./memory/skill-format.js").SkillDefinition>("skills") // global — shared across projects
   for (const sk of savedSkills) {
     skillStore.importFromEnvelope(JSON.stringify(createMemoryEnvelope(sk.data, "skill")))
   }
 
-  // Restore persisted prompt states (Stage IV: versioned prompt history)
-  const savedPrompts = persistence.loadAll<Array<{ role: string; history: PromptEntry[] }>>("prompts")
+  // Restore persisted prompt states (Stage IV: versioned prompt history) — global
+  const savedPrompts = persistence.loadAll<Array<{ role: string; history: PromptEntry[] }>>("prompts") // global
   if (savedPrompts.length > 0) {
     // Find the latest state and pass to RoleRegistry constructor
     const latest = savedPrompts.reduce((a, b) => {
@@ -577,6 +599,67 @@ const createEngine: Plugin = async (input, _options) => {
   function ctxDir(context: { worktree: string; directory?: string }) {
     return context.directory || context.worktree
   }
+
+  // ────────────────────────────────────────────────────────────────
+  // G1: EventBus subscriber wiring
+  // Semua subscriber didaftarkan di sini — event yang di-emit oleh
+  // producer (Executor, LLMEngine, Pipeline, dll) akan otomatis
+  // memicu reaksi consumer tanpa coupling langsung.
+  // ────────────────────────────────────────────────────────────────
+
+  // LiveEvaluator: track step outcomes untuk scoring real-time
+  eventBus.on("step.completed", (ev: any) => {
+    liveEvaluator.feedStepResult({ stepId: ev.payload.stepId, success: true, sessionId: ev.payload.sessionID })
+    continuousEvolution.feedStepResult({
+      stepId: ev.payload.stepId,
+      success: true,
+      output: ev.payload.output?.slice(0, 100) ?? "",
+      sessionId: ev.payload.sessionID,
+      timestamp: Date.now(),
+    })
+  })
+  eventBus.on("step.failed", (ev: any) => {
+    liveEvaluator.feedStepResult({ stepId: ev.payload.stepId, success: false, sessionId: ev.payload.sessionID })
+    continuousEvolution.feedStepResult({
+      stepId: ev.payload.stepId,
+      success: false,
+      output: ev.payload.error?.slice(0, 100) ?? "",
+      sessionId: ev.payload.sessionID,
+      timestamp: Date.now(),
+      category: ev.payload.errorCategory,
+    })
+  })
+  eventBus.on("task.delegated", (ev: any) => {
+    liveEvaluator.feedDelegation(ev.payload.taskId, ev.payload.role, true)
+  })
+  eventBus.on("task.completed", (ev: any) => {
+    liveEvaluator.feedDelegation(ev.payload.taskId, ev.payload.role, ev.payload.success)
+  })
+
+  // TraceLogger: log semua event ke file JSONL (wildcard)
+  eventBus.onAny((ev: any) => {
+    traceLogger.log({
+      step: ev.type,
+      input: JSON.stringify(ev.payload ?? {}).slice(0, 200),
+      output: "",
+      toolUsed: ev.type?.split(".")[0] ?? "event",
+      success: !ev.type?.includes("failed") && !ev.type?.includes("exceeded"),
+      durationMs: 0,
+      metadata: { eventType: ev.type },
+    })
+  })
+
+  // Orchestrator: auto-advance pipeline saat stage selesai
+  eventBus.on("pipeline.stage.completed", (ev: any) => {
+    orchestrator.advanceStage(ev.payload.runId, ev.payload.output, ev.payload.issues)
+  })
+
+  // ModelRegistry: catat hallucination guard failures
+  eventBus.on("guard.check.completed", (ev: any) => {
+    if (!ev.payload.passed) {
+      modelRegistry.recordHallucination(ev.payload.sessionID)
+    }
+  })
 
   return {
     tool: {
@@ -835,15 +918,14 @@ const createEngine: Plugin = async (input, _options) => {
             response += `\n### Auto-Verify\n`
             const changedFiles = args.filesModified ?? []
             
-            // Use verifyAllDeep to include semantic check (Gap #4 fix)
-            const session = sessionStore.getOrCreate(context.sessionID)
-            const intent = session.plan?.intent.goal ?? args.output
-            const requireSemantic = configLoader.get().agent.requireSemanticCheck
-            verifyResult = await verifier.verifyAllDeep(args.stepId, projectDir, intent, changedFiles, requireSemantic)
+            // Fast verification: compile ONLY (no full test suite).
+            // Full suite (compile+lint+test+LLM) dijalankan di agentic_verify final.
+            // Ini bikin intermediate steps CEPAT — dari ~30s jadi ~3s.
+            verifier.clearCompileCache() // Force re-compile since files changed
+            verifyResult = verifier.verifyFast(args.stepId, projectDir, changedFiles)
             
             if (verifyResult.passed) {
               response += `✅ All checks passed\n`
-              // Show individual check results
               verifyResult.checks.forEach(c => {
                 response += `  ${c.passed ? "✅" : "❌"} ${c.name}\n`
               })
@@ -1001,6 +1083,7 @@ const createEngine: Plugin = async (input, _options) => {
                 decisions,
                 allFiles,
                 domainRegistry.getCurrentDomain() ?? undefined,
+                projectId,
               )
             }
           }
@@ -2190,7 +2273,7 @@ const createEngine: Plugin = async (input, _options) => {
       }),
 
       agentic_model: tool({
-        description: "Configure per-role LLM model preferences for the current session. Use 'set' to assign a model to an agent role. Use 'get' to see current assignment. Use 'list' to view all preferences. Use 'clear' to remove a preference.",
+        description: "Configure per-role LLM model preferences for the current session. Use 'set' to assign a model to an agent role. Use 'get' to see current assignment. Use 'list' to view all preferences. Use 'clear' to remove a preference. Preferences are persisted to .agentic/models.json.",
         args: {
           action: tool.schema.enum(["set", "get", "list", "clear"]).describe("Action: set/get/list/clear per-role model preference"),
           role: tool.schema.string().optional().describe("Agent role (architect, developer, qa, coordinator, pm)"),
@@ -2198,8 +2281,39 @@ const createEngine: Plugin = async (input, _options) => {
         },
         async execute(args, context) {
           const VALID_ROLES = ["architect", "developer", "qa", "coordinator", "pm"]
+          const projectDir = ctxDir(context)
+
+          // ── Persistence helpers ──
+          const modelsPath = join(projectDir, ".agentic", "models.json")
+          function readPersistedPrefs(): Record<string, string> {
+            try {
+              if (existsSync(modelsPath)) {
+                return JSON.parse(readFileSync(modelsPath, "utf-8"))
+              }
+            } catch { /* corrupt or missing */ }
+            return {}
+          }
+          function writePersistedPrefs(prefs: Record<string, string>): void {
+            try {
+              const dir = dirname(modelsPath)
+              mkdirSync(dir, { recursive: true })
+              writeFileSync(modelsPath, JSON.stringify(prefs, null, 2), "utf-8")
+            } catch { /* non-fatal */ }
+          }
+
+          // On first access, load persisted prefs into session
+          function ensureSessionLoaded(): void {
+            const existing = sessionStore.getAllModelPreferences(context.sessionID)
+            if (existing.length === 0) {
+              const persisted = readPersistedPrefs()
+              for (const [role, model] of Object.entries(persisted)) {
+                sessionStore.setModelPreference(context.sessionID, role, model)
+              }
+            }
+          }
 
           if (args.action === "list") {
+            ensureSessionLoaded()
             const prefs = sessionStore.getAllModelPreferences(context.sessionID)
             if (prefs.length === 0) {
               return { output: "No model preferences configured for this session. Use `action: \"set\"` to assign models to agent roles." }
@@ -2208,6 +2322,9 @@ const createEngine: Plugin = async (input, _options) => {
             output += "| Role | Model |\n"
             output += "|------|-------|\n"
             output += prefs.map(p => `| **${p.role}** | \`${p.model}\` |`).join("\n")
+            const persisted = readPersistedPrefs()
+            const persistedCount = Object.keys(persisted).length
+            output += `\n\n${persistedCount > 0 ? `💾 ${persistedCount} preference(s) persisted to \`.agentic/models.json\`` : "Preferences are session-only (not yet persisted)"}`
             output += "\n\nThese preferences override the default model selection during delegation."
             return { output }
           }
@@ -2223,23 +2340,38 @@ const createEngine: Plugin = async (input, _options) => {
             // Also register in model registry so it's tracked
             modelRegistry.addModel(args.model)
             modelRegistry.registerAlias(roleLower, [args.model])
-            return { output: `✅ Model preference set: **${roleLower}** → \`${args.model}\`\nThis model will be used when delegating tasks to the ${roleLower} role in this session.` }
+
+            // Persist to .agentic/models.json
+            const persisted = readPersistedPrefs()
+            persisted[roleLower] = args.model
+            writePersistedPrefs(persisted)
+
+            return { output: `✅ Model preference set: **${roleLower}** → \`${args.model}\`\nThis model will be used when delegating tasks to the ${roleLower} role in this session.\n💾 Persisted to \`.agentic/models.json\`` }
           }
 
           if (args.action === "get") {
+            ensureSessionLoaded()
             if (!args.role) return { output: "Provide a `role` to check (e.g. 'architect')." }
             const model = sessionStore.getModelPreference(context.sessionID, args.role)
             if (!model) {
               return { output: `No model preference set for role "${args.role}". Delegation will use default model selection.` }
             }
-            return { output: `**${args.role}** → \`${model}\`` }
+            const persisted = readPersistedPrefs()
+            const isPersisted = persisted[args.role] === model
+            return { output: `**${args.role}** → \`${model}\`${isPersisted ? " 💾 (persisted)" : ""}` }
           }
 
           if (args.action === "clear") {
             sessionStore.clearModelPreference(context.sessionID, args.role)
+            // Also remove from persistence
             if (args.role) {
+              const persisted = readPersistedPrefs()
+              delete persisted[args.role]
+              writePersistedPrefs(persisted)
               return { output: `Cleared model preference for role "${args.role}".` }
             }
+            // Clear all
+            writePersistedPrefs({})
             return { output: "Cleared all model preferences for this session." }
           }
 
@@ -2449,9 +2581,9 @@ const createEngine: Plugin = async (input, _options) => {
       }),
 
       agentic_parallel: tool({
-        description: "Analyze or execute steps concurrently. Use `analyze` to see parallelism opportunities, or `execute` to run ready steps in parallel with Promise.all. Supports LLM-driven execution and sub-process OpenCode spawn.",
+        description: "Analyze or run steps concurrently. Use action: `analyze` to see parallelism opportunities. Use action: `execute` to run ready steps in parallel. Does NOT replace agentic_execute — only orchestrates concurrent runs.",
         args: {
-          action: tool.schema.enum(["analyze", "execute"]).optional().describe("'analyze' (default) shows parallelism plan; 'execute' runs ready steps concurrently"),
+          action: tool.schema.enum(["analyze", "execute"]).optional().describe("'analyze' shows parallelism plan; 'execute' runs ready steps concurrently (does not replace agentic_execute for step execution)"),
           opencodePath: tool.schema.string().optional().describe("Path to `opencode` binary for sub-process spawn (execute mode)"),
           abortOnFailure: tool.schema.boolean().optional().describe("Stop all tasks in phase if one fails (default: false)"),
         },
@@ -3198,6 +3330,7 @@ const createEngine: Plugin = async (input, _options) => {
               [`${result.totalRounds} rounds`, `Approved: ${result.approved}`, result.revisionSummary],
               [],
               domainRegistry.getCurrentDomain() ?? undefined,
+              projectId,
             )
           } catch { /* non-fatal */ }
 
@@ -3323,18 +3456,22 @@ const createEngine: Plugin = async (input, _options) => {
               const cat = args.category
 
               if (cat) {
-                const results = multiIndexRAG.searchByCategory(q, cat)
+                const results = await multiIndexRAG.searchByCategoryAsync(q, cat)
                 const lines = [
                   `## 🔍 RAG Search Results`,
                   `**Query:** ${q}`,
                   `**Category:** ${cat}`,
                   `**Matches:** ${results.totalInCategory}`,
+                  `**Mode:** ${multiIndexRAG.mode}`,
                   ``,
                 ]
                 for (const entry of results.entries.slice(0, 10)) {
                   const type = entry.episode ? "📖 Episode" : "🔧 Skill"
                   const title = entry.title
-                  lines.push(`- ${type}: **${title}** [${entry.category}]`)
+                  const score = entry.vectorScore !== undefined
+                    ? ` [vec:${entry.vectorScore.toFixed(3)} tfidf:${(entry.tfidfScore ?? 0).toFixed(3)}]`
+                    : ` [tfidf:${(entry.tfidfScore ?? 0).toFixed(3)}]`
+                  lines.push(`- ${type}: **${title}** [${entry.category}]${score}`)
                 }
                 if (results.entries.length === 0) {
                   lines.push("*(no results)*")
@@ -3345,7 +3482,7 @@ const createEngine: Plugin = async (input, _options) => {
                   metadata: { searchResults: results },
                 }
               } else {
-                const allResults = multiIndexRAG.searchAll(q)
+                const allResults = await multiIndexRAG.searchAllAsync(q)
                 const totalMatches = allResults.reduce((s, r) => s + r.entries.length, 0)
                 const lines = [
                   `## 🔍 RAG Search Results (All Categories)`,
@@ -3554,6 +3691,388 @@ const createEngine: Plugin = async (input, _options) => {
         },
       }),
 
+      // ── Stage III: Fine-Tuning Pipeline ──
+      agentic_finetune: tool({
+        description: "End-to-end fine-tuning pipeline: prepare dataset, save file, upload to OpenAI, create and monitor fine-tuning job.",
+        args: {
+          action: tool.schema.string().describe("Action: prepare, save, upload, create-job, status, list, cancel, full-pipeline"),
+          source: tool.schema.string().optional().describe("Data source: 'skills', 'episodes', 'combined' (default: 'combined')"),
+          format: tool.schema.string().optional().describe("Output format: 'openai' (JSONL) or 'instructions' (JSON)"),
+          minQuality: tool.schema.number().optional().describe("Minimum quality/success rate filter (default: 0.5)"),
+          outputPath: tool.schema.string().optional().describe("File path to save the dataset"),
+          model: tool.schema.string().optional().describe("Base model for fine-tuning (e.g. gpt-4o-mini-2024-07-18)"),
+          epochs: tool.schema.number().optional().describe("Number of training epochs"),
+          suffix: tool.schema.string().optional().describe("Custom suffix for the fine-tuned model name"),
+          jobId: tool.schema.string().optional().describe("Fine-tuning job ID (for status/cancel actions)"),
+        },
+        async execute(args: Record<string, unknown>, _ctx: any) {
+          const action = args.action as string
+          const source = (args.source as string) ?? "combined"
+          const format = (args.format as "openai" | "instructions") ?? "openai"
+          const minQuality = (args.minQuality as number) ?? 0.5
+          const outputPath = args.outputPath as string | undefined
+          const model = args.model as string | undefined
+          const epochs = args.epochs as number | undefined
+          const suffix = args.suffix as string | undefined
+          const jobId = args.jobId as string | undefined
+
+          // Session state for skill store and episodic store
+          const skillStore = (globalThis as any).__opencode_skillStore
+          const episodicStore = (globalThis as any).__opencode_episodicStore
+
+          switch (action) {
+            case "prepare": {
+              // Gather data
+              const skills = skillStore?.getAll() ?? []
+              const episodes = episodicStore?.getRecent(1000) ?? []
+
+              let datasetStr: string
+              let exampleCount: number
+
+              if (source === "skills") {
+                const { skillsToTrainingData } = await import("./memory/skill-training.js")
+                const ds = skillsToTrainingData(skills, format, minQuality)
+                datasetStr = ds.data
+                exampleCount = ds.totalExamples
+              } else if (source === "episodes") {
+                const { episodesToTrainingData } = await import("./memory/skill-training.js")
+                const ds = episodesToTrainingData(episodes, format, minQuality)
+                datasetStr = ds.data
+                exampleCount = ds.totalExamples
+              } else {
+                const { prepareFineTuningDataset } = await import("./memory/skill-training.js")
+                const ds = prepareFineTuningDataset(skills, episodes, format, minQuality)
+                datasetStr = ds.data
+                exampleCount = ds.totalExamples
+              }
+
+              // Truncate preview to avoid huge responses
+              const preview = datasetStr.length > 2000
+                ? datasetStr.slice(0, 2000) + "\n... (truncated)"
+                : datasetStr
+
+              return {
+                output: [
+                  `## Fine-Tuning Dataset (${source})`,
+                  `**Format:** ${format}`,
+                  `**Examples:** ${exampleCount}`,
+                  `**Min quality:** ${minQuality}`,
+                  ``,
+                  `### Preview (first 2000 chars)`,
+                  `\`\`\`jsonl`,
+                  preview,
+                  `\`\`\``,
+                  ``,
+                  `> Use \`action: "save"\` to write to a file, or \`action: "upload"\` to upload to OpenAI.`,
+                ].join("\n"),
+              }
+            }
+
+            case "save": {
+              if (!outputPath) {
+                return { output: "Error: 'outputPath' is required for save action." }
+              }
+
+              const { saveTrainingDataToFile } = await import("./memory/skill-training.js")
+              const skills = skillStore?.getAll() ?? []
+              const episodes = episodicStore?.getRecent(1000) ?? []
+
+              const { prepareFineTuningDataset } = await import("./memory/skill-training.js")
+              const dataset = prepareFineTuningDataset(skills, episodes, format, minQuality)
+              const savedPath = saveTrainingDataToFile(dataset, outputPath)
+
+              return {
+                output: `✅ Dataset saved to \`${savedPath}\`\n**Examples:** ${dataset.totalExamples}\n**Format:** ${format}`,
+              }
+            }
+
+            case "upload": {
+              const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
+              // Get config from configLoader if available
+              const configLoader = (globalThis as any).__opencode_configLoader
+              const ftConfig = configLoader?.get()?.fineTuning ?? {}
+              const client = new FTC({
+                apiKey: ftConfig.apiKey || undefined,
+                baseURL: ftConfig.baseURL || undefined,
+                model: model || ftConfig.model || undefined,
+              })
+
+              if (!client.isConfigured()) {
+                return { output: "Error: OpenAI API key not configured. Set OPENAI_API_KEY env or fineTuning.apiKey in config." }
+              }
+
+              if (!outputPath) {
+                return { output: "Error: 'outputPath' pointing to a .jsonl file is required for upload." }
+              }
+
+              try {
+                const file = await client.uploadFile(outputPath)
+                return {
+                  output: [
+                    `✅ File uploaded successfully`,
+                    `**File ID:** ${file.id}`,
+                    `**Filename:** ${file.filename}`,
+                    `**Size:** ${file.bytes} bytes`,
+                    `**Status:** ${file.status}`,
+                    ``,
+                    `> Use \`action: "create-job"\` with \`jobId: "${file.id}"\` to start fine-tuning.`,
+                  ].join("\n"),
+                }
+              } catch (err: any) {
+                return { output: `❌ Upload failed: ${err.message}` }
+              }
+            }
+
+            case "create-job": {
+              if (!jobId) {
+                return { output: "Error: 'jobId' (training file ID) is required for create-job." }
+              }
+
+              const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
+              const configLoader = (globalThis as any).__opencode_configLoader
+              const ftConfig = configLoader?.get()?.fineTuning ?? {}
+              const client = new FTC({
+                apiKey: ftConfig.apiKey || undefined,
+                baseURL: ftConfig.baseURL || undefined,
+                model: model || ftConfig.model || undefined,
+              })
+
+              if (!client.isConfigured()) {
+                return { output: "Error: OpenAI API key not configured." }
+              }
+
+              try {
+                const job = await client.createJob(jobId, {
+                  model: model || ftConfig.model,
+                  trainingEpochs: epochs || ftConfig.trainingEpochs,
+                  suffix: suffix || ftConfig.suffix,
+                })
+                return {
+                  output: [
+                    `✅ Fine-tuning job created`,
+                    `**Job ID:** ${job.id}`,
+                    `**Model:** ${job.model}`,
+                    `**Status:** ${job.status}`,
+                    ``,
+                    `> Use \`action: "status"\` with \`jobId: "${job.id}"\` to check progress.`,
+                  ].join("\n"),
+                }
+              } catch (err: any) {
+                return { output: `❌ Create job failed: ${err.message}` }
+              }
+            }
+
+            case "status": {
+              if (!jobId) {
+                return { output: "Error: 'jobId' is required for status action." }
+              }
+
+              const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
+              const configLoader = (globalThis as any).__opencode_configLoader
+              const ftConfig = configLoader?.get()?.fineTuning ?? {}
+              const client = new FTC({
+                apiKey: ftConfig.apiKey || undefined,
+                baseURL: ftConfig.baseURL || undefined,
+              })
+
+              if (!client.isConfigured()) {
+                return { output: "Error: OpenAI API key not configured." }
+              }
+
+              try {
+                const job = await client.getJobStatus(jobId)
+                return {
+                  output: [
+                    `## Fine-Tuning Job Status`,
+                    `**Job ID:** ${job.id}`,
+                    `**Model:** ${job.model}`,
+                    `**Status:** ${job.status}`,
+                    job.trainedModel ? `**Fine-tuned model:** ${job.trainedModel}` : "",
+                    job.epochs ? `**Epochs:** ${job.epochs}` : "",
+                    job.createdAt ? `**Created:** ${job.createdAt}` : "",
+                    job.finishedAt ? `**Finished:** ${job.finishedAt}` : "",
+                    job.error ? `**Error:** ${job.error}` : "",
+                  ].filter(Boolean).join("\n"),
+                }
+              } catch (err: any) {
+                return { output: `❌ Status check failed: ${err.message}` }
+              }
+            }
+
+            case "list": {
+              const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
+              const configLoader = (globalThis as any).__opencode_configLoader
+              const ftConfig = configLoader?.get()?.fineTuning ?? {}
+              const client = new FTC({
+                apiKey: ftConfig.apiKey || undefined,
+                baseURL: ftConfig.baseURL || undefined,
+              })
+
+              if (!client.isConfigured()) {
+                return { output: "Error: OpenAI API key not configured." }
+              }
+
+              try {
+                const jobs = await client.listJobs()
+                if (jobs.length === 0) {
+                  return { output: "No fine-tuning jobs found." }
+                }
+                const jobLines = jobs.map(j =>
+                  `- **${j.id}** | ${j.model} | ${j.status}${j.trainedModel ? ` → ${j.trainedModel}` : ""}`
+                ).join("\n")
+                return {
+                  output: `## Fine-Tuning Jobs (${jobs.length})\n\n${jobLines}`,
+                }
+              } catch (err: any) {
+                return { output: `❌ List jobs failed: ${err.message}` }
+              }
+            }
+
+            case "cancel": {
+              if (!jobId) {
+                return { output: "Error: 'jobId' is required for cancel action." }
+              }
+
+              const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
+              const configLoader = (globalThis as any).__opencode_configLoader
+              const ftConfig = configLoader?.get()?.fineTuning ?? {}
+              const client = new FTC({
+                apiKey: ftConfig.apiKey || undefined,
+                baseURL: ftConfig.baseURL || undefined,
+              })
+
+              if (!client.isConfigured()) {
+                return { output: "Error: OpenAI API key not configured." }
+              }
+
+              try {
+                const job = await client.cancelJob(jobId)
+                return {
+                  output: `✅ Job ${job.id} cancelled. Status: ${job.status}`,
+                }
+              } catch (err: any) {
+                return { output: `❌ Cancel failed: ${err.message}` }
+              }
+            }
+
+            case "full-pipeline": {
+              const { saveTrainingDataToFile, prepareFineTuningDataset } = await import("./memory/skill-training.js")
+              const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
+
+              const configLoader = (globalThis as any).__opencode_configLoader
+              const ftConfig = configLoader?.get()?.fineTuning ?? {}
+              const client = new FTC({
+                apiKey: ftConfig.apiKey || undefined,
+                baseURL: ftConfig.baseURL || undefined,
+                model: model || ftConfig.model || undefined,
+              })
+
+              if (!client.isConfigured()) {
+                return { output: "Error: OpenAI API key not configured. Set OPENAI_API_KEY env or fineTuning.apiKey in config." }
+              }
+
+              const skills = skillStore?.getAll() ?? []
+              const episodes = episodicStore?.getRecent(1000) ?? []
+              if (skills.length === 0 && episodes.length === 0) {
+                return { output: "Error: No skills or episodes available for training data." }
+              }
+
+              // Prepare and save dataset
+              const savePath = outputPath ?? ".agentic/fine-tuning-data.jsonl"
+              const dataset = prepareFineTuningDataset(skills, episodes, "openai", minQuality)
+              if (dataset.totalExamples === 0) {
+                return { output: "Error: No training examples after filtering. Try lowering minQuality." }
+              }
+              saveTrainingDataToFile(dataset, savePath)
+
+              // Upload to OpenAI
+              try {
+                const file = await client.uploadFile(savePath)
+                // Create job
+                const job = await client.createJob(file.id, {
+                  model: model || ftConfig.model,
+                  trainingEpochs: epochs || ftConfig.trainingEpochs,
+                  suffix: suffix || ftConfig.suffix,
+                })
+
+                return {
+                  output: [
+                    `## 🚀 Full Fine-Tuning Pipeline`,
+                    ``,
+                    `**Dataset:** ${savePath}`,
+                    `**Examples:** ${dataset.totalExamples}`,
+                    ``,
+                    `**File Upload:**`,
+                    `- ID: ${file.id}`,
+                    `- Size: ${file.bytes} bytes`,
+                    ``,
+                    `**Job Created:**`,
+                    `- Job ID: ${job.id}`,
+                    `- Model: ${job.model}`,
+                    `- Status: ${job.status}`,
+                    ``,
+                    `> Use \`action: "status"\` with \`jobId: "${job.id}"\` to monitor progress.`,
+                    `> Or run \`action: "full-pipeline-wait"\` to block until completion.`,
+                  ].join("\n"),
+                }
+              } catch (err: any) {
+                return { output: `❌ Pipeline failed at step: ${err.message}` }
+              }
+            }
+
+            case "full-pipeline-wait": {
+              const { saveTrainingDataToFile, prepareFineTuningDataset } = await import("./memory/skill-training.js")
+              const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
+
+              const configLoader = (globalThis as any).__opencode_configLoader
+              const ftConfig = configLoader?.get()?.fineTuning ?? {}
+              const client = new FTC({
+                apiKey: ftConfig.apiKey || undefined,
+                baseURL: ftConfig.baseURL || undefined,
+                model: model || ftConfig.model || undefined,
+              })
+
+              if (!client.isConfigured()) {
+                return { output: "Error: OpenAI API key not configured." }
+              }
+
+              const skills = skillStore?.getAll() ?? []
+              const episodes = episodicStore?.getRecent(1000) ?? []
+              const savePath = outputPath ?? ".agentic/fine-tuning-data.jsonl"
+              const dataset = prepareFineTuningDataset(skills, episodes, "openai", minQuality)
+              saveTrainingDataToFile(dataset, savePath)
+
+              try {
+                const result = await client.fullPipeline(savePath, {
+                  model: model || ftConfig.model,
+                  trainingEpochs: epochs || ftConfig.trainingEpochs,
+                  suffix: suffix || ftConfig.suffix,
+                })
+
+                return {
+                  output: [
+                    `## ✅ Full Pipeline Complete`,
+                    ``,
+                    `**File:** ID ${result.file.id} (${result.file.bytes} bytes)`,
+                    `**Job:** ${result.job.id}`,
+                    `**Final Status:** ${result.result.status}`,
+                    result.result.trainedModel ? `**Fine-tuned Model:** ${result.result.trainedModel}` : "",
+                    result.result.error ? `**Error:** ${result.result.error}` : "",
+                    ``,
+                    `**Dataset saved to:** ${savePath}`,
+                  ].filter(Boolean).join("\n"),
+                }
+              } catch (err: any) {
+                return { output: `❌ Full pipeline failed: ${err.message}` }
+              }
+            }
+
+            default:
+              return { output: "Unknown action. Available: prepare, save, upload, create-job, status, list, cancel, full-pipeline, full-pipeline-wait" }
+          }
+        },
+      }),
+
       // ── Stage V: Autonomous Mode — fast orchestrator ──
       // Fast path: LLM call + file write + compile check (return immediately).
       // Thorough path (+async): memory + skills + guard + post-processing (fire-and-forget after return).
@@ -3697,7 +4216,7 @@ const createEngine: Plugin = async (input, _options) => {
               completedSteps.push(step.id)
             }
           } else {
-            // ── Fast path: monolithic LLM call ──
+            // ── Fast path: monolithic LLM call with adaptive retry loop ──
             const systemPrompt = `Return JSON array of {path, content}. Write COMPLETE file contents.
 Rules: ESM imports (.js) · match existing patterns · valid imports
 {"files":[{"path":"src/x.ts","content":"..."}]} or {"noChanges":true}`
@@ -3707,38 +4226,43 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
             const isSimple = args.goal.length < 80 && activeSteps.length < 3
             const maxTokens = isSimple ? 1024 : 2048
 
-            const llmResult = await llmEngine.call({
-              systemPrompt, userPrompt,
-              temperature: 0.2, maxTokens, jsonMode: true,
-            })
-
-            const output = llmResult.content || ""
-            hasNoLLM = output.includes("[NO_LLM]") || output === "NO_LLM"
-
-            // Parse JSON output
-            const filesToWrite: Array<{ path: string; content: string }> = []
-            if (!hasNoLLM) {
+            // ── Helper: parse LLM JSON output → {path, content}[] ──
+            function parseLLMOutput(output: string): Array<{ path: string; content: string }> {
+              const result: Array<{ path: string; content: string }> = []
               try {
                 const parsed = JSON.parse(output)
                 if (parsed.files && Array.isArray(parsed.files)) {
                   for (const f of parsed.files) {
-                    if (f.path && f.content) filesToWrite.push({ path: f.path, content: f.content })
+                    if (f.path && f.content) result.push({ path: f.path, content: f.content })
                   }
                 }
               } catch {
                 const fbRegex = /FILE:\s*(\S+)\n```(?:\w+)?\n([\s\S]*?)```/g
                 let fbMatch: RegExpExecArray | null
                 while ((fbMatch = fbRegex.exec(output)) !== null) {
-                  filesToWrite.push({ path: fbMatch[1].replace(/^\/+/, ""), content: fbMatch[2] })
+                  result.push({ path: fbMatch[1].replace(/^\/+/, ""), content: fbMatch[2] })
                 }
-                if (filesToWrite.length === 0 && !output.includes("NO_CHANGES") && !output.includes('"noChanges"')) {
+                if (result.length === 0 && !output.includes("NO_CHANGES") && !output.includes('"noChanges"')) {
                   const cbMatch = output.match(/```(?:\w+)?\n([\s\S]*?)```/)
-                  if (cbMatch) filesToWrite.push({ path: relevantFiles[0]?.replace(/^\/+/, "") || "src/index.ts", content: cbMatch[1] })
+                  if (cbMatch) result.push({ path: relevantFiles[0]?.replace(/^\/+/, "") || "src/index.ts", content: cbMatch[1] })
                 }
+              }
+              return result
+            }
+
+            // ── Helper: write files to disk ──
+            function writeFiles(files: Array<{ path: string; content: string }>, target: string[]): void {
+              for (const fw of files) {
+                try {
+                  const absPath = join(projectDir, fw.path)
+                  mkdirSync(dirname(absPath), { recursive: true })
+                  writeFileSync(absPath, fw.content, "utf-8")
+                  target.push(fw.path)
+                } catch { /* skip bad paths */ }
               }
             }
 
-            // Capture pre-change git state for rollback (only in non-pipeline path)
+            // Capture pre-change git state for rollback
             try {
               if (git.isAvailable()) {
                 const stashResult = execFileSync("git", ["stash", "create"], { cwd: projectDir, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }).trim()
@@ -3747,14 +4271,98 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
               }
             } catch { /* non-fatal — rollback not available */ }
 
-            // Write files to disk
-            for (const fw of filesToWrite) {
+            // ── Adaptive retry loop ──
+            const autoRetry = new AutoRetryManager({ maxRetries: 3 })
+            let retryPrompt: string | null = null
+            let firstAttempt = true
+
+            do {
+              // Construct prompt: original + retry context
+              const currentPrompt = retryPrompt ?? userPrompt
+              const prompt = firstAttempt
+                ? `${systemPrompt}\n\n${currentPrompt}`
+                : `${systemPrompt}\n\nIMPORTANT: Fix the previous errors. Only output files that need changes.\n\n${currentPrompt}`
+
+              // LLM call
+              const llmResult = await llmEngine.call({
+                systemPrompt: prompt,
+                userPrompt: currentPrompt,
+                temperature: firstAttempt ? 0.2 : 0.3,
+                maxTokens: firstAttempt ? maxTokens : Math.min(maxTokens * 2, 4096),
+                jsonMode: true,
+              })
+
+              const output = llmResult.content || ""
+              hasNoLLM = output.includes("[NO_LLM]") || output === "NO_LLM"
+
+              if (hasNoLLM) break
+
+              // Parse & write files
+              const filesToWrite = parseLLMOutput(output)
+              writeFiles(filesToWrite, allModified)
+
+              if (filesToWrite.length === 0) {
+                verifyNote = "⚠️ No files generated"
+                break
+              }
+
+              // Verify compilation
               try {
-                const absPath = join(projectDir, fw.path)
-                mkdirSync(dirname(absPath), { recursive: true })
-                writeFileSync(absPath, fw.content, "utf-8")
-                allModified.push(fw.path)
-              } catch { /* skip bad paths */ }
+                verifier.detectLanguage(projectDir)
+                const cc = verifier.verifyCompile(projectDir)
+                verifyPassed = cc.passed
+                verifyNote = verifyPassed ? "✅ Compile OK" : `⚠️ ${cc.output.slice(0, 200)}`
+
+                if (verifyPassed) break // ✅ Success — exit retry loop
+
+                // ── Error analysis + selective rollback ──
+                const analysis = await errorAnalyzer.analyzeDeep(cc.output, [...allModified])
+                const filesToRollback = autoRetry.getFilesToRollback(analysis, [...allModified], cc.output)
+
+                if (filesToRollback.length > 0 && hasGitRollback && preChangeCommit) {
+                  try {
+                    execFileSync("git", ["checkout", "--", ...filesToRollback.map(f => join(projectDir, f))],
+                      { cwd: projectDir, stdio: "pipe", timeout: 15000 })
+
+                    // Remove rolled back files from allModified (keep successfully compiled ones)
+                    const rolledBackSet = new Set(filesToRollback)
+                    const keptFiles: string[] = []
+                    for (const f of allModified) {
+                      if (!rolledBackSet.has(f)) keptFiles.push(f)
+                    }
+                    allModified.length = 0
+                    allModified.push(...keptFiles)
+                  } catch { /* rollback best-effort */ }
+                }
+
+                // Record retry attempt
+                autoRetry.recordAttempt(cc.output, analysis, filesToRollback)
+                verifier.clearCompileCache()
+
+                // Build retry prompt with failure context injection
+                retryPrompt = autoRetry.buildRetryPrompt(
+                  args.goal, cc.output, analysis,
+                  autoRetry.getStrategyForAttempt(autoRetry.getCurrentAttempt()),
+                  [...allModified],
+                )
+
+                firstAttempt = false
+              } catch {
+                verifyNote = "⚠️ Verify error"
+                break
+              }
+            } while (autoRetry.canRetry())
+
+            // ── Final fallback: if all retries failed, rollback all ──
+            if (!verifyPassed && hasGitRollback && preChangeCommit && allModified.length > 0) {
+              try {
+                execFileSync("git", ["checkout", "--", ...allModified.map(f => join(projectDir, f))],
+                  { cwd: projectDir, stdio: "pipe", timeout: 15000 })
+                verifyNote += ` 🔄 Full rollback to pre-change state`
+              } catch {
+                verifyNote += ` ⚠️ Rollback attempted but may be incomplete`
+              }
+              allModified.length = 0
             }
 
             // Record execution
@@ -3762,35 +4370,14 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
               depTracker.recordChange(context.sessionID, step.id, allModified)
               executor.recordResult(context.sessionID, {
                 stepId: step.id,
-                success: !hasNoLLM,
-                output: hasNoLLM ? "No LLM (mock)" : `Files: ${allModified.join(", ")}`,
+                success: !hasNoLLM && (verifyPassed || allModified.length > 0),
+                output: hasNoLLM
+                  ? "No LLM (mock)"
+                  : `Files: ${allModified.join(", ")}${autoRetry.getRetrySummary() ? ` ${autoRetry.getRetrySummary()}` : ""}`,
                 filesModified: allModified,
               })
               completedSteps.push(step.id)
             }
-          }
-
-          // ═══════════════════════════════════════════════
-          // PHASE 4: Verify — compilation check + auto-rollback
-          // ═══════════════════════════════════════════════
-          if (!hasNoLLM && allModified.length > 0) {
-            try {
-              verifier.detectLanguage(projectDir)
-              const cc = verifier.verifyCompile(projectDir)
-              verifyPassed = cc.passed
-              verifyNote = verifyPassed ? "✅ Compile OK" : `⚠️ ${cc.output.slice(0, 200)}`
-
-              // ── Auto-rollback on verify failure ──
-              if (!verifyPassed && hasGitRollback && preChangeCommit) {
-                try {
-                  execFileSync("git", ["checkout", "--", ...allModified.map(f => join(projectDir, f))], { cwd: projectDir, stdio: "pipe", timeout: 15000 })
-                  verifyNote += ` 🔄 Auto-rolled back to pre-change state`
-                } catch (rollbackErr) {
-                  verifyNote += ` ⚠️ Rollback attempted but may be incomplete`
-                }
-                allModified.length = 0 // Clear modified list since files are rolled back
-              }
-            } catch { verifyNote = "⚠️ Verify skipped" }
           }
 
           // ─── POST-PHASE: hanya kalau thorough ───
@@ -3813,7 +4400,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
               try {
                 episodicStore.record(context.sessionID, args.goal, verifyPassed ? "success" : "partial",
                   [`Auto via agentic_auto`, `Verify: ${verifyPassed}`, `Files: ${allModified.length}`], allModified,
-                  domainRegistry.getCurrentDomain() ?? undefined)
+                  domainRegistry.getCurrentDomain() ?? undefined, projectId)
               } catch { /* non-fatal */ }
 
               // Extract skill (async)
@@ -3962,8 +4549,8 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
       configLoader.stopWatch()
       persistence.save("models", "registry", modelRegistry.toJSON())
       persistence.save("prompts", "state", roleRegistry.getAllPromptStates())
-      persistence.save("evolution", "trend", continuousEvolution.toJSON())
-      persistence.save("evaluation", "live", liveEvaluator.toJSON())
+      persistence.save("evolution", "trend", continuousEvolution.toJSON(), projectId)
+      persistence.save("evaluation", "live", liveEvaluator.toJSON(), projectId)
       await traceLogger.dispose()
     },
   }
@@ -3990,3 +4577,8 @@ export { PatternDiscovery } from "./drift/pattern-discovery.js"
 export { skillToTrainingExample, skillsToTrainingData, exportOpenAIJSONL, exportInstructionsJSON, trainingDatasetSummary } from "./memory/skill-training.js"
 export { LiveEvaluator } from "./evaluation/live-evaluator.js"
 export { BudgetTracker } from "./core/budget-tracker.js"
+export { FineTuningClient } from "./core/fine-tuning.js"
+export { episodeToTrainingExample, episodesToTrainingData, prepareFineTuningDataset, saveTrainingDataToFile } from "./memory/skill-training.js"
+export { ConfigLoader, validateConfig } from "./core/config.js"
+export { PersistenceLayer } from "./memory/persistence.js"
+export { EpisodicStore } from "./memory/episodic-store.js"

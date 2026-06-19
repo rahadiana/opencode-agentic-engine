@@ -9,14 +9,19 @@ export interface PersistentState<T> {
 }
 
 /**
- * PersistenceLayer — hybrid global + local storage.
+ * PersistenceLayer — hybrid global + local storage with project scoping.
  *
- * Global store: ~/.config/opencode/agentic-store/ (shared across ALL projects)
- * Local store:  <project>/.agentic/store/            (project-specific override)
+ * Storage layout:
+ *   Global: ~/.config/opencode/agentic-store/{namespace}/@{scope}/{key}.json
+ *   Local:  <project>/.agentic/store/{namespace}/@{scope}/{key}.json
  *
- * save() → writes to BOTH global and local
- * load() → checks local first (override), falls back to global
- * loadAll() → merges global + local (local wins on key conflict)
+ * Scoped mode (scope provided):
+ *   - Data isolated per project: episodes, evolution, evaluation
+ *   - Prevents cross-project noise in pattern discovery
+ *
+ * Unscoped mode (scope omitted):
+ *   - Shared across ALL projects: skills, models, prompts
+ *   - Backward compatible with existing callers
  */
 export class PersistenceLayer {
   private globalDir: string
@@ -29,30 +34,38 @@ export class PersistenceLayer {
     this.localDir = resolve(worktree || process.cwd(), ".agentic", "store")
   }
 
-  save<T>(namespace: string, key: string, data: T): void {
-    this.writeTo(this.globalDir, namespace, key, data)
-    this.writeTo(this.localDir, namespace, key, data)
+  /** Build scoped path: "episodes" + "@project-myapp" → "episodes/@project-myapp" */
+  private scoped(ns: string, scope?: string): string {
+    return scope ? `${ns}/@${scope}` : ns
   }
 
-  load<T>(namespace: string, key: string): T | null {
+  save<T>(namespace: string, key: string, data: T, scope?: string): void {
+    const ns = this.scoped(namespace, scope)
+    this.writeTo(this.globalDir, ns, key, data)
+    this.writeTo(this.localDir, ns, key, data)
+  }
+
+  load<T>(namespace: string, key: string, scope?: string): T | null {
+    const ns = this.scoped(namespace, scope)
     // Local override first
-    const local = this.readFrom<T>(this.localDir, namespace, key)
+    const local = this.readFrom<T>(this.localDir, ns, key)
     if (local !== null) return local
-    return this.readFrom<T>(this.globalDir, namespace, key)
+    return this.readFrom<T>(this.globalDir, ns, key)
   }
 
-  loadAll<T>(namespace: string): PersistentState<T>[] {
+  loadAll<T>(namespace: string, scope?: string): PersistentState<T>[] {
+    const ns = this.scoped(namespace, scope)
     const seen = new Set<string>()
     const result: PersistentState<T>[] = []
 
     // Global first (base), then local overrides
-    const globalItems = this.readAllFrom<T>(this.globalDir, namespace)
+    const globalItems = this.readAllFrom<T>(this.globalDir, ns)
     for (const item of globalItems) {
       seen.add(item.key)
       result.push(item)
     }
 
-    const localItems = this.readAllFrom<T>(this.localDir, namespace)
+    const localItems = this.readAllFrom<T>(this.localDir, ns)
     for (const item of localItems) {
       if (seen.has(item.key)) {
         // Replace global entry with local override (keep same position)
@@ -66,23 +79,41 @@ export class PersistenceLayer {
     return result
   }
 
-  delete(namespace: string, key: string): boolean {
+  delete(namespace: string, key: string, scope?: string): boolean {
+    const ns = this.scoped(namespace, scope)
     let found = false
-    const globalPath = resolve(this.globalDir, namespace, `${key}.json`)
+    const globalPath = resolve(this.globalDir, ns, `${key}.json`)
     if (existsSync(globalPath)) { try { unlinkSync(globalPath); found = true } catch { /* non-fatal */ } }
-    const localPath = resolve(this.localDir, namespace, `${key}.json`)
+    const localPath = resolve(this.localDir, ns, `${key}.json`)
     if (existsSync(localPath)) { try { unlinkSync(localPath); found = true } catch { /* non-fatal */ } }
     return found
   }
 
-  listKeys(namespace: string): string[] {
+  listKeys(namespace: string, scope?: string): string[] {
+    const ns = this.scoped(namespace, scope)
+    const seen = new Set<string>()
+    for (const dir of [this.globalDir, this.localDir]) {
+      const full = resolve(dir, ns)
+      if (existsSync(full)) {
+        for (const entry of readdirSync(full, { withFileTypes: true })) {
+          if (entry.isFile() && entry.name.endsWith(".json")) {
+            seen.add(entry.name.replace(".json", ""))
+          }
+        }
+      }
+    }
+    return [...seen]
+  }
+
+  /** List all scope prefixes under a namespace (e.g., "@project-myapp") */
+  listScopes(namespace: string): string[] {
     const seen = new Set<string>()
     for (const dir of [this.globalDir, this.localDir]) {
       const full = resolve(dir, namespace)
       if (existsSync(full)) {
         for (const entry of readdirSync(full, { withFileTypes: true })) {
-          if (entry.isFile() && entry.name.endsWith(".json")) {
-            seen.add(entry.name.replace(".json", ""))
+          if (entry.isDirectory() && entry.name.startsWith("@")) {
+            seen.add(entry.name.slice(1)) // remove @ prefix
           }
         }
       }

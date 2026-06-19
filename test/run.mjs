@@ -1029,6 +1029,89 @@ try { rmSync(cfgWorktree, { recursive: true, force: true }) } catch {}
 try { rmSync(cfgWorktreeB, { recursive: true, force: true }) } catch {}
 try { rmSync(cfgWorktreeC, { recursive: true, force: true }) } catch {}
 
+// Test D: validateConfig function — valid, invalid, and edge cases
+console.log("\n[54-D] validateConfig validation tests")
+const { validateConfig } = await import(pluginDist)
+// Valid config — should return empty issues
+const validCfg = {
+  $schema: "v1",
+  embedding: null,
+  memory: { enabled: true, mode: "lightweight", maxEntries: 100, compressThreshold: 50, forgetAfterDays: 7, stopWordsLanguages: ["eng", "ind"], search: { keywordWeight: 0.3, vectorWeight: 0.7, topK: 5 } },
+  agent: { maxDelegationDepth: 3, autoSkillExtract: true, defaultRole: "developer", timeoutMs: 30000 },
+  storage: { traceRetentionDays: 7, skillMaxCount: 200 },
+  evaluation: { enabled: false }
+}
+const validResult = validateConfig(validCfg)
+assert(typeof validResult === "object" && validResult !== null, "validateConfig returns an object")
+assert(Array.isArray(validResult.issues), "validateConfig result.issues is an array")
+assert(validResult.issues.length === 0, `valid config should have 0 issues, got ${validResult.issues.length}: ${JSON.stringify(validResult.issues)}`)
+assert(validResult.valid === true, "valid config has valid=true")
+
+// Invalid config — wrong field types inside sub-objects
+const badTypeCfg = {
+  $schema: "v1",
+  memory: { enabled: "yes", mode: "turbo", maxEntries: "many", search: { keywordWeight: "heavy", vectorWeight: 0.5 } },
+  agent: { maxDelegationDepth: "three", autoSkillExtract: "yes" }
+}
+const typeResult = validateConfig(badTypeCfg)
+assert(Array.isArray(typeResult.issues), "typeResult.issues is an array")
+assert(typeResult.issues.length > 0, "invalid field types should produce issues")
+const hasTypeIssue = typeResult.issues.some(i => i.message && i.message.includes("Expected type"))
+assert(hasTypeIssue, "should flag type mismatches like enabled:'yes' instead of boolean")
+
+// Invalid config — out of range values
+const rangeCfg = {
+  $schema: "v1",
+  memory: { enabled: true, mode: "lightweight", maxEntries: 100, compressThreshold: 50, forgetAfterDays: 7, search: { keywordWeight: 1.5, vectorWeight: -0.5 } },
+  agent: { maxDelegationDepth: -1 },
+  storage: { traceRetentionDays: -7 }
+}
+const rangeResult = validateConfig(rangeCfg)
+assert(rangeResult.issues.length > 0, `out-of-range values should produce issues, got ${JSON.stringify(rangeResult.issues)}`)
+// keywordWeight > 1.0 should be flagged
+const hasRangeIssue = rangeResult.issues.some(i => i.message && i.message.includes("exceeds maximum"))
+assert(hasRangeIssue, `should flag keywordWeight > 1.0, issues: ${JSON.stringify(rangeResult.issues)}`)
+
+// Invalid config — weighted sum check
+const badWeightCfg = {
+  $schema: "v1",
+  memory: { enabled: true, mode: "lightweight", maxEntries: 100, compressThreshold: 50, forgetAfterDays: 7, search: { keywordWeight: 0.9, vectorWeight: 0.9 } },
+  agent: { maxDelegationDepth: 3, autoSkillExtract: true, defaultRole: "developer" },
+  storage: { traceRetentionDays: 7 }
+}
+const weightResult = validateConfig(badWeightCfg)
+const hasWeightIssue = weightResult.issues.some(i => i.message && (i.message.includes("keywordWeight") || i.message.includes("vectorWeight")))
+assert(hasWeightIssue, `keywordWeight + vectorWeight > 1.0 should raise issue, got issues: ${JSON.stringify(weightResult.issues)}`)
+
+// No top-level schema — function handles gracefully (not an object)
+const notObjResult = validateConfig(null)
+assert(notObjResult.valid === false, "null config should not be valid")
+assert(notObjResult.issues.length > 0, "null config should produce issues")
+
+// ConfigLoader integration — getValidationIssues() returns issues after load
+const loaderMod = await import(pluginDist)
+const { ConfigLoader } = loaderMod
+const cfgWorktreeD = join(projectDir, "config-test-validate")
+try { rmSync(cfgWorktreeD, { recursive: true, force: true }) } catch {}
+mkdirSync(cfgWorktreeD, { recursive: true })
+mkdirSync(join(cfgWorktreeD, ".agentic"), { recursive: true })
+// Write config with out-of-range value
+writeFileSync(join(cfgWorktreeD, ".agentic", "config.json"), JSON.stringify({
+  $schema: "v1", embedding: null,
+  memory: { enabled: true, mode: "lightweight", maxEntries: 100, compressThreshold: 50, forgetAfterDays: 7, search: { keywordWeight: 0.3, vectorWeight: 0.7 } },
+  agent: { maxDelegationDepth: 99, autoSkillExtract: true },
+  storage: { traceRetentionDays: 7 }
+}))
+const dInput = { ...mockInput, worktree: cfgWorktreeD, directory: cfgWorktreeD, client: {} }
+const dHooks = await mod.AgenticEngine(dInput)
+await new Promise(r => setTimeout(r, 100))
+// Check that validation issues are accessible
+const loader = new ConfigLoader(cfgWorktreeD)
+const issuesAfterLoad = loader.getValidationIssues()
+assert(Array.isArray(issuesAfterLoad), "getValidationIssues returns array")
+try { rmSync(cfgWorktreeD, { recursive: true, force: true }) } catch {}
+await dHooks.dispose()
+
 // 55. VectorStore — TF-IDF sparse retrieval
 console.log("\n[55] VectorStore — TF-IDF sparse retrieval")
 const { VectorStore } = await import(pluginDist)
@@ -1995,6 +2078,132 @@ assert(typeof trOut3 === "string" && trOut3.length > 0, "export-training-data wi
 
 assert(true, "agentic_evolve export-training-data tests passed")
 
+// 84-B. Episode → Training Data conversion
+console.log("\n[84-B] Episode → Training Data conversion")
+const { episodeToTrainingExample: ep2tr, episodesToTrainingData: eps2tr, prepareFineTuningDataset: prepFT, saveTrainingDataToFile: saveFT } = mod
+
+// Mock episode
+const mockEpisode = {
+  id: "ep-test-1",
+  sessionId: "sess-1",
+  planGoal: "Add authentication middleware",
+  summary: "Completed: Add authentication middleware",
+  outcome: "success",
+  decisions: ["Used JWT library", "Created middleware function", "Added token validation"],
+  filesChanged: ["src/auth.ts", "src/middleware.ts"],
+  domain: "security",
+  timestamp: "2026-06-01T00:00:00Z",
+  tags: ["auth", "jwt", "middleware"],
+}
+
+const epExample = ep2tr(mockEpisode)
+assert(typeof epExample.instruction === "string" && epExample.instruction.length > 0, "episode example has instruction")
+assert(typeof epExample.response === "string" && epExample.response.length > 0, "episode example has response")
+assert(epExample.instruction.includes("authentication"), "episode instruction from planGoal")
+assert(epExample.response.includes("JWT"), "episode response contains decisions")
+assert(epExample.quality === 1.0, "successful episode has quality 1.0")
+
+// Failed episode
+const failedEpisode = { ...mockEpisode, outcome: "failed", decisions: [] }
+const failEx = ep2tr(failedEpisode)
+assert(failEx.quality === 0.0, "failed episode has quality 0.0")
+assert(failEx.response.includes("No decision trace"), "handles empty decisions gracefully")
+
+// episodesToTrainingData
+const epDataset = eps2tr([mockEpisode, failedEpisode], "openai", 0.5)
+assert(epDataset.format === "openai", "episodes format preserved")
+assert(epDataset.totalExamples === 1, "only successful episode passes minQuality=0.5")
+
+const epAll = eps2tr([mockEpisode, failedEpisode], "instructions", 0.0)
+assert(epAll.totalExamples === 2, "minQuality=0.0 includes all episodes")
+
+// prepareFineTuningDataset — combined
+const mockSkill = {
+  definition: {
+    meta: { format: "agentic-skill/v1", id: "test-skill", name: "Test Skill" },
+    trigger: { pattern: "test something", keywords: ["test"] },
+    workflow: { steps: [{ order: 1, action: "run", description: "Run tests" }], estimatedDuration: "1m", parallelizable: false },
+    quality: { successRate: 0.8, usageCount: 1, failureScenarios: [] },
+    audit: { createdAt: "2024-01-01", lastUsed: "2024-06-01", lastModified: "2024-06-01", modifiedBy: "agent" },
+  },
+  usageCount: 1, successRate: 0.8, lastUsed: "2024-06-01",
+}
+const combined = prepFT([mockSkill], [mockEpisode], "openai", 0.5, 0.0)
+assert(combined.totalExamples === 2, "combined dataset includes skill + episode")
+assert(combined.format === "openai", "combined format preserved")
+
+// saveTrainingDataToFile
+const testDataDir = join(projectDir, "tmp-ft-test")
+try { mkdirSync(testDataDir, { recursive: true }) } catch {}
+const testFilePath = join(testDataDir, "test-training.jsonl")
+const saved = saveFT(combined, testFilePath)
+assert(saved === testFilePath, "save returns correct file path")
+assert(existsSync(testFilePath), "file was created")
+const savedContent = readFileSync(testFilePath, "utf-8").trim()
+assert(savedContent.length > 0, "saved file has content")
+const ftLines = savedContent.split("\n")
+assert(ftLines.length === 2, "saved file has 2 lines (one per example)")
+// Cleanup
+try { unlinkSync(testFilePath) } catch {}
+try { rmSync(testDataDir, { recursive: true, force: true }) } catch {}
+
+assert(true, "Episode → Training Data conversion tests passed")
+
+// 84-C. FineTuningClient — unit tests (mock fetch)
+console.log("\n[84-C] FineTuningClient — unit tests")
+const { FineTuningClient: FTC } = mod
+
+const unconfiguredClient = new FTC({})
+assert(!unconfiguredClient.isConfigured(), "client without key is not configured")
+
+let threw = false
+try { await unconfiguredClient.uploadFile("test.jsonl") } catch (e) { threw = true; assert(e.message.includes("API key"), "uploadFile throws about API key") }
+assert(threw, "uploadFile throws without API key")
+
+threw = false
+try { await unconfiguredClient.createJob("file-123") } catch (e) { threw = true; assert(e.message.includes("API key"), "createJob throws about API key") }
+assert(threw, "createJob throws without API key")
+
+threw = false
+try { await unconfiguredClient.getJobStatus("job-123") } catch (e) { threw = true; assert(e.message.includes("API key"), "getJobStatus throws about API key") }
+assert(threw, "getJobStatus throws without API key")
+
+threw = false
+try { await unconfiguredClient.listJobs() } catch (e) { threw = true; assert(e.message.includes("API key"), "listJobs throws about API key") }
+assert(threw, "listJobs throws without API key")
+
+threw = false
+try { await unconfiguredClient.cancelJob("job-123") } catch (e) { threw = true; assert(e.message.includes("API key"), "cancelJob throws about API key") }
+assert(threw, "cancelJob throws without API key")
+
+assert(true, "FineTuningClient unit tests passed")
+
+// 84-D. agentic_finetune tool
+console.log("\n[84-D] agentic_finetune tool")
+const ftCtx = mockCtx(freshSid())
+const ftPrepare = await hooks.tool.agentic_finetune.execute({ action: "prepare", source: "skills" }, ftCtx)
+const ftPrepareOut = typeof ftPrepare === "string" ? ftPrepare : (ftPrepare.output || "")
+assert(typeof ftPrepareOut === "string" && ftPrepareOut.length > 0, "finetune prepare returns output")
+assert(ftPrepareOut.includes("Fine-Tuning") || ftPrepareOut.includes("Dataset"), "finetune prepare shows dataset info")
+
+const ftSaveNoPath = await hooks.tool.agentic_finetune.execute({ action: "save" }, ftCtx)
+const ftSaveNoPathOut = typeof ftSaveNoPath === "string" ? ftSaveNoPath : (ftSaveNoPath.output || "")
+assert(ftSaveNoPathOut.includes("outputPath") || ftSaveNoPathOut.includes("required"), "finetune save without path shows error")
+
+const ftList = await hooks.tool.agentic_finetune.execute({ action: "list" }, ftCtx)
+const ftListOut = typeof ftList === "string" ? ftList : (ftList.output || "")
+assert(ftListOut.includes("API key") || ftListOut.includes("not configured"), "finetune list without key shows error")
+
+const ftStatusNoId = await hooks.tool.agentic_finetune.execute({ action: "status" }, ftCtx)
+const ftStatusNoIdOut = typeof ftStatusNoId === "string" ? ftStatusNoId : (ftStatusNoId.output || "")
+assert(ftStatusNoIdOut.includes("jobId") || ftStatusNoIdOut.includes("required"), "finetune status without jobId shows error")
+
+const ftUnknown = await hooks.tool.agentic_finetune.execute({ action: "unknown" }, ftCtx)
+const ftUnknownOut = typeof ftUnknown === "string" ? ftUnknown : (ftUnknown.output || "")
+assert(ftUnknownOut.includes("Unknown"), "finetune unknown action shows error")
+
+assert(true, "agentic_finetune tool tests passed")
+
 // 85. LiveEvaluator
 console.log("\n[85] LiveEvaluator")
 const ev = new mod.LiveEvaluator()
@@ -2398,6 +2607,63 @@ const p4Out = typeof p4Result === "string" ? p4Result : (p4Result.output || "")
 assert(p4Out.length > 20, "auto with pipeline goal returns output")
 assert(p4Out.includes("Goal") || p4Out.includes("Auto"), "output mentions goal or auto")
   assert(true, "agentic_auto pipeline delegation tests passed")
+
+  // ── Project-Scoped Memory Isolation tests ──
+  console.log("\n[PS] Project-Scoped Memory Isolation")
+  const { PersistenceLayer } = await import(pluginDist)
+
+  // Create a temp persistence layer with ISOLATED global dir
+  const scopeWorktree = join(projectDir, "scope-test")
+  const scopeGlobal = join(projectDir, "scope-global")
+  try { mkdirSync(scopeWorktree, { recursive: true }) } catch {}
+  try { mkdirSync(scopeGlobal, { recursive: true }) } catch {}
+  process.env.AGENTIC_STORE_DIR = scopeGlobal
+  const pl = new PersistenceLayer(scopeWorktree)
+
+  // Test 1: Scoped save + load (projectA vs projectB)
+  const projA = "project-alpha"
+  const projB = "project-beta"
+
+  pl.save("episodes", "ep1", { goal: "Fix bug A" }, projA)
+  pl.save("episodes", "ep1", { goal: "Fix bug B" }, projB)
+
+  const epA = pl.load("episodes", "ep1", projA)
+  const epB = pl.load("episodes", "ep1", projB)
+  assert(epA && epA.goal === "Fix bug A", "project A episode is isolated")
+  assert(epB && epB.goal === "Fix bug B", "project B episode is isolated")
+
+  // Test 2: Unscoped save (shared — skills, models, prompts)
+  pl.save("skills", "skill1", { name: "Test Pattern" }) // no scope = global
+  const skGlobal = pl.load("skills", "skill1")
+  assert(skGlobal && skGlobal.name === "Test Pattern", "unscoped skill is globally shared")
+
+  // Test 3: Scoped evolution (per-project trend.json)
+  pl.save("evolution", "trend", { results: [1, 2, 3] }, projA)
+  pl.save("evolution", "trend", { results: [4, 5] }, projB)
+  const evoA = pl.load("evolution", "trend", projA)
+  const evoB = pl.load("evolution", "trend", projB)
+  assert(evoA && evoA.results.length === 3, "project A evolution is isolated")
+  assert(evoB && evoB.results.length === 2, "project B evolution is isolated")
+
+  // Test 4: listScopes — detect existing project scopes
+  const scopes = pl.listScopes("episodes")
+  assert(scopes.includes("project-alpha"), "listScopes finds project-alpha")
+  assert(scopes.includes("project-beta"), "listScopes finds project-beta")
+
+  // Test 5: Episode.projectId field
+  const mockEpStore = new (await import(pluginDist)).EpisodicStore()
+  const ep = mockEpStore.record("sess-1", "Test goal", "success", ["did work"], ["src/app.ts"], "code", projA)
+  assert(ep.projectId === projA, "Episode has projectId")
+  const projectEps = mockEpStore.getByProject(projA)
+  assert(projectEps.length === 1, "getByProject returns scoped episodes")
+  assert(projectEps[0].projectId === projA, "getByProject filters correctly")
+
+  // Cleanup
+  try { rmSync(scopeWorktree, { recursive: true, force: true }) } catch {}
+  try { rmSync(scopeGlobal, { recursive: true, force: true }) } catch {}
+  delete process.env.AGENTIC_STORE_DIR
+
+  assert(true, "Project-Scoped Memory Isolation tests passed")
 
   // ── BudgetTracker unit tests (inside runAll) ──
   console.log("\n[B1] BudgetTracker — class unit tests")

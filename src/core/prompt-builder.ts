@@ -41,6 +41,8 @@ mode: all
 
 You have access to **${relevantTools.length} specialized agentic_* tools**. **YOU MUST PREFER THESE TOOLS OVER BUILT-IN TOOLS** for any task within this domain.
 
+⚠️ **REMINDER**: ALL specialized tools use the "agentic_" prefix (e.g. "agentic_plan", "agentic_execute", "agentic_verify"). There is NO tool named just "execute", "plan", "verify", etc. Always include the prefix.
+
 ### Tool Preference Hierarchy (HIGHEST first):
 1. **agentic_*** — Use FIRST. Far more powerful than built-in tools.
 2. bash/edit/read/write — Only if no agentic_* tool fits the need.

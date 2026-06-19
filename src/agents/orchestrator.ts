@@ -2,6 +2,7 @@ import type { SharedMemoryEntry, AgentCoordinator } from "./coordinator.js"
 import type { LLMEngine } from "../core/llm.js"
 import type { BudgetTracker } from "../core/budget-tracker.js"
 import type { EventBus } from "../core/event-bus.js"
+import type { Condition } from "../core/formal-model.js"
 import { parseFileEntries, writeFiles, recordCompletion } from "../core/execution-helpers.js"
 
 export interface PipelineStage {
@@ -28,6 +29,48 @@ export interface CrossValidationResult {
   }>
   passed: boolean
   summary: string
+}
+
+// ── G4: Contract-based cross-validation ──
+
+/** Schema field type for pipeline stage I/O contracts */
+export type SchemaFieldType = "string" | "string[]" | "number" | "boolean" | "json" | "code"
+
+export interface SchemaField {
+  name: string
+  type: SchemaFieldType
+  required: boolean
+  description: string
+  /** Pattern/regex for value validation (e.g., "*.ts" for file paths) */
+  pattern?: string
+}
+
+/** Defines what a pipeline stage expects as input and must produce as output */
+export interface StageContract {
+  role: string
+  description: string
+  inputSchema: SchemaField[]
+  outputSchema: SchemaField[]
+  /** Pre-conditions: must be true before this stage runs */
+  preConditions: Condition[]
+  /** Post-conditions: must be true after this stage completes */
+  postConditions: Condition[]
+}
+
+/** Aggregate contract for an entire pipeline */
+export interface PipelineContract {
+  pipelineId: string
+  stageContracts: StageContract[]
+  /** Cross-stage invariants: must hold across ALL stages */
+  crossStageInvariants: Condition[]
+}
+
+/** Result of a single schema field validation */
+export interface SchemaValidationResult {
+  field: string
+  passed: boolean
+  severity: "error" | "warning" | "info"
+  detail: string
 }
 
 export class Orchestrator {
@@ -99,6 +142,54 @@ export class Orchestrator {
     return this.activeRuns.get(runId)?.stageResults ?? new Map()
   }
 
+  /** Validate stage output against its output schema */
+  validateSchema(output: string, schema: SchemaField[]): SchemaValidationResult[] {
+    const results: SchemaValidationResult[] = []
+    const lower = output.toLowerCase()
+    for (const field of schema) {
+      const name = field.name.toLowerCase()
+      let found = false
+      try {
+        const parsed = JSON.parse(output)
+        found = parsed[name] !== undefined || Object.keys(parsed).some(k => k.toLowerCase() === name)
+      } catch {
+        found = lower.includes(name)
+      }
+      if (!found && field.required) {
+        results.push({ field: field.name, passed: false, severity: "error", detail: `Required field "${field.name}" (${field.type}) not found in output` })
+      } else if (!found) {
+        results.push({ field: field.name, passed: true, severity: "info", detail: `Optional field "${field.name}" not found (non-blocking)` })
+      } else {
+        results.push({ field: field.name, passed: true, severity: "info", detail: `Field "${field.name}" present in output` })
+      }
+    }
+    return results
+  }
+
+  /** Check cross-stage invariants against all stage outputs */
+  checkInvariants(invariants: Condition[], allStageResults: Map<string, { output: string; issues: string[]; validatedBy: string[] }>): SchemaValidationResult[] {
+    const results: SchemaValidationResult[] = []
+    const allOutputs = [...allStageResults.values()].map(r => r.output.toLowerCase()).join("\n")
+    const allIssues = [...allStageResults.values()].flatMap(r => r.issues)
+    for (const inv of invariants) {
+      const expr = inv.expr.toLowerCase()
+      if (expr.includes("no errors") || expr.includes("no error")) {
+        const hasErrors = allIssues.some(i => i.toLowerCase().includes("error")) || allOutputs.includes("error")
+        results.push({ field: `invariant: ${inv.description}`, passed: !hasErrors, severity: inv.severity, detail: hasErrors ? "Errors detected across stages" : "No errors detected across stages" })
+      } else if (expr.includes("dependency") && expr.includes("complete")) {
+        const hasEmpty = [...allStageResults.values()].some(r => !r.output || r.output.trim().length === 0)
+        results.push({ field: `invariant: ${inv.description}`, passed: !hasEmpty, severity: inv.severity, detail: hasEmpty ? "Some stages produced empty output" : "All stages have output" })
+      } else if (expr.includes("compile") && expr.includes("pass")) {
+        const compilePassed = !allOutputs.includes("fail") || allOutputs.includes("compilation successful")
+        results.push({ field: `invariant: ${inv.description}`, passed: compilePassed, severity: inv.severity, detail: compilePassed ? "Compilation check passed" : "Compilation issues detected" })
+      } else {
+        results.push({ field: `invariant: ${inv.description}`, passed: true, severity: "info", detail: `Invariant "${inv.expr}" assumed satisfied` })
+      }
+    }
+    return results
+  }
+
+  /** G4: Contract-based crossValidate with schema + invariant checking */
   async crossValidate(
     targetRole: string,
     output: string,
@@ -106,7 +197,45 @@ export class Orchestrator {
   ): Promise<CrossValidationResult> {
     const issues: CrossValidationResult["issues"] = []
 
-    // Basic structural checks
+    // 1. Find pipeline contract
+    let pipelineContract: PipelineContract | null = null
+    for (const pipeline of this.pipelines.values()) {
+      if (pipeline.stages.some(s => s.role === targetRole)) {
+        pipelineContract = this.getPipelineContract(pipeline.id)
+        break
+      }
+    }
+    if (!pipelineContract) {
+      for (const bp of this.getBuiltInPipelines()) {
+        if (bp.stages.some(s => s.role === targetRole)) {
+          pipelineContract = this.getPipelineContract(bp.id)
+          if (pipelineContract) break
+        }
+      }
+    }
+
+    if (pipelineContract) {
+      // 2. Schema validation per stage
+      for (const contract of pipelineContract.stageContracts) {
+        const stageResult = allStageResults.get(contract.role)
+        if (!stageResult) continue
+        const schemaResults = this.validateSchema(stageResult.output, contract.outputSchema)
+        for (const sr of schemaResults) {
+          if (!sr.passed) {
+            issues.push({ severity: sr.severity as "error" | "warning" | "info", description: `[${contract.role}] ${sr.detail}`, source: "schema-validator" })
+          }
+        }
+      }
+      // 3. Cross-stage invariants
+      const invResults = this.checkInvariants(pipelineContract.crossStageInvariants, allStageResults)
+      for (const ir of invResults) {
+        if (!ir.passed) {
+          issues.push({ severity: ir.severity as "error" | "warning" | "info", description: ir.detail, source: "invariant-checker" })
+        }
+      }
+    }
+
+    // 4. Basic structural checks
     for (const [role, result] of allStageResults) {
       if (role === targetRole) continue
       if (!result.output || result.output.trim().length === 0) {
@@ -114,57 +243,36 @@ export class Orchestrator {
       }
     }
 
-    // Semantic validation via LLM (if available)
+    // 5. Semantic validation via LLM
     if (this.llmEngine && allStageResults.size >= 2) {
       const previousStages = [...allStageResults].filter(([r]) => r !== targetRole)
       const previousOutputs = previousStages.map(([r, res]) => `### ${r}\n${res.output.slice(0, 1000)}`).join("\n\n")
-
-      const validationPrompt = `You are a cross-validator. Compare the outputs of different stages in a software engineering pipeline. Identify any inconsistencies, contradictions, or missing pieces between stages.
-
-Previous stage outputs:
+      const contractInfo = pipelineContract ? `Pipeline: ${pipelineContract.pipelineId}\nContracts: ${pipelineContract.stageContracts.length} stages` : "No formal contract"
+      const validationPrompt = `You are a strict cross-validator. Compare pipeline stage outputs for consistency.
+${contractInfo}
+Previous outputs:
 ${previousOutputs}
-
-Current stage (${targetRole}) output:
+Current (${targetRole}):
 ${output.slice(0, 1500)}
-
-Check:
-1. Does the current output contradict any previous stage?
-2. Are there requirements from earlier stages that are not addressed?
-3. Are there any gaps or missing pieces?
-
-Return your analysis as JSON with:
-- "passed": boolean
-- "issues": array of { "severity": "error"|"warning"|"info", "description": string, "source": string }
-- "summary": string`
-
+Check: 1) Contradictions? 2) Missing requirements? 3) Contract compliance?
+Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary":string}`
       try {
-        const llmResp = await this.llmEngine.call({
-          systemPrompt: "You are a strict cross-validator. Compare pipeline stage outputs for consistency.",
-          userPrompt: validationPrompt,
-          jsonMode: true,
-          temperature: 0.1,
-          maxTokens: 1024,
-        })
+        const llmResp = await this.llmEngine.call({ systemPrompt: "You are a strict cross-validator.", userPrompt: validationPrompt, jsonMode: true, temperature: 0.1, maxTokens: 1024 })
         const parsed = JSON.parse(llmResp.content)
         if (parsed.issues && Array.isArray(parsed.issues)) {
           for (const issue of parsed.issues) {
             if (issue.severity && issue.description && !issues.some(i => i.description === issue.description)) {
-              issues.push({
-                severity: issue.severity as "error" | "warning" | "info",
-                description: issue.description,
-                source: issue.source ?? "llm-validator",
-              })
+              issues.push({ severity: issue.severity, description: issue.description, source: issue.source ?? "llm-validator" })
             }
           }
         }
-      } catch { /* LLM call failed, fall through */ }
+      } catch { /* LLM call failed */ }
     }
 
     const passed = issues.filter(i => i.severity === "error").length === 0
     const summary = passed
-      ? `Cross-validation passed: ${allStageResults.size} stages reviewed, no critical issues`
-      : `Cross-validation found ${issues.length} issue(s): ${issues.filter(i => i.severity === "error").length} error(s), ${issues.filter(i => i.severity === "warning").length} warning(s)`
-
+      ? `Cross-validation passed: ${allStageResults.size} stages, ${issues.length} issue(s) (minor)`
+      : `Cross-validation FAILED: ${issues.filter(i => i.severity === "error").length} error(s), ${issues.filter(i => i.severity === "warning").length} warning(s)`
     return { stage: targetRole, targetStage: "<all>", issues, passed, summary }
   }
 
@@ -435,5 +543,165 @@ Return your analysis as JSON with:
         createdAt: Date.now(),
       },
     ]
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // G4: Contract-based cross-validation
+  // ──────────────────────────────────────────────────────────────
+
+  /** Get the built-in contract for a pipeline */
+  getPipelineContract(pipelineId: string): PipelineContract | null {
+    // Define contracts inline
+    const featureDev: PipelineContract = {
+      pipelineId: "feature-dev",
+      stageContracts: [
+        {
+          role: "pm", description: "PM defines requirements and acceptance criteria",
+          inputSchema: [{ name: "goal", type: "string", required: true, description: "The feature goal" }],
+          outputSchema: [
+            { name: "spec", type: "string", required: true, description: "Feature specification" },
+            { name: "criteria", type: "string[]", required: true, description: "Acceptance criteria" },
+          ],
+          preConditions: [{ expr: "goal is non-empty", severity: "error", description: "Feature goal must be defined" }],
+          postConditions: [
+            { expr: "spec is non-empty", severity: "error", description: "PM must produce a specification" },
+          ],
+        },
+        {
+          role: "architect", description: "Architect designs architecture",
+          inputSchema: [
+            { name: "spec", type: "string", required: true, description: "Specification from PM" },
+            { name: "criteria", type: "string[]", required: true, description: "Acceptance criteria" },
+          ],
+          outputSchema: [
+            { name: "architecture", type: "string", required: true, description: "Architecture design" },
+            { name: "interfaces", type: "json", required: true, description: "Interface contracts" },
+          ],
+          preConditions: [{ expr: "spec is non-empty", severity: "error", description: "Architecture needs a specification" }],
+          postConditions: [{ expr: "architecture is non-empty", severity: "error", description: "Architecture must be produced" }],
+        },
+        {
+          role: "developer", description: "Developer implements the feature",
+          inputSchema: [
+            { name: "spec", type: "string", required: true, description: "Feature specification" },
+            { name: "architecture", type: "string", required: true, description: "Architecture design" },
+            { name: "interfaces", type: "json", required: true, description: "Interface contracts" },
+          ],
+          outputSchema: [
+            { name: "files", type: "string[]", required: true, description: "Implementation files" },
+          ],
+          preConditions: [{ expr: "architecture is non-empty", severity: "error", description: "Developer needs architecture" }],
+          postConditions: [
+            { expr: "files exist", severity: "error", description: "Implementation must produce files" },
+          ],
+        },
+        {
+          role: "qa", description: "QA reviews the implementation",
+          inputSchema: [
+            { name: "spec", type: "string", required: true, description: "Original specification" },
+            { name: "criteria", type: "string[]", required: true, description: "Acceptance criteria" },
+            { name: "files", type: "string[]", required: true, description: "Implementation files" },
+          ],
+          outputSchema: [
+            { name: "issues", type: "json", required: true, description: "Review findings" },
+            { name: "summary", type: "string", required: true, description: "Review verdict" },
+            { name: "passed", type: "boolean", required: true, description: "Whether QA approves" },
+          ],
+          preConditions: [{ expr: "files exist", severity: "warning", description: "QA should have files to review" }],
+          postConditions: [{ expr: "output is non-empty", severity: "error", description: "QA must produce a review" }],
+        },
+      ],
+      crossStageInvariants: [
+        { expr: "no errors", severity: "error", description: "No stage should produce errors" },
+        { expr: "dependency is complete", severity: "error", description: "Each stage depends on previous stage output" },
+      ],
+    }
+
+    const fixVerify: PipelineContract = {
+      pipelineId: "fix-verify",
+      stageContracts: [
+        {
+          role: "qa", description: "QA reproduces the bug",
+          inputSchema: [{ name: "goal", type: "string", required: true, description: "Bug description" }],
+          outputSchema: [
+            { name: "reproduction", type: "string", required: true, description: "Steps to reproduce" },
+            { name: "failure", type: "string", required: true, description: "Actual failure" },
+          ],
+          preConditions: [{ expr: "goal is non-empty", severity: "error", description: "Bug description required" }],
+          postConditions: [{ expr: "output is non-empty", severity: "error", description: "Reproduction steps required" }],
+        },
+        {
+          role: "developer", description: "Developer fixes the root cause",
+          inputSchema: [
+            { name: "reproduction", type: "string", required: true, description: "Steps to reproduce" },
+            { name: "failure", type: "string", required: true, description: "Actual failure" },
+          ],
+          outputSchema: [
+            { name: "files", type: "string[]", required: true, description: "Fix files" },
+          ],
+          preConditions: [{ expr: "output is non-empty", severity: "error", description: "Developer needs reproduction steps" }],
+          postConditions: [{ expr: "files exist", severity: "error", description: "Fix must produce changes" }],
+        },
+        {
+          role: "qa", description: "QA verifies the fix",
+          inputSchema: [
+            { name: "fix", type: "string", required: true, description: "Fix description" },
+            { name: "files", type: "string[]", required: true, description: "Changed files" },
+          ],
+          outputSchema: [
+            { name: "passed", type: "boolean", required: true, description: "Whether fix is verified" },
+            { name: "summary", type: "string", required: true, description: "Verification result" },
+          ],
+          preConditions: [{ expr: "files exist", severity: "warning", description: "QA needs files to verify" }],
+          postConditions: [{ expr: "output is non-empty", severity: "error", description: "QA must produce verification" }],
+        },
+      ],
+      crossStageInvariants: [{ expr: "no errors", severity: "error", description: "No stage should produce errors" }],
+    }
+
+    const refactorReview: PipelineContract = {
+      pipelineId: "refactor-review",
+      stageContracts: [
+        {
+          role: "architect", description: "Architect designs new structure",
+          inputSchema: [{ name: "goal", type: "string", required: true, description: "Refactoring goal" }],
+          outputSchema: [
+            { name: "architecture", type: "string", required: true, description: "New structure" },
+          ],
+          preConditions: [{ expr: "goal is non-empty", severity: "error", description: "Refactoring goal required" }],
+          postConditions: [{ expr: "output is non-empty", severity: "error", description: "New structure must be defined" }],
+        },
+        {
+          role: "developer", description: "Developer executes refactoring",
+          inputSchema: [
+            { name: "architecture", type: "string", required: true, description: "New structure" },
+          ],
+          outputSchema: [{ name: "files", type: "string[]", required: true, description: "Changed files" }],
+          preConditions: [{ expr: "output is non-empty", severity: "error", description: "Developer needs architecture" }],
+          postConditions: [{ expr: "files exist", severity: "error", description: "Refactoring must produce changes" }],
+        },
+        {
+          role: "qa", description: "QA verifies no regressions",
+          inputSchema: [{ name: "files", type: "string[]", required: true, description: "Changed files" }],
+          outputSchema: [
+            { name: "passed", type: "boolean", required: true, description: "Whether refactoring is clean" },
+            { name: "summary", type: "string", required: true, description: "Review result" },
+          ],
+          preConditions: [{ expr: "files exist", severity: "warning", description: "QA needs files to review" }],
+          postConditions: [{ expr: "output is non-empty", severity: "error", description: "QA must produce verdict" }],
+        },
+      ],
+      crossStageInvariants: [
+        { expr: "no errors", severity: "error", description: "No regressions allowed" },
+        { expr: "compile passes", severity: "error", description: "Code must compile after refactoring" },
+      ],
+    }
+
+    const contracts: Record<string, PipelineContract> = {
+      "feature-dev": featureDev,
+      "fix-verify": fixVerify,
+      "refactor-review": refactorReview,
+    }
+    return contracts[pipelineId] ?? null
   }
 }

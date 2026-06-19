@@ -89,6 +89,9 @@ export class Verifier {
   private detectedLang: SupportedLanguage = "unknown"
   private llm: LLMEngine | null = null
   private domainRegistry: DomainRegistry | null = null
+  /** Cache hasil compile — avoid re-running tsc untuk intermediate steps */
+  private lastCompileResult: { passed: boolean; output: string } | null = null
+  private lastCompileFiles: string[] = []
 
   setLLM(llm: LLMEngine): void {
     this.llm = llm
@@ -100,6 +103,12 @@ export class Verifier {
 
   setDomainRegistry(registry: DomainRegistry): void {
     this.domainRegistry = registry
+  }
+
+  /** Reset compile cache (panggil saat file berubah) */
+  clearCompileCache(): void {
+    this.lastCompileResult = null
+    this.lastCompileFiles = []
   }
 
   async verifySemantic(_stepId: string, intent: string, changedFiles: string[], projectDir: string): Promise<CheckResult> {
@@ -143,6 +152,38 @@ export class Verifier {
     } catch {
       return { name: "semantic", passed: true, output: `Semantic verification: ${resp.content.slice(0, 500)}` }
     }
+  }
+
+  /**
+   * Fast verification — compile ONLY (no tests, no lint, no LLM).
+   * Untuk intermediate steps di agentic_execute.
+   * Pakai cache: jika file tidak berubah sejak compile terakhir, skip.
+   */
+  verifyFast(stepId: string, projectDir: string, changedFiles?: string[]): VerificationResult {
+    if (this.detectedLang === "unknown") this.detectLanguage(projectDir)
+
+    const checks: CheckResult[] = []
+
+    // Compile: pake cache kalau file tidak berubah
+    const filesChanged = changedFiles ?? []
+    const filesSame = filesChanged.length === this.lastCompileFiles.length &&
+      filesChanged.every((f, i) => f === this.lastCompileFiles[i])
+
+    if (this.lastCompileResult && filesSame) {
+      checks.push({
+        name: `compile:${this.detectedLang} (cached)`,
+        passed: this.lastCompileResult.passed,
+        output: this.lastCompileResult.output,
+      })
+    } else {
+      const compileResult = this.verifyCompile(projectDir)
+      this.lastCompileResult = { passed: compileResult.passed, output: compileResult.output }
+      this.lastCompileFiles = [...filesChanged]
+      checks.push(compileResult)
+    }
+
+    const errors = checks.filter(c => !c.passed).map(c => c.output)
+    return { passed: errors.length === 0, stepId, checks, errors }
   }
 
   async verifyAllDeep(stepId: string, projectDir: string, intent?: string, changedFiles?: string[], requireSemanticCheck = false): Promise<VerificationResult> {

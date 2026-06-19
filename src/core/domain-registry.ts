@@ -1,4 +1,5 @@
 export type DomainName = string
+import type { FormalContract } from "./formal-model.js"
 
 export interface VerifierStrategy {
   name: string
@@ -28,6 +29,8 @@ export interface DomainPack {
   fileExtensions?: string[]
   decompositionRules?: DomainDecompositionRule[]
   onLoad?: () => void
+  /** Formal contract for pre/post-condition verification (G5 formal model) */
+  formalContract?: FormalContract
 }
 
 export class DomainRegistry {

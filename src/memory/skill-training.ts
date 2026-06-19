@@ -1,4 +1,7 @@
+import { writeFileSync, mkdirSync } from "node:fs"
+import { dirname } from "node:path"
 import type { SkillRecord } from "./skill-store.js"
+import type { Episode } from "./episodic-store.js"
 
 export interface TrainingExample {
   instruction: string
@@ -103,6 +106,120 @@ export function trainingDatasetSummary(examples: TrainingExample[]): string {
     out += `  … and ${examples.length - 5} more\n`
   }
   return out
+}
+
+/**
+ * Convert a single episode into a training example.
+ * instruction = plan goal → what the agent was asked to do
+ * response   = decisions + outcome → how the agent reasoned and what happened
+ */
+export function episodeToTrainingExample(episode: Episode): TrainingExample {
+  const decisionsText = episode.decisions.length > 0
+    ? episode.decisions.map((d, i) => `${i + 1}. ${d}`).join("\n")
+    : "No decision trace available."
+
+  const response = [
+    `## Task: ${episode.planGoal}`,
+    `**Outcome:** ${episode.outcome}`,
+    episode.filesChanged && episode.filesChanged.length > 0
+      ? `**Files changed:** ${episode.filesChanged.join(", ")}`
+      : "",
+    `\n**Decision trace:**`,
+    decisionsText,
+  ].filter(Boolean).join("\n")
+
+  const quality = episode.outcome === "success" ? 1.0
+    : episode.outcome === "partial" ? 0.5
+    : 0.0
+
+  return {
+    instruction: episode.planGoal,
+    response,
+    skillName: `episode:${episode.id}`,
+    quality,
+  }
+}
+
+/**
+ * Convert all episodes to training examples, filtered by minimum quality.
+ */
+export function episodesToTrainingData(
+  episodes: Episode[],
+  format: "openai" | "instructions" = "openai",
+  minQuality = 0.0,
+): TrainingDataset {
+  const examples = episodes
+    .filter(e => {
+      const q = e.outcome === "success" ? 1.0 : e.outcome === "partial" ? 0.5 : 0.0
+      return q >= minQuality
+    })
+    .map(e => episodeToTrainingExample(e))
+
+  const data = format === "openai"
+    ? exportOpenAIJSONL(examples)
+    : exportInstructionsJSON(examples)
+
+  return {
+    format,
+    totalExamples: examples.length,
+    qualityFilter: minQuality,
+    data,
+  }
+}
+
+/**
+ * Prepare a combined fine-tuning dataset from both skills and episodes.
+ */
+export function prepareFineTuningDataset(
+  skills: SkillRecord[],
+  episodes: Episode[],
+  format: "openai" | "instructions" = "openai",
+  minSkillSuccessRate = 0.5,
+  minEpisodeQuality = 0.0,
+): TrainingDataset {
+  const skillExamples = skills
+    .filter(s => s.successRate >= minSkillSuccessRate)
+    .map(s => skillToTrainingExample(s))
+
+  const episodeExamples = episodes
+    .filter(e => {
+      const q = e.outcome === "success" ? 1.0 : e.outcome === "partial" ? 0.5 : 0.0
+      return q >= minEpisodeQuality
+    })
+    .map(e => episodeToTrainingExample(e))
+
+  const allExamples = [...skillExamples, ...episodeExamples]
+
+  const data = format === "openai"
+    ? exportOpenAIJSONL(allExamples)
+    : exportInstructionsJSON(allExamples)
+
+  return {
+    format,
+    totalExamples: allExamples.length,
+    qualityFilter: Math.min(minSkillSuccessRate, minEpisodeQuality),
+    data,
+  }
+}
+
+/**
+ * Save training data to a JSONL file on disk.
+ * Returns the file path.
+ */
+export function saveTrainingDataToFile(
+  dataset: TrainingDataset,
+  outputPath: string,
+): string {
+  // Ensure parent directory exists
+  const dir = dirname(outputPath)
+  try { mkdirSync(dir, { recursive: true }) } catch {}
+
+  const content = dataset.format === "openai" || dataset.format === "instructions"
+    ? dataset.data + "\n"
+    : dataset.data
+
+  writeFileSync(outputPath, content, "utf-8")
+  return outputPath
 }
 
 /**

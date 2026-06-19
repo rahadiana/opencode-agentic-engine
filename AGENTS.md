@@ -71,6 +71,7 @@ Note: `memory/skill-training.ts` juga ada — konversi skill → training data (
 | agentic_pr | II | Generate PR + description |
 | agentic_score | II | Tech debt analysis |
 | agentic_model + agentic_model_reset | II | Configure per-role LLM model preferences per session |
+| agentic_budget | II | Set/view/reset resource budget limits (tokens, steps, time, cost) |
 | agentic_delegate | III | Assign to architect/developer/qa/coordinator — pipeline-aware with cross-validation |
 | agentic_pipeline | III | Define and run multi-agent workflow pipelines (PM→Arch→Dev→QA) |
 | agentic_message | III | Inter-agent messaging: send, inbox, conversation, review requests |

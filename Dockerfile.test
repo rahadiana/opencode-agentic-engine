@@ -66,6 +66,12 @@ RUN echo "=== LAYER 7: EVOCLAW E2E SCENARIO ===" && \
     E2E_CODEBASE=/tmp/e2e-codebase-real node test/e2e-scenario.mjs && \
     echo "=== LAYER 7: OK ==="
 
+# — Layer 9: Blueprint tools E2E (debate, router, clean, rag, mcp) —
+# Tests all 5 blueprint tools that don't need LLM.
+RUN echo "=== LAYER 9: BLUEPRINT E2E ===" && \
+    node test/blueprint-e2e.mjs && \
+    echo "=== LAYER 9: OK ==="
+
 # — Layer 8: LLM E2E tests via OpenCode Free (no auth needed) —
 # Only runs if LLM_OFF is not set. OpenCode Free endpoint needs internet.
 ARG LLM_OFF

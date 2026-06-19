@@ -1,6 +1,7 @@
 import type { Subtask, Plan } from "./intent-parser"
 import type { DomainRegistry } from "./domain-registry"
 import type { BudgetTracker } from "./budget-tracker"
+import { ContractVerifier, type FormalContract, type VerificationContext } from "./formal-model.js"
 
 export interface ExecutionResult {
   stepId: string
@@ -36,6 +37,7 @@ export class Executor {
   private states = new Map<string, ExecutionState>()
   private domainRegistry: DomainRegistry | null = null
   private budgetTracker: BudgetTracker | null = null
+  private contractVerifier = new ContractVerifier()
 
   setDomainRegistry(registry: DomainRegistry): void {
     this.domainRegistry = registry
@@ -43,6 +45,32 @@ export class Executor {
 
   setBudgetTracker(tracker: BudgetTracker): void {
     this.budgetTracker = tracker
+  }
+
+  /** G5: Get contract for current domain */
+  private getCurrentContract(): FormalContract | undefined {
+    return this.domainRegistry?.getCurrentPack()?.formalContract
+  }
+
+  /** G5: Verify pre-conditions before executing a step.
+   *  Returns null if no contract, or { passed, summary, results } */
+  async verifyPreConditions(stepId: string, description: string, projectDir?: string): Promise<{ passed: boolean; summary: string } | null> {
+    const contract = this.getCurrentContract()
+    if (!contract) return null
+
+    const context: VerificationContext = { stepId, description, projectDir }
+    return this.contractVerifier.verifyPreConditions(contract, context)
+  }
+
+  /** G5: Verify post-conditions after executing a step */
+  async verifyPostConditions(stepId: string, description: string, filesModified: string[], output: string, errorOutput?: string, projectDir?: string): Promise<{ passed: boolean; summary: string } | null> {
+    const contract = this.getCurrentContract()
+    if (!contract) return null
+
+    const context: VerificationContext = {
+      stepId, description, filesModified, output, errorOutput, projectDir,
+    }
+    return this.contractVerifier.verifyPostConditions(contract, context)
   }
 
   /** Per-error-category retry limits (domain-agnostic).

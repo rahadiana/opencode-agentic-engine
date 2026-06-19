@@ -331,6 +331,37 @@ export class MultiIndexRAG {
   }
 
   /**
+   * Async variant of searchByCategory — adds vector similarity enrichment
+   * if an embedder is configured. Falls back to sync TF-IDF search otherwise.
+   */
+  async searchByCategoryAsync(query: string, category: string, limit = 10): Promise<IndexSearchResult> {
+    const result = this.searchByCategory(query, category, limit)
+
+    // Enrich with vector scores if embedder is available
+    if (this.embedder && result.entries.length > 0) {
+      const enriched = await enrichWithVectors(this.embedder, [result], query)
+      return enriched[0] ?? result
+    }
+
+    return result
+  }
+
+  /**
+   * Async variant of searchAll — adds vector similarity enrichment
+   * if an embedder is configured. Falls back to sync TF-IDF search otherwise.
+   */
+  async searchAllAsync(query: string, limit = 10): Promise<IndexSearchResult[]> {
+    const results = this.searchAll(query, limit)
+
+    // Enrich with vector scores if embedder is available
+    if (this.embedder && results.length > 0) {
+      return enrichWithVectors(this.embedder, results, query)
+    }
+
+    return results
+  }
+
+  /**
    * Auto-select the best category based on TF-IDF scoring.
    */
   autoCategory(query: string): string {

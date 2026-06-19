@@ -2,6 +2,177 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, watch, statSync } f
 import { join } from "node:path"
 
 // ──────────────────────────────────────────────
+// JSON Schema Validation
+// ──────────────────────────────────────────────
+
+export interface ValidationIssue {
+  path: string
+  message: string
+  severity: "warning" | "error"
+  expected?: string
+  actual?: string
+}
+
+/**
+ * JSON Schema-like validator untuk AgenticConfigSchema.
+ * Memvalidasi tipe, range, dan field yang required.
+ */
+export function validateConfig(raw: unknown): { valid: boolean; config: AgenticConfigSchema; issues: ValidationIssue[] } {
+  const issues: ValidationIssue[] = []
+  const defaults = { ...DEFAULT_CONFIG }
+
+  if (!raw || typeof raw !== "object") {
+    return { valid: false, config: { ...defaults }, issues: [{ path: "$", message: "Config is not an object", severity: "error" }] }
+  }
+
+  const cfg = raw as Record<string, unknown>
+
+  // Helper: validate a nested object
+  function validateObject(path: string, obj: unknown, shape: Record<string, { type: string; required?: boolean; min?: number; max?: number; values?: string[] }>): Record<string, unknown> {
+    const result: Record<string, unknown> = {}
+    if (!obj || typeof obj !== "object") {
+      for (const [key, def] of Object.entries(shape)) {
+        if (def.required) {
+          issues.push({ path: `${path}.${key}`, message: `Required field missing`, severity: "error", expected: def.type })
+        }
+      }
+      return result
+    }
+    const o = obj as Record<string, unknown>
+    for (const [key, def] of Object.entries(shape)) {
+      const val = o[key]
+      if (val === undefined || val === null) {
+        if (def.required) {
+          issues.push({ path: `${path}.${key}`, message: `Required field missing`, severity: "error", expected: def.type })
+        }
+        continue
+      }
+      const actualType = Array.isArray(val) ? "array" : typeof val
+      if (actualType !== def.type) {
+        issues.push({ path: `${path}.${key}`, message: `Expected type ${def.type}, got ${actualType}`, severity: "warning", expected: def.type, actual: actualType })
+        continue
+      }
+      if (def.type === "number") {
+        const num = val as number
+        if (def.min !== undefined && num < def.min) {
+          issues.push({ path: `${path}.${key}`, message: `Value ${num} is below minimum ${def.min}`, severity: "warning", expected: `>= ${def.min}`, actual: String(num) })
+        }
+        if (def.max !== undefined && num > def.max) {
+          issues.push({ path: `${path}.${key}`, message: `Value ${num} exceeds maximum ${def.max}`, severity: "warning", expected: `<= ${def.max}`, actual: String(num) })
+        }
+      }
+      if (def.type === "string" && def.values && !def.values.includes(val as string)) {
+        issues.push({ path: `${path}.${key}`, message: `Value "${val}" not in allowed values: ${def.values.join(", ")}`, severity: "warning", expected: def.values.join("|"), actual: String(val) })
+      }
+      result[key] = val
+    }
+    return result
+  }
+
+  // Validate embedding (nullable)
+  const embeddingRaw = cfg.embedding
+  if (embeddingRaw !== null && embeddingRaw !== undefined) {
+    if (typeof embeddingRaw !== "object") {
+      issues.push({ path: "embedding", message: "Expected object or null", severity: "error", expected: "object|null", actual: typeof embeddingRaw })
+    } else {
+      validateObject("embedding", embeddingRaw, {
+        model: { type: "string", required: true },
+        endpoint: { type: "string" },
+        apiKey: { type: "string" },
+      })
+    }
+  }
+
+  // Validate memory
+  if (cfg.memory) {
+    const memShape = {
+      enabled: { type: "boolean" },
+      mode: { type: "string", values: ["lightweight", "full"] },
+      maxEntries: { type: "number", min: 1, max: 100000 },
+      compressThreshold: { type: "number", min: 1 },
+      forgetAfterDays: { type: "number", min: 1, max: 3650 },
+      stopWordsLanguages: { type: "array" },
+    }
+    validateObject("memory", cfg.memory, memShape)
+    // Validate nested search
+    const searchRaw = (cfg.memory as Record<string, unknown>).search
+    if (searchRaw) {
+      validateObject("memory.search", searchRaw, {
+        keywordWeight: { type: "number", min: 0, max: 1 },
+        vectorWeight: { type: "number", min: 0, max: 1 },
+      })
+      const sw = searchRaw as Record<string, unknown>
+      if (typeof sw.keywordWeight === "number" && typeof sw.vectorWeight === "number") {
+        const total = sw.keywordWeight + sw.vectorWeight
+        if (Math.abs(total - 1) > 0.01) {
+          issues.push({ path: "memory.search", message: `keywordWeight + vectorWeight = ${total}, expected ~1.0`, severity: "warning", expected: "1.0", actual: String(total) })
+        }
+      }
+    }
+  }
+
+  // Validate agent
+  if (cfg.agent) {
+    validateObject("agent", cfg.agent, {
+      maxDelegationDepth: { type: "number", min: 1, max: 10 },
+      autoSkillExtract: { type: "boolean" },
+      defaultRole: { type: "string" },
+      requireSemanticCheck: { type: "boolean" },
+      autoHallucinationCheck: { type: "boolean" },
+      blockOnHallucination: { type: "boolean" },
+      hallucinationThreshold: { type: "number", min: 0, max: 1 },
+      hardBlockReliability: { type: "number", min: 0, max: 1 },
+      softBlockReliability: { type: "number", min: 0, max: 1 },
+      minSampleSize: { type: "number", min: 1 },
+    })
+  }
+
+  // Validate storage
+  if (cfg.storage) {
+    validateObject("storage", cfg.storage, {
+      traceRetentionDays: { type: "number", min: 1, max: 365 },
+      skillMaxCount: { type: "number", min: 1, max: 10000 },
+    })
+  }
+
+  // Validate fine-tuning (optional)
+  if (cfg.fineTuning && typeof cfg.fineTuning === "object") {
+    validateObject("fineTuning", cfg.fineTuning, {
+      apiKey: { type: "string" },
+      baseURL: { type: "string" },
+      model: { type: "string" },
+      trainingEpochs: { type: "number", min: 1, max: 100 },
+      batchSize: { type: "number", min: 1, max: 256 },
+      learningRateMultiplier: { type: "number", min: 0.01, max: 10 },
+      suffix: { type: "string" },
+    })
+  }
+
+  // Merge valid parts with defaults
+  const merged = { ...defaults }
+  if (embeddingRaw && typeof embeddingRaw === "object") {
+    (merged as any).embedding = { ...defaults.embedding, ...embeddingRaw as EmbeddingConfig }
+  }
+  if (cfg.memory && typeof cfg.memory === "object") {
+    merged.memory = { ...defaults.memory, ...cfg.memory as MemoryConfig }
+    const searchRaw = (cfg.memory as Record<string, unknown>).search
+    if (searchRaw && typeof searchRaw === "object") {
+      merged.memory.search = { ...defaults.memory.search, ...searchRaw as MemoryConfig["search"] }
+    }
+  }
+  if (cfg.agent && typeof cfg.agent === "object") {
+    merged.agent = { ...defaults.agent, ...cfg.agent as AgentConfig }
+  }
+  if (cfg.storage && typeof cfg.storage === "object") {
+    merged.storage = { ...defaults.storage, ...cfg.storage as StorageConfig }
+  }
+
+  const hasErrors = issues.some(i => i.severity === "error")
+
+  return { valid: !hasErrors, config: merged, issues }
+}
+
+// ──────────────────────────────────────────────
 // Schema
 // ──────────────────────────────────────────────
 
@@ -47,6 +218,23 @@ export interface StorageConfig {
   skillMaxCount: number
 }
 
+export interface FineTuningConfigSchema {
+  /** OpenAI API key (falls back to OPENAI_API_KEY env) */
+  apiKey?: string
+  /** Base URL for OpenAI-compatible API */
+  baseURL?: string
+  /** Base model to fine-tune, e.g. "gpt-4o-mini-2024-07-18" */
+  model?: string
+  /** Default number of training epochs */
+  trainingEpochs?: number
+  /** Batch size for training */
+  batchSize?: number
+  /** Learning rate multiplier */
+  learningRateMultiplier?: number
+  /** Custom suffix for the fine-tuned model name */
+  suffix?: string
+}
+
 export interface AgenticConfigSchema {
   $schema: string
   /** Embedding — null = lightweight mode */
@@ -54,6 +242,8 @@ export interface AgenticConfigSchema {
   memory: MemoryConfig
   agent: AgentConfig
   storage: StorageConfig
+  /** Optional fine-tuning configuration */
+  fineTuning?: FineTuningConfigSchema
 }
 
 // ──────────────────────────────────────────────
@@ -91,6 +281,7 @@ export const DEFAULT_CONFIG: AgenticConfigSchema = {
     traceRetentionDays: 7,
     skillMaxCount: 200,
   },
+  fineTuning: undefined,
 }
 
 // ──────────────────────────────────────────────
@@ -124,14 +315,43 @@ export class ConfigLoader {
       const raw = readFileSync(this.configPath, "utf-8")
       const parsed = JSON.parse(raw)
 
+      // Validate against schema — warn on issues but still load
+      const { valid, config, issues } = validateConfig(parsed)
+      if (issues.length > 0) {
+        const warnings = issues.filter(i => i.severity === "warning")
+        const errors = issues.filter(i => i.severity === "error")
+        if (warnings.length > 0) {
+          console.warn(`[ConfigLoader] ${warnings.length} config warning(s):\n${warnings.map(i => `  - ${i.path}: ${i.message}`).join("\n")}`)
+        }
+        if (errors.length > 0) {
+          console.warn(`[ConfigLoader] ${errors.length} config error(s) — fixing with defaults:\n${errors.map(i => `  - ${i.path}: ${i.message}`).join("\n")}`)
+        }
+      }
+
+      if (!valid && issues.some(i => i.severity === "error")) {
+        // Merge recovered parts with defaults
+        const merged = this.mergeDeep({ ...DEFAULT_CONFIG }, config)
+        this.config = merged
+        // Save fixed version back
+        try { this.save(merged) } catch { /* non-fatal */ }
+        return this.config
+      }
+
       // Merge with defaults (so new fields always have values)
-      this.config = this.mergeDeep({ ...DEFAULT_CONFIG }, parsed)
+      this.config = this.mergeDeep({ ...DEFAULT_CONFIG }, config)
       return this.config
     } catch {
       // Parse error — fallback ke default
+      console.warn(`[ConfigLoader] Failed to parse config, using defaults`)
       this.config = { ...DEFAULT_CONFIG }
       return this.config
     }
+  }
+
+  /** Validate current config and return issues */
+  getValidationIssues(): ValidationIssue[] {
+    const { issues } = validateConfig(this.config)
+    return issues
   }
 
   /** Save config to file */

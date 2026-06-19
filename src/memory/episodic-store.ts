@@ -3,6 +3,7 @@ import { createMemoryEnvelope, parseMemoryEnvelope, MEMORY_SCHEMA_VERSION, Memor
 export interface Episode {
   id: string
   sessionId: string
+  projectId?: string
   planGoal: string
   summary: string
   outcome: "success" | "partial" | "failed"
@@ -29,10 +30,11 @@ export class EpisodicStore {
     this.onRecord = cb
   }
 
-  record(sessionId: string, planGoal: string, outcome: Episode["outcome"], decisions: string[], filesChanged?: string[], domain?: string): Episode {
+  record(sessionId: string, planGoal: string, outcome: Episode["outcome"], decisions: string[], filesChanged?: string[], domain?: string, projectId?: string): Episode {
     const episode: Episode = {
       id: `ep-${Date.now()}`,
       sessionId,
+      projectId,
       planGoal,
       summary: `${outcome === "success" ? "Completed" : outcome === "partial" ? "Partially completed" : "Failed"}: ${planGoal}`,
       outcome,
@@ -46,6 +48,14 @@ export class EpisodicStore {
     this.episodes.push(episode)
     this.onRecord?.(episode)
     return episode
+  }
+
+  /** Get episodes scoped to a specific project, sorted by recency */
+  getByProject(projectId: string, limit = 100): Episode[] {
+    return this.episodes
+      .filter(e => e.projectId === projectId)
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+      .slice(0, limit)
   }
 
   search(query: string): Episode[] {
