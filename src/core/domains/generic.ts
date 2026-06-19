@@ -92,6 +92,6 @@ export const genericDomain: DomainPack = {
   errorMatchers: [genericErrorMatcher],
   roles: emptyRoles,
   skills: [],
-  tools: ["read", "edit", "write", "bash", "glob", "grep", "agentic_plan", "agentic_execute", "agentic_verify", "agentic_reflect", "agentic_status", "agentic_nav", "agentic_skill", "agentic_episodes"],
+  tools: ["read", "edit", "write", "bash", "glob", "grep", "agentic_plan", "agentic_execute", "agentic_verify", "agentic_reflect", "agentic_status", "agentic_nav", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_parallel", "agentic_skill", "agentic_episodes"],
   fileExtensions: [],
 }

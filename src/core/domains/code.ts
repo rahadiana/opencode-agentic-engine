@@ -201,6 +201,6 @@ export const codeDomain: DomainPack = {
   errorMatchers: codeErrorMatchers,
   roles: [],
   skills: [],
-  tools: ["read", "edit", "write", "bash", "glob", "grep", "agentic_nav", "agentic_verify", "agentic_score", "agentic_pr", "agentic_delegate", "agentic_skill", "agentic_plan", "agentic_execute"],
+  tools: ["read", "edit", "write", "bash", "glob", "grep", "agentic_nav", "agentic_verify", "agentic_score", "agentic_pr", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_parallel", "agentic_skill", "agentic_plan", "agentic_execute"],
   fileExtensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".mts", ".py", ".go", ".rs", ".java"],
 }

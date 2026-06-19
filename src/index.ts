@@ -687,8 +687,17 @@ const createEngine: Plugin = async (input, _options) => {
 
           const autoTag = (!args.subtasks || args.subtasks.length === 0) && subtasks.length > 0 ? " (auto-decomposed)" : ""
 
+          let planOutput = `## Plan Created${autoTag}\n\n**Goal:** ${plan.intent.goal}\n**Complexity:** ${plan.complexity}\n**Steps:** ${plan.estimatedSteps}\n\n### Steps\n${stepList}\n\nStart with \`agentic_execute\` for the first ready step.`
+
+          const suggestedPipelineId = orchestrator.getSuggestedPipeline(args.goal)
+          const suggestedPipelineObj = orchestrator.getPipeline(suggestedPipelineId)
+          if (suggestedPipelineObj && suggestedPipelineObj.stages.length > 0) {
+            const stageList = suggestedPipelineObj.stages.map(s => `\`${s.role}\``).join(" → ")
+            planOutput += `\n\n### 💡 Suggested Pipeline\nThis goal matches the **${suggestedPipelineObj.name}** pipeline (${stageList}). Run \`agentic_pipeline action="run" pipelineId="${suggestedPipelineId}"\` to delegate to specialized agents.`
+          }
+
           return {
-            output: `## Plan Created${autoTag}\n\n**Goal:** ${plan.intent.goal}\n**Complexity:** ${plan.complexity}\n**Steps:** ${plan.estimatedSteps}\n\n### Steps\n${stepList}\n\nStart with \`agentic_execute\` for the first ready step.`,
+            output: planOutput,
             metadata: { plan },
           }
         },
@@ -925,6 +934,11 @@ const createEngine: Plugin = async (input, _options) => {
 
             if (canRetry) {
               response += `\n🔄 **Retries remaining:** ${retriesLeft}/${maxAllowed} (${analysis.category}) — fix the issue and call \`agentic_execute\` again.`
+
+              if (retriesUsed >= 2) {
+                const delegateRole = analysis.category === "test" ? "qa" : (analysis.category === "compile" || analysis.category === "type") ? "developer" : "architect"
+                response += `\n\n💡 **Escalate:** This step has failed ${retriesUsed}x. Delegate to **${delegateRole}** specialist: \`agentic_delegate role="${delegateRole}" taskId="${args.stepId}-delegate" description="${analysis.category} error in ${args.stepId}"\``
+              }
             } else {
               response += `\n🛑 **Max retries (${maxAllowed}) reached for ${analysis.category}.** Address the underlying issue or revise the plan.`
             }
@@ -965,7 +979,7 @@ const createEngine: Plugin = async (input, _options) => {
           if (args.success && nextStep) {
             response += `\n### Next\n▶ **${nextStep.id}** — ${nextStep.description}`
           } else if (args.success && !nextStep) {
-            response += `\n### 🎉 All steps complete!\nRun \`agentic_verify\` for final verification.`
+            response += `\n### 🎉 All steps complete!\nRun \`agentic_verify\` for final verification, or \`agentic_pipeline action="run" pipelineId="fix-verify"\` to trigger a QA review.`
 
             // Record episode
             const session = sessionStore.getOrCreate(context.sessionID)
@@ -2215,12 +2229,44 @@ const createEngine: Plugin = async (input, _options) => {
             if (args.opencodePath) {
               stepRunner = (step) => parallelExec.executeWithSubprocessSpawn(step, args.opencodePath!, cwd, context.sessionID)
             } else {
-              stepRunner = parallelExec.llmStepRunner({
-                llmEngine,
-                projectDir: cwd,
-                planGoal: session.plan.intent.goal,
-                sessionId: context.sessionID,
-              })
+              stepRunner = async (step) => {
+                const taskId = `parallel-${step.id}-${Date.now()}`
+                coordinator.delegate("developer", {
+                  id: taskId, assignedTo: "developer",
+                  description: step.description, input: step.description,
+                  status: "running",
+                }, context.sessionID, 0)
+
+                const sharedMem = coordinator.getAllSharedMemory()
+                const memCtx = sharedMem.length > 0
+                  ? `\nShared context:\n${sharedMem.slice(-3).map(e => `- ${e.key}: ${e.value.slice(0, 200)}`).join("\n")}`
+                  : ""
+
+                try {
+                  const resp = await llmEngine.call({
+                    systemPrompt: `You are a developer implementing step ${step.id}. Return JSON with: "files": [{path, content}], "summary": "what was done"`,
+                    userPrompt: `Goal: ${session.plan!.intent.goal}\nStep: ${step.description}${memCtx}`,
+                    jsonMode: true, temperature: 0.3, maxTokens: 2048,
+                  })
+                  let impl: { files?: Array<{ path: string; content: string }>; summary?: string }
+                  try { impl = JSON.parse(resp.content) } catch {
+                    coordinator.updateTask(context.sessionID, taskId, "failed", resp.content)
+                    return { stepId: step.id, success: false, error: "LLM JSON parse error", output: resp.content, filesModified: [] }
+                  }
+                  const files: string[] = []
+                  for (const f of impl.files ?? []) {
+                    const abs = join(cwd, f.path)
+                    mkdirSync(dirname(abs), { recursive: true })
+                    writeFileSync(abs, f.content, "utf-8")
+                    files.push(f.path)
+                  }
+                  coordinator.updateTask(context.sessionID, taskId, "done", impl.summary)
+                  return { stepId: step.id, success: true, output: impl.summary ?? step.description, filesModified: files }
+                } catch (e) {
+                  coordinator.updateTask(context.sessionID, taskId, "failed", (e as Error).message)
+                  return { stepId: step.id, success: false, error: (e as Error).message, output: "", filesModified: [] }
+                }
+              }
             }
 
             const { results, durationMs } = await parallelExec.executePlanConcurrently(
@@ -3339,7 +3385,7 @@ const createEngine: Plugin = async (input, _options) => {
           sessionStore.getOrCreate(context.sessionID).plan = plan
 
           // ═══════════════════════════════════════════════
-          // PHASE 3: Implement — FAST single LLM call, return JSON
+          // PHASE 3: Implement — pipeline delegation or fast LLM
           // ═══════════════════════════════════════════════
           const fileContents: Record<string, string> = {}
           for (const f of relevantFiles) {
@@ -3350,77 +3396,188 @@ const createEngine: Plugin = async (input, _options) => {
             .map(([p, c]) => `${p}:\n${c.slice(0, 100)}`).join("\n---\n")
           const contextHints = [...memoryContexts.slice(0, 2), ...skillContexts.slice(0, 1)].join("; ")
 
-          // LLM returns JSON — faster parsing, no FILE: blocks needed
-          const systemPrompt = `Return JSON array of {path, content}. Write COMPLETE file contents.
+          const pipelineId = orchestrator.getSuggestedPipeline(args.goal)
+          const pipeline = orchestrator.getPipeline(pipelineId)
+          const usePipeline = thorough && pipeline && pipeline.stages.length >= 2 && activeSteps.length >= 2
+
+          let allModified: string[] = []
+          let completedSteps: string[] = []
+          let verifyPassed = true
+          let verifyNote = "—"
+          let pipelineReview = ""
+          let hasNoLLM = false
+
+          if (usePipeline) {
+            // ── Pipeline path: delegate developer + QA stages ──
+            const pipelineRunId = `run-${context.sessionID}-${pipelineId}`
+            orchestrator.startRun(pipelineRunId, pipelineId)
+
+            for (const stage of pipeline.stages) {
+              const stageTaskId = `auto-${stage.role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+
+              coordinator.delegate(stage.role, {
+                id: stageTaskId, assignedTo: stage.role,
+                description: `${args.goal} — ${stage.description}`,
+                input: stage.description, status: "running",
+                pipelineRunId,
+              }, context.sessionID, 0)
+
+              coordinator.writeSharedMemory(`auto:${stage.role}:start`, stage.description, stage.role)
+
+              const stageCtx = orchestrator.buildContextForRole(stage.role, pipelineRunId, coordinator.getAllSharedMemory())
+              const pipelineContextHints = [...memoryContexts.slice(0, 2), ...skillContexts.slice(0, 1)].join("; ")
+
+              const sysPrompts: Record<string, string> = {
+                pm: `You are a PM. Define requirements and acceptance criteria concisely. Return JSON: {"spec": "...", "criteria": ["..."]}`,
+                architect: `You are an architect. Design architecture and interface contracts. Return JSON: {"architecture": "...", "interfaces": [{...}], "designNotes": "..."}`,
+                developer: `Return JSON array of {path, content}. Write COMPLETE file contents. Rules: ESM imports (.js) · match existing patterns · valid imports. {"files":[{"path":"src/x.ts","content":"..."}]} or {"noChanges":true}`,
+                qa: `You are QA. Review the implementation for correctness, edge cases, and regressions. Return JSON: {"issues": [{"severity":"error|warning|info","description":"...","file":"..."}], "summary": "verdict", "passed": true/false}`,
+                coordinator: `You are a coordinator. Verify pipeline completion and consistency. Return JSON: {"summary": "...", "gaps": ["..."], "approved": true/false}`,
+              }
+              const sp = sysPrompts[stage.role] ?? `You are ${stage.role}. Complete your task. Return JSON output.`
+
+              const up = `Goal: ${args.goal}${args.constraints?.length ? `\nConstraints: ${args.constraints.join(", ")}` : ""}${pipelineContextHints ? `\nPast tasks: ${pipelineContextHints}` : ""}${stageCtx ? `\n\nContext from previous stages:\n${stageCtx}` : ""}\n${stage.role} task: ${stage.description}\n${filesBlock || "(new)"}\n${codebaseSummary.slice(0, 100)}`
+
+              const llmOut = await llmEngine.call({
+                systemPrompt: sp, userPrompt: up,
+                temperature: 0.2, maxTokens: 2048, jsonMode: true,
+              })
+
+              const raw = llmOut.content || ""
+              const isFail = raw.includes("[NO_LLM]") || raw === "NO_LLM"
+              if (isFail) { hasNoLLM = true; break }
+
+              coordinator.updateTask(context.sessionID, stageTaskId, "done", raw.slice(0, 1000))
+
+              if (stage.role === "developer") {
+                try {
+                  const parsed = JSON.parse(raw)
+                  if (parsed.files && Array.isArray(parsed.files)) {
+                    for (const f of parsed.files) {
+                      if (f.path && f.content) {
+                        const absPath = join(projectDir, f.path)
+                        mkdirSync(dirname(absPath), { recursive: true })
+                        writeFileSync(absPath, f.content, "utf-8")
+                        allModified.push(f.path)
+                      }
+                    }
+                  }
+                } catch {
+                  const fbRegex = /FILE:\s*(\S+)\n```(?:\w+)?\n([\s\S]*?)```/g
+                  let m: RegExpExecArray | null
+                  while ((m = fbRegex.exec(raw)) !== null) {
+                    const absPath = join(projectDir, m[1].replace(/^\/+/, ""))
+                    mkdirSync(dirname(absPath), { recursive: true })
+                    writeFileSync(absPath, m[2], "utf-8")
+                    allModified.push(m[1].replace(/^\/+/, ""))
+                  }
+                }
+                coordinator.writeSharedMemory("auto:files", allModified.join(", "), "developer")
+              }
+
+              if (stage.role === "qa") {
+                try {
+                  const qaParsed = JSON.parse(raw)
+                  pipelineReview = qaParsed.summary?.slice(0, 200) ?? raw.slice(0, 200)
+                  if (!qaParsed.passed) verifyNote = `⚠️ QA: ${qaParsed.summary?.slice(0, 100) ?? "issues found"}`
+                  else verifyNote = "✅ QA passed"
+                } catch { pipelineReview = raw.slice(0, 200) }
+              }
+            }
+
+            // Cross-validate between stages
+            try {
+              const allStageResults = orchestrator.getAllStageResults(pipelineRunId)
+              if (allStageResults.size >= 2) {
+                const xv = await orchestrator.crossValidate("coordinator", args.goal, allStageResults, coordinator.getAllSharedMemory())
+                if (!xv.passed) verifyNote += ` ⚠️ Cross-validation: ${xv.issues.length} issues`
+              }
+            } catch { /* non-fatal */ }
+
+            const allPipelineStages = pipeline.stages.map(s => s.role)
+            coordinator.writeSharedMemory("pipeline:auto:stages", allPipelineStages.join(","), "coordinator")
+
+            // Record execution
+            for (const step of activeSteps) {
+              depTracker.recordChange(context.sessionID, step.id, allModified)
+              executor.recordResult(context.sessionID, {
+                stepId: step.id, success: !hasNoLLM,
+                output: `Pipeline: ${allPipelineStages.join("→")} — ${allModified.length} files${pipelineReview ? ` — QA: ${pipelineReview}` : ""}`,
+                filesModified: allModified,
+              })
+              completedSteps.push(step.id)
+            }
+          } else {
+            // ── Fast path: monolithic LLM call ──
+            const contextHints = [...memoryContexts.slice(0, 2), ...skillContexts.slice(0, 1)].join("; ")
+
+            const systemPrompt = `Return JSON array of {path, content}. Write COMPLETE file contents.
 Rules: ESM imports (.js) · match existing patterns · valid imports
 {"files":[{"path":"src/x.ts","content":"..."}]} or {"noChanges":true}`
 
-          const userPrompt = `${args.goal}${args.constraints?.length ? `\nConstraints: ${args.constraints.join(", ")}` : ""}${contextHints ? `\nContext: ${contextHints}` : ""}\n\n${filesBlock || "(new)"}\n${codebaseSummary.slice(0, 100)}`
+            const userPrompt = `${args.goal}${args.constraints?.length ? `\nConstraints: ${args.constraints.join(", ")}` : ""}${contextHints ? `\nContext: ${contextHints}` : ""}\n\n${filesBlock || "(new)"}\n${codebaseSummary.slice(0, 100)}`
 
-          const isSimple = args.goal.length < 80 && activeSteps.length < 3
-          const maxTokens = isSimple ? 1024 : 2048
+            const isSimple = args.goal.length < 80 && activeSteps.length < 3
+            const maxTokens = isSimple ? 1024 : 2048
 
-          const llmResult = await llmEngine.call({
-            systemPrompt, userPrompt,
-            temperature: 0.2, maxTokens, jsonMode: true,
-          })
+            const llmResult = await llmEngine.call({
+              systemPrompt, userPrompt,
+              temperature: 0.2, maxTokens, jsonMode: true,
+            })
 
-          const output = llmResult.content || ""
-          const hasNoLLM = output.includes("[NO_LLM]") || output === "NO_LLM"
+            const output = llmResult.content || ""
+            hasNoLLM = output.includes("[NO_LLM]") || output === "NO_LLM"
 
-          // Parse JSON output
-          const filesToWrite: Array<{ path: string; content: string }> = []
-          if (!hasNoLLM) {
-            try {
-              const parsed = JSON.parse(output)
-              if (parsed.files && Array.isArray(parsed.files)) {
-                for (const f of parsed.files) {
-                  if (f.path && f.content) filesToWrite.push({ path: f.path, content: f.content })
+            // Parse JSON output
+            const filesToWrite: Array<{ path: string; content: string }> = []
+            if (!hasNoLLM) {
+              try {
+                const parsed = JSON.parse(output)
+                if (parsed.files && Array.isArray(parsed.files)) {
+                  for (const f of parsed.files) {
+                    if (f.path && f.content) filesToWrite.push({ path: f.path, content: f.content })
+                  }
+                }
+              } catch {
+                const fbRegex = /FILE:\s*(\S+)\n```(?:\w+)?\n([\s\S]*?)```/g
+                let fbMatch: RegExpExecArray | null
+                while ((fbMatch = fbRegex.exec(output)) !== null) {
+                  filesToWrite.push({ path: fbMatch[1].replace(/^\/+/, ""), content: fbMatch[2] })
+                }
+                if (filesToWrite.length === 0 && !output.includes("NO_CHANGES") && !output.includes('"noChanges"')) {
+                  const cbMatch = output.match(/```(?:\w+)?\n([\s\S]*?)```/)
+                  if (cbMatch) filesToWrite.push({ path: relevantFiles[0]?.replace(/^\/+/, "") || "src/index.ts", content: cbMatch[1] })
                 }
               }
-            } catch {
-              // Fallback: parse FILE: blocks from markdown
-              const fbRegex = /FILE:\s*(\S+)\n```(?:\w+)?\n([\s\S]*?)```/g
-              let fbMatch: RegExpExecArray | null
-              while ((fbMatch = fbRegex.exec(output)) !== null) {
-                filesToWrite.push({ path: fbMatch[1].replace(/^\/+/, ""), content: fbMatch[2] })
-              }
-              if (filesToWrite.length === 0 && !output.includes("NO_CHANGES") && !output.includes('"noChanges"')) {
-                const cbMatch = output.match(/```(?:\w+)?\n([\s\S]*?)```/)
-                if (cbMatch) filesToWrite.push({ path: relevantFiles[0]?.replace(/^\/+/, "") || "src/index.ts", content: cbMatch[1] })
-              }
             }
-          }
 
-          // Write files to disk
-          const allModified: string[] = []
-          for (const fw of filesToWrite) {
-            try {
-              const absPath = join(projectDir, fw.path)
-              mkdirSync(dirname(absPath), { recursive: true })
-              writeFileSync(absPath, fw.content, "utf-8")
-              allModified.push(fw.path)
-            } catch { /* skip bad paths */ }
-          }
+            // Write files to disk
+            for (const fw of filesToWrite) {
+              try {
+                const absPath = join(projectDir, fw.path)
+                mkdirSync(dirname(absPath), { recursive: true })
+                writeFileSync(absPath, fw.content, "utf-8")
+                allModified.push(fw.path)
+              } catch { /* skip bad paths */ }
+            }
 
-          // Record execution
-          const completedSteps: string[] = []
-          for (const step of activeSteps) {
-            depTracker.recordChange(context.sessionID, step.id, allModified)
-            executor.recordResult(context.sessionID, {
-              stepId: step.id,
-              success: !hasNoLLM,
-              output: hasNoLLM ? "No LLM (mock)" : `Files: ${allModified.join(", ")}`,
-              filesModified: allModified,
-            })
-            completedSteps.push(step.id)
+            // Record execution
+            for (const step of activeSteps) {
+              depTracker.recordChange(context.sessionID, step.id, allModified)
+              executor.recordResult(context.sessionID, {
+                stepId: step.id,
+                success: !hasNoLLM,
+                output: hasNoLLM ? "No LLM (mock)" : `Files: ${allModified.join(", ")}`,
+                filesModified: allModified,
+              })
+              completedSteps.push(step.id)
+            }
           }
 
           // ═══════════════════════════════════════════════
           // PHASE 4: Verify — compilation check (always runs)
           // ═══════════════════════════════════════════════
-          let verifyPassed = true
-          let verifyNote = "—"
+          // verifyPassed/verifyNote already set by phase 3
           if (!hasNoLLM && allModified.length > 0) {
             try {
               verifier.detectLanguage(projectDir)
