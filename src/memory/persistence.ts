@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync, renameSync } from "node:fs"
 import { resolve } from "node:path"
 import { homedir } from "node:os"
 
@@ -126,8 +126,13 @@ export class PersistenceLayer {
       const dir = resolve(base, namespace)
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
       const state: PersistentState<T> = { key, data, updatedAt: new Date().toISOString() }
-      writeFileSync(resolve(dir, `${key}.json`), JSON.stringify(state, null, 2), "utf-8")
-    } catch { /* non-fatal: e.g. read-only fs */ }
+      const filePath = resolve(dir, `${key}.json`)
+      const tmpPath = filePath + ".tmp." + Date.now()
+      writeFileSync(tmpPath, JSON.stringify(state, null, 2), "utf-8")
+      renameSync(tmpPath, filePath)
+    } catch (e) {
+      console.error(`[PersistenceLayer] writeTo failed (${base}/${namespace}/${key}):`, e)
+    }
   }
 
   private readFrom<T>(base: string, namespace: string, key: string): T | null {

@@ -108,12 +108,16 @@ export class ContextCompressor {
     for (const turn of turns) {
       const content = turn.content ?? ""
 
-      const decisionMatches = content.match(/(?:decided|chose|opted|will use|using|selected|picked) (.+?)(?:\.|$)/gi)
+      const decisionMatches = content.match(/(?:\bdecided\b|\bchose\b|\bopted\b|\bwill use\b|\busing\b|\bselected\b|\bpicked\b) (.+?)(?:\.|$)/gi)
       if (decisionMatches) {
         decisions.push(...decisionMatches.map(d => d.trim()).slice(0, 3))
       }
 
-      const fileMatches = content.match(/(?:src|lib|test|app|pkg|cmd)\/[\w/.-]+/gi)
+      const fileMatches: string[] = []
+      const prefixedMatches = content.match(/(?:src|lib|test|app|pkg|cmd)\/[\w/.-]+/gi)
+      if (prefixedMatches) fileMatches.push(...prefixedMatches)
+      const rootFileMatches = content.match(/(?<=["'`\s])([\w-]+\.(?:ts|js|tsx|jsx|json|py|go|rs|md|yaml|yml|toml))/gi)
+      if (rootFileMatches) fileMatches.push(...rootFileMatches)
       if (fileMatches) {
         fileChanges.push(...fileMatches)
       }

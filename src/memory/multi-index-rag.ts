@@ -194,10 +194,13 @@ export class MultiIndexRAG {
 
     // 2. Fallback: keyword matching for anything not caught by TF-IDF
     //    (episodes/skills that don't have enough TF-IDF signal)
+    //    Early break once we have enough keyword bonuses to fill the limit.
     const q = query.toLowerCase()
     const keywordBonus = new Map<string, number>()
+    const kwNeeded = limit + 5 // collect a bit more than needed for dedup
 
     for (const ep of index.episodes) {
+      if (keywordBonus.size >= kwNeeded) break
       const epId = `ep-${ep.id}`
       let bonus = 0
       if (ep.planGoal.toLowerCase().includes(q)) bonus += 3
@@ -206,6 +209,7 @@ export class MultiIndexRAG {
       if (bonus > 0) keywordBonus.set(epId, bonus)
     }
     for (const sk of index.skills) {
+      if (keywordBonus.size >= kwNeeded) break
       const skId = `sk-${sk.definition.meta.id}`
       let bonus = 0
       if (sk.definition.meta.name.toLowerCase().includes(q)) bonus += 3
@@ -489,13 +493,17 @@ export async function enrichWithVectors(
   const qVec = await embedder.embed(query)
 
   for (const catResult of results) {
-    for (const entry of catResult.entries) {
-      const text = entry.title + " " + entry.keywords.join(" ")
-      const docVec = await embedder.embed(text)
-      const sim = embedder.cosineSimilarity(qVec.vector, docVec.vector)
-      entry.vectorScore = sim
-      entry.hybridScore = (entry.hybridScore ?? 0) * 0.3 + sim * 0.7
-    }
+    const enriched = await Promise.all(
+      catResult.entries.map(async (entry) => {
+        const text = entry.title + " " + entry.keywords.join(" ")
+        const docVec = await embedder.embed(text)
+        const sim = embedder.cosineSimilarity(qVec.vector, docVec.vector)
+        entry.vectorScore = sim
+        entry.hybridScore = (entry.hybridScore ?? 0) * 0.3 + sim * 0.7
+        return entry
+      })
+    )
+    catResult.entries = enriched
     catResult.entries.sort((a, b) => (b.hybridScore ?? 0) - (a.hybridScore ?? 0))
   }
 

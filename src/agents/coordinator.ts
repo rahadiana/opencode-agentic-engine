@@ -37,6 +37,8 @@ export interface AgentMessage {
 
 export type SharedMemoryListener = (entry: SharedMemoryEntry) => void
 
+type ResolveLock = () => void
+
 export class AgentCoordinator {
   private sharedMemory = new Map<string, SharedMemoryEntry>()
   private memoryListeners: SharedMemoryListener[] = []
@@ -46,10 +48,31 @@ export class AgentCoordinator {
   private pipelineRuns = new Map<string, string[]>()
   private maxDepth = 3
   private skillStore?: SkillStore
+  private mutexQueue: ResolveLock[] = []
+  private locked = false
 
   constructor(skillStore?: SkillStore) {
     this.registry = new RoleRegistry()
     this.skillStore = skillStore
+  }
+
+  private async acquire(): Promise<void> {
+    if (!this.locked) {
+      this.locked = true
+      return
+    }
+    return new Promise<void>((resolve) => {
+      this.mutexQueue.push(resolve)
+    })
+  }
+
+  private release(): void {
+    const next = this.mutexQueue.shift()
+    if (next) {
+      next()
+    } else {
+      this.locked = false
+    }
   }
 
   /** Set max delegation depth (from config hot-reload) */
@@ -66,18 +89,39 @@ export class AgentCoordinator {
     this.memoryListeners.push(listener)
   }
 
-  writeSharedMemory(key: string, value: string, agentRole: string): SharedMemoryEntry {
-    const entry: SharedMemoryEntry = { key, value, writtenBy: agentRole, timestamp: Date.now() }
-    this.sharedMemory.set(key, entry)
-    for (const listener of this.memoryListeners) {
-      try { listener(entry) } catch { /* non-fatal */ }
+  async writeSharedMemory(key: string, value: string, agentRole: string): Promise<SharedMemoryEntry> {
+    await this.acquire()
+    try {
+      const entry: SharedMemoryEntry = { key, value, writtenBy: agentRole, timestamp: Date.now() }
+      this.sharedMemory.set(key, entry)
+      for (const listener of this.memoryListeners) {
+        try { listener(entry) } catch { /* non-fatal */ }
+      }
+      return entry
+    } finally {
+      this.release()
     }
-    return entry
   }
 
-  writeSharedMemoryBatch(entries: Array<{ key: string; value: string; agentRole: string }>): void {
-    for (const e of entries) {
-      this.writeSharedMemory(e.key, e.value, e.agentRole)
+  async writeSharedMemoryBatch(entries: Array<{ key: string; value: string; agentRole: string }>): Promise<void> {
+    await this.acquire()
+    try {
+      const temp: SharedMemoryEntry[] = []
+      for (const e of entries) {
+        const entry: SharedMemoryEntry = { key: e.key, value: e.value, writtenBy: e.agentRole, timestamp: Date.now() }
+        temp.push(entry)
+      }
+      // All entries built successfully — commit atomically
+      for (const entry of temp) {
+        this.sharedMemory.set(entry.key, entry)
+      }
+      for (const entry of temp) {
+        for (const listener of this.memoryListeners) {
+          try { listener(entry) } catch { /* non-fatal */ }
+        }
+      }
+    } finally {
+      this.release()
     }
   }
 
@@ -193,7 +237,7 @@ export class AgentCoordinator {
     return (this.tasks.get(sessionId) ?? []).filter(t => t.assignedTo === role)
   }
 
-  updateTask(sessionId: string, taskId: string, status: AgentTask["status"], result?: string): boolean {
+  async updateTask(sessionId: string, taskId: string, status: AgentTask["status"], result?: string): Promise<boolean> {
     const tasks = this.tasks.get(sessionId)
     if (!tasks) return false
 
@@ -204,7 +248,7 @@ export class AgentCoordinator {
     if (result) task.result = result
 
     if (status === "done" && task.assignedTo) {
-      this.writeSharedMemory(`task:${taskId}:result`, result ?? "completed", task.assignedTo)
+      await this.writeSharedMemory(`task:${taskId}:result`, result ?? "completed", task.assignedTo)
     }
 
     return true
@@ -228,9 +272,9 @@ export class AgentCoordinator {
 
   // --- Pipeline Run Tracking ---
 
-  setPipelineRun(sessionId: string, pipelineId: string, taskIds: string[]): void {
+  async setPipelineRun(sessionId: string, pipelineId: string, taskIds: string[]): Promise<void> {
     this.pipelineRuns.set(sessionId, taskIds)
-    this.writeSharedMemory(`pipeline:${sessionId}`, pipelineId, "coordinator")
+    await this.writeSharedMemory(`pipeline:${sessionId}`, pipelineId, "coordinator")
   }
 
   getPipelineRun(sessionId: string): string[] | undefined {

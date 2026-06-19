@@ -1,4 +1,4 @@
-import { LLMEngine } from "../core/llm.js"
+import { LLMEngine, type LLMResponse } from "../core/llm.js"
 import type { ModelRegistry } from "../core/model-registry.js"
 import type { AgentRole } from "./coordinator.js"
 import { RoleRegistry } from "./role-registry.js"
@@ -24,15 +24,23 @@ export interface AgentResult {
  * Manages isolated LLM runtimes per role + session.
  * Each role gets its own LLMEngine instance with a dedicated session ID,
  * so architect, developer, and QA operate in separate context windows.
+ * Engines are LRU-evicted when exceeding maxEngines (10).
  */
 export class AgentRuntime {
   private engines = new Map<string, LLMEngine>()
+  private engineOrder: string[] = []
+  private readonly maxEngines = 10
   private opencodeClient: unknown = null
   private modelRegistry?: ModelRegistry
   private roleRegistry: RoleRegistry
 
   constructor() {
     this.roleRegistry = new RoleRegistry()
+  }
+
+  dispose(): void {
+    this.engines.clear()
+    this.engineOrder = []
   }
 
   setOpencodeClient(client: unknown): void {
@@ -50,16 +58,25 @@ export class AgentRuntime {
   /**
    * Get or create an isolated LLM engine for a specific role + session.
    * Each engine has its own sessionId = `${parentSessionId}-${role}`.
+   * LRU eviction: if > maxEngines, removes the oldest accessed engine.
    */
   private getEngine(parentSessionId: string, role: string): LLMEngine {
     const key = `${parentSessionId}::${role}`
     if (!this.engines.has(key)) {
+      if (this.engines.size >= this.maxEngines) {
+        const oldest = this.engineOrder.shift()
+        if (oldest) this.engines.delete(oldest)
+      }
       const engine = new LLMEngine()
       engine.setOpencodeClient(this.opencodeClient)
       engine.setSessionId(`${parentSessionId}-${role}`)
       if (this.modelRegistry) engine.setModelRegistry(this.modelRegistry)
       this.engines.set(key, engine)
     }
+    // Move to most-recently-used position
+    const idx = this.engineOrder.indexOf(key)
+    if (idx >= 0) this.engineOrder.splice(idx, 1)
+    this.engineOrder.push(key)
     return this.engines.get(key)!
   }
 
@@ -92,12 +109,17 @@ export class AgentRuntime {
     }
 
     try {
-      const resp = await engine.call({
-        systemPrompt: promptParts.join("\n"),
-        userPrompt: ctx.taskDescription,
-        temperature: 0.3,
-        maxTokens: 4096,
-      })
+      const resp = await Promise.race([
+        engine.call({
+          systemPrompt: promptParts.join("\n"),
+          userPrompt: ctx.taskDescription,
+          temperature: 0.3,
+          maxTokens: 4096,
+        }),
+        new Promise<LLMResponse>((_, reject) =>
+          setTimeout(() => reject(new Error("LLM timeout after 120s")), 120_000)
+        ),
+      ])
       const output = resp.content
       if (output.startsWith("LLM error") || output.startsWith("[NO_LLM]")) {
         return { output, success: false, error: output }

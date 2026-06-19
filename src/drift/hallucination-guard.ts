@@ -122,7 +122,10 @@ export class HallucinationGuard {
     const pattern = /(?:added|implemented|created|modified)\s+(\w+)\s+(?:in|to|at)\s+['"]?([\w/.-]+)['"]?/gi
 
     for (const match of output.matchAll(pattern)) {
-      results.push({ function: match[1], file: match[2] })
+      const funcName = match[1]
+      // Skip false positives like "file", "the", "a", "an"
+      if (/^(?:file|the|a|an|this|that|some|new|our|their|my|your)$/i.test(funcName)) continue
+      results.push({ function: funcName, file: match[2] })
     }
 
     return results
@@ -186,9 +189,9 @@ export class HallucinationGuard {
       }
 
       const patterns = [
-        new RegExp(`(?:function|const|let|var|export\\s+(?:const|function|class|default|async\\s+function))\\s+${escaped}\\b`),
-        new RegExp(`${escaped}\\s*[=(:]`),
-        new RegExp(`(?:async\\s+)?${escaped}\\s*\\(`),
+        new RegExp(`(?:^|\\n)\\s*(?:export\\s+(?:default\\s+)?)?(?:async\\s+)?function\\s+${escaped}\\b`),
+        new RegExp(`(?:^|\\n)\\s*(?:export\\s+(?:default\\s+)?)?(?:const|let|var)\\s+${escaped}\\s*[:=]\\s*(?:\\(|function|async)`),
+        new RegExp(`(?:^|\\n)\\s*(?:export\\s+)?(?:async\\s+)?${escaped}\\s*\\(`),
       ]
       return patterns.some(p => p.test(content))
     } catch {
@@ -202,9 +205,9 @@ export class HallucinationGuard {
       // Escape regex special characters to prevent crash on names like "$parse" or "get.value"
       const escaped = funcName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
       const patterns = [
-        new RegExp(`(?:function|const|let|var|export\\s+(?:const|function|class|default|async\\s+function))\\s+${escaped}\\b`),
-        new RegExp(`${escaped}\\s*[=(:]`),
-        new RegExp(`(?:async\\s+)?${escaped}\\s*\\(`),
+        new RegExp(`(?:^|\\n)\\s*(?:export\\s+(?:default\\s+)?)?(?:async\\s+)?function\\s+${escaped}\\b`),
+        new RegExp(`(?:^|\\n)\\s*(?:export\\s+(?:default\\s+)?)?(?:const|let|var)\\s+${escaped}\\s*[:=]\\s*(?:\\(|function|async)`),
+        new RegExp(`(?:^|\\n)\\s*(?:export\\s+)?(?:async\\s+)?${escaped}\\s*\\(`),
       ]
       return patterns.some(p => p.test(content))
     } catch {

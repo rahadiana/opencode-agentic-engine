@@ -34,6 +34,7 @@ export class DependencyTracker {
   private dependencies = new Map<string, DependencyEdge[]>()
   private stepFiles = new Map<string, Map<string, string[]>>()
   private fileGraph = new Map<string, Set<string>>()
+  private statCache = new Map<string, boolean>()
 
   // ── File-level import parsing ──
 
@@ -46,22 +47,37 @@ export class DependencyTracker {
     const imports: string[] = []
     const seen = new Set<string>()
 
-    // ESM import + export from
+    // Normalize line breaks for multi-line imports
+    const normalized = content.replace(/\r\n/g, "\n")
+
+    // Single-line ESM import + export from
     const importRegex = /(?:import\s+(?:(?:\{[^}]*\}|[^;{]+?)\s+from\s+|)\s*["'`]|export\s+(?:\{[^}]*\}|\*)\s+from\s+["'`])([^"'`]+)["'`]/g
+    // Multi-line import: import { ...\n ... } from "module"
+    const multiLineImportRegex = /import\s*\{[\s\S]*?\}\s*from\s*["'`]([^"'`]+)["'`]/g
+    // import type { ... } from "module"
+    const typeImportRegex = /import\s+type\s+\{[\s\S]*?\}\s*from\s*["'`]([^"'`]+)["'`]/g
     // require() calls
     const requireRegex = /(?:require|import)\s*\(\s*["'`]([^"'`]+)["'`]\s*\)/g
-    // dynamic import()
+    // dynamic import() (template literals with static parts)
     const dynamicImportRegex = /import\s*\(\s*["'`]([^"'`]+)["'`]\s*\)/g
 
-    for (const match of content.matchAll(importRegex)) {
+    for (const match of normalized.matchAll(importRegex)) {
       const raw = match[1]
       if (raw && !seen.has(raw)) { seen.add(raw); imports.push(raw) }
     }
-    for (const match of content.matchAll(requireRegex)) {
+    for (const match of normalized.matchAll(multiLineImportRegex)) {
       const raw = match[1]
       if (raw && !seen.has(raw)) { seen.add(raw); imports.push(raw) }
     }
-    for (const match of content.matchAll(dynamicImportRegex)) {
+    for (const match of normalized.matchAll(typeImportRegex)) {
+      const raw = match[1]
+      if (raw && !seen.has(raw)) { seen.add(raw); imports.push(raw) }
+    }
+    for (const match of normalized.matchAll(requireRegex)) {
+      const raw = match[1]
+      if (raw && !seen.has(raw)) { seen.add(raw); imports.push(raw) }
+    }
+    for (const match of normalized.matchAll(dynamicImportRegex)) {
       const raw = match[1]
       if (raw && !seen.has(raw)) { seen.add(raw); imports.push(raw) }
     }
@@ -71,9 +87,13 @@ export class DependencyTracker {
 
   /**
    * Resolve a relative import specifier to possible filesystem paths.
+   * Also handles node: prefix, @scope/package, and package.json exports.
    */
   resolveImportPath(sourceFile: string, specifier: string): string[] {
-    if (!specifier.startsWith(".")) return [] // skip npm packages
+    // Handle node: prefix — skip to built-in module
+    if (specifier.startsWith("node:")) return []
+    // Handle @scope/package or bare package — skip
+    if (!specifier.startsWith(".")) return []
     const sourceDir = dirname(sourceFile)
     const base = join(sourceDir, specifier).replace(/\\/g, "/")
 
@@ -116,7 +136,12 @@ export class DependencyTracker {
       for (const spec of localSpecifiers) {
         const candidates = this.resolveImportPath(absPath, spec)
         for (const cand of candidates) {
-          if (existsSync(cand)) {
+          let exists = this.statCache.get(cand)
+          if (exists === undefined) {
+            exists = existsSync(cand)
+            this.statCache.set(cand, exists)
+          }
+          if (exists) {
             const targetRel = relative(projectDir, cand).replace(/\\/g, "/")
             resolvedTargets.push(targetRel)
             break // first existing resolution wins
@@ -143,7 +168,7 @@ export class DependencyTracker {
     const result: string[] = []
     for (const [source, targets] of this.fileGraph) {
       for (const t of targets) {
-        if (t === normalized || t.endsWith("/" + normalized) || normalized.endsWith("/" + t)) {
+        if (t === normalized) {
           result.push(source)
           break
         }
@@ -300,7 +325,8 @@ export class DependencyTracker {
 
     const matchesInError: string[] = []
     for (const file of allPreviousFiles) {
-      if (error.toLowerCase().includes(file.toLowerCase())) {
+      const escaped = file.replace(/[/\-\\^$*+?.()|[\]{}]/g, "\\$&")
+      if (new RegExp(`\\b${escaped}\\b`, "i").test(error)) {
         matchesInError.push(file)
       }
     }
@@ -341,9 +367,10 @@ export class DependencyTracker {
     for (const stepId of planSteps) {
       if (stepId === failingStepId) break
       const changedFiles = this.getFilesChangedByStep(sessionId, stepId)
-      const hasOverlap = changedFiles.some(f =>
-        error.toLowerCase().includes(f.toLowerCase())
-      )
+      const hasOverlap = changedFiles.some(f => {
+        const escaped = f.replace(/[/\-\\^$*+?.()|[\]{}]/g, "\\$&")
+        return new RegExp(`\\b${escaped}\\b`, "i").test(error)
+      })
       if (hasOverlap || changedFiles.length > 0) {
         propagationPath.push(stepId)
       }

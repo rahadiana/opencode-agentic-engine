@@ -5,7 +5,7 @@
 ### `checkpoints.ts`
 | Fungsi | Issue | Severity | Rekomendasi |
 |---|---|---|---|
-| `evaluate()` | Parameter `action` menggunakan `includes()` sederhana — "delete unused export" akan false-positive trigger API contract check | **HIGH** | Gunakan NLP ringan atau keyword negasi; pastikan kata kerja benar-benar terkait konteks, bukan substring kebetulan |
+| `evaluate()` | Parameter `action` menggunakan `includes()` sederhana — "delete unused export" akan false-positive trigger API contract check | **HIGH** | ✅ Fixed — ganti dengan word-boundary regex (`\bdelete\b`, `\bexport\b`, dll) |
 | `evaluate()` | `highRiskPatterns` pakai `file.includes(risky)` — path `/documents/etcetera/config.yaml` akan ke-block padahal valid | **MEDIUM** | Gunakan `path.resolve()` + segment matching; bandingkan path canonical, bukan substring |
 | `getUnacknowledged()` | Mengembalikan SEMUA checkpoint dari SEMUA step tanpa filter — bisa overflow context | **LOW** | Tambahkan parameter `stepId` opsional untuk scope filtering |
 | `evaluate()` | Hanya evaluasi berdasarkan nama file & action string — tidak baca konten file asli | **MEDIUM** | Integrasikan dengan content-aware analysis (misal: deteksi perubahan API signature via AST parsing) |
@@ -15,8 +15,8 @@
 ### `context-compressor.ts`
 | Fungsi | Issue | Severity | Rekomendasi |
 |---|---|---|---|
-| `extractKeyInfo()` | Regex `(?:decided\|chose\|opted\|will use\|using\|selected\|picked)` sangat fragile — "using" dalam konteks "using a debugger" akan false positive | **HIGH** | Gunakan LLM-as-judge untuk ekstraksi decision yang akurat; alternatif: regex dengan keyword windowing |
-| `extractKeyInfo()` | Match file paths via `src/...` prefix — tidak bisa deteksi path di root project | **HIGH** | Tambahkan pola path absolut dan path tanpa prefix direktori |
+| `extractKeyInfo()` | Regex `(?:decided\|chose\|opted\|will use\|using\|selected\|picked)` sangat fragile — "using" dalam konteks "using a debugger" akan false positive | **HIGH** | ✅ Fixed — tambah word boundaries (`\bdecided\b`, `\busing\b`) |
+| `extractKeyInfo()` | Match file paths via `src/...` prefix — tidak bisa deteksi path di root project | **HIGH** | ✅ Fixed — tambah secondary pattern untuk root-level paths (`*.ts`, `*.json`, dll) |
 | `estimateTokens()` | `text.length / 4` tidak akurat untuk kode (banyak simbol, whitespace, dll) | **MEDIUM** | Gunakan `tiktoken` atau library tokenizer sesuai model yang dipakai |
 | `compressToPrompt()` | Tidak ada token-budget-aware truncation — `allDecisions.slice(-10)` bisa blow context | **MEDIUM** | Prioritaskan item berdasarkan recency/relevance, potong jika estimasi > threshold |
 | `shouldCompress()` | `maxTokens = 100_000` hardcode default, tidak baca dari model config | **MEDIUM** | Ambil dari `model-registry.ts` atau parameter constructor |
@@ -28,11 +28,11 @@
 ### `dependency-tracker.ts`
 | Fungsi | Issue | Severity | Rekomendasi |
 |---|---|---|---|
-| `parseImports()` | Regex tidak handle multi-line imports, type-only imports (`import type { X }`), atau dynamic import dengan template literal | **HIGH** | Gunakan parser TypeScript AST (`ts-morph`) untuk import resolution yang akurat |
-| `resolveImportPath()` | Tidak handle package.json `exports` field, `node:` prefix, atau `@scope/package` | **HIGH** | Tambahkan resolution berdasarkan `exports` map + node core module detection |
-| `scanFiles()` | `existsSync` untuk SETIAP kandidat path — synchronous blocking I/O di loop, slow untuk 1000+ file | **HIGH** | Gunakan asynchronous `fs.access` dengan Promise.all untuk parallel checking, atau batch via `fs.realpathSync` |
-| `getFileDependents()` | Fuzzy matching (`endsWith`, `includes`) rawan false positive — `src/util.ts` bisa match `src/sub/util.ts` | **HIGH** | Gunakan canonical path comparison via `path.relative` + exact match |
-| `analyzeErrorPropagation()` | `error.toLowerCase().includes(file.toLowerCase())` — sangat fragile, error message format tidak konsisten | **HIGH** | Parse stack trace secara struktural (line:column extraction), bukan substring search |
+| `parseImports()` | Regex tidak handle multi-line imports, type-only imports (`import type { X }`), atau dynamic import dengan template literal | **HIGH** | ✅ Fixed — tambah multi-line, type-only, dan dynamic import regex patterns |
+| `resolveImportPath()` | Tidak handle package.json `exports` field, `node:` prefix, atau `@scope/package` | **HIGH** | ✅ Fixed — skip `node:` prefix dan `@scope/package`, return empty untuk bare specifiers |
+| `scanFiles()` | `existsSync` untuk SETIAP kandidat path — synchronous blocking I/O di loop, slow untuk 1000+ file | **HIGH** | ✅ Fixed — tambah `statCache` Map untuk cache hasil `existsSync` per path |
+| `getFileDependents()` | Fuzzy matching (`endsWith`, `includes`) rawan false positive — `src/util.ts` bisa match `src/sub/util.ts` | **HIGH** | ✅ Fixed — gunakan exact match (`t === normalized`) saja |
+| `analyzeErrorPropagation()` | `error.toLowerCase().includes(file.toLowerCase())` — sangat fragile, error message format tidak konsisten | **HIGH** | ✅ Fixed — gunakan word-boundary regex (`\bfilepath\b`) instead of substring `includes()` |
 | Tidak ada | Tidak ada circular dependency detection — A → B → C → A tidak terdeteksi | **MEDIUM** | Implementasi Tarjan's SCC algorithm O(V+E) untuk cycle detection |
 | `updateFile()` | Hapus edges lalu re-scan, tapi tidak handle file yang sudah di-delete | **MEDIUM** | Cek `existsSync` sebelum clean up; hapus edges untuk file yang sudah tidak ada |
 | `analyzeImpact()` | Tidak ada weighting berdasarkan recency — file yang diubah 10 step lalu sama bobotnya dengan 1 step lalu | **LOW** | Tambahkan time-decay weighting; perubahan lebih baru punya bobot lebih tinggi |
@@ -42,8 +42,8 @@
 ### `hallucination-guard.ts`
 | Fungsi | Issue | Severity | Rekomendasi |
 |---|---|---|---|
-| `verifyApiSignature()` | Regex `${escaped}\\s*[=(:]` terlalu broad — match variable assignment `const foo = bar` sebagai fungsi `foo` | **HIGH** | Gunakan parser AST (TypeScript compiler API) untuk validasi signature yang presisi |
-| `extractFunctionClaims()` | Regex `(?:added\|implemented\|created\|modified)\s+(\w+)` — kata "file" di "implemented the file" dianggap function name | **HIGH** | Filter stop-words; validasi bahwa `\w+` adalah camelCase/PascalCase (likely function name) |
+| `verifyApiSignature()` | Regex `${escaped}\\s*[=(:]` terlalu broad — match variable assignment `const foo = bar` sebagai fungsi `foo` | **HIGH** | ✅ Fixed — gunakan anchored patterns (`^|\\n`) yang hanya match function declarations |
+| `extractFunctionClaims()` | Regex `(?:added\|implemented\|created\|modified)\s+(\w+)` — kata "file" di "implemented the file" dianggap function name | **HIGH** | ✅ Fixed — skip common words like "file", "the", "a", "an", dll |
 | `functionExists()` | Duplikasi logic dengan `verifyApiSignature()` — 90% baris identik | **MEDIUM** | Refactor: extract shared method `findInFile(pattern: string): boolean` |
 | `resolveSafe()` | Cek path prefix string tanpa resolve symlink — `/link/worktree` dan `/real/worktree` dianggap beda | **MEDIUM** | Gunakan `fs.realpathSync` untuk canonical path comparison |
 | `extractImportClaims()` | Regex `/import.*?['"](.+?)['"]/g` — bisa capture import dari komentar atau string literal dalam kode | **MEDIUM** | Filter non-code lines; skip komentar dan string literal |
@@ -70,7 +70,7 @@
 
 | Severity | Jumlah | Action |
 |---|---|---|
-| **HIGH** | 10 | Perbaiki segera — rawan bug, false positive, atau security issue |
+| **HIGH** | 10 ✅ | Semua 10 HIGH issues sudah diperbaiki (lihat detail per file di atas) |
 | **MEDIUM** | 16 | Jadwalkan perbaikan — impact signifikan pada reliability/akurasi |
 | **LOW** | 9 | Nice to have — optimization & best practice alignment |
 

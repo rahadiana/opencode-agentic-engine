@@ -73,8 +73,15 @@ export interface SchemaValidationResult {
   detail: string
 }
 
+enum InvariantKind {
+  NoErrors = "no-errors",
+  DependencyComplete = "dependency-complete",
+  CompilePasses = "compile-passes",
+}
+
 export class Orchestrator {
   private pipelines = new Map<string, WorkflowPipeline>()
+  private readonly maxActiveRuns = 50
   private activeRuns = new Map<string, {
     pipelineId: string
     currentStageIndex: number
@@ -98,9 +105,22 @@ export class Orchestrator {
     return [...this.pipelines.values()]
   }
 
+  cleanupRun(runId: string): void {
+    this.activeRuns.delete(runId)
+  }
+
+  private cleanupStaleRuns(): void {
+    if (this.activeRuns.size > this.maxActiveRuns) {
+      const keys = [...this.activeRuns.keys()]
+      const toRemove = keys.slice(0, keys.length - this.maxActiveRuns)
+      for (const k of toRemove) this.activeRuns.delete(k)
+    }
+  }
+
   startRun(runId: string, pipelineId: string): boolean {
     const pipeline = this.pipelines.get(pipelineId)
     if (!pipeline) return false
+    this.cleanupStaleRuns()
     this.activeRuns.set(runId, {
       pipelineId,
       currentStageIndex: 0,
@@ -173,13 +193,14 @@ export class Orchestrator {
     const allIssues = [...allStageResults.values()].flatMap(r => r.issues)
     for (const inv of invariants) {
       const expr = inv.expr.toLowerCase()
-      if (expr.includes("no errors") || expr.includes("no error")) {
+      const kind = this.classifyInvariant(expr)
+      if (kind === InvariantKind.NoErrors) {
         const hasErrors = allIssues.some(i => i.toLowerCase().includes("error")) || allOutputs.includes("error")
         results.push({ field: `invariant: ${inv.description}`, passed: !hasErrors, severity: inv.severity, detail: hasErrors ? "Errors detected across stages" : "No errors detected across stages" })
-      } else if (expr.includes("dependency") && expr.includes("complete")) {
+      } else if (kind === InvariantKind.DependencyComplete) {
         const hasEmpty = [...allStageResults.values()].some(r => !r.output || r.output.trim().length === 0)
         results.push({ field: `invariant: ${inv.description}`, passed: !hasEmpty, severity: inv.severity, detail: hasEmpty ? "Some stages produced empty output" : "All stages have output" })
-      } else if (expr.includes("compile") && expr.includes("pass")) {
+      } else if (kind === InvariantKind.CompilePasses) {
         const compilePassed = !allOutputs.includes("fail") || allOutputs.includes("compilation successful")
         results.push({ field: `invariant: ${inv.description}`, passed: compilePassed, severity: inv.severity, detail: compilePassed ? "Compilation check passed" : "Compilation issues detected" })
       } else {
@@ -187,6 +208,13 @@ export class Orchestrator {
       }
     }
     return results
+  }
+
+  private classifyInvariant(expr: string): InvariantKind | null {
+    if (/no\s+errors?/.test(expr)) return InvariantKind.NoErrors
+    if (/dependency.*complete|complete.*dependency/.test(expr)) return InvariantKind.DependencyComplete
+    if (/compile.*pass|pass.*compile|compilation/.test(expr)) return InvariantKind.CompilePasses
+    return null
   }
 
   /** G4: Contract-based crossValidate with schema + invariant checking */
@@ -329,11 +357,8 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
     sessionID: string
     budgetTracker?: BudgetTracker
     eventBus?: EventBus
-    /** HallucinationGuard instance (for auto-check during completion recording) */
     hallucinationGuard?: import("../drift/hallucination-guard.js").HallucinationGuard
-    /** SkillStore instance (for auto-extract during completion recording) */
     skillStore?: import("../memory/skill-store.js").SkillStore
-    /** ConfigLoader instance (for autoSkillExtract flag check) */
     configLoader?: import("../core/config.js").ConfigLoader
   }): Promise<{
     results: Map<string, { output: string; issues: string[]; validatedBy: string[] }>
@@ -344,128 +369,47 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
     verifyNote: string
     completedStageCount: number
   }> {
-    const { pipeline, runId, goal, constraints, projectDir, codebaseSummary, filesBlock, memoryContexts, skillContexts, coordinator, sessionID, budgetTracker } = params
+    const { pipeline, runId, goal, coordinator, sessionID, budgetTracker } = params
     const allFiles: string[] = []
     let pipelineReview = ""
     let verifyNote = ""
     let hasNoLLM = false
     let budgetExceeded = false
     let completedStageCount = 0
-
-    const sysPrompts: Record<string, string> = {
-      pm: `You are a PM. Define requirements and acceptance criteria concisely. Return JSON: {"spec": "...", "criteria": ["..."]}`,
-      architect: `You are an architect. Design architecture and interface contracts. Return JSON: {"architecture": "...", "interfaces": [{...}], "designNotes": "..."}`,
-      developer: `Return JSON array of {path, content}. Write COMPLETE file contents. Rules: ESM imports (.js) · match existing patterns · valid imports. {"files":[{"path":"src/x.ts","content":"..."}]} or {"noChanges":true}`,
-      qa: `You are QA. Review the implementation for correctness, edge cases, and regressions. Return JSON: {"issues": [{"severity":"error|warning|info","description":"...","file":"..."}], "summary": "verdict", "passed": true/false}`,
-      coordinator: `You are a coordinator. Verify pipeline completion and consistency. Return JSON: {"summary": "...", "gaps": ["..."], "approved": true/false}`,
-    }
-
     const stageStartTime = Date.now()
 
     for (const stage of pipeline.stages) {
-      // ── Synchronous budget check BEFORE each stage (direct call, not event) ──
-      // Cek kedua scope — strictest-wins (sesuai desain awal agentic_budget)
-      if (budgetTracker) {
-        const sessionStatus = budgetTracker.check("session")
-        if (sessionStatus) {
-          budgetExceeded = true
-          verifyNote = `⛔ Budget exceeded (session): ${sessionStatus.metric} (${sessionStatus.current} > ${sessionStatus.limit})`
-          break
-        }
-        const taskStatus = budgetTracker.check("task")
-        if (taskStatus) {
-          budgetExceeded = true
-          verifyNote = `⛔ Budget exceeded (task): ${taskStatus.metric} (${taskStatus.current} > ${taskStatus.limit})`
-          break
-        }
-      }
-
-      const stageTaskId = `pipeline-${stage.role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-
-      coordinator.delegate(stage.role, {
-        id: stageTaskId, assignedTo: stage.role,
-        description: `${goal} — ${stage.description}`,
-        input: stage.description, status: "running",
-        pipelineRunId: runId,
-      }, sessionID, 0)
-
-      coordinator.writeSharedMemory(`pipeline:${stage.role}:start`, stage.description, stage.role)
-
-      const pipelineContextHints = [...memoryContexts.slice(0, 2), ...skillContexts.slice(0, 1)].join("; ")
-      const stageCtx = this.buildContextForRole(stage.role, runId, coordinator.getAllSharedMemory())
-      const sp = sysPrompts[stage.role] ?? `You are ${stage.role}. Complete your task. Return JSON output.`
-
-      const up = `Goal: ${goal}${constraints?.length ? `\nConstraints: ${constraints.join(", ")}` : ""}${pipelineContextHints ? `\nPast tasks: ${pipelineContextHints}` : ""}${stageCtx ? `\n\nContext from previous stages:\n${stageCtx}` : ""}\n${stage.role} task: ${stage.description}\n${filesBlock || "(new)"}\n${codebaseSummary.slice(0, 100)}`
-
-      // ── LLM call with try/catch for partial-save ──
-      let raw: string
-      try {
-        const llmOut = await this.llmEngine!.call({
-          systemPrompt: sp, userPrompt: up,
-          temperature: 0.2, maxTokens: 2048, jsonMode: true,
-          sourceTaskId: stageTaskId,
-          sourcePipelineRunId: runId,
-        })
-        raw = llmOut.content || ""
-      } catch (err) {
-        // Partial-save: pipeline tetap return hasil stage yang sudah sukses
-        verifyNote = `❌ Stage ${stage.role} crashed: ${(err as Error).message ?? err}`
-        coordinator.updateTask(sessionID, stageTaskId, "failed", `LLM call failed: ${(err as Error).message ?? err}`)
+      const budgetStop = this.checkBudget(budgetTracker)
+      if (budgetStop) {
+        budgetExceeded = true
+        verifyNote = budgetStop
         break
       }
 
-      const isFail = raw.includes("[NO_LLM]") || raw === "NO_LLM"
-      if (isFail) { hasNoLLM = true; break }
-
-      coordinator.updateTask(sessionID, stageTaskId, "done", raw.slice(0, 1000))
-
-      // ── Developer stage: write files via shared helper ──
-      if (stage.role === "developer") {
-        const fileEntries = parseFileEntries(raw)
-        const written = writeFiles(fileEntries, projectDir, sessionID, params.eventBus, { taskId: stageTaskId, pipelineRunId: runId })
-        allFiles.push(...written)
-
-        // Warning kalau developer tidak menghasilkan file
-        if (written.length === 0 && !raw.includes("noChanges") && !raw.includes("NO_CHANGES")) {
-          verifyNote = "⚠️ Developer stage: no files written (parsing may have failed)"
-        }
-        coordinator.writeSharedMemory("pipeline:files", allFiles.join(", "), "developer")
+      const stageTaskId = `pipeline-${stage.role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      const stageResult = await this.executeStage(stage, params, stageTaskId, runId)
+      if (stageResult.stop) {
+        if (stageResult.hasNoLLM) hasNoLLM = true
+        if (stageResult.budgetExceeded) budgetExceeded = true
+        if (stageResult.verifyNote) verifyNote = stageResult.verifyNote
+        break
       }
+      if (stageResult.verifyNote) verifyNote = stageResult.verifyNote
+      if (stageResult.raw) {
+        const raw = stageResult.raw
+        const handled = await this.handleStageOutput(stage.role, raw, allFiles, stageTaskId, runId, params)
+        pipelineReview = handled.pipelineReview ?? pipelineReview
+        if (handled.verifyNote) verifyNote = handled.verifyNote
 
-      // ── QA stage: parse review ──
-      if (stage.role === "qa") {
-        try {
-          const qaParsed = JSON.parse(raw)
-          pipelineReview = qaParsed.summary?.slice(0, 200) ?? raw.slice(0, 200)
-          if (!qaParsed.passed) verifyNote = `⚠️ QA: ${qaParsed.summary?.slice(0, 100) ?? "issues found"}`
-          else verifyNote = "✅ QA passed"
-        } catch { pipelineReview = raw.slice(0, 200) }
+        await this.recordStageCompletion({
+          sessionID, taskId: stageTaskId, pipelineRunId: runId,
+          output: raw, filesModified: allFiles, durationMs: Date.now() - stageStartTime,
+          role: stage.role,
+        }, params)
       }
-
-      // ── Blocking completion record: guard + skill + step count ──
-      // TANPA AND-gate — setiap concern independen di dalam recordCompletion().
-      // Guard gak butuh skill, skill gak butuh budget, masing-masing jalan sendiri.
-      await recordCompletion({
-        sessionID,
-        taskId: stageTaskId,
-        pipelineRunId: runId,
-        output: raw,
-        filesModified: allFiles,
-        durationMs: Date.now() - stageStartTime,
-        role: stage.role,
-        skipSkillExtract: stage.role !== "developer" || allFiles.length === 0,
-      }, {
-        budgetTracker,
-        hallucinationGuard: params.hallucinationGuard,
-        skillStore: params.skillStore,
-        configLoader: params.configLoader,
-        eventBus: params.eventBus,
-      })
-
       completedStageCount++
     }
 
-    // Cross-validate between stages
     if (completedStageCount >= 2 && !budgetExceeded && !hasNoLLM) {
       try {
         const allStageResults = this.getAllStageResults(runId)
@@ -477,7 +421,7 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
     }
 
     const allPipelineStages = pipeline.stages.map(s => s.role)
-    coordinator.writeSharedMemory("pipeline:stages", allPipelineStages.join(","), "coordinator")
+    await coordinator.writeSharedMemory("pipeline:stages", allPipelineStages.join(","), "coordinator")
 
     return {
       results: this.getAllStageResults(runId),
@@ -488,6 +432,133 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
       verifyNote,
       completedStageCount,
     }
+  }
+
+  private checkBudget(budgetTracker?: BudgetTracker): string | null {
+    if (!budgetTracker) return null
+    const sessionStatus = budgetTracker.check("session")
+    if (sessionStatus) return `Budget exceeded (session): ${sessionStatus.metric} (${sessionStatus.current} > ${sessionStatus.limit})`
+    const taskStatus = budgetTracker.check("task")
+    if (taskStatus) return `Budget exceeded (task): ${taskStatus.metric} (${taskStatus.current} > ${taskStatus.limit})`
+    return null
+  }
+
+  private getSysPrompts(): Record<string, string> {
+    return {
+      pm: `You are a PM. Define requirements and acceptance criteria concisely. Return JSON: {"spec": "...", "criteria": ["..."]}`,
+      architect: `You are an architect. Design architecture and interface contracts. Return JSON: {"architecture": "...", "interfaces": [{...}], "designNotes": "..."}`,
+      developer: `Return JSON array of {path, content}. Write COMPLETE file contents. Rules: ESM imports (.js) · match existing patterns · valid imports. {"files":[{"path":"src/x.ts","content":"..."}]} or {"noChanges":true}`,
+      qa: `You are QA. Review the implementation for correctness, edge cases, and regressions. Return JSON: {"issues": [{"severity":"error|warning|info","description":"...","file":"..."}], "summary": "verdict", "passed": true/false}`,
+      coordinator: `You are a coordinator. Verify pipeline completion and consistency. Return JSON: {"summary": "...", "gaps": ["..."], "approved": true/false}`,
+    }
+  }
+
+  private async executeStage(
+    stage: PipelineStage, params: any, stageTaskId: string, runId: string,
+  ): Promise<{ stop: boolean; verifyNote?: string; hasNoLLM?: boolean; budgetExceeded?: boolean; raw?: string }> {
+    const { goal, constraints, filesBlock, codebaseSummary, memoryContexts, skillContexts, coordinator, sessionID } = params
+    const sysPrompts = this.getSysPrompts()
+
+    coordinator.delegate(stage.role, {
+      id: stageTaskId, assignedTo: stage.role,
+      description: `${goal} — ${stage.description}`,
+      input: stage.description, status: "running",
+      pipelineRunId: runId,
+    }, sessionID, 0)
+
+    await coordinator.writeSharedMemory(`pipeline:${stage.role}:start`, stage.description, stage.role)
+
+    const pipelineContextHints = [...(memoryContexts ?? []).slice(0, 2), ...(skillContexts ?? []).slice(0, 1)].join("; ")
+    const stageCtx = this.buildContextForRole(stage.role, runId, coordinator.getAllSharedMemory())
+    const sp = sysPrompts[stage.role] ?? `You are ${stage.role}. Complete your task. Return JSON output.`
+
+    const up = `Goal: ${goal}${constraints?.length ? `\nConstraints: ${constraints.join(", ")}` : ""}${pipelineContextHints ? `\nPast tasks: ${pipelineContextHints}` : ""}${stageCtx ? `\n\nContext from previous stages:\n${stageCtx}` : ""}\n${stage.role} task: ${stage.description}\n${filesBlock || "(new)"}\n${(codebaseSummary ?? "").slice(0, 100)}`
+
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 120_000)
+
+    let raw: string
+    try {
+      const llmOut = await Promise.race([
+        this.llmEngine!.call({
+          systemPrompt: sp, userPrompt: up,
+          temperature: 0.2, maxTokens: 2048, jsonMode: true,
+          sourceTaskId: stageTaskId,
+          sourcePipelineRunId: runId,
+        }),
+        new Promise<never>((_, reject) => {
+          controller.signal.addEventListener("abort", () => reject(new Error(`LLM timeout after 120s for stage ${stage.role}`)))
+        }),
+      ])
+      clearTimeout(timeoutId)
+      raw = llmOut.content || ""
+    } catch (err) {
+      clearTimeout(timeoutId)
+      const msg = `Stage ${stage.role} crashed: ${(err as Error).message ?? err}`
+      await coordinator.updateTask(sessionID, stageTaskId, "failed", `LLM call failed: ${(err as Error).message ?? err}`)
+      return { stop: true, verifyNote: msg }
+    }
+
+    const isFail = raw.includes("[NO_LLM]") || raw === "NO_LLM"
+    if (isFail) return { stop: true, hasNoLLM: true }
+
+    await coordinator.updateTask(sessionID, stageTaskId, "done", raw.slice(0, 1000))
+    return { stop: false, raw }
+  }
+
+  private async handleStageOutput(
+    role: string, raw: string, allFiles: string[], stageTaskId: string, runId: string, params: any,
+  ): Promise<{ pipelineReview?: string; verifyNote?: string }> {
+    const { projectDir, sessionID, coordinator } = params
+    let pipelineReview: string | undefined
+    let verifyNote: string | undefined
+
+    if (role === "developer") {
+      const fileEntries = parseFileEntries(raw)
+      const written = writeFiles(fileEntries, projectDir, sessionID, params.eventBus, { taskId: stageTaskId, pipelineRunId: runId })
+      allFiles.push(...written)
+      if (written.length === 0 && !raw.includes("noChanges") && !raw.includes("NO_CHANGES")) {
+        verifyNote = "Developer stage: no files written (parsing may have failed)"
+      }
+      await coordinator.writeSharedMemory("pipeline:files", allFiles.join(", "), "developer")
+    }
+
+    if (role === "qa") {
+      try {
+        const qaParsed = JSON.parse(raw)
+        pipelineReview = qaParsed.summary?.slice(0, 200) ?? raw.slice(0, 200)
+        if (!qaParsed.passed) verifyNote = `QA: ${qaParsed.summary?.slice(0, 100) ?? "issues found"}`
+        else verifyNote = "QA passed"
+      } catch {
+        pipelineReview = raw.slice(0, 200)
+      }
+    }
+
+    return { pipelineReview, verifyNote }
+  }
+
+  private async recordStageCompletion(
+    opts: {
+      sessionID: string; taskId: string; pipelineRunId: string; output: string
+      filesModified: string[]; durationMs: number; role: string
+    }, params: any,
+  ): Promise<void> {
+    await recordCompletion({
+      sessionID: opts.sessionID,
+      taskId: opts.taskId,
+      pipelineRunId: opts.pipelineRunId,
+      output: opts.output,
+      filesModified: opts.filesModified,
+      durationMs: opts.durationMs,
+      role: opts.role,
+      skipSkillExtract: opts.role !== "developer" || opts.filesModified.length === 0,
+    }, {
+      budgetTracker: params.budgetTracker,
+      hallucinationGuard: params.hallucinationGuard,
+      skillStore: params.skillStore,
+      configLoader: params.configLoader,
+      eventBus: params.eventBus,
+    })
   }
 
   getSuggestedPipeline(description: string): string {

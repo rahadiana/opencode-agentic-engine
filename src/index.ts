@@ -1698,7 +1698,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
               const runId = `run-${context.sessionID}-${args.pipelineId}`
               orchestrator.startRun(runId, args.pipelineId)
 
-              coordinator.writeSharedMemory(`pipeline:run:${runId}`, `Started pipeline ${pipeline.name}`, "coordinator")
+              await coordinator.writeSharedMemory(`pipeline:run:${runId}`, `Started pipeline ${pipeline.name}`, "coordinator")
 
               // Internal orchestration — no manual delegation needed
               let out = `## 🚀 Pipeline Run: ${pipeline.name}\n\n`
@@ -1983,11 +1983,11 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
 
           // If result is provided, we're completing a task
           if (args.result || args.status) {
-            const updated = coordinator.updateTask(context.sessionID, args.taskId, args.status ?? "done", args.result)
+            const updated = await coordinator.updateTask(context.sessionID, args.taskId, args.status ?? "done", args.result)
             if (!updated) return { output: `Task "${args.taskId}" not found.` }
 
             // Write to shared memory
-            coordinator.writeSharedMemory(`task:${args.taskId}`, (args.result ?? "").slice(0, 500), args.role ?? "unknown")
+            await coordinator.writeSharedMemory(`task:${args.taskId}`, (args.result ?? "").slice(0, 500), args.role ?? "unknown")
 
             let output = `## ✅ Task Updated\n\n`
             output += `**Task:** \`${args.taskId}\` → **${args.status ?? "done"}**\n`
@@ -2127,11 +2127,11 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
           const executionError = agentResultObj.success ? null : (agentResultObj.error ?? "Agent execution failed")
 
           if (agentResult) {
-            coordinator.updateTask(context.sessionID, args.taskId, "done", agentResult)
-            coordinator.writeSharedMemory(`task:${args.taskId}`, agentResult.slice(0, 500), role)
-            coordinator.writeSharedMemory(`task:${args.taskId}:full`, agentResult, role)
+            await coordinator.updateTask(context.sessionID, args.taskId, "done", agentResult)
+            await coordinator.writeSharedMemory(`task:${args.taskId}`, agentResult.slice(0, 500), role)
+            await coordinator.writeSharedMemory(`task:${args.taskId}:full`, agentResult, role)
           } else {
-            coordinator.updateTask(context.sessionID, args.taskId, "failed", executionError ?? "LLM unavailable")
+            await coordinator.updateTask(context.sessionID, args.taskId, "failed", executionError ?? "LLM unavailable")
           }
 
           let output = `## 🤖 Task Delegated\n\n`
@@ -2706,7 +2706,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
                   })
                   let impl: { files?: Array<{ path: string; content: string }>; summary?: string }
                   try { impl = JSON.parse(resp.content) } catch {
-                    coordinator.updateTask(context.sessionID, taskId, "failed", resp.content)
+                    await coordinator.updateTask(context.sessionID, taskId, "failed", resp.content)
                     return { stepId: step.id, success: false, error: "LLM JSON parse error", output: resp.content, filesModified: [] }
                   }
                   const files: string[] = []
@@ -2716,10 +2716,10 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
                     writeFileSync(abs, f.content, "utf-8")
                     files.push(f.path)
                   }
-                  coordinator.updateTask(context.sessionID, taskId, "done", impl.summary)
+                  await coordinator.updateTask(context.sessionID, taskId, "done", impl.summary)
                   return { stepId: step.id, success: true, output: impl.summary ?? step.description, filesModified: files }
                 } catch (e) {
-                  coordinator.updateTask(context.sessionID, taskId, "failed", (e as Error).message)
+                  await coordinator.updateTask(context.sessionID, taskId, "failed", (e as Error).message)
                   return { stepId: step.id, success: false, error: (e as Error).message, output: "", filesModified: [] }
                 }
               }
@@ -4280,7 +4280,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
 
             // Record execution
             const allPipelineStages = pipeline.stages.map(s => s.role)
-            coordinator.writeSharedMemory("pipeline:auto:stages", allPipelineStages.join(","), "coordinator")
+            await coordinator.writeSharedMemory("pipeline:auto:stages", allPipelineStages.join(","), "coordinator")
             for (const step of activeSteps) {
               depTracker.recordChange(context.sessionID, step.id, allModified)
               executor.recordResult(context.sessionID, {

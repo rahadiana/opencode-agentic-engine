@@ -32,7 +32,7 @@ export class CheckpointSystem {
     const results: Checkpoint[] = []
 
     // File deletion
-    if (action.includes("delete") || action.includes("remove")) {
+    if (/\bdelete\b/i.test(action) || /\bremove\b/i.test(action)) {
       if (filesModified.some(f => f.endsWith(".ts") || f.endsWith(".tsx") || f.endsWith(".js") || f.endsWith(".py") || f.endsWith(".go") || f.endsWith(".rs"))) {
         results.push({
           id: `${stepId}-delete`,
@@ -58,7 +58,7 @@ export class CheckpointSystem {
     }
 
     // API contract change
-    if (action.toLowerCase().includes("export") || action.toLowerCase().includes("interface") || action.toLowerCase().includes("api")) {
+    if (/\bexport\b/i.test(action) || /\binterface\b/i.test(action) || /\bapi\b/i.test(action)) {
       results.push({
         id: `${stepId}-api`,
         type: "review",
@@ -83,9 +83,9 @@ export class CheckpointSystem {
         })
       }
 
-      const highRiskPatterns = ["/etc/", "/var/", "/boot/", "/usr/lib", "/lib/systemd", ".ssh/", ".gnupg/", ".aws/credentials", ".kube/config"]
+      const highRiskPatterns = [/\/etc\//, /\/var\//, /\/boot\//, /\/usr\/lib/, /\/lib\/systemd/, /\.ssh\//, /\.gnupg\//, /\.aws\/credentials/, /\.kube\/config/]
       for (const risky of highRiskPatterns) {
-        if (file.includes(risky)) {
+        if (risky.test(file)) {
           results.push({
             id: `${stepId}-system-${file.replace(/[^a-zA-Z0-9]/g, "-")}`,
             type: "block",
@@ -99,7 +99,7 @@ export class CheckpointSystem {
     }
 
     // Test-only changes without source changes
-    const onlyTests = filesModified.every(f => f.includes(".test.") || f.includes(".spec.") || f.includes("_test."))
+    const onlyTests = filesModified.every(f => /\.test\./i.test(f) || /\.spec\./i.test(f) || /_test\./i.test(f))
     if (onlyTests && filesModified.length > 0) {
       results.push({
         id: `${stepId}-tests-only`,
@@ -113,7 +113,7 @@ export class CheckpointSystem {
 
     // Schema or migration files
     for (const file of filesModified) {
-      if (file.includes("schema") || file.includes("migration") || file.includes(".sql")) {
+      if (/\bschema\b/i.test(file) || /\bmigration\b/i.test(file) || /\.sql$/i.test(file)) {
         results.push({
           id: `${stepId}-schema-${file.replace(/[^a-zA-Z0-9]/g, "-")}`,
           type: "review",

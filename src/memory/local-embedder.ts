@@ -59,11 +59,13 @@ function hashEmbedding(text: string, dim: number): number[] {
 export class LocalEmbedder {
   private config: Required<EmbedderConfig>
   private cache = new Map<string, EmbeddingResult>()
+  private maxCacheSize: number
   private httpCall: (url: string, apiKey: string, body: unknown) => Promise<unknown>
 
   constructor(
     config: EmbedderConfig = {},
     httpCall?: (url: string, apiKey: string, body: unknown) => Promise<unknown>,
+    maxCacheSize = 500,
   ) {
     this.config = {
       model: config.model ?? "text-embedding-3-small",
@@ -71,6 +73,7 @@ export class LocalEmbedder {
       apiKey: config.apiKey ?? null,
       dimension: config.dimension ?? FALLBACK_DIMENSION,
     }
+    this.maxCacheSize = maxCacheSize
     this.httpCall = httpCall ?? this.defaultHttpCall
   }
 
@@ -87,7 +90,20 @@ export class LocalEmbedder {
       signal: controller.signal,
     })
     clearTimeout(timeout)
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => "")
+      throw new Error(`Embedding API error ${resp.status}: ${errText.slice(0, 200)}`)
+    }
     return resp.json()
+  }
+
+  private pruneCache(): void {
+    if (this.cache.size <= this.maxCacheSize) return
+    const toDelete = this.cache.size - this.maxCacheSize
+    const keys = [...this.cache.keys()]
+    for (let i = 0; i < toDelete; i++) {
+      this.cache.delete(keys[i])
+    }
   }
 
   /**
@@ -114,6 +130,7 @@ export class LocalEmbedder {
       dimensions: this.config.dimension,
     }
     this.cache.set(cacheKey, result)
+    this.pruneCache()
     return result
   }
 
@@ -170,6 +187,7 @@ export class LocalEmbedder {
 
     const cacheKey = `${this.config.model}:${text.slice(0, 200)}`
     this.cache.set(cacheKey, result)
+    this.pruneCache()
     return result
   }
 

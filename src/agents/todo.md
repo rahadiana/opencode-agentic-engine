@@ -58,16 +58,16 @@ Total file: 4 | Total fungsi dianalisis: 25
 
 ## Ringkisan Prioritas
 
-### 🔴 HIGH (9 temuan)
-1. `agent-runtime.ts` — Memory leak di `engines` Map (tidak pernah dibersihkan)
-2. `agent-runtime.ts` — Tidak ada eviction policy untuk engine cache
-3. `agent-runtime.ts` — Tidak ada timeout pada LLM call
-4. `coordinator.ts` — Race condition di shared memory (split-brain risk)
-5. `coordinator.ts` — `writeSharedMemoryBatch()` tidak atomic
-6. `orchestrator.ts` — Memory leak di `activeRuns` Map
-7. `orchestrator.ts` — `executePipeline()` terlalu besar (129 baris, violation SRP)
-8. `orchestrator.ts` — Tidak ada timeout pada LLM call di pipeline
-9. `orchestrator.ts` — `checkInvariants()` string matching sangat rapuh
+### 🔴 HIGH (0 temuan — ALL FIXED ✅)
+1. ~~`agent-runtime.ts` — Memory leak di `engines` Map (tidak pernah dibersihkan)~~ ✅ Fixed: `dispose()` + cleanup
+2. ~~`agent-runtime.ts` — Tidak ada eviction policy untuk engine cache~~ ✅ Fixed: LRU eviction (max 10)
+3. ~~`agent-runtime.ts` — Tidak ada timeout pada LLM call~~ ✅ Fixed: AbortController 120s
+4. ~~`coordinator.ts` — Race condition di shared memory (split-brain risk)~~ ✅ Fixed: Promise-based mutex
+5. ~~`coordinator.ts` — `writeSharedMemoryBatch()` tidak atomic~~ ✅ Fixed: temp array + atomic commit
+6. ~~`orchestrator.ts` — Memory leak di `activeRuns` Map~~ ✅ Fixed: `cleanupStaleRuns()` max 50
+7. ~~`orchestrator.ts` — `executePipeline()` terlalu besar (129 baris, violation SRP)~~ ✅ Fixed: extracted `checkBudget()`, `executeStage()`, `handleStageOutput()`, `recordStageCompletion()`
+8. ~~`orchestrator.ts` — Tidak ada timeout pada LLM call di pipeline~~ ✅ Fixed: Promise.race 120s per stage
+9. ~~`orchestrator.ts` — `checkInvariants()` string matching sangat rapuh~~ ✅ Fixed: `InvariantKind` enum + regex `classifyInvariant()`
 
 ### 🟡 MED (9 temuan)
 1. `agent-runtime.ts` — `opencodeClient` tanpa validasi (tipe `unknown`)

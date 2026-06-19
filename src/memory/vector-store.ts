@@ -61,6 +61,10 @@ export class VectorStore {
   private docs = new Map<string, { doc: TfIdfDoc; tokens: string[] }>()
   /** category → total docs */
   private docCount = new Map<string, number>()
+  /** keyword inverted index: keyword_lower → Set<docId> — for O(1) keyword matching */
+  private keywordIndex = new Map<string, Set<string>>()
+  /** title inverted index: title word → Set<docId> — for O(1) title matching */
+  private titleIndex = new Map<string, Set<string>>()
 
   /**
    * Index a single document. Idempotent — re-indexing replaces old entry.
@@ -96,6 +100,28 @@ export class VectorStore {
     }
     this.invertedIndex.set(doc.category, catIndex)
 
+    // Update keyword inverted index
+    if (existing) {
+      for (const [, ids] of this.keywordIndex) ids.delete(doc.id)
+    }
+    for (const kw of doc.keywords) {
+      const kwLower = kw.toLowerCase()
+      const ids = this.keywordIndex.get(kwLower) ?? new Set()
+      ids.add(doc.id)
+      this.keywordIndex.set(kwLower, ids)
+    }
+
+    // Update title inverted index
+    if (existing) {
+      for (const [, ids] of this.titleIndex) ids.delete(doc.id)
+    }
+    const titleWords = tokenize(doc.title)
+    for (const tw of titleWords) {
+      const ids = this.titleIndex.get(tw) ?? new Set()
+      ids.add(doc.id)
+      this.titleIndex.set(tw, ids)
+    }
+
     // Only increment docCount if this is a NEW document (not a re-index)
     if (!existing) {
       this.docCount.set(doc.category, (this.docCount.get(doc.category) ?? 0) + 1)
@@ -115,6 +141,9 @@ export class VectorStore {
         postings.delete(id)
       }
     }
+
+    for (const [, ids] of this.keywordIndex) ids.delete(id)
+    for (const [, ids] of this.titleIndex) ids.delete(id)
 
     this.docs.delete(id)
     const count = this.docCount.get(entry.doc.category) ?? 0
@@ -154,26 +183,48 @@ export class VectorStore {
       }
     }
 
-    // Title match bonus (exact phrase gets extra)
-    for (const [docId, entry] of this.docs) {
-      if (entry.doc.category !== category) continue
-      const titleLower = entry.doc.title.toLowerCase()
-      const qLower = query.toLowerCase()
-      if (titleLower.includes(qLower)) {
-        const existing = scores.get(docId) ?? { score: 0, fields: new Set<string>() }
-        existing.score += 2.0
-        existing.fields.add("title")
-        scores.set(docId, existing)
-      }
-      // Keyword match bonus
-      for (const kw of entry.doc.keywords) {
-        if (qTokens.some(t => kw.toLowerCase().includes(t))) {
-          const existing = scores.get(docId) ?? { score: 0, fields: new Set<string>() }
-          existing.score += 1.5
-          existing.fields.add("keyword")
-          scores.set(docId, existing)
+    // Title match bonus via titleIndex (O(qTokens * matchedDocCount) instead of O(n))
+    const matchedTitleIds = new Set<string>()
+    for (const qTerm of qTokens) {
+      const titleMatches = this.titleIndex.get(qTerm)
+      if (titleMatches) {
+        for (const docId of titleMatches) {
+          const entry = this.docs.get(docId)
+          if (!entry || entry.doc.category !== category) continue
+          matchedTitleIds.add(docId)
         }
       }
+    }
+    const qLower = query.toLowerCase()
+    for (const docId of matchedTitleIds) {
+      const entry = this.docs.get(docId)!
+      const titleLower = entry.doc.title.toLowerCase()
+      let bonus = 1.5
+      if (titleLower.includes(qLower)) bonus = 2.0
+      const existing = scores.get(docId) ?? { score: 0, fields: new Set<string>() }
+      existing.score += bonus
+      existing.fields.add("title")
+      scores.set(docId, existing)
+    }
+
+    // Keyword match bonus via keywordIndex (O(qTokens * matchedDocCount) instead of O(n))
+    const matchedKwIds = new Set<string>()
+    for (const qTerm of qTokens) {
+      for (const [kw, ids] of this.keywordIndex) {
+        if (kw.includes(qTerm)) {
+          for (const docId of ids) {
+            const entry = this.docs.get(docId)
+            if (!entry || entry.doc.category !== category) continue
+            matchedKwIds.add(docId)
+          }
+        }
+      }
+    }
+    for (const docId of matchedKwIds) {
+      const existing = scores.get(docId) ?? { score: 0, fields: new Set<string>() }
+      existing.score += 1.5
+      existing.fields.add("keyword")
+      scores.set(docId, existing)
     }
 
     return [...scores.entries()]
