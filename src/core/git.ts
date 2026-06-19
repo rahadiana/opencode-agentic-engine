@@ -13,6 +13,7 @@ export interface PRDescription {
   changes: string[]
   testPlan: string
   breakingChanges: boolean
+  notes?: string
 }
 
 export interface PRCreationResult {

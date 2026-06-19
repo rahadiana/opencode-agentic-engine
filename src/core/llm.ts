@@ -23,6 +23,8 @@ export interface LLMRequest {
   maxTokens?: number
   temperature?: number
   jsonMode?: boolean
+  /** Bypass the response cache (for debate loop where each round is unique despite similar prompt prefix) */
+  bypassCache?: boolean
   /** Source context untuk event llm.response — terisi jika dari agentic_execute step */
   sourceStepId?: string
   /** Source context untuk event llm.response — terisi jika dari pipeline stage */
@@ -147,7 +149,11 @@ export class LLMEngine {
   }
 
   private getCacheKey(req: LLMRequest): string {
-    return `${this.config.provider}:${this.config.model}:${req.systemPrompt.slice(0, 100)}:${req.userPrompt.slice(0, 200)}:${req.jsonMode}`
+    // Use longer prefix + hash of full prompts to prevent collisions
+    // (debate loop has same prefix but different full prompts per round)
+    const sysPrefix = req.systemPrompt.slice(0, 200)
+    const userPrefix = req.userPrompt.slice(0, 500)
+    return `${this.config.provider}:${this.config.model}:${sysPrefix}:${userPrefix}:${req.jsonMode}:${req.bypassCache}`
   }
 
   async call(req: LLMRequest): Promise<LLMResponse> {
@@ -155,11 +161,13 @@ export class LLMEngine {
     let success = false
     let response: LLMResponse
 
-    // Check cache for identical requests (TTL: 30s)
+    // Check cache for identical requests (TTL: 30s) — skip if bypassCache is set
     const cacheKey = this.getCacheKey(req)
-    const cached = this.responseCache.get(cacheKey)
-    if (cached && (Date.now() - cached.timestamp) < this.CACHE_TTL) {
-      return cached.response
+    if (!req.bypassCache) {
+      const cached = this.responseCache.get(cacheKey)
+      if (cached && (Date.now() - cached.timestamp) < this.CACHE_TTL) {
+        return cached.response
+      }
     }
 
     try {

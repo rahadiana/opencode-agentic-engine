@@ -1349,10 +1349,10 @@ const createEngine: Plugin = async (input, _options) => {
       }),
 
       agentic_snapshot: tool({
-        description: "Save or restore execution snapshots. Use 'save' to checkpoint current state (plan progress, file changes, decisions). Use 'list' to see all snapshots.",
+        description: "Save, restore, or list execution snapshots. Use 'save' to checkpoint state (plan progress, file changes, decisions). Use 'restore' to reload a previous checkpoint and reset execution state. Use 'list' to see all snapshots.",
         args: {
-          action: tool.schema.enum(["save", "list"]).describe("'save' creates a checkpoint; 'list' shows all saved snapshots"),
-          label: tool.schema.string().optional().describe("Optional label for the snapshot (e.g., 'after-types')"),
+          action: tool.schema.enum(["save", "list", "restore"]).describe("'save' creates a checkpoint; 'restore' reloads a checkpoint; 'list' shows all saved snapshots"),
+          label: tool.schema.string().optional().describe("Snapshot label to restore (required for 'restore', optional for 'save')"),
         },
         async execute(args, context) {
           if (args.action === "save") {
@@ -1361,15 +1361,19 @@ const createEngine: Plugin = async (input, _options) => {
             const session = sessionStore.getOrCreate(context.sessionID)
             const planGoal = session.plan?.intent.goal ?? "N/A"
 
+            const completedSteps = session.plan?.intent.subtasks.filter(s =>
+              executor.getCompletedSteps(context.sessionID).includes(s.id)
+            ).map(s => s.id) ?? []
+
             const snapshot = {
               label: args.label ?? `snap-${Date.now()}`,
               timestamp: new Date().toISOString(),
               planGoal,
               progress,
               filesModified: allFiles,
-              completedSteps: session.plan?.intent.subtasks.filter(s =>
-                executor.getCompletedSteps(context.sessionID).includes(s.id)
-              ).map(s => s.id) ?? [],
+              completedSteps,
+              totalSteps: session.plan?.intent.subtasks.length ?? 0,
+              plan: session.plan ?? null,
             }
 
             session.artifacts.set(`snapshot:${snapshot.label}`, JSON.stringify(snapshot))
@@ -1388,6 +1392,55 @@ const createEngine: Plugin = async (input, _options) => {
             }
           }
 
+          if (args.action === "restore") {
+            if (!args.label) {
+              return { output: "Provide a `label` of the snapshot to restore. Use `action: \"list\"` to see available snapshots." }
+            }
+
+            const session = sessionStore.getOrCreate(context.sessionID)
+            const raw = session.artifacts.get(`snapshot:${args.label}`)
+            if (!raw) {
+              return { output: `Snapshot "${args.label}" not found. Use \`action: "list"\` to see available snapshots.` }
+            }
+
+            let snapshot: any
+            try {
+              snapshot = JSON.parse(raw)
+            } catch {
+              return { output: `Snapshot "${args.label}" is corrupted and cannot be restored.` }
+            }
+
+            // Re-init execution with the same plan but mark completed steps from snapshot
+            if (snapshot.plan) {
+              executor.initExecution(context.sessionID, snapshot.plan)
+              // Re-mark completed steps
+              for (const stepId of snapshot.completedSteps ?? []) {
+                executor.recordResult(context.sessionID, {
+                  stepId,
+                  success: true,
+                  output: `Restored from snapshot "${args.label}"`,
+                  filesModified: snapshot.filesModified ?? [],
+                })
+              }
+              // Update session plan
+              session.plan = snapshot.plan
+            }
+
+            traceLogger.log({
+              step: "snapshot:restore",
+              input: args.label,
+              output: `Restored ${snapshot.completedSteps?.length ?? 0}/${snapshot.totalSteps ?? 0} steps`,
+              toolUsed: "agentic_snapshot",
+              success: true,
+              durationMs: 0,
+            })
+
+            const stepList = (snapshot.completedSteps ?? []).map((s: string) => `  - ✅ \`${s}\``).join("\n")
+            return {
+              output: `## ♻️ Snapshot Restored\n\n**Label:** \`${args.label}\`\n**Timestamp:** ${snapshot.timestamp}\n**Goal:** ${snapshot.planGoal}\n**Progress Restored:** ${snapshot.completedSteps?.length ?? 0}/${snapshot.totalSteps ?? 0} steps\n\n### Completed Steps\n${stepList || "  (none)"}\n\n### Files Modified (${snapshot.filesModified?.length ?? 0})\n${(snapshot.filesModified ?? []).map((f: string) => `  - \`${f}\``).join("\n") || "  (none)"}\n\nRun \`agentic_status\` to see current progress.`,
+            }
+          }
+
           // List snapshots
           const session = sessionStore.getOrCreate(context.sessionID)
           const snapshots: string[] = []
@@ -1401,7 +1454,23 @@ const createEngine: Plugin = async (input, _options) => {
             return { output: "No snapshots saved yet. Use `action: \"save\"` to create one." }
           }
 
-          return { output: `## 📸 Snapshots\n\n${snapshots.map(s => `- \`${s}\``).join("\n")}` }
+          // Show details for each snapshot
+          const lines: string[] = []
+          for (const label of snapshots) {
+            const raw = session.artifacts.get(`snapshot:${label}`)
+            if (raw) {
+              try {
+                const s = JSON.parse(raw)
+                lines.push(`- \`${label}\` — ${s.planGoal ?? "N/A"} (${s.completedSteps?.length ?? 0}/${s.totalSteps ?? 0} steps, ${new Date(s.timestamp).toLocaleDateString()})`)
+              } catch {
+                lines.push(`- \`${label}\` (corrupted)`)
+              }
+            } else {
+              lines.push(`- \`${label}\``)
+            }
+          }
+
+          return { output: `## 📸 Snapshots (${snapshots.length})\n\n${lines.join("\n")}\n\nUse \`agentic_snapshot\` with \`action: "restore"\` and the \`label\` to reload a checkpoint.` }
         },
       }),
 
@@ -1584,15 +1653,56 @@ const createEngine: Plugin = async (input, _options) => {
 
           const pr = git.generatePRDescription(args.title ?? session.plan.intent.goal, steps, allFiles)
 
-          let output = `## 📋 PR Description\n\n`
+          // LLM-enhanced summary if available
+          let enhancedSummary = pr.summary
+          let enhancedTestPlan = pr.testPlan
+          let llmUsed = false
+
+          try {
+            const hasLLM = await llmEngine.call({
+              systemPrompt: "You are a PR description assistant. Respond with just 'OK' to confirm availability.",
+              userPrompt: "Confirm you are available.",
+              maxTokens: 10,
+              temperature: 0,
+            }).catch(() => null)
+
+            if (hasLLM && hasLLM.content && !hasLLM.content.includes("[NO_LLM]")) {
+              const diffContext = git.getDiff("main").slice(0, 3000) || allFiles.join(", ")
+
+              const llmSummary = await llmEngine.call({
+                systemPrompt: "You are a senior engineer writing a PR description. Respond as JSON with keys: summary (concise description of what was done and why), changes (array of bullet-point changes), testPlan (steps to verify), notes (any caveats or follow-up items). Be specific and technical.",
+                userPrompt: `## Goal\n${pr.title}\n\n## Files Changed\n${allFiles.map(f => `- ${f}`).join("\n")}\n\n## Steps Executed\n${steps.map(s => `${s.success ? "[DONE]" : "[FAIL]"} ${s.description}`).join("\n")}\n\n## Diff Context\n${diffContext}\n\nGenerate PR description summary, changes list, and test plan.`,
+                jsonMode: true,
+                temperature: 0.3,
+                maxTokens: 1024,
+              })
+
+              if (llmSummary.content && !llmSummary.content.includes("[NO_LLM]")) {
+                const parsed = JSON.parse(llmSummary.content)
+                if (parsed.summary) enhancedSummary = parsed.summary
+                if (Array.isArray(parsed.changes)) {
+                  pr.changes = parsed.changes
+                }
+                if (parsed.testPlan) enhancedTestPlan = parsed.testPlan
+                if (parsed.notes) pr.notes = parsed.notes
+                llmUsed = true
+              }
+            }
+          } catch { /* non-fatal — fall back to template */ }
+
+          let output = `## 📋 PR Description${llmUsed ? " (LLM-enhanced)" : ""}\n\n`
           output += `---\ntitle: ${pr.title}\n---\n\n`
-          output += `## Summary\n\n${pr.summary}\n\n`
-          output += `## Changes\n\n${pr.changes.join("\n")}\n\n`
+          output += `## Summary\n\n${enhancedSummary}\n\n`
+          output += `## Changes\n\n${pr.changes.map(c => `- ${c}`).join("\n")}\n\n`
           output += `## Files Changed\n\n${allFiles.map(f => `- \`${f}\``).join("\n")}\n\n`
-          output += `## Test Plan\n\n${pr.testPlan}\n\n`
+          output += `## Test Plan\n\n${enhancedTestPlan}\n\n`
 
           if (pr.breakingChanges) {
             output += `## ⚠️ Breaking Changes\n\nSome steps failed. Review carefully before merging.\n\n`
+          }
+
+          if ((pr as any).notes) {
+            output += `## 📝 Notes\n\n${(pr as any).notes}\n\n`
           }
 
           output += `## Steps Executed\n\n`
@@ -3539,6 +3649,8 @@ const createEngine: Plugin = async (input, _options) => {
           let verifyNote = "—"
           let pipelineReview = ""
           let hasNoLLM = false
+          let preChangeCommit = ""
+          let hasGitRollback = false
 
           if (usePipeline) {
             // ── Pipeline path: reuse shared internal orchestrator ──
@@ -3626,6 +3738,15 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
               }
             }
 
+            // Capture pre-change git state for rollback (only in non-pipeline path)
+            try {
+              if (git.isAvailable()) {
+                const stashResult = execFileSync("git", ["stash", "create"], { cwd: projectDir, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }).trim()
+                preChangeCommit = stashResult || execFileSync("git", ["rev-parse", "HEAD"], { cwd: projectDir, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }).trim()
+                hasGitRollback = true
+              }
+            } catch { /* non-fatal — rollback not available */ }
+
             // Write files to disk
             for (const fw of filesToWrite) {
               try {
@@ -3650,15 +3771,25 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
           }
 
           // ═══════════════════════════════════════════════
-          // PHASE 4: Verify — compilation check (always runs)
+          // PHASE 4: Verify — compilation check + auto-rollback
           // ═══════════════════════════════════════════════
-          // verifyPassed/verifyNote already set by phase 3
           if (!hasNoLLM && allModified.length > 0) {
             try {
               verifier.detectLanguage(projectDir)
               const cc = verifier.verifyCompile(projectDir)
               verifyPassed = cc.passed
               verifyNote = verifyPassed ? "✅ Compile OK" : `⚠️ ${cc.output.slice(0, 200)}`
+
+              // ── Auto-rollback on verify failure ──
+              if (!verifyPassed && hasGitRollback && preChangeCommit) {
+                try {
+                  execFileSync("git", ["checkout", "--", ...allModified.map(f => join(projectDir, f))], { cwd: projectDir, stdio: "pipe", timeout: 15000 })
+                  verifyNote += ` 🔄 Auto-rolled back to pre-change state`
+                } catch (rollbackErr) {
+                  verifyNote += ` ⚠️ Rollback attempted but may be incomplete`
+                }
+                allModified.length = 0 // Clear modified list since files are rolled back
+              }
             } catch { verifyNote = "⚠️ Verify skipped" }
           }
 
@@ -3718,15 +3849,16 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
             toolUsed: "agentic_auto", success: allSuccess, durationMs: Date.now() - startTime,
           })
 
+          const rolledBack = hasGitRollback && !verifyPassed && preChangeCommit ? " 🔄 Files rolled back to pre-change state" : ""
           const fileList = allModified.length > 0
             ? `\n\n### Files Changed\n${allModified.map(f => `- \`${f}\``).join("\n")}`
-            : ""
+            : (rolledBack ? "\n\n⚠️ All changes were rolled back due to verification failure." : "")
           const memNote = memoryContexts.length > 0 ? `\n📚 ${memoryContexts.length} similar past tasks consulted` : ""
           const skillNote = skillContexts.length > 0 ? `\n🎯 ${skillContexts.length} relevant skills applied` : ""
 
           return {
-            output: `## 🤖 Auto Complete\n\n**Goal:** ${args.goal}\n**Duration:** ${duration}s\n**Files:** ${allModified.length}\n**Verify:** ${verifyNote}${memNote}${skillNote}${fileList}`,
-            metadata: { result, success: allSuccess, plan, filesModified: allModified, episodes: memoryContexts.length, skills: skillContexts.length },
+            output: `## 🤖 Auto Complete\n\n**Goal:** ${args.goal}\n**Duration:** ${duration}s\n**Files:** ${allModified.length}\n**Verify:** ${verifyNote}${rolledBack}${memNote}${skillNote}${fileList}`,
+            metadata: { result, success: allSuccess, plan, filesModified: allModified, episodes: memoryContexts.length, skills: skillContexts.length, rolledBack: hasGitRollback && !verifyPassed },
           }
         },
       }),

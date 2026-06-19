@@ -32,22 +32,26 @@ export interface DebateResult {
 
 const EXECUTOR_PROMPT = `You are an **executor agent**. Your job is to produce a thorough, well-structured analysis or implementation based on the given task and context.
 
+CRITICAL RULE: You MUST produce the actual analysis/implementation directly. Do NOT write meta-commentary like "I will now analyze..." or "Here is my analysis:" — just write the analysis itself. Do NOT describe what you're going to do — DO it.
+
 Rules:
 1. Be thorough and specific — include numbers, facts, and concrete details
 2. Structure your output clearly (headings, lists, tables as needed)
 3. If data is provided, reference it directly — do NOT make up numbers
 4. After receiving critic feedback, address EVERY issue raised
+5. Start your response with the actual content, NOT meta-commentary
 
-Output your analysis below.`
+Output your analysis below — start NOW with the actual content:`
 
 const CRITIC_PROMPT = `You are a **critic agent** (QA/quality control). Your job is to rigorously review the executor's output and find ANY issues.
 
 Check for:
-1. **Factual errors** — numbers that don't add up, contradictory statements
-2. **Logic holes** — missing steps, non-sequiturs, incomplete reasoning
-3. **Vagueness** — statements that are too generic or lack specifics
-4. **Structure problems** — poor organization, missing sections
-5. **Assumptions** — unstated assumptions that should be made explicit
+1. **Meta-commentary** — output that says "I will now analyze..." instead of actually analyzing. This is an automatic REJECT.
+2. **Factual errors** — numbers that don't add up, contradictory statements
+3. **Logic holes** — missing steps, non-sequiturs, incomplete reasoning
+4. **Vagueness** — statements that are too generic or lack specifics
+5. **Structure problems** — poor organization, missing sections
+6. **Assumptions** — unstated assumptions that should be made explicit
 
 For each issue found:
 - State WHAT the issue is
@@ -100,11 +104,13 @@ export class DebateLoop {
       let draft = ""
       let issues: string[] = []
       try {
+        // bypassCache for round 2+ to prevent cache collisions (prompts differ after first 200 chars)
         const draftResp = await this.llmEngine.call({
           systemPrompt: EXECUTOR_PROMPT,
           userPrompt: executorInput,
-          temperature: 0.3,
+          temperature: 0.3 + (round - 1) * 0.1, // Increase temperature each round for variation
           maxTokens: 4096,
+          bypassCache: round > 1, // Skip cache for revision rounds
         })
         draft = draftResp.content
       } catch (error) {
@@ -112,6 +118,22 @@ export class DebateLoop {
         // Short-circuit: don't continue debate with an error string as draft
         issues = [`Executor failed: ${error}`]
         break
+      }
+
+      // ── Check for duplicate output (loop detection) ──
+      if (round > 1) {
+        const prevDraft = rounds[rounds.length - 1].draft
+        if (draft === prevDraft) {
+          // Executor produced identical output — force break to prevent infinite loop
+          rounds.push({
+            round,
+            draft,
+            review: "⚠️ AUTO-BREAK: Executor produced identical output as previous round. Loop detected.",
+            approved: false,
+            issues: ["Output identical to previous round — loop detected, debate terminated"],
+          })
+          break
+        }
       }
 
       // ── Step 2: Critic reviews ──
@@ -122,6 +144,7 @@ export class DebateLoop {
           userPrompt: `Executor's output for task "${config.task}":\n\n${draft}\n\nReview this output. If APPROVED, respond with "APPROVED: (message)". Otherwise list all issues.`,
           temperature: 0.2,
           maxTokens: 2048,
+          bypassCache: round > 1, // Skip cache for revision rounds
         })
         review = criticResp.content
 
