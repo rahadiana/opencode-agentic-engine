@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "last_updated": "2026-06-19T19:35:00Z",
+  "sessions": [
+    {
+      "session_id": "noise-audit-stopwords-multilingual",
+      "date": "2026-06-19",
+      "commits": "4b4999d → 916b733 (9 commits)",
+      "summary": "Noise tolerance audit + centralized multilingual stop words integration",
+      "achievements": [
+        "Noise audit across skills/memory/evolution — 10 vulnerabilities fixed (+403/-58 lines)",
+        "7+ web searches on noise handling best practices (sliding window, paper references)",
+        "Centralized stop word module via stopwords-iso (58 languages, 19.188 unique words)",
+        "Created src/memory/stopwords.ts with isStopWord(), filterStopWords(), getStopWordStats()",
+        "skill-store.ts and episodic-store.ts now import centralized stop words",
+        "Sliding window success rate (last 20) replaces cumulative for all metrics",
+        "Semantic gate (≥2 action verbs + min 60 chars) for skill extraction",
+        "Hysteresis (60-120s cooldown) for auto-evolution triggers",
+        "Sustained degradation check (3 consecutive bucket drops)",
+        "Created COLLABORATION_SCENARIOS.md (899 lines) — 27 tool chaining patterns",
+        "All 641 unit tests passing after all changes"
+      ],
+      "key_decisions": [
+        "EN-first + ID-second + 56 other languages via stopwords-iso",
+        "Sliding window success rate for accuracy over cumulative",
+        "TF-IDF relevance scoring for skill search",
+        "Multi-language success markers (EN + ID + emoji)",
+        "Auto-evolution requires sustained degradation (3 bucket drops) + hysteresis"
+      ],
+      "files_created": [
+        "src/memory/stopwords.ts",
+        "COLLABORATION_SCENARIOS.md",
+        ".agentic/knowledge.json"
+      ],
+      "files_modified": [
+        "src/memory/skill-store.ts",
+        "src/memory/episodic-store.ts",
+        "src/evolution/self-evolver.ts",
+        "src/evolution/continuous-evolution.ts",
+        "src/index.ts",
+        "test/run.mjs"
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "name": "Multilingual Stop Words Integration",
+      "description": "Centralized stop word module using stopwords-iso (58 languages)",
+      "module": "src/memory/stopwords.ts",
+      "api": ["STOP_WORDS", "isStopWord()", "filterStopWords()", "getStopWordStats()"],
+      "consumers": ["skill-store.ts", "episodic-store.ts"]
+    },
+    {
+      "name": "Noise-Tolerant Sliding Window Pattern",
+      "description": "Sliding window metrics, semantic gates, hysteresis for noise reduction",
+      "files": ["skill-store.ts", "self-evolver.ts", "continuous-evolution.ts"],
+      "key_parameters": {
+        "window_size": 20,
+        "min_content_length": 60,
+        "min_action_verbs": 2,
+        "hysteresis_ms": 60000,
+        "sustained_buckets": 3
+      }
+    }
+  ]
+}
