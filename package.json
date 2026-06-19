@@ -43,6 +43,7 @@
   ],
   "scripts": {
     "build": "tsc --emitDeclarationOnly && node esbuild.config.mjs",
+    "postbuild": "if [ -d \"$HOME/.cache/opencode/packages/opencode-agentic-engine@latest\" ]; then cp -r dist/* \"$HOME/.cache/opencode/packages/opencode-agentic-engine@latest/node_modules/opencode-agentic-engine/dist/\" && cp package.json \"$HOME/.cache/opencode/packages/opencode-agentic-engine@latest/node_modules/opencode-agentic-engine/package.json\" && echo \"  → copied to opencode cache\"; fi",
     "dev": "concurrently -n types,bundle -c blue,green \"tsc --emitDeclarationOnly --watch\" \"node esbuild.config.mjs --watch\"",
     "dev:simple": "tsc --emitDeclarationOnly --watch & node esbuild.config.mjs --watch",
     "clean": "rm -rf dist",
