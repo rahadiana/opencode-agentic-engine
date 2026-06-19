@@ -2322,6 +2322,82 @@ const emptyResult = await hooks.tool.agentic_auto.execute({
 const emptyOut = typeof emptyResult === "string" ? emptyResult : (emptyResult.output || "")
 assert(emptyOut.length > 5, "agentic_auto handles empty goal")
 assert(true, "agentic_auto error handling passed")
+
+// ── Sub-agent integration tests ──
+console.log("\n── Sub-agent integration tests ──")
+
+// P1: agentic_plan suggests pipeline for feature/bug/refactor goals
+console.log("\n[P1] agentic_plan — pipeline suggestion")
+const p1Sid = freshSid()
+const p1Result = await hooks.tool.agentic_plan.execute({
+  goal: "Add new user login feature with JWT",
+}, mockCtx(p1Sid))
+const p1Out = typeof p1Result === "string" ? p1Result : (p1Result.output || "")
+assert(p1Out.includes("Pipeline") && p1Out.includes("feature-dev"), "plan suggests feature-dev pipeline")
+
+const p1bSid = freshSid()
+const p1bResult = await hooks.tool.agentic_plan.execute({
+  goal: "Fix bug in payment module",
+}, mockCtx(p1bSid))
+const p1bOut = typeof p1bResult === "string" ? p1bResult : (p1bResult.output || "")
+assert(p1bOut.includes("Pipeline") && p1bOut.includes("fix-verify"), "plan suggests fix-verify for bug")
+
+const p1cSid = freshSid()
+const p1cResult = await hooks.tool.agentic_plan.execute({
+  goal: "Refactor authentication service",
+}, mockCtx(p1cSid))
+const p1cOut = typeof p1cResult === "string" ? p1cResult : (p1cResult.output || "")
+assert(p1cOut.includes("Pipeline") && p1cOut.includes("refactor-review"), "plan suggests refactor-review pipeline")
+assert(true, "agentic_plan pipeline suggestion tests passed")
+
+// P2: agentic_execute suggests delegation after 2+ retries
+console.log("\n[P2] agentic_execute — delegation suggestion on repeated failure")
+const p2Sid = freshSid()
+await hooks.tool.agentic_plan.execute({
+  goal: "Execute escalation test",
+  subtasks: [{ id: "es1", description: "Will fail twice", dependsOn: [] }],
+}, mockCtx(p2Sid))
+await hooks.tool.agentic_execute.execute({
+  stepId: "es1", success: false, error: "TypeError: cannot read property 'x'", output: "Fail 1", autoVerify: false,
+}, mockCtx(p2Sid))
+const p2Result = await hooks.tool.agentic_execute.execute({
+  stepId: "es1", success: false, error: "TypeError: cannot read property 'x' again", output: "Fail 2", autoVerify: false,
+}, mockCtx(p2Sid))
+const p2Out = typeof p2Result === "string" ? p2Result : (p2Result.output || "")
+assert(p2Out.includes("Escalate") || p2Out.includes("delegate"), "delegation hint shown after 2 failures")
+assert(true, "agentic_execute delegation suggestion tests passed")
+
+// P3: agentic_parallel delegate-based runner still works
+console.log("\n[P3] agentic_parallel — delegate-based execution")
+const p3Sid = freshSid()
+const p3Ctx = mockCtx(p3Sid)
+await hooks.tool.agentic_plan.execute({
+  goal: "Parallel delegate test",
+  subtasks: [
+    { id: "pd1", description: "Write alpha.txt", dependsOn: [] },
+    { id: "pd2", description: "Write beta.txt", dependsOn: [] },
+  ],
+}, p3Ctx)
+await hooks.tool.agentic_execute.execute({
+  stepId: "pd1", success: true, autoVerify: false, output: "Done", filesModified: ["alpha.txt"],
+}, p3Ctx)
+const p3Result = await hooks.tool.agentic_parallel.execute({ action: "execute" }, p3Ctx)
+const p3Out = typeof p3Result === "string" ? p3Result : (p3Result.output || "")
+assert(p3Out.includes("Execution") || p3Out.includes("passed") || p3Out.includes("Failed"), "parallel delegate execution produces result")
+assert(true, "agentic_parallel delegate execution tests passed")
+
+// P4: agentic_auto with pipeline-suitable complex goal
+console.log("\n[P4] agentic_auto — pipeline-suitable goal")
+const p4Sid = freshSid()
+const p4Result = await hooks.tool.agentic_auto.execute({
+  goal: "Refactor utils module: extract validation functions",
+  constraints: ["TypeScript"],
+  thorough: true,
+}, mockCtx(p4Sid))
+const p4Out = typeof p4Result === "string" ? p4Result : (p4Result.output || "")
+assert(p4Out.length > 20, "auto with pipeline goal returns output")
+assert(p4Out.includes("Goal") || p4Out.includes("Auto"), "output mentions goal or auto")
+assert(true, "agentic_auto pipeline delegation tests passed")
 }
 
 await runAll()
