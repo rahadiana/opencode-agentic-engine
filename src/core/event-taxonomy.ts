@@ -196,6 +196,51 @@ export interface TaskCompletedEvent {
 }
 /** Consumers: Orchestrator (advance pipeline stage), agentic_message (auto-notify downstream) */
 
+// ── Namespace: llm — low-level LLM call lifecycle ──
+// Chokepoint paling rendah: setiap llmEngine.call() selesai, apa pun pemanggilnya.
+// Budget enforcement pakai direct call (bukan event), tapi observer pasif (dashboard,
+// trace, audit) dengar dari sini.
+
+export interface LLMResponseEvent {
+  type: "llm.response"
+  payload: {
+    sessionID: string
+    model: string
+    tokens: {
+      input: number
+      output: number
+      reasoning: number
+      cacheRead: number
+      cacheWrite: number
+    }
+    costUsd: number
+    success: boolean
+    durationMs: number
+    /** Terisi jika dipanggil dari agentic_execute path */
+    sourceStepId?: string
+    /** Terisi jika dipanggil dari pipeline stage */
+    sourceTaskId?: string
+    /** Terisi jika dipanggil dari pipeline multi-stage */
+    sourcePipelineRunId?: string
+  }
+}
+/** Consumers (passive/observer only): Dashboard.updateTimeline, TraceLogger.log, LiveEvaluator.recordCall */
+
+// ── Namespace: file — low-level file write lifecycle ──
+// Chokepoint paling rendah: setiap file benar-benar ditulis ke disk.
+
+export interface FileWrittenEvent {
+  type: "file.written"
+  payload: {
+    sessionID: string
+    filePath: string
+    bytesWritten: number
+    sourceStepId?: string
+    sourceTaskId?: string
+  }
+}
+/** Consumers: Guard (auto-verify file claims against reality), Dashboard.fileStats */
+
 // ── Namespace: memory — persistence ──
 
 export interface SkillExtractedEvent {
@@ -233,6 +278,8 @@ export type AgenticEvent =
   | BudgetLimitExceededEvent
   | BudgetThresholdWarningEvent
   | GuardCheckCompletedEvent
+  | LLMResponseEvent
+  | FileWrittenEvent
   | TaskDelegatedEvent
   | TaskCompletedEvent
   | SkillExtractedEvent
@@ -250,7 +297,9 @@ export const EVENT_PRODUCER_MAP: Record<string, string[]> = {
   "pipeline.completed":        ["agentic_pipeline", "agentic_auto"],
   "budget.limit.exceeded":     ["BudgetTracker.check()", "PEP middleware"],
   "budget.threshold.warning":  ["BudgetTracker.check()"],
-  "guard.check.completed":     ["agentic_execute (auto)", "agentic_guard (manual)"],
+  "llm.response":              ["llmEngine.call()"],
+  "file.written":              ["writeFiles() helper", "agentic_execute", "executePipeline"],
+  "guard.check.completed":     ["agentic_execute (auto)", "agentic_guard (manual)", "recordCompletion()"],
   "task.delegated":            ["agentic_delegate"],
   "task.completed":            ["agentic_delegate"],
   "memory.skill.extracted":    ["SkillStore.extract()"],
@@ -267,6 +316,8 @@ export const EVENT_CONSUMER_MAP: Record<string, string[]> = {
   "pipeline.completed":        ["agentic_pr", "agentic_score", "SkillStore.extract"],
   "budget.limit.exceeded":     ["Executor (block next)", "LLMEngine (block next)", "agentic_budget (status update)"],
   "budget.threshold.warning":  ["agentic_budget (display warning)"],
+  "llm.response":              ["Dashboard.updateTimeline", "TraceLogger.log", "LiveEvaluator.recordCall"],
+  "file.written":              ["HallucinationGuard (passive cross-check)", "Dashboard.fileStats"],
   "guard.check.completed":     ["ModelRegistry.recordHallucination (if failed)", "Dashboard.anomalyDetection"],
   "task.delegated":            ["TraceLogger.log", "Orchestrator (pipeline tracking)"],
   "task.completed":            ["Orchestrator.advanceStage (if pipeline)", "agentic_message (notify downstream)"],

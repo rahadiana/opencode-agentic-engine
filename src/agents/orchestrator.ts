@@ -1,7 +1,8 @@
 import type { SharedMemoryEntry, AgentCoordinator } from "./coordinator.js"
 import type { LLMEngine } from "../core/llm.js"
-import { mkdirSync, writeFileSync } from "node:fs"
-import { join, dirname } from "node:path"
+import type { BudgetTracker } from "../core/budget-tracker.js"
+import type { EventBus } from "../core/event-bus.js"
+import { parseFileEntries, writeFiles, recordCompletion } from "../core/execution-helpers.js"
 
 export interface PipelineStage {
   role: string
@@ -218,18 +219,30 @@ Return your analysis as JSON with:
     skillContexts: string[]
     coordinator: AgentCoordinator
     sessionID: string
+    budgetTracker?: BudgetTracker
+    eventBus?: EventBus
+    /** HallucinationGuard instance (for auto-check during completion recording) */
+    hallucinationGuard?: import("../drift/hallucination-guard.js").HallucinationGuard
+    /** SkillStore instance (for auto-extract during completion recording) */
+    skillStore?: import("../memory/skill-store.js").SkillStore
+    /** ConfigLoader instance (for autoSkillExtract flag check) */
+    configLoader?: import("../core/config.js").ConfigLoader
   }): Promise<{
     results: Map<string, { output: string; issues: string[]; validatedBy: string[] }>
     allFiles: string[]
     pipelineReview: string
     hasNoLLM: boolean
+    budgetExceeded: boolean
     verifyNote: string
+    completedStageCount: number
   }> {
-    const { pipeline, runId, goal, constraints, projectDir, codebaseSummary, filesBlock, memoryContexts, skillContexts, coordinator, sessionID } = params
+    const { pipeline, runId, goal, constraints, projectDir, codebaseSummary, filesBlock, memoryContexts, skillContexts, coordinator, sessionID, budgetTracker } = params
     const allFiles: string[] = []
     let pipelineReview = ""
     let verifyNote = ""
     let hasNoLLM = false
+    let budgetExceeded = false
+    let completedStageCount = 0
 
     const sysPrompts: Record<string, string> = {
       pm: `You are a PM. Define requirements and acceptance criteria concisely. Return JSON: {"spec": "...", "criteria": ["..."]}`,
@@ -239,7 +252,19 @@ Return your analysis as JSON with:
       coordinator: `You are a coordinator. Verify pipeline completion and consistency. Return JSON: {"summary": "...", "gaps": ["..."], "approved": true/false}`,
     }
 
+    const stageStartTime = Date.now()
+
     for (const stage of pipeline.stages) {
+      // ── Synchronous budget check BEFORE each stage (direct call, not event) ──
+      if (budgetTracker) {
+        const budgetStatus = budgetTracker.check("session")
+        if (budgetStatus) {
+          budgetExceeded = true
+          verifyNote = `⛔ Budget exceeded: ${budgetStatus.metric} (${budgetStatus.current} > ${budgetStatus.limit})`
+          break
+        }
+      }
+
       const stageTaskId = `pipeline-${stage.role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
 
       coordinator.delegate(stage.role, {
@@ -257,43 +282,40 @@ Return your analysis as JSON with:
 
       const up = `Goal: ${goal}${constraints?.length ? `\nConstraints: ${constraints.join(", ")}` : ""}${pipelineContextHints ? `\nPast tasks: ${pipelineContextHints}` : ""}${stageCtx ? `\n\nContext from previous stages:\n${stageCtx}` : ""}\n${stage.role} task: ${stage.description}\n${filesBlock || "(new)"}\n${codebaseSummary.slice(0, 100)}`
 
-      const llmOut = await this.llmEngine!.call({
-        systemPrompt: sp, userPrompt: up,
-        temperature: 0.2, maxTokens: 2048, jsonMode: true,
-      })
+      // ── LLM call with try/catch for partial-save ──
+      let raw: string
+      try {
+        const llmOut = await this.llmEngine!.call({
+          systemPrompt: sp, userPrompt: up,
+          temperature: 0.2, maxTokens: 2048, jsonMode: true,
+        })
+        raw = llmOut.content || ""
+      } catch (err) {
+        // Partial-save: pipeline tetap return hasil stage yang sudah sukses
+        verifyNote = `❌ Stage ${stage.role} crashed: ${(err as Error).message ?? err}`
+        coordinator.updateTask(sessionID, stageTaskId, "failed", `LLM call failed: ${(err as Error).message ?? err}`)
+        break
+      }
 
-      const raw = llmOut.content || ""
       const isFail = raw.includes("[NO_LLM]") || raw === "NO_LLM"
       if (isFail) { hasNoLLM = true; break }
 
       coordinator.updateTask(sessionID, stageTaskId, "done", raw.slice(0, 1000))
 
+      // ── Developer stage: write files via shared helper ──
       if (stage.role === "developer") {
-        try {
-          const parsed = JSON.parse(raw)
-          if (parsed.files && Array.isArray(parsed.files)) {
-            for (const f of parsed.files) {
-              if (f.path && f.content) {
-                const absPath = join(projectDir, f.path)
-                mkdirSync(dirname(absPath), { recursive: true })
-                writeFileSync(absPath, f.content, "utf-8")
-                allFiles.push(f.path)
-              }
-            }
-          }
-        } catch {
-          const fbRegex = /FILE:\s*(\S+)\n```(?:\w+)?\n([\s\S]*?)```/g
-          let m: RegExpExecArray | null
-          while ((m = fbRegex.exec(raw)) !== null) {
-            const absPath = join(projectDir, m[1].replace(/^\/+/, ""))
-            mkdirSync(dirname(absPath), { recursive: true })
-            writeFileSync(absPath, m[2], "utf-8")
-            allFiles.push(m[1].replace(/^\/+/, ""))
-          }
+        const fileEntries = parseFileEntries(raw)
+        const written = writeFiles(fileEntries, projectDir, sessionID, params.eventBus, { taskId: stageTaskId, pipelineRunId: runId })
+        allFiles.push(...written)
+
+        // Warning kalau developer tidak menghasilkan file
+        if (written.length === 0 && !raw.includes("noChanges") && !raw.includes("NO_CHANGES")) {
+          verifyNote = "⚠️ Developer stage: no files written (parsing may have failed)"
         }
         coordinator.writeSharedMemory("pipeline:files", allFiles.join(", "), "developer")
       }
 
+      // ── QA stage: parse review ──
       if (stage.role === "qa") {
         try {
           const qaParsed = JSON.parse(raw)
@@ -302,16 +324,42 @@ Return your analysis as JSON with:
           else verifyNote = "✅ QA passed"
         } catch { pipelineReview = raw.slice(0, 200) }
       }
+
+      // ── Blocking completion record: guard + skill + step count ──
+      // Gunakan shared recordCompletion() sehingga guard/skill/budget jalan
+      // untuk KEDUA jalur (agentic_execute dan pipeline).
+      if (params.hallucinationGuard && params.skillStore && budgetTracker) {
+        await recordCompletion({
+          sessionID,
+          taskId: stageTaskId,
+          pipelineRunId: runId,
+          output: raw,
+          filesModified: allFiles,
+          durationMs: Date.now() - stageStartTime,
+          role: stage.role,
+          skipSkillExtract: stage.role !== "developer" || allFiles.length === 0,
+        }, {
+          budgetTracker,
+          hallucinationGuard: params.hallucinationGuard,
+          skillStore: params.skillStore,
+          configLoader: params.configLoader,
+          eventBus: params.eventBus,
+        })
+      }
+
+      completedStageCount++
     }
 
     // Cross-validate between stages
-    try {
-      const allStageResults = this.getAllStageResults(runId)
-      if (allStageResults.size >= 2) {
-        const xv = await this.crossValidate("coordinator", goal, allStageResults)
-        if (!xv.passed) verifyNote += ` ⚠️ Cross-validation: ${xv.issues.length} issues`
-      }
-    } catch { /* non-fatal */ }
+    if (completedStageCount >= 2 && !budgetExceeded && !hasNoLLM) {
+      try {
+        const allStageResults = this.getAllStageResults(runId)
+        if (allStageResults.size >= 2) {
+          const xv = await this.crossValidate("coordinator", goal, allStageResults)
+          if (!xv.passed) verifyNote += ` ⚠️ Cross-validation: ${xv.issues.length} issues`
+        }
+      } catch { /* non-fatal */ }
+    }
 
     const allPipelineStages = pipeline.stages.map(s => s.role)
     coordinator.writeSharedMemory("pipeline:stages", allPipelineStages.join(","), "coordinator")
@@ -321,7 +369,9 @@ Return your analysis as JSON with:
       allFiles,
       pipelineReview,
       hasNoLLM,
+      budgetExceeded,
       verifyNote,
+      completedStageCount,
     }
   }
 

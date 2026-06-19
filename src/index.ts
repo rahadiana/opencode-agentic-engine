@@ -43,6 +43,7 @@ import { PersistenceLayer } from "./memory/persistence.js"
 import { ModelRegistry } from "./core/model-registry.js"
 import { ConfigLoader } from "./core/config.js"
 import { BudgetTracker } from "./core/budget-tracker.js"
+import { EventBus } from "./core/event-bus.js"
 import { PatternDiscovery } from "./drift/pattern-discovery.js"
 import { LiveEvaluator } from "./evaluation/live-evaluator.js"
 import { DebateLoop } from "./core/debate-loop.js"
@@ -268,11 +269,13 @@ const createEngine: Plugin = async (input, _options) => {
   const patternDiscovery = new PatternDiscovery()
   const liveEvaluator = new LiveEvaluator()
   const modelRegistry = new ModelRegistry()
+  const eventBus = new EventBus()
   const llmEngine = new LLMEngine()
   llmEngine.setOpencodeClient(input.client)
     llmEngine.setModelRegistry(modelRegistry)
     llmEngine.setSessionStore(sessionStore)
     llmEngine.setBudgetTracker(budgetTracker)
+    llmEngine.setEventBus(eventBus)
   orchestrator.setLLMEngine(llmEngine)
   errorAnalyzer.setLLM(llmEngine)
   verifier.setLLM(llmEngine)
@@ -1491,14 +1494,22 @@ const createEngine: Plugin = async (input, _options) => {
                 skillContexts,
                 coordinator,
                 sessionID: context.sessionID,
+                budgetTracker,
+                eventBus,
+                hallucinationGuard,
+                skillStore,
+                configLoader,
               })
 
               if (piperesult.hasNoLLM) {
                 out += `❌ LLM unavailable — pipeline aborted.\n`
                 return { output: out }
               }
-
-              out += `✅ All stages completed.\n`
+              if (piperesult.budgetExceeded) {
+                out += `⛔ Budget exceeded — ${piperesult.completedStageCount}/${pipeline.stages.length} stages completed.\n`
+              } else {
+                out += `✅ ${piperesult.completedStageCount} stages completed.\n`
+              }
               out += `**Files modified:** ${piperesult.allFiles.length > 0 ? piperesult.allFiles.join(", ") : "(none)"}\n`
               if (piperesult.pipelineReview) out += `**QA review:** ${piperesult.pipelineReview}\n`
               if (piperesult.verifyNote) out += `**Verification:** ${piperesult.verifyNote}\n`
@@ -3546,12 +3557,20 @@ const createEngine: Plugin = async (input, _options) => {
               skillContexts,
               coordinator,
               sessionID: context.sessionID,
+              budgetTracker,
+              eventBus,
+              hallucinationGuard,
+              skillStore,
+              configLoader,
             })
 
             hasNoLLM = piperesult.hasNoLLM
             pipelineReview = piperesult.pipelineReview
             verifyNote = piperesult.verifyNote
             allModified.push(...piperesult.allFiles)
+            if (piperesult.budgetExceeded) {
+              verifyNote = `⛔ Budget exceeded after ${piperesult.completedStageCount} stages`
+            }
 
             // Record execution
             const allPipelineStages = pipeline.stages.map(s => s.role)

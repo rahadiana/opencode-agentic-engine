@@ -58,6 +58,7 @@ export class LLMEngine {
     findSkills: (query: string) => Array<{ name: string; successRate: number }>
   }
   private budgetTracker?: BudgetTracker
+  private eventBus?: import("./event-bus.js").EventBus
   private responseCache = new Map<string, { response: LLMResponse; timestamp: number }>()
   private readonly CACHE_TTL = 30_000 // 30s cache for identical requests
 
@@ -121,6 +122,10 @@ export class LLMEngine {
 
   setBudgetTracker(tracker: BudgetTracker): void {
     this.budgetTracker = tracker
+  }
+
+  setEventBus(bus: import("./event-bus.js").EventBus): void {
+    this.eventBus = bus
   }
 
   setSessionStore(store: import("../memory/session-store.js").SessionStore): void {
@@ -189,15 +194,31 @@ export class LLMEngine {
     this.modelRegistry?.recordCall(this.getCurrentModel(), success, latency, taskType)
 
     // Feed token usage to BudgetTracker
-    if (success && response.usage && this.budgetTracker) {
-      this.budgetTracker.recordTokens(
-        this.getCurrentModel(),
-        response.usage.promptTokens,
-        response.usage.completionTokens,
-        response.usage.reasoningTokens ?? 0,
-        response.usage.cacheReadTokens ?? 0,
-        response.usage.cacheWriteTokens ?? 0,
-      )
+    const tInput = response.usage?.promptTokens ?? 0
+    const tOutput = response.usage?.completionTokens ?? 0
+    const tReasoning = response.usage?.reasoningTokens ?? 0
+    const tCacheRead = response.usage?.cacheReadTokens ?? 0
+    const tCacheWrite = response.usage?.cacheWriteTokens ?? 0
+
+    if (success && this.budgetTracker) {
+      this.budgetTracker.recordTokens(this.getCurrentModel(), tInput, tOutput, tReasoning, tCacheRead, tCacheWrite)
+    }
+
+    // Emit llm.response event (passive — for dashboard/trace observers)
+    if (this.eventBus) {
+      // Approximate cost using gpt-4o defaults (matching BudgetTracker fallback)
+      const cost = (tInput * 2.5 + tOutput * 10 + tReasoning * 10 + tCacheRead * 0.3 + tCacheWrite * 2.5) / 1_000_000
+      this.eventBus.emit({
+        type: "llm.response",
+        payload: {
+          sessionID: this.pluginSessionId ?? "",
+          model: this.getCurrentModel(),
+          tokens: { input: tInput, output: tOutput, reasoning: tReasoning, cacheRead: tCacheRead, cacheWrite: tCacheWrite },
+          costUsd: cost,
+          success,
+          durationMs: latency,
+        },
+      } as any)
     }
 
     return response
