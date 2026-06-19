@@ -4682,5 +4682,6 @@ export { episodeToTrainingExample, episodesToTrainingData, prepareFineTuningData
 export { ConfigLoader, validateConfig } from "./core/config.js"
 export { PersistenceLayer } from "./memory/persistence.js"
 export { EpisodicStore } from "./memory/episodic-store.js"
+export { STOP_WORDS, isStopWord, filterStopWords, getStopWordStats } from "./memory/stopwords.js"
 export { PromptTemplate } from "./core/prompt-template.js"
 export { buildAgentPrompt, buildAgenticSystemInstructions, buildGenericAgentPrompt } from "./core/prompt-builder.js"

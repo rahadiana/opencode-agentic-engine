@@ -71,10 +71,6 @@ export class SelfEvolver {
 
   // Sliding window for success rate calculation
   private readonly successWindowSize = 20
-  // Hysteresis: minimum gap between auto-evolve triggers for same session
-  private readonly minEvolveIntervalMs = 60000  // 1 minute
-  private lastEvolveTime = 0
-
   feedSkills(skills: SkillRecord[]): void { this.skills = skills }
   feedEpisodes(episodes: Episode[]): void {
     this.episodes = (episodes ?? []).filter(e => {

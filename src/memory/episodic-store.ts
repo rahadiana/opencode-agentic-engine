@@ -1,4 +1,5 @@
 import { createMemoryEnvelope, parseMemoryEnvelope, MEMORY_SCHEMA_VERSION, MemorySchemaVersion } from "./schema-version.js"
+import { isStopWord } from "./stopwords.js"
 
 export interface Episode {
   id: string
@@ -224,39 +225,12 @@ export class EpisodicStore {
   }
 
   private extractTags(goal: string, decisions: string[]): string[] {
-    // Extended stop words — domain-specific for software engineering
-    const stopWords = new Set([
-      // General English stop words
-      "this", "that", "with", "from", "have", "been", "were", "they", "them", "their",
-      "what", "which", "when", "where", "will", "would", "could", "should", "about",
-      "then", "than", "just", "also", "very", "more", "some", "such", "only", "other",
-      "into", "over", "after", "before", "between", "through", "during", "because",
-      "therefore", "however", "without", "within", "along", "across", "being", "doing",
-      "having", "thing", "make", "made", "take", "took", "need", "want", "used",
-      "using", "might", "must", "still", "well", "back", "much", "each", "every",
-      "both", "few", "most", "yet", "already", "always", "never", "often", "sometimes",
-      // Software engineering generic words (not domain-specific)
-      "step", "steps", "task", "tasks", "code", "file", "files", "function", "class",
-      "method", "variable", "type", "data", "value", "name", "line", "lines", "test",
-      "tests", "bug", "fix", "feature", "implement", "implementation", "change",
-      "changes", "add", "added", "adding", "remove", "removed", "removing", "update",
-      "updated", "updating", "create", "created", "creating", "delete", "deleted",
-      "modify", "modified", "modification", "refactor", "refactored", "refactoring",
-      "first", "second", "third", "next", "last", "final", "initial", "previous",
-      "current", "need", "needs", "needed", "work", "works", "working", "way",
-      "done", "complete", "completed", "completion", "finish", "finished",
-      "start", "started", "begin", "began", "beginning",
-      // Indonesian stop words
-      "yang", "dan", "di", "ke", "dari", "ini", "itu", "dengan", "untuk", "pada",
-      "adalah", "akan", "telah", "sudah", "bisa", "dapat", "tidak", "atau", "saya",
-      "kami", "kita", "mereka", "dia", "anda", "juga", "karena", "jika", "saat",
-      "setelah", "sebelum", "sangat", "semua", "tetapi", "namun",
-      "selesai", "sukses", "berhasil", "langkah", "tugas", "buat", "baru",
-    ])
+    // Uses centralized multilingual stop word set (58 languages via stopwords-iso)
+    // plus software engineering domain-specific words
 
     const words = [...goal.split(/\s+/), ...decisions.join(" ").split(/\s+/)]
     const raw = words
-      .filter(w => w.length > 3 && !stopWords.has(w.toLowerCase()))
+      .filter(w => w.length > 3 && !isStopWord(w))
       .map(w => w.toLowerCase())
 
     // TF-based deduplication: only keep tags that appear at least twice

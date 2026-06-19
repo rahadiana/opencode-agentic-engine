@@ -1236,9 +1236,13 @@ const ce2 = new mod.ContinuousEvolution(5)
 // No trigger at start
 assert(ce2.shouldEvolve("sess-2") === null, "no evolve trigger on fresh CE")
 
-// Feed all failures → should trigger degradation
+// Feed mixed: 5 successes then 5 failures → degradation trigger
+// (need ≥10 total for minimum data threshold, and earlier rate > recent rate)
 for (let i = 0; i < 5; i++) {
-  ce2.feedStepResult({ stepId: `x${i}`, success: false, output: "fail", sessionId: "sess-2", timestamp: Date.now() })
+  ce2.feedStepResult({ stepId: `ok${i}`, success: true, output: "ok", sessionId: "sess-2", timestamp: Date.now() })
+}
+for (let i = 0; i < 5; i++) {
+  ce2.feedStepResult({ stepId: `fail${i}`, success: false, output: "fail", sessionId: "sess-2", timestamp: Date.now() })
 }
 const trigger = ce2.shouldEvolve("sess-2")
 assert(trigger !== null, "shouldEvolve returns trigger after degradation")

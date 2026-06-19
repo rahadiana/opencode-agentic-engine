@@ -1,5 +1,6 @@
 import { type SkillDefinition, type SkillStep, type SkillMeta, createSkillDefinition, inspectSkill, serializeSkill, deserializeSkill } from "./skill-format.js"
 import { createMemoryEnvelope, parseMemoryEnvelope } from "./schema-version.js"
+import { STOP_WORDS } from "./stopwords.js"
 
 export { type SkillDefinition, type SkillStep, type SkillMeta, inspectSkill, serializeSkill, deserializeSkill, createSkillDefinition }
 
@@ -10,25 +11,6 @@ export interface SkillRecord {
   successWindow: boolean[]  // sliding window of last N outcomes (true=success)
   lastUsed: string
 }
-
-// Stop words for keyword extraction — prevents noise from generic tokens
-const STOP_WORDS = new Set([
-  "this", "that", "with", "from", "have", "been", "were", "they", "them", "their",
-  "what", "which", "when", "where", "will", "would", "could", "should", "about",
-  "then", "than", "just", "also", "very", "more", "some", "such", "only", "other",
-  "into", "over", "after", "before", "between", "through", "during", "because",
-  "therefore", "however", "without", "within", "along", "across", "being", "doing",
-  "having", "thing", "make", "made", "take", "took", "need", "want", "used",
-  "using", "might", "must", "still", "well", "back", "much", "each", "every",
-  "both", "few", "most", "step", "steps", "done", "complete", "completed",
-  "first", "second", "third", "next", "last", "then", "finally", "after", "before",
-  "success", "successful", "successfully", "failed", "failure",
-  // Indonesian stop words
-  "yang", "dan", "di", "ke", "dari", "ini", "itu", "dengan", "untuk", "pada",
-  "adalah", "akan", "telah", "sudah", "bisa", "dapat", "tidak", "atau", "saya",
-  "kami", "kita", "mereka", "dia", "anda", "juga", "karena", "jika", "saat",
-  "setelah", "sebelum", "sangat", "semua", "tetapi", "namun", "selesai", "sukses",
-])
 
 // Action verb prefixes for step validation — filters non-action lines
 const ACTION_VERBS = new Set([
