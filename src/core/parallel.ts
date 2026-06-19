@@ -182,7 +182,6 @@ export class ParallelExecutor {
 
   llmStepRunner(opts: LLMStepRunnerOptions): StepRunner {
     return async (step: Subtask): Promise<ParallelExecutionResult> => {
-      const startTime = Date.now()
       try {
         const resp = await opts.llmEngine.call({
           systemPrompt: `You are an autonomous software engineer implementing a step of a larger plan. Generate implementation as JSON with:

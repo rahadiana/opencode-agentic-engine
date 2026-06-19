@@ -42,12 +42,6 @@ export interface MCPConnection {
 const STDIO_TIMEOUT = 30000 // 30s for stdio commands
 const HTTP_TIMEOUT = 15000  // 15s for HTTP requests
 
-function logError(context: string, error: unknown): void {
-  if (process.env.DEBUG_AGENTIC) {
-    console.error(`[MCPClient] ${context}:`, error)
-  }
-}
-
 /**
  * Minimal MCP (Model Context Protocol) client.
  * Supports stdio (subprocess) and HTTP(S) transports.
@@ -438,7 +432,7 @@ export class MCPClient {
 
   // ── HTTP(S) Transport ──
 
-  private async connectHTTP(name: string, config: MCPConfig): Promise<MCPTool[]> {
+  private async connectHTTP(_name: string, config: MCPConfig): Promise<MCPTool[]> {
     if (!config.url) {
       throw new Error("HTTP transport requires a 'url'")
     }

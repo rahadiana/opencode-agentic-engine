@@ -8,7 +8,7 @@ import { tmpdir, homedir } from "node:os"
 import { DomainRegistry, type DomainPack } from "./core/domain-registry.js"
 import { genericDomain } from "./core/domains/generic.js"
 import { codeDomain } from "./core/domains/code.js"
-import { IntentParser, type TaskIntent, type Subtask } from "./core/intent-parser.js"
+import { IntentParser, type TaskIntent } from "./core/intent-parser.js"
 import { Executor } from "./core/executor.js"
 import { Verifier } from "./core/verifier.js"
 import { ErrorAnalyzer } from "./core/error-analyzer.js"
@@ -21,7 +21,7 @@ import { TechDebtScorer } from "./core/tech-debt-scorer.js"
 import { AgentCoordinator } from "./agents/coordinator.js"
 import { AgentRuntime } from "./agents/agent-runtime.js"
 import type { AgentRole, AgentTask } from "./agents/coordinator.js"
-import { Orchestrator, type WorkflowPipeline, type CrossValidationResult } from "./agents/orchestrator.js"
+import { Orchestrator, type WorkflowPipeline } from "./agents/orchestrator.js"
 import { SkillStore } from "./memory/skill-store.js"
 import { EpisodicStore } from "./memory/episodic-store.js"
 import { HallucinationGuard, type ClaimResult } from "./drift/hallucination-guard.js"
@@ -31,8 +31,8 @@ import { CheckpointSystem } from "./drift/checkpoints.js"
 import { SessionStore } from "./memory/session-store.js"
 import { TraceLogger } from "./observability/trace-logger.js"
 import { RoleRegistry, type PromptEntry } from "./agents/role-registry.js"
-import { MemorySchemaVersion, createMemoryEnvelope, parseMemoryEnvelope } from "./memory/schema-version.js"
-import { createSkillDefinition, inspectSkill, serializeSkill, deserializeSkill } from "./memory/skill-format.js"
+import { MemorySchemaVersion, createMemoryEnvelope } from "./memory/schema-version.js"
+import { createSkillDefinition, inspectSkill, serializeSkill } from "./memory/skill-format.js"
 import { detectTaskType } from "./core/task-classifier.js"
 import { skillsToTrainingData, trainingDatasetSummary, skillToTrainingExample } from "./memory/skill-training.js"
 import { SelfEvolver } from "./evolution/self-evolver.js"
@@ -40,7 +40,6 @@ import { ContinuousEvolution } from "./evolution/continuous-evolution.js"
 import { LLMEngine } from "./core/llm.js"
 import { AgentLoop } from "./core/agent-loop.js"
 import { PersistenceLayer } from "./memory/persistence.js"
-import { VectorStore } from "./memory/vector-store.js"
 import { ModelRegistry } from "./core/model-registry.js"
 import { ConfigLoader } from "./core/config.js"
 import { PatternDiscovery } from "./drift/pattern-discovery.js"
@@ -135,16 +134,6 @@ const createEngine: Plugin = async (input, _options) => {
   // Safety: list of system/OS directories that should never be used as worktree
   const systemDirs = ["/", "/home", "/lib", "/usr", "/var", "/etc", "/boot", "/sys", "/proc", "/dev", "/run", "/tmp"]
 
-  // Check if path looks like a real project (has package.json, Cargo.toml, go.mod, pyproject.toml, etc.)
-  const looksLikeProject = (dir: string): boolean => {
-    try {
-      const projectFiles = ["package.json", "Cargo.toml", "go.mod", "pyproject.toml", "setup.py", "requirements.txt", "Makefile", "CMakeLists.txt"]
-      return projectFiles.some(f => existsSync(join(dir, f)))
-    } catch {
-      return false
-    }
-  }
-
   // Normalize: reject system directories, prefer input.directory, validate it's a project
   let worktree = rawWorktree
   if (systemDirs.includes(worktree) || systemDirs.some(s => worktree.startsWith(s + "/") && worktree.split("/").length <= 2)) {
@@ -195,7 +184,7 @@ const createEngine: Plugin = async (input, _options) => {
   // ── Helper: write agent prompt file for current domain ──
   function writeAgentPrompt(domainOverride?: DomainPack) {
     const pack = domainOverride ?? domainRegistry.getCurrentPack() ?? genericDomain
-    const content = buildAgentPrompt(pack, TOOL_REGISTRY, worktree)
+    const content = buildAgentPrompt(pack, TOOL_REGISTRY)
     try {
       const globalAgentsDir = join(homedir(), ".config", "opencode", "agents")
       mkdirSync(globalAgentsDir, { recursive: true })
@@ -245,9 +234,9 @@ const createEngine: Plugin = async (input, _options) => {
             if (entry.isDirectory() && !["node_modules", ".git", "dist", ".agentic"].includes(entry.name))
               walkDir(full, depth + 1)
             else if (entry.isFile() && /\.(ts|tsx|js|jsx|mjs)$/.test(entry.name) && Object.keys(scanBatch).length < 100)
-              try { scanBatch[full] = readFileSync(full, "utf-8") } catch {}
+              try { scanBatch[full] = readFileSync(full, "utf-8") } catch { /* non-fatal */ }
           }
-        } catch {}
+        } catch { /* non-fatal */ }
       }
       walkDir(sourceDir)
       depTracker.scanFiles(scanBatch, worktree)
@@ -346,7 +335,7 @@ const createEngine: Plugin = async (input, _options) => {
     searchEpisodes: (query: string) => episodicStore.search(query),
     findSkills: (query: string) => skillStore.find(query).map(s => ({ name: s.definition.meta.name, successRate: s.successRate })),
   })
-  const agentLoop = new AgentLoop(llmEngine, { maxIterations: 10, autoRetry: true, maxRetries: 2, verifyAfterEach: false })
+  new AgentLoop(llmEngine, { maxIterations: 10, autoRetry: true, maxRetries: 2, verifyAfterEach: false })
   const persistence = new PersistenceLayer(worktree)
   // Build RAG config from config file
   const ragConfig: import("./memory/multi-index-rag.js").RAGConfig = {
@@ -356,8 +345,6 @@ const createEngine: Plugin = async (input, _options) => {
   }
   const multiIndexRAG = new MultiIndexRAG(undefined, ragConfig)
 
-  // Alias for backward compat — vectorStore is multiIndexRAG's TF-IDF engine
-  const vectorStore = multiIndexRAG.vectorStore
   const debateLoop = new DebateLoop(llmEngine)
   const routerAgent = new RouterAgent(llmEngine)
   const dataCleaner = new DataCleaner(llmEngine)
@@ -410,7 +397,7 @@ const createEngine: Plugin = async (input, _options) => {
       }
       // Replay history into RoleRegistry (construct already set initial prompts)
       for (const hist of entry.history) {
-        let currentPrompt = roleRegistry.getPrompt(entry.role)
+        const currentPrompt = roleRegistry.getPrompt(entry.role)
         if (currentPrompt && hist.prompt !== currentPrompt) {
           roleRegistry.updatePrompt(entry.role as "architect" | "developer" | "qa" | "coordinator" | "pm", hist.prompt, hist.source, hist.description)
         }
@@ -478,7 +465,7 @@ const createEngine: Plugin = async (input, _options) => {
       }
     }
 
-    let traces: Array<{ toolUsed: string; success: boolean; step: string }> = []
+    const traces: Array<{ toolUsed: string; success: boolean; step: string }> = []
     const tracePath = `${worktree}/.agentic/trace.jsonl`
     try {
       const content = readFileSync(tracePath, "utf-8")
@@ -511,7 +498,7 @@ const createEngine: Plugin = async (input, _options) => {
           prompt: `You are ${role.name}. ${role.reason}\n\nTrigger: ${role.triggerPattern}`,
         })
         appliedRoles.push(role.name)
-      } catch { }
+      } catch { /* non-fatal */ }
     }
 
     // Auto-apply skill patches
@@ -1723,7 +1710,6 @@ const createEngine: Plugin = async (input, _options) => {
                     "coordinator",
                     "Pipeline completed",
                     allResults,
-                    coordinator.getAllSharedMemory(),
                   )
                   output += `\n### Cross-Validation\n**Status:** ${finalValidation.passed ? "✅ Passed" : "❌ Issues found"}\n`
                   output += `**Summary:** ${finalValidation.summary}\n`
@@ -1740,7 +1726,6 @@ const createEngine: Plugin = async (input, _options) => {
                     args.role ?? "unknown",
                     args.result ?? "",
                     allResults,
-                    coordinator.getAllSharedMemory(),
                   )
                   if (validation.issues.length > 0) {
                     output += `\n### 🔍 Cross-Validation Notes\n`
@@ -1793,7 +1778,7 @@ const createEngine: Plugin = async (input, _options) => {
             steps: s.definition.workflow.steps.map(st => `${st.action}: ${st.description}`).join("; "),
           }))
 
-          const task = coordinator.delegate(role, {
+          coordinator.delegate(role, {
             id: args.taskId,
             assignedTo: role,
             description: args.description,
@@ -1915,7 +1900,7 @@ const createEngine: Plugin = async (input, _options) => {
                 output += `\n### Pipeline: Next Stage\n▶ **${nextStage.role}** — ${nextStage.description}\n`
               } else {
                 output += `\n### 🎉 Pipeline Complete\nAll stages finished!\n`
-                const finalValidation = await orchestrator.crossValidate("coordinator", "Pipeline completed", allResults, coordinator.getAllSharedMemory())
+                const finalValidation = await orchestrator.crossValidate("coordinator", "Pipeline completed", allResults)
                 output += `**Cross-Validation:** ${finalValidation.passed ? "✅ Passed" : "❌ Issues"}\n`
               }
             }
@@ -2111,7 +2096,7 @@ const createEngine: Plugin = async (input, _options) => {
           model: tool.schema.string().optional().describe("Model name (required for 'reset' action)"),
           staleDays: tool.schema.number().optional().describe("Days threshold for stale detection (default: 7)"),
         },
-        async execute(args, context) {
+        async execute(args, _context) {
           if (args.action === "reset") {
             if (!args.model) return { output: "Provide a `model` name to reset (e.g. 'gpt-4o')." }
             
@@ -2153,7 +2138,7 @@ const createEngine: Plugin = async (input, _options) => {
           action: tool.schema.enum(["search", "recent", "stats"]).describe("'search' finds relevant past tasks; 'recent' shows latest; 'stats' shows summary"),
           query: tool.schema.string().optional().describe("Search query (for 'search' action)"),
         },
-        async execute(args, context) {
+        async execute(args, _context) {
           if (args.action === "search") {
             if (!args.query) return { output: "Provide a search query." }
 
@@ -2363,7 +2348,7 @@ const createEngine: Plugin = async (input, _options) => {
       agentic_dashboard: tool({
         description: "Generate an observability dashboard from execution traces. Shows timeline, statistics, tool usage, anomaly detection, and model reliability (timeouts, retry storms, silent failures).",
         args: {},
-        async execute(args, _context) {
+        async execute(_args, _context) {
           // Always show model reliability regardless of trace data
           const modelReliability = modelRegistry.getSummary()
           let traceSection = ""
@@ -2388,7 +2373,6 @@ const createEngine: Plugin = async (input, _options) => {
           // Cross-session pattern discovery
           const allEpisodes = episodicStore.getRecent(200)
           if (allEpisodes.length >= 3) {
-            const allStepResults = [] // No direct access to CE's internal results; use episodes instead
             const allSkills = skillStore.getAll().map(s => ({
               name: s.definition.meta.name,
               successRate: s.successRate,
@@ -2557,7 +2541,6 @@ const createEngine: Plugin = async (input, _options) => {
             }
 
             case "export-skill": {
-              const skillId = args.skillId
               const skillData = createSkillDefinition(
                 args.name ?? "unnamed-skill",
                 args.name ?? "generic pattern",
@@ -2621,7 +2604,7 @@ const createEngine: Plugin = async (input, _options) => {
                 }
               }
 
-              let traces: Array<{ toolUsed: string; success: boolean; step: string }> = []
+              const traces: Array<{ toolUsed: string; success: boolean; step: string }> = []
               const tracePath = `${worktree}/.agentic/trace.jsonl`
               try {
                 const content = readFileSync(tracePath, "utf-8")
@@ -2654,7 +2637,7 @@ const createEngine: Plugin = async (input, _options) => {
                     prompt: `You are ${role.name}. ${role.reason}\n\nTrigger: ${role.triggerPattern}`,
                   })
                   appliedRoles.push(role.name)
-                } catch { }
+                } catch { /* non-fatal */ }
               }
 
               // Auto-apply skill patches
@@ -3069,7 +3052,6 @@ const createEngine: Plugin = async (input, _options) => {
         },
         async execute(args, context) {
           llmEngine.setSessionId(context.sessionID)
-          const startTime = Date.now()
 
           switch (args.action) {
             case "search": {
@@ -3215,7 +3197,6 @@ const createEngine: Plugin = async (input, _options) => {
         },
         async execute(args, context) {
           llmEngine.setSessionId(context.sessionID)
-          const startTime = Date.now()
 
           switch (args.action) {
             case "connect": {
@@ -3394,14 +3375,12 @@ const createEngine: Plugin = async (input, _options) => {
 
           const filesBlock = Object.entries(fileContents)
             .map(([p, c]) => `${p}:\n${c.slice(0, 100)}`).join("\n---\n")
-          const contextHints = [...memoryContexts.slice(0, 2), ...skillContexts.slice(0, 1)].join("; ")
-
           const pipelineId = orchestrator.getSuggestedPipeline(args.goal)
           const pipeline = orchestrator.getPipeline(pipelineId)
           const usePipeline = thorough && pipeline && pipeline.stages.length >= 2 && activeSteps.length >= 2
 
-          let allModified: string[] = []
-          let completedSteps: string[] = []
+          const allModified: string[] = []
+          const completedSteps: string[] = []
           let verifyPassed = true
           let verifyNote = "—"
           let pipelineReview = ""
@@ -3489,7 +3468,7 @@ const createEngine: Plugin = async (input, _options) => {
             try {
               const allStageResults = orchestrator.getAllStageResults(pipelineRunId)
               if (allStageResults.size >= 2) {
-                const xv = await orchestrator.crossValidate("coordinator", args.goal, allStageResults, coordinator.getAllSharedMemory())
+                const xv = await orchestrator.crossValidate("coordinator", args.goal, allStageResults)
                 if (!xv.passed) verifyNote += ` ⚠️ Cross-validation: ${xv.issues.length} issues`
               }
             } catch { /* non-fatal */ }
@@ -3509,13 +3488,11 @@ const createEngine: Plugin = async (input, _options) => {
             }
           } else {
             // ── Fast path: monolithic LLM call ──
-            const contextHints = [...memoryContexts.slice(0, 2), ...skillContexts.slice(0, 1)].join("; ")
-
             const systemPrompt = `Return JSON array of {path, content}. Write COMPLETE file contents.
 Rules: ESM imports (.js) · match existing patterns · valid imports
 {"files":[{"path":"src/x.ts","content":"..."}]} or {"noChanges":true}`
 
-            const userPrompt = `${args.goal}${args.constraints?.length ? `\nConstraints: ${args.constraints.join(", ")}` : ""}${contextHints ? `\nContext: ${contextHints}` : ""}\n\n${filesBlock || "(new)"}\n${codebaseSummary.slice(0, 100)}`
+            const userPrompt = `${args.goal}${args.constraints?.length ? `\nConstraints: ${args.constraints.join(", ")}` : ""}${[...memoryContexts.slice(0, 2), ...skillContexts.slice(0, 1)].join("; ") ? `\nContext: ${[...memoryContexts.slice(0, 2), ...skillContexts.slice(0, 1)].join("; ")}` : ""}\n\n${filesBlock || "(new)"}\n${codebaseSummary.slice(0, 100)}`
 
             const isSimple = args.goal.length < 80 && activeSteps.length < 3
             const maxTokens = isSimple ? 1024 : 2048

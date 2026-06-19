@@ -1,5 +1,5 @@
-import { readFileSync, existsSync } from "node:fs"
-import { join, relative, dirname, resolve } from "node:path"
+import { existsSync } from "node:fs"
+import { join, relative, dirname } from "node:path"
 
 export interface FileChange {
   file: string
@@ -162,7 +162,7 @@ export class DependencyTracker {
     this.fileGraph.delete(relPath)
     this.dependencies.delete(relPath)
     // Remove old edges where this file was the target
-    for (const [src, targets] of this.fileGraph) {
+    for (const [_src, targets] of this.fileGraph) {
       if (targets.has(relPath)) {
         targets.delete(relPath)
       }

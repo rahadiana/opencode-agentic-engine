@@ -70,7 +70,7 @@ export class AgentCoordinator {
     const entry: SharedMemoryEntry = { key, value, writtenBy: agentRole, timestamp: Date.now() }
     this.sharedMemory.set(key, entry)
     for (const listener of this.memoryListeners) {
-      try { listener(entry) } catch { }
+      try { listener(entry) } catch { /* non-fatal */ }
     }
     return entry
   }

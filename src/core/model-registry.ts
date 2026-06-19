@@ -189,7 +189,7 @@ export class ModelRegistry {
     return this.modelAliases.get(alias) ?? (alias ? [alias] : [])
   }
 
-  suggestWithFallback(role: string, preferredModels: string[] = []): string[] {
+  suggestWithFallback(_role: string, preferredModels: string[] = []): string[] {
     const candidates = new Set<string>()
 
     for (const m of preferredModels) {
@@ -292,7 +292,7 @@ export class ModelRegistry {
   }
 
   selectWithFallback(
-    taskType: string,
+    _taskType: string,
     availableModels: string[],
     blockingConfig: { hardBlockReliability: number; softBlockReliability: number; minSampleSize: number }
   ): { model: string; tier: "healthy" | "degraded" | "unstable" | "reset"; warnings: string[] } {

@@ -289,7 +289,7 @@ export class LLMEngine {
       }
     }
     if (requiredKey) {
-      const loose = cleaned.match(new RegExp(`\\{[\s\S]*?"${requiredKey}"[\\s\\S]*?\\}`))
+      const loose = cleaned.match(new RegExp(`\\{[\\s\\S]*?"${requiredKey}"[\\s\\S]*?\\}`))
       if (loose) {
         try {
           const parsed = JSON.parse(loose[0])
@@ -311,7 +311,7 @@ export class LLMEngine {
     return null
   }
 
-  async generatePlan(goal: string, constraints: string[], codebaseSummary: string): Promise<{
+  async generatePlan(goal: string, _constraints: string[], codebaseSummary: string): Promise<{
     steps: Array<{ id: string; description: string; dependsOn: string[] }>
     complexity: string
   }> {

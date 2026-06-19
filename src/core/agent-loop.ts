@@ -4,7 +4,6 @@ import { Verifier } from "./verifier.js"
 import { ErrorAnalyzer } from "./error-analyzer.js"
 import { DependencyTracker } from "../drift/dependency-tracker.js"
 import { LLMEngine } from "./llm.js"
-import { ParallelExecutor } from "./parallel.js"
 
 export interface AgentLoopConfig {
   maxIterations: number
@@ -35,7 +34,7 @@ export class AgentLoop {
   private config: AgentLoopConfig
   private llm: LLMEngine
   private observers: LoopObserver[] = []
-  private parallelExec = new ParallelExecutor()
+
 
   constructor(llm: LLMEngine, config: Partial<AgentLoopConfig> = {}) {
     this.llm = llm
@@ -254,7 +253,7 @@ export class AgentLoop {
   }
 
   private async attemptRepair(
-    step: Subtask,
+    _step: Subtask,
     error: string,
     analysis: ReturnType<ErrorAnalyzer["analyze"]>,
     fixExecutor?: (fix: string) => Promise<boolean>,

@@ -134,7 +134,7 @@ export class DebateLoop {
           // Extract issues from review
           const issueLines = review
             .split("\n")
-            .filter(l => /^\d+[\.\)]/.test(l.trim()) || l.trim().startsWith("-") || l.toLowerCase().includes("issue") || l.toLowerCase().includes("problem") || l.toLowerCase().includes("error") || l.toLowerCase().includes("missing"))
+            .filter(l => /^\d+[.)]/.test(l.trim()) || l.trim().startsWith("-") || l.toLowerCase().includes("issue") || l.toLowerCase().includes("problem") || l.toLowerCase().includes("error") || l.toLowerCase().includes("missing"))
             .map(l => l.trim())
             .filter(l => l.length > 10)
           issues = issueLines.length > 0 ? issueLines : [review.slice(0, 500)]

@@ -1,5 +1,5 @@
 import { type SkillDefinition, type SkillStep, type SkillMeta, createSkillDefinition, inspectSkill, serializeSkill, deserializeSkill } from "./skill-format.js"
-import { createMemoryEnvelope, parseMemoryEnvelope, MEMORY_SCHEMA_VERSION } from "./schema-version.js"
+import { createMemoryEnvelope, parseMemoryEnvelope } from "./schema-version.js"
 
 export { type SkillDefinition, type SkillStep, type SkillMeta, inspectSkill, serializeSkill, deserializeSkill, createSkillDefinition }
 

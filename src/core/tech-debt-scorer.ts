@@ -12,7 +12,7 @@ export interface DebtCategory {
 }
 
 export class TechDebtScorer {
-  score(planGoal: string, filesChanged: string[], fileContents: Map<string, string>): DebtScore {
+  score(_planGoal: string, filesChanged: string[], fileContents: Map<string, string>): DebtScore {
     const breakdown: DebtCategory[] = []
     let totalIssues = 0
 
@@ -67,7 +67,7 @@ export class TechDebtScorer {
     return { category: "coupling", score: Math.min(score, 10), issues }
   }
 
-  private analyzeSize(filesChanged: string[], contents: Map<string, string>): DebtCategory {
+  private analyzeSize(_filesChanged: string[], contents: Map<string, string>): DebtCategory {
     const issues: string[] = []
     let score = 0
 
@@ -127,7 +127,7 @@ export class TechDebtScorer {
     return { category: "patterns", score: Math.min(score, 10), issues }
   }
 
-  private generateSuggestion(overall: string, breakdown: DebtCategory[], total: number): string {
+  private generateSuggestion(overall: string, _breakdown: DebtCategory[], total: number): string {
     if (overall === "low") return "Minimal debt. Proceed confidently."
     if (overall === "medium") return `${total} issue(s) found. Address before next iteration.`
     if (overall === "high") return `${total} issue(s) found. Fix before merging — add to next sprint.`

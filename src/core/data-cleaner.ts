@@ -118,7 +118,7 @@ export class DataCleaner {
    * Compress debate history into a clean summary.
    */
   compressDebate(rounds: DebateRound[], finalOutput: string): string {
-    const summary = rounds.map((r, i) => {
+    const summary = rounds.map((r, _i) => {
       const issues = r.issues.length > 0
         ? `\n   Issues: ${r.issues.slice(0, 3).map(j => j.slice(0, 100)).join("; ")}${r.issues.length > 3 ? ` (+${r.issues.length - 3} more)` : ""}`
         : ""
@@ -184,7 +184,7 @@ export class DataCleaner {
       /^I'?ve\s+(fixed|updated|revised|added|changed).*$/gim,
       /^Here['']s\s+(my|the)\s+(revised|updated|fixed).*$/gim,
       /^APPROVED:.*$/gim,
-      /^\d+[\.\)]\s+(In)?valid\s+(point|observation|critique).*$/gim,
+      /^\d+[.)]\s+(In)?valid\s+(point|observation|critique).*$/gim,
       /^Thank\s+(you|sir|ma'am).*$/gim,
       /^You\s+make\s+a\s+good\s+point.*$/gim,
     ]

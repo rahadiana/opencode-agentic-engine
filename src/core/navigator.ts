@@ -127,15 +127,9 @@ const BUILTIN_LANGUAGES: LanguageConfig[] = [
 export class CodebaseNavigator {
   private index: ProjectIndex | null = null
   private languages: LanguageConfig[] = [...BUILTIN_LANGUAGES]
-  private useGenericFallback = false
-
   setLanguages(langs: LanguageConfig[]): void {
     this.languages = langs
     this.index = null
-  }
-
-  setUseGenericFallback(fallback: boolean): void {
-    this.useGenericFallback = fallback
   }
 
   async scan(root: string): Promise<ProjectIndex> {
@@ -169,7 +163,7 @@ export class CodebaseNavigator {
           await stat(join(root, pf))
           if (!detected.includes(lang.name)) detected.push(lang.name)
           break
-        } catch { }
+        } catch { /* non-fatal */ }
       }
     }
     return detected
@@ -283,7 +277,7 @@ export class CodebaseNavigator {
         if (!resolved.isDirectory()) continue
         if (this.isSystemDirectory(p)) continue
         return p
-      } catch { }
+      } catch { /* non-fatal */ }
     }
     return null
   }
@@ -309,7 +303,7 @@ export class CodebaseNavigator {
         if (!lang.sourceExtensions.includes(ext)) continue
 
         let size = 0
-        try { size = (await stat(fullPath)).size } catch { }
+        try { size = (await stat(fullPath)).size } catch { /* non-fatal */ }
 
         const imports: string[] = []
         const exports: string[] = []
@@ -324,7 +318,7 @@ export class CodebaseNavigator {
             const expMatch = line.match(lang.exportPattern)
             if (expMatch) exports.push(expMatch[expMatch.length - 1])
           }
-        } catch { }
+        } catch { /* non-fatal */ }
 
         modules.push({
           path: fullPath,

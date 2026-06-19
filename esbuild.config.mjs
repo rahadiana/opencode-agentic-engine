@@ -13,6 +13,10 @@ const ctx = await esbuild.context({
   target: "node22",
   format: "esm",
   sourcemap: true,
+  minify: true,
+  treeShaking: true,
+  keepNames: true,
+  legalComments: "external",
   external: ["@opencode-ai/plugin"],
   define: {
     __VERSION__: JSON.stringify(version),

@@ -113,7 +113,7 @@ export class ContextCompressor {
         decisions.push(...decisionMatches.map(d => d.trim()).slice(0, 3))
       }
 
-      const fileMatches = content.match(/(?:src|lib|test|app|pkg|cmd)\/[\w/.\-]+/gi)
+      const fileMatches = content.match(/(?:src|lib|test|app|pkg|cmd)\/[\w/.-]+/gi)
       if (fileMatches) {
         fileChanges.push(...fileMatches)
       }

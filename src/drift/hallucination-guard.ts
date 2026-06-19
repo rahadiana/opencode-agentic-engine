@@ -102,8 +102,8 @@ export class HallucinationGuard {
 
   private extractFileClaims(output: string): string[] {
     const patterns = [
-      /(?:created|wrote|generated|saved)\s+['"]?([\w/.\-]+\.(?:ts|js|tsx|jsx|json|py|go|rs|md|yaml|yml|toml))['"]?/gi,
-      /(?:in|at|to)\s+['"]?([\w/.\-]+\.(?:ts|js|tsx|jsx|py|go|rs|md))['"]?/gi,
+      /(?:created|wrote|generated|saved)\s+['"]?([\w/.-]+\.(?:ts|js|tsx|jsx|json|py|go|rs|md|yaml|yml|toml))['"]?/gi,
+      /(?:in|at|to)\s+['"]?([\w/.-]+\.(?:ts|js|tsx|jsx|py|go|rs|md))['"]?/gi,
     ]
 
     const files = new Set<string>()
@@ -119,7 +119,7 @@ export class HallucinationGuard {
 
   private extractFunctionClaims(output: string): Array<{ function: string; file: string }> {
     const results: Array<{ function: string; file: string }> = []
-    const pattern = /(?:added|implemented|created|modified)\s+(\w+)\s+(?:in|to|at)\s+['"]?([\w/.\-]+)['"]?/gi
+    const pattern = /(?:added|implemented|created|modified)\s+(\w+)\s+(?:in|to|at)\s+['"]?([\w/.-]+)['"]?/gi
 
     for (const match of output.matchAll(pattern)) {
       results.push({ function: match[1], file: match[2] })
@@ -144,9 +144,9 @@ export class HallucinationGuard {
     const results: Array<{ method: string; file: string }> = []
 
     const patterns = [
-      /(?:calls|invokes|uses|references)\s+(\w+)\s+(?:from|in)\s+['"]?([\w/.\-]+\.(?:ts|js|py|go|rs))['"]?/gi,
-      /(?:API|endpoint|method|function)\s+(\w+)\s+(?:in|at)\s+['"]?([\w/.\-]+\.(?:ts|js|py|go|rs))['"]?/gi,
-      /(?:returns|exports)\s+(\w+)\s+(?:from)\s+['"]?([\w/.\-]+\.(?:ts|js|py|go|rs))['"]?/gi,
+      /(?:calls|invokes|uses|references)\s+(\w+)\s+(?:from|in)\s+['"]?([\w/.-]+\.(?:ts|js|py|go|rs))['"]?/gi,
+      /(?:API|endpoint|method|function)\s+(\w+)\s+(?:in|at)\s+['"]?([\w/.-]+\.(?:ts|js|py|go|rs))['"]?/gi,
+      /(?:returns|exports)\s+(\w+)\s+(?:from)\s+['"]?([\w/.-]+\.(?:ts|js|py|go|rs))['"]?/gi,
     ]
 
     for (const pattern of patterns) {

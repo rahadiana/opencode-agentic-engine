@@ -1,7 +1,7 @@
 import type { SkillRecord } from "../memory/skill-store.js"
 import type { Episode } from "../memory/episodic-store.js"
 import type { AgentTask } from "../agents/coordinator.js"
-import type { CustomAgentDef } from "../agents/role-registry.js"
+
 
 export interface EvolutionMetrics {
   totalSessions: number

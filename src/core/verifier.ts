@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
-import type { DomainRegistry, VerifierStrategy } from "./domain-registry.js"
+import type { DomainRegistry } from "./domain-registry.js"
 import type { LLMEngine } from "./llm.js"
 
 export type SupportedLanguage = "typescript" | "python" | "go" | "rust" | "javascript" | "unknown"
@@ -19,17 +19,17 @@ export interface CheckResult {
   output: string
 }
 
-export interface LanguageConfig {
+export interface VerifierLanguageConfig {
   compileCmd: (projectDir: string) => { bin: string; args: string[]; timeout: number }
   testCmd: (projectDir: string, testPattern?: string) => { bin: string; args: string[]; timeout: number }
   fileExts: string[]
   testFileExts: string[]
 }
 
-const LANGUAGE_CONFIGS: Record<SupportedLanguage, LanguageConfig> = {
+const LANGUAGE_CONFIGS: Record<SupportedLanguage, VerifierLanguageConfig> = {
   typescript: {
-    compileCmd: (dir) => ({ bin: "npx", args: ["tsc", "--noEmit", "--pretty", "false"], timeout: 30000 }),
-    testCmd: (dir, pattern) => {
+    compileCmd: (_dir) => ({ bin: "npx", args: ["tsc", "--noEmit", "--pretty", "false"], timeout: 30000 }),
+    testCmd: (_dir, pattern) => {
       const args = ["vitest", "run", "--reporter", "verbose"]
       if (pattern) args.push("--", pattern)
       return { bin: "npx", args, timeout: 60000 }
@@ -38,8 +38,8 @@ const LANGUAGE_CONFIGS: Record<SupportedLanguage, LanguageConfig> = {
     testFileExts: [".test.ts", ".spec.ts", ".test.tsx", ".spec.tsx"],
   },
   javascript: {
-    compileCmd: (dir) => ({ bin: "node", args: ["-e", "process.exit(0)"], timeout: 5000 }),
-    testCmd: (dir, pattern) => {
+    compileCmd: (_dir) => ({ bin: "node", args: ["-e", "process.exit(0)"], timeout: 5000 }),
+    testCmd: (_dir, pattern) => {
       const args = ["vitest", "run", "--reporter", "verbose"]
       if (pattern) args.push("--", pattern)
       return { bin: "npx", args, timeout: 60000 }
@@ -48,8 +48,8 @@ const LANGUAGE_CONFIGS: Record<SupportedLanguage, LanguageConfig> = {
     testFileExts: [".test.js", ".spec.js", ".test.jsx", ".spec.jsx"],
   },
   python: {
-    compileCmd: (dir) => ({ bin: "python", args: ["-m", "py_compile", "-q", "."], timeout: 30000 }),
-    testCmd: (dir, pattern) => {
+    compileCmd: (_dir) => ({ bin: "python", args: ["-m", "py_compile", "-q", "."], timeout: 30000 }),
+    testCmd: (_dir, pattern) => {
       const args = ["-m", "pytest", "-q"]
       if (pattern) args.push(pattern)
       return { bin: "python", args, timeout: 60000 }
@@ -58,8 +58,8 @@ const LANGUAGE_CONFIGS: Record<SupportedLanguage, LanguageConfig> = {
     testFileExts: ["test_", "_test.py"],
   },
   go: {
-    compileCmd: (dir) => ({ bin: "go", args: ["vet", "./..."], timeout: 30000 }),
-    testCmd: (dir, pattern) => {
+    compileCmd: (_dir) => ({ bin: "go", args: ["vet", "./..."], timeout: 30000 }),
+    testCmd: (_dir, pattern) => {
       const args = ["test", "./...", "-count=1"]
       if (pattern) args.push("-run", pattern)
       return { bin: "go", args, timeout: 120000 }
@@ -68,8 +68,8 @@ const LANGUAGE_CONFIGS: Record<SupportedLanguage, LanguageConfig> = {
     testFileExts: ["_test.go"],
   },
   rust: {
-    compileCmd: (dir) => ({ bin: "cargo", args: ["check", "--quiet"], timeout: 120000 }),
-    testCmd: (dir, pattern) => {
+    compileCmd: (_dir) => ({ bin: "cargo", args: ["check", "--quiet"], timeout: 120000 }),
+    testCmd: (_dir, pattern) => {
       const args = ["test"]
       if (pattern) args.push(pattern)
       return { bin: "cargo", args, timeout: 120000 }
@@ -78,8 +78,8 @@ const LANGUAGE_CONFIGS: Record<SupportedLanguage, LanguageConfig> = {
     testFileExts: ["test.rs"],
   },
   unknown: {
-    compileCmd: (dir) => ({ bin: "echo", args: ["no compile step"], timeout: 1000 }),
-    testCmd: (dir) => ({ bin: "echo", args: ["no test step"], timeout: 1000 }),
+    compileCmd: (_dir) => ({ bin: "echo", args: ["no compile step"], timeout: 1000 }),
+    testCmd: (_dir) => ({ bin: "echo", args: ["no test step"], timeout: 1000 }),
     fileExts: [],
     testFileExts: [],
   },
@@ -102,7 +102,7 @@ export class Verifier {
     this.domainRegistry = registry
   }
 
-  async verifySemantic(stepId: string, intent: string, changedFiles: string[], projectDir: string): Promise<CheckResult> {
+  async verifySemantic(_stepId: string, intent: string, changedFiles: string[], projectDir: string): Promise<CheckResult> {
     if (!this.llm) {
       return { name: "semantic", passed: true, output: "Semantic verification skipped (no LLM configured)" }
     }

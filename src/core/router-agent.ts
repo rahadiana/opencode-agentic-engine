@@ -77,32 +77,13 @@ const DEFAULT_CATEGORIES: RouteCategory[] = [
   },
 ]
 
-const ROUTER_SYSTEM_PROMPT = `You are a **router agent** — a lightweight, fast intent classifier.
 
-Given a user input and a list of categories, determine:
-1. **Category**: Which category best matches this input?
-2. **Intent**: A brief (1-2 sentence) summary of what the user wants
-3. **Confidence**: How confident are you? (0.0 - 1.0)
-4. **Reasoning**: Why did you pick this category?
-
-Return your answer as a JSON object:
-{
-  "category": "category_id",
-  "intent": "string",
-  "confidence": 0.0-1.0,
-  "reasoning": "string"
-}
-
-Available categories:
-{CATEGORIES_LIST}
-
-If the input doesn't clearly match any category, choose "general" with low confidence.`
 
 export class RouterAgent {
   private categories: RouteCategory[]
 
   constructor(
-    private llmEngine?: LLMEngine,
+    _llmEngine?: LLMEngine,
     categories?: RouteCategory[],
   ) {
     this.categories = categories ?? DEFAULT_CATEGORIES
@@ -122,7 +103,6 @@ export class RouterAgent {
    */
   keywordRoute(input: string): RouteMatch | null {
     const normalizedInput = input.toLowerCase()
-    const words = normalizedInput.split(/\s+/)
     const matches: Array<{ category: RouteCategory; score: number; matchedKeywords: string[] }> = []
 
     for (const cat of this.categories) {
@@ -191,27 +171,6 @@ export class RouterAgent {
     }
   }
 
-  private tryParseJSON(content: string): Record<string, unknown> | null {
-    try {
-      return JSON.parse(content)
-    } catch {
-      const match = content.match(/\{[\s\S]*?\}/)
-      if (match) {
-        try {
-          return JSON.parse(match[0])
-        } catch {
-          return null
-        }
-      }
-      return null
-    }
-  }
-}
-
-function logParseError(context: string, error: unknown): void {
-  if (process.env.DEBUG_AGENTIC) {
-    console.error(`[RouterAgent] ${context}:`, error)
-  }
 }
 
 /**

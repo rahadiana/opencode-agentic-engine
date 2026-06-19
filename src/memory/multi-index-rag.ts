@@ -273,7 +273,7 @@ export class MultiIndexRAG {
     //    This keeps searchByCategory synchronous and fast.
 
     // 5. Compute combined TF-IDF + keyword score
-    for (const [id, data] of scoredMap) {
+    for (const [_id, data] of scoredMap) {
       const tfidf = data.tfidfScore
       const kw = data.kwBonus
 

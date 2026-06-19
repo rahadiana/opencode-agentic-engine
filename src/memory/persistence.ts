@@ -69,9 +69,9 @@ export class PersistenceLayer {
   delete(namespace: string, key: string): boolean {
     let found = false
     const globalPath = resolve(this.globalDir, namespace, `${key}.json`)
-    if (existsSync(globalPath)) { try { unlinkSync(globalPath); found = true } catch {} }
+    if (existsSync(globalPath)) { try { unlinkSync(globalPath); found = true } catch { /* non-fatal */ } }
     const localPath = resolve(this.localDir, namespace, `${key}.json`)
-    if (existsSync(localPath)) { try { unlinkSync(localPath); found = true } catch {} }
+    if (existsSync(localPath)) { try { unlinkSync(localPath); found = true } catch { /* non-fatal */ } }
     return found
   }
 

@@ -1,5 +1,4 @@
-import type { AgentRole, AgentTask, SharedMemoryEntry } from "./coordinator.js"
-import type { AgentDef, CustomAgentDef } from "./role-registry.js"
+import type { SharedMemoryEntry } from "./coordinator.js"
 import type { LLMEngine } from "../core/llm.js"
 
 export interface PipelineStage {
@@ -101,7 +100,6 @@ export class Orchestrator {
     targetRole: string,
     output: string,
     allStageResults: Map<string, { output: string; issues: string[]; validatedBy: string[] }>,
-    sharedMemory: SharedMemoryEntry[],
   ): Promise<CrossValidationResult> {
     const issues: CrossValidationResult["issues"] = []
 

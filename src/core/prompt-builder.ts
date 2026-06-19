@@ -9,18 +9,9 @@ const CORE_TOOLS = ["agentic_plan", "agentic_execute", "agentic_verify", "agenti
 const MEMORY_TOOLS = ["agentic_skill", "agentic_episodes", "agentic_context"]
 const META_TOOLS = ["agentic_model", "agentic_dashboard", "agentic_evolve"]
 
-const ADVANCED_TOOLS = [
-  "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_parallel",
-  "agentic_debate", "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp",
-  "agentic_snapshot", "agentic_auto",
-]
-
-const CODE_ONLY_TOOLS = ["agentic_nav", "agentic_pr", "agentic_score", "agentic_guard"]
-
 export function buildAgentPrompt(
   domain: DomainPack,
   allTools: ToolEntry[],
-  worktree: string,
 ): string {
   const domainName = domain.name
   const isCodeDomain = domainName === "code"
@@ -28,9 +19,6 @@ export function buildAgentPrompt(
   const relevantToolNames = domain.tools ?? allTools.map(t => t.name)
   const relevantTools = allTools.filter(t => relevantToolNames.includes(t.name))
 
-  const hasAdvanced = relevantTools.some(t =>
-    ADVANCED_TOOLS.includes(t.name) || CODE_ONLY_TOOLS.includes(t.name),
-  )
   const hasMemory = relevantTools.some(t => MEMORY_TOOLS.includes(t.name))
   const hasDebate = relevantTools.some(t => t.name === "agentic_debate")
   const hasRouter = relevantTools.some(t => t.name === "agentic_router")
@@ -42,7 +30,7 @@ export function buildAgentPrompt(
   if (isCodeDomain) desc += " — autonomous planning, execution, verification, delegation, and self-evolution"
   else desc += " — plan, execute, verify, and learn across sessions"
 
-  let prompt = `---
+  const prompt = `---
 description: ${desc}
 mode: all
 ---
@@ -120,7 +108,7 @@ ${hasDebate ? `6. For analysis tasks: use **agentic_debate**\n` : ""}${hasRouter
   return prompt
 }
 
-export function buildGenericAgentPrompt(allTools: ToolEntry[], worktree: string): string {
+export function buildGenericAgentPrompt(allTools: ToolEntry[]): string {
   const genericTools = allTools.filter(t =>
     CORE_TOOLS.includes(t.name) ||
     MEMORY_TOOLS.includes(t.name) ||

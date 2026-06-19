@@ -31,7 +31,7 @@ export interface Anomaly {
 }
 
 export class Dashboard {
-  generate(traces: TraceEntry[], sessionStart: number): DashboardData {
+  generate(traces: TraceEntry[], _sessionStart: number): DashboardData {
     const timeline: TimelineEvent[] = traces.map(t => ({
       time: t.timestamp,
       tool: t.toolUsed,

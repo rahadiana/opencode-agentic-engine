@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process"
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync } from "node:fs"
 import { resolve } from "node:path"
 import type { DomainPack, VerifierStrategy, ErrorMatcher } from "../domain-registry.js"
 
@@ -20,7 +20,7 @@ const codeDetect = (input: string): number => {
   }
   const projectFiles = ["package.json", "Cargo.toml", "go.mod", "pyproject.toml", "setup.py", "tsconfig.json"]
   for (const f of projectFiles) {
-    try { if (existsSync(f)) score += 0.2 } catch {}
+    try { if (existsSync(f)) score += 0.2 } catch { /* non-fatal */ }
   }
   return Math.min(score, 1.0)
 }

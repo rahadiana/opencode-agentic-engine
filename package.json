@@ -28,34 +28,48 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js",
-    "./tool": "./dist/index.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE",
+    "AGENTS.md",
+    "TOOLS.md"
   ],
   "scripts": {
     "build": "tsc --emitDeclarationOnly && node esbuild.config.mjs",
-    "dev": "tsc --emitDeclarationOnly --watch & node esbuild.config.mjs --watch",
+    "dev": "concurrently -n types,bundle -c blue,green \"tsc --emitDeclarationOnly --watch\" \"node esbuild.config.mjs --watch\"",
+    "dev:simple": "tsc --emitDeclarationOnly --watch & node esbuild.config.mjs --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "node test/run.mjs",
     "test:e2e": "node test/e2e-scenario.mjs",
     "test:e2e-llm": "node test/e2e-llm.mjs",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
     "test:swebench": "node test/swebench-harness.mjs",
     "test:swebench-llm": "OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_MODEL=qwen2.5:0.5b node test/swebench-harness.mjs",
     "prepublishOnly": "npm run build"
   },
-  "dependencies": {
-    "stopword": "^3.1.5",
-    "zod": "^4.1.8"
-  },
+  "dependencies": {},
   "peerDependencies": {
     "@opencode-ai/plugin": ">=1.3.3"
   },
   "devDependencies": {
+    "@eslint/js": "^9.25.0",
     "@types/node": "^22.19.21",
+    "concurrently": "^9.1.2",
     "esbuild": "^0.28.1",
-    "typescript": "^5.7.0"
+    "eslint": "^9.25.0",
+    "prettier": "^3.5.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.31.0"
   }
 }
