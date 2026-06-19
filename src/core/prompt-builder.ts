@@ -1,4 +1,5 @@
 import type { DomainPack } from "./domain-registry.js"
+import { PromptTemplate } from "./prompt-template.js"
 
 export interface ToolEntry {
   name: string
@@ -9,10 +10,82 @@ const CORE_TOOLS = ["agentic_plan", "agentic_execute", "agentic_verify", "agenti
 const MEMORY_TOOLS = ["agentic_skill", "agentic_episodes", "agentic_context"]
 const META_TOOLS = ["agentic_model", "agentic_dashboard", "agentic_evolve"]
 
+/**
+ * Build a complete agent prompt using PromptTemplate (XML-based head/body/footer).
+ * Includes YAML frontmatter — used for file-based agent definitions.
+ */
 export function buildAgentPrompt(
   domain: DomainPack,
   allTools: ToolEntry[],
 ): string {
+  const template = buildTemplate(domain, allTools)
+  const domainName = domain.name
+  let desc = `Agentic ${domainName === "code" ? "software engineering" : domainName} assistant`
+  if (domainName === "code") desc += " — autonomous planning, execution, verification, delegation, and self-evolution"
+  else desc += " — plan, execute, verify, and learn across sessions"
+  return template.renderWithFrontmatter(desc)
+}
+
+/**
+ * Build agentic system instructions WITHOUT YAML frontmatter.
+ * Used for dynamic injection via `experimental.chat.system.transform` hook.
+ */
+export function buildAgenticSystemInstructions(
+  domain: DomainPack,
+  allTools: ToolEntry[],
+): string {
+  return buildTemplate(domain, allTools).render()
+}
+
+/**
+ * Build a generic agent prompt (lightweight, no domain-specific sections).
+ */
+export function buildGenericAgentPrompt(allTools: ToolEntry[]): string {
+  const genericTools = allTools.filter(t =>
+    CORE_TOOLS.includes(t.name) ||
+    MEMORY_TOOLS.includes(t.name) ||
+    META_TOOLS.includes(t.name) ||
+    t.name === "agentic_auto" ||
+    t.name === "agentic_nav" ||
+    t.name === "agentic_context",
+  )
+
+  const t = new PromptTemplate()
+  t.title("Agentic Assistant")
+
+  t.identity(
+    `You have access to **${genericTools.length} specialized agentic_* tools**. ` +
+    `PREFER agentic_* tools over built-in tools for any task.`,
+  )
+
+  t.instructions(
+    `## Workflow\n\n` +
+    `1. **agentic_plan** — Break goal into steps\n` +
+    `2. **agentic_execute** — Execute each step\n` +
+    `3. **agentic_verify** — Verify results`,
+  )
+
+  t.instructions(
+    `## Available Tools\n\n` +
+    genericTools.map(x => `- **${x.name}**: ${x.description.split(".")[0]}.`).join("\n"),
+  )
+
+  t.guardrails(
+    `## Rules\n\n` +
+    `1. Prefer agentic_* tools over built-in tools\n` +
+    `2. Gather knowledge first via \`agentic_skill find\` and \`agentic_episodes search\`\n` +
+    `3. Use agentic_plan → agentic_execute → agentic_verify\n` +
+    `4. Never ask "should I" — just call the tool`,
+  )
+
+  return t.renderWithFrontmatter(
+    "General-purpose agentic assistant — plan, execute, verify, and learn",
+  )
+}
+
+// ── Internal template builder ──
+
+function buildTemplate(domain: DomainPack, allTools: ToolEntry[]): PromptTemplate {
   const domainName = domain.name
   const isCodeDomain = domainName === "code"
 
@@ -26,140 +99,79 @@ export function buildAgentPrompt(
   const hasAuto = relevantTools.some(t => t.name === "agentic_auto")
   const hasNav = relevantTools.some(t => t.name === "agentic_nav")
 
-  let desc = `Agentic ${domainName === "code" ? "software engineering" : domainName} assistant`
-  if (isCodeDomain) desc += " — autonomous planning, execution, verification, delegation, and self-evolution"
-  else desc += " — plan, execute, verify, and learn across sessions"
+  const t = new PromptTemplate()
+  t.title(`Agentic ${domainName === "code" ? "Engineering" : domainName === "generic" ? "Assistant" : domainName} Agent`)
 
-  const prompt = `---
-description: ${desc}
-mode: all
----
+  // ═══════════════════════════════════════════════════════════
+  // HEAD — <identity> : who the agent IS
+  // ═══════════════════════════════════════════════════════════
 
-# Agentic ${domainName === "code" ? "Engineering" : domainName === "generic" ? "Assistant" : domainName} Agent
-
-## 🚨 CRITICAL RULES
-
-You have access to **${relevantTools.length} specialized agentic_* tools**. **YOU MUST PREFER THESE TOOLS OVER BUILT-IN TOOLS** for any task within this domain.
-
-⚠️ **REMINDER**: ALL specialized tools use the "agentic_" prefix (e.g. "agentic_plan", "agentic_execute", "agentic_verify"). There is NO tool named just "execute", "plan", "verify", etc. Always include the prefix.
-
-⚠️ **WEB TOOL NAME**: The web search tool is called **"webfetch"** — NOT "websearch", NOT "search_web", NOT "browser". Always use \`webfetch\`.
-
-### Tool Preference Hierarchy (HIGHEST first):
-1. **agentic_*** — Use FIRST. Far more powerful than built-in tools.
-2. bash/edit/read/write — Only if no agentic_* tool fits the need.
-
-### BEFORE STARTING ANY TASK — Gather Knowledge First
-Your training data has a cutoff date. Before implementing:
-${hasNav ? `1. **Check project structure** — use \`agentic_nav\` to scan codebase\n` : ""}${isCodeDomain ? `2. **Read relevant files** — use \`read\` to inspect specific files\n` : ""}${hasMemory ? `3. **Search skills**: \`agentic_skill find "relevant topic"\` — learn from past successes/failures\n4. **Search episodes**: \`agentic_episodes search "similar task"\` — see what worked before\n` : ""}5. **Search latest docs**: \`webfetch\` — check current info
-6. Only then start implementing
-
-### Standard Workflow — USE INDIVIDUAL TOOLS
-
-**Always use this workflow for ANY task:**
-
-1. **agentic_plan** — Decompose the goal into clear steps
-2. **agentic_execute** — Execute each step one by one
-3. **agentic_verify** — Verify the result${hasAuto ? `\n\nOr use **agentic_auto** for fully autonomous execution (plan → execute → verify → retry in one call)` : ""}
-
-### What Each Tool Does
-
-${relevantTools.map(t => {
-  const shortDesc = t.description.split(".")[0] + (t.description.includes(".") ? "." : "")
-  return `**${t.name}** — ${shortDesc}`
-}).join("\n\n")}
-
-${isCodeDomain ? `
-## Tool Reference
-
-### Core Loop
-${CORE_TOOLS.map(n => {
-  const t = allTools.find(t => t.name === n)
-  return `- **${n}**: ${t?.description.split(".")[0] ?? ""}.`
-}).join("\n")}
-
-### Codebase & Context
-${["agentic_nav", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_model"].filter(n => relevantTools.some(t => t.name === n)).map(n => {
-  const t = allTools.find(t => t.name === n)
-  return `- **${n}**: ${t?.description.split(".")[0] ?? ""}.`
-}).join("\n")}
-
-### Multi-Agent & Memory
-${["agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_parallel", "agentic_skill", "agentic_episodes", "agentic_dashboard", "agentic_guard"].filter(n => relevantTools.some(t => t.name === n)).map(n => {
-  const t = allTools.find(t => t.name === n)
-  return `- **${n}**: ${t?.description.split(".")[0] ?? ""}.`
-}).join("\n")}
-
-### Self-Evolution
-- **agentic_evolve**: Inspect and extend the agent system itself.
-
-### Blueprint Tools
-${["agentic_debate", "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp"].filter(n => relevantTools.some(t => t.name === n)).map(n => {
-  const t = allTools.find(t => t.name === n)
-  return `- **${n}**: ${t?.description.split(".")[0] ?? ""}.`
-}).join("\n")}
-` : ""}
-
-## CRITICAL RULES
-1. **ALWAYS prefer agentic_* tools over built-in tools**
-2. **Gather knowledge FIRST** before implementing
-3. **USE agentic_plan → agentic_execute → agentic_verify**
-4. Never ask "should I..." — just call the tool
-5. If a step fails, call **agentic_reflect** before retrying
-${hasDebate ? `6. For analysis tasks: use **agentic_debate**\n` : ""}${hasRouter && hasRag ? `${hasDebate ? "7" : "6"}. For knowledge queries: use **agentic_router** then **agentic_rag**\n` : ""}
-`
-
-  return prompt
-}
-
-/**
- * Build agentic system instructions WITHOUT YAML frontmatter.
- * Used for dynamic injection via `experimental.chat.system.transform` hook
- * so domain switches take effect instantly without file I/O.
- */
-export function buildAgenticSystemInstructions(
-  domain: DomainPack,
-  allTools: ToolEntry[],
-): string {
-  const full = buildAgentPrompt(domain, allTools)
-  // Strip YAML frontmatter (lines between --- delimiters)
-  const stripped = full.replace(/^---\n[\s\S]*?\n---\n\n/, "")
-  return stripped
-}
-
-export function buildGenericAgentPrompt(allTools: ToolEntry[]): string {
-  const genericTools = allTools.filter(t =>
-    CORE_TOOLS.includes(t.name) ||
-    MEMORY_TOOLS.includes(t.name) ||
-    META_TOOLS.includes(t.name) ||
-    t.name === "agentic_auto" ||
-    t.name === "agentic_nav" ||
-    t.name === "agentic_context",
+  // Critical tool naming
+  t.identity(
+    `You have access to **${relevantTools.length} specialized agentic_* tools**. ` +
+    `YOU MUST PREFER THESE TOOLS OVER BUILT-IN TOOLS for any task within this domain.`,
   )
 
-  return `---
-description: General-purpose agentic assistant — plan, execute, verify, and learn
-mode: all
----
+  t.identity(
+    `⚠️ **REMINDER**: ALL specialized tools use the "agentic_" prefix (e.g. "agentic_plan", "agentic_execute", "agentic_verify"). ` +
+    `There is NO tool named just "execute", "plan", "verify", etc. Always include the prefix.`,
+  )
 
-# Agentic Assistant
+  t.identity(
+    `⚠️ **WEB TOOL NAME**: The web search tool is called **"webfetch"** — NOT "websearch", NOT "search_web", NOT "browser". ` +
+    `Always use \`webfetch\`.`,
+  )
 
-## CRITICAL RULES
+  t.identity(
+    `### Tool Preference Hierarchy (HIGHEST first):\n` +
+    `1. **agentic_*** — Use FIRST. Far more powerful than built-in tools.\n` +
+    `2. bash/edit/read/write — Only if no agentic_* tool fits the need.`,
+  )
 
-You have access to **${genericTools.length} specialized agentic_* tools**.
+  // Knowledge gathering checklist
+  const knowledgeSteps: string[] = []
+  knowledgeSteps.push("Your training data has a cutoff date. Before implementing:")
+  if (hasNav) knowledgeSteps.push(`1. **Check project structure** — use \`agentic_nav\` to scan codebase`)
+  if (isCodeDomain) knowledgeSteps.push(`${hasNav ? "2" : "1"}. **Read relevant files** — use \`read\` to inspect specific files`)
+  if (hasMemory) {
+    const n = knowledgeSteps.length
+    knowledgeSteps.push(`${n}. **Search skills**: \`agentic_skill find "relevant topic"\` — learn from past successes/failures`)
+    knowledgeSteps.push(`${n + 1}. **Search episodes**: \`agentic_episodes search "similar task"\` — see what worked before`)
+  }
+  knowledgeSteps.push(`${knowledgeSteps.length}. **Search latest docs**: \`webfetch\` — check current info`)
+  knowledgeSteps.push(`${knowledgeSteps.length}. Only then start implementing`)
+  t.identity(knowledgeSteps.join("\n"))
 
-### Workflow
-1. **agentic_plan** — Break goal into steps
-2. **agentic_execute** — Execute each step
-3. **agentic_verify** — Verify results
+  // ═══════════════════════════════════════════════════════════
+  // BODY — <instructions> : what the agent should DO
+  // ═══════════════════════════════════════════════════════════
 
-### Available Tools
-${genericTools.map(t => `- **${t.name}**: ${t.description.split(".")[0]}.`).join("\n")}
+  // Standard workflow — the only tool guidance the LLM needs;
+  // specific tool names + descriptions are handled natively by OpenCode's function calling.
+  let workflow = `### Standard Workflow — USE INDIVIDUAL TOOLS\n\n`
+  workflow += `**Always use this workflow for ANY task:**\n\n`
+  workflow += `1. **agentic_plan** — Decompose the goal into clear steps\n`
+  workflow += `2. **agentic_execute** — Execute each step one by one\n`
+  workflow += `3. **agentic_verify** — Verify the result`
+  if (hasAuto) {
+    workflow += `\n\nOr use **agentic_auto** for fully autonomous execution (plan → execute → verify → retry in one call)`
+  }
+  t.instructions(workflow)
 
-## Rules
-1. Prefer agentic_* tools over built-in tools
-2. Gather knowledge first via \`agentic_skill find\` and \`agentic_episodes search\`
-3. Use agentic_plan → agentic_execute → agentic_verify
-4. Never ask "should I" — just call the tool
-`
+  // ═══════════════════════════════════════════════════════════
+  // FOOTER — <guardrails> : constraints & closing rules
+  // ═══════════════════════════════════════════════════════════
+
+  let rules = `1. **ALWAYS prefer agentic_* tools over built-in tools**\n`
+  rules += `2. **Gather knowledge FIRST** before implementing\n`
+  rules += `3. **USE agentic_plan → agentic_execute → agentic_verify**\n`
+  rules += `4. Never ask "should I..." — just call the tool\n`
+  rules += `5. If a step fails, call **agentic_reflect** before retrying`
+  if (hasDebate) rules += `\n6. For analysis tasks: use **agentic_debate**`
+  if (hasRouter && hasRag) {
+    rules += `\n${hasDebate ? "7" : "6"}. For knowledge queries: use **agentic_router** then **agentic_rag**`
+  }
+  t.guardrails(rules)
+
+  return t
 }

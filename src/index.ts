@@ -201,6 +201,67 @@ const createEngine: Plugin = async (input, _options) => {
     { name: "agentic_finetune", description: "End-to-end fine-tuning pipeline: prepare dataset, save file, upload to OpenAI, create and monitor fine-tuning job." },
   ]
 
+  // ── Sub-agent detection (dynamic via RoleRegistry + fallback signatures) ──
+  // Sub-agents have limited tool sets and role-specific prompts. Injecting the
+  // full agentic prompt would conflict (wrong tool count, wrong workflow).
+  // Detection is dynamic: checks ALL registered roles (built-in + custom via
+  // agentic_evolve) plus orchestrator pipeline-stage prompts.
+  function detectSubAgentRole(systemText: string): { role: string; tools: string[] } | null {
+    // 1) Check built-in roles
+    for (const def of roleRegistry.getAllBuiltIn()) {
+      if (def.prompt && systemText.includes(def.prompt.slice(0, 50))) {
+        return { role: def.role, tools: def.tools ?? [] }
+      }
+    }
+    // 2) Check custom roles (agentic_evolve register-role)
+    for (const def of roleRegistry.getAllCustom()) {
+      if (def.prompt && systemText.includes(def.prompt.slice(0, 50))) {
+        return { role: def.role, tools: def.tools ?? [] }
+      }
+    }
+    // 3) Fallback: orchestrator pipeline-stage hardcoded prompts
+    const pipelineSigs: Array<{ sig: string; role: string; tools: string[] }> = [
+      { sig: "You are a PM. Define requirements", role: "pm", tools: ["agentic_plan", "agentic_nav", "agentic_delegate", "agentic_episodes", "read"] },
+      { sig: "You are an architect. Design architecture", role: "architect", tools: ["read", "grep", "glob", "agentic_nav", "agentic_score", "agentic_delegate", "agentic_skill"] },
+      { sig: "Return JSON array of {path, content}", role: "developer", tools: ["read", "edit", "write", "bash", "glob", "grep", "agentic_skill"] },
+      { sig: "You are QA. Review the implementation", role: "qa", tools: ["read", "glob", "grep", "bash", "agentic_verify", "agentic_skill"] },
+      { sig: "You are a coordinator. Verify pipeline", role: "coordinator", tools: ["read", "agentic_verify", "agentic_plan"] },
+    ]
+    for (const ps of pipelineSigs) {
+      if (systemText.includes(ps.sig)) return { role: ps.role, tools: ps.tools }
+    }
+    // 4) Debate agents: pure text generation, no tools. Minimal injection.
+    const debateSigs: Array<{ sig: string; role: string }> = [
+      { sig: "You are an **executor agent**", role: "debate-executor" },
+      { sig: "You are a **critic agent**", role: "debate-critic" },
+      { sig: "You are a **data cleaner**", role: "debate-cleaner" },
+    ]
+    for (const ds of debateSigs) {
+      if (systemText.includes(ds.sig)) return { role: ds.role, tools: [] }
+    }
+    return null
+  }
+
+  function buildSubAgentInjection(role: string, tools: string[]): string {
+    const isDebateAgent = role.startsWith("debate-")
+    if (isDebateAgent) {
+      // Debate agents are pure text generation — they don't call tools.
+      // Inject nothing — their prompts are fully self-contained.
+      // Only add webfetch reminder since they might search for reference.
+      return "Note: the web fetch tool is `webfetch` (not `websearch`)."
+    }
+    const toolList = tools.length > 0
+      ? `Your available tools: ${tools.map(t => `\`${t}\``).join(", ")}`
+      : "Use the tools provided by your role definition."
+    return [
+      `## ⚠️ Role: ${role}`,
+      toolList,
+      `- Web search: use \`webfetch\` (NOT \`websearch\`)`,
+      `- All agentic tools use \`agentic_\` prefix — no bare names`,
+      `- On failure: call \`agentic_reflect\` before retrying`,
+    ].join("\n")
+  }
+
   // ── Static agent file: minimal bootstrap identity ──
   // ALL dynamic instructions (tools, CRITICAL RULES, domain context)
   // are injected per-LLM-call via `experimental.chat.system.transform` hook.
@@ -4467,17 +4528,27 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
     },
 
     // ── Dynamic system prompt injection per LLM call ──
-    // Replaces file-based prompt writing. The static `agentic.md` provides minimal
-    // bootstrap identity; this hook injects the full TOOL_REGISTRY, CRITICAL RULES,
-    // domain-specific instructions, and web tool name reminders.
-    // Domain switches take effect instantly — hook fires on every LLM request.
+    // Parent agent: full XML-structured prompt (identity + workflow + guardrails).
+    // Sub-agent: role-aware minimal injection — tool list from RoleRegistry,
+    // critical reminders, anti-hallucination. Avoids conflicting tool counts.
     "experimental.chat.system.transform": async (_input: { sessionID?: string; model: unknown }, output: { system: string[] }) => {
-      const pack = currentInjectDomain ?? domainRegistry.getCurrentPack() ?? genericDomain
-      const instructions = buildAgenticSystemInstructions(pack, TOOL_REGISTRY)
-      if (output.system.length > 0) {
-        output.system[output.system.length - 1] += "\n\n" + instructions
+      const systemText = output.system.join("\n")
+      const subAgent = detectSubAgentRole(systemText)
+
+      let injection: string
+      if (subAgent) {
+        // Role-aware minimal injection
+        injection = buildSubAgentInjection(subAgent.role, subAgent.tools)
       } else {
-        output.system.push(instructions)
+        // Full prompt for parent agent
+        const pack = currentInjectDomain ?? domainRegistry.getCurrentPack() ?? genericDomain
+        injection = buildAgenticSystemInstructions(pack, TOOL_REGISTRY)
+      }
+
+      if (output.system.length > 0) {
+        output.system[output.system.length - 1] += "\n\n" + injection
+      } else {
+        output.system.push(injection)
       }
     },
 
@@ -4611,3 +4682,5 @@ export { episodeToTrainingExample, episodesToTrainingData, prepareFineTuningData
 export { ConfigLoader, validateConfig } from "./core/config.js"
 export { PersistenceLayer } from "./memory/persistence.js"
 export { EpisodicStore } from "./memory/episodic-store.js"
+export { PromptTemplate } from "./core/prompt-template.js"
+export { buildAgentPrompt, buildAgenticSystemInstructions, buildGenericAgentPrompt } from "./core/prompt-builder.js"
