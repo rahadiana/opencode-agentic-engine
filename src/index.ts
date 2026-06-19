@@ -202,9 +202,22 @@ const createEngine: Plugin = async (input, _options) => {
   ]
 
   // ── Helper: write agent prompt file for current domain ──
-  function writeAgentPrompt(domainOverride?: DomainPack) {
+  // Smart cache with persisted hash to avoid unnecessary writes across restarts.
+  let lastPromptHash = ""
+  function writeAgentPrompt(domainOverride?: DomainPack, force = false) {
     const pack = domainOverride ?? domainRegistry.getCurrentPack() ?? genericDomain
     const content = buildAgentPrompt(pack, TOOL_REGISTRY)
+
+    // djb2 hash
+    let hash = 5381
+    for (let i = 0; i < content.length; i++) hash = ((hash << 5) + hash + content.charCodeAt(i)) | 0
+    const hashStr = String(hash >>> 0)
+
+    if (!force && hashStr === lastPromptHash) return
+
+    lastPromptHash = hashStr
+    try { persistence.save("_meta", "agentic-hash", hashStr) } catch { /* no persistence yet */ }
+
     try {
       const globalAgentsDir = join(homedir(), ".config", "opencode", "agents")
       mkdirSync(globalAgentsDir, { recursive: true })
@@ -217,8 +230,7 @@ const createEngine: Plugin = async (input, _options) => {
     } catch { /* non-fatal */ }
   }
 
-  // Write initial prompt (generic domain by default)
-  writeAgentPrompt(genericDomain)
+  // Write initial prompt (deferred — after persistence is available for smart cache)
 
   const intentParser = new IntentParser()
   const executor = new Executor()
@@ -366,6 +378,13 @@ const createEngine: Plugin = async (input, _options) => {
   })
   new AgentLoop(llmEngine, { maxIterations: 10, autoRetry: true, maxRetries: 2, verifyAfterEach: false })
   const persistence = new PersistenceLayer(worktree)
+  // Restore prompt hash from disk (survives restart — skips rewrite if content unchanged)
+  try {
+    const savedHash = persistence.load<string>("_meta", "agentic-hash")
+    if (savedHash) lastPromptHash = savedHash
+  } catch { /* non-fatal */ }
+  // Write initial prompt — smart cache prevents rewrite if content hasn't changed
+  writeAgentPrompt(genericDomain)
   // Build RAG config from config file
   const ragConfig: import("./memory/multi-index-rag.js").RAGConfig = {
     keywordWeight: config.memory.search.keywordWeight,
