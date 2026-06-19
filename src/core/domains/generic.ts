@@ -20,7 +20,7 @@ const genericErrorMatcher: ErrorMatcher = {
   name: "generic",
   match() {
     return {
-      matched: true,
+      matched: false,
       category: "unknown",
       summary: "Domain-agnostic error",
       likelyRootCause: "No domain-specific error analysis configured",

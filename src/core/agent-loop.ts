@@ -73,6 +73,9 @@ export class AgentLoop {
       const readySteps = executor.getReadySteps(sessionId)
       if (readySteps.length === 0) break
 
+      // Track progress to detect stalled loops
+      const beforeCompleted = completedSteps.length
+
       // Group ready steps into non-conflicting batches
       const batches = this.batchSteps(readySteps, filesModifiedMap)
 
@@ -94,6 +97,11 @@ export class AgentLoop {
         }
 
         if (this.config.abortOnFailure && results.some(r => !r.success)) break
+      }
+
+      // Break if no progress: no new completed steps this iteration
+      if (completedSteps.length === beforeCompleted) {
+        break
       }
     }
 

@@ -100,7 +100,16 @@ export class ParallelExecutor {
     }
 
     const promises = phase.steps.map(step => runner(step))
-    const results = await Promise.all(promises)
+    const settled = await Promise.allSettled(promises)
+    const results: ParallelExecutionResult[] = settled.map((s, i) => {
+      if (s.status === "fulfilled") return s.value
+      return {
+        stepId: phase.steps[i].id,
+        success: false,
+        error: `Step crashed: ${s.reason}`,
+        filesModified: [],
+      }
+    })
 
     if (abortOnFailure && results.some(r => !r.success)) {
       return results

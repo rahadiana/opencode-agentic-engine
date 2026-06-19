@@ -36,15 +36,15 @@ export class Executor {
   private maxRetries = 3
   private states = new Map<string, ExecutionState>()
   private domainRegistry: DomainRegistry | null = null
-  private budgetTracker: BudgetTracker | null = null
   private contractVerifier = new ContractVerifier()
 
   setDomainRegistry(registry: DomainRegistry): void {
     this.domainRegistry = registry
   }
 
-  setBudgetTracker(tracker: BudgetTracker): void {
-    this.budgetTracker = tracker
+  setBudgetTracker(_tracker: BudgetTracker): void {
+    // Budget step counting is handled by recordCompletion() in execution-helpers.ts
+    // to prevent double counting. Setter kept for API compatibility.
   }
 
   /** G5: Get contract for current domain */
@@ -179,7 +179,8 @@ export class Executor {
     if (result.success) {
       state.completedSteps.add(result.stepId)
       state.failedSteps.delete(result.stepId) // Clear from failed if succeeded after retry
-      this.budgetTracker?.recordStep()
+      // NOTE: budgetTracker.recordStep() is NOT called here — it's handled in
+      // execution-helpers.ts recordCompletion() to prevent double counting
     } else {
       stepState.retryCount++
       stepState.errorHistory.push({

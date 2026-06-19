@@ -69,6 +69,7 @@ export class LLMEngine {
   private eventBus?: import("./event-bus.js").EventBus
   private responseCache = new Map<string, { response: LLMResponse; timestamp: number }>()
   private readonly CACHE_TTL = 30_000 // 30s cache for identical requests
+  private readonly CACHE_MAX_ENTRIES = 1000 // prevent unbounded memory growth
 
   constructor(config: Partial<LLMConfig> = {}) {
     this.config = {
@@ -195,9 +196,16 @@ export class LLMEngine {
       success = false
     }
 
-    // Cache successful responses
+    // Cache successful responses (bounded to prevent memory leak)
     if (success) {
       this.responseCache.set(cacheKey, { response, timestamp: Date.now() })
+      // Evict oldest entries if cache exceeds limit
+      if (this.responseCache.size > this.CACHE_MAX_ENTRIES) {
+        const oldest = [...this.responseCache.entries()]
+          .sort(([, a], [, b]) => a.timestamp - b.timestamp)
+          .slice(0, Math.floor(this.CACHE_MAX_ENTRIES * 0.2)) // remove oldest 20%
+        for (const [k] of oldest) this.responseCache.delete(k)
+      }
     }
 
     const latency = Date.now() - startTime
@@ -539,16 +547,29 @@ export class LLMEngine {
           }
         }
 
-        const result = await client.session.prompt({
-          body: {
-            system: req.jsonMode
-              ? `${req.systemPrompt}\n\nRespond with ONLY valid JSON. No markdown, no explanation.`
-              : req.systemPrompt,
-            noReply: false,
-            parts: [{ type: "text", text: req.userPrompt }],
-          },
-          path: { id: this.pluginSessionId },
-        })
+        // Add timeout to prevent hanging
+        const timeoutMs = 120_000
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+        const result = await Promise.race([
+          client.session.prompt({
+            body: {
+              system: req.jsonMode
+                ? `${req.systemPrompt}\n\nRespond with ONLY valid JSON. No markdown, no explanation.`
+                : req.systemPrompt,
+              noReply: false,
+              parts: [{ type: "text", text: req.userPrompt }],
+            },
+            path: { id: this.pluginSessionId },
+          }),
+          new Promise<never>((_, reject) => {
+            controller.signal.addEventListener("abort", () => {
+              reject(new Error(`OpenCode call timed out after ${timeoutMs}ms`))
+            })
+          }),
+        ])
+        clearTimeout(timeoutId)
 
         const parts = result.data?.parts ?? result.parts ?? []
         const textPart = parts.find((p: { type: string; text?: string }) => p.type === "text")

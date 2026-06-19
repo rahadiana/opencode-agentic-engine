@@ -388,7 +388,13 @@ export class ConfigLoader {
           }
         }
       })
-      // Polling fallback: fs.watch is unreliable on some platforms (macOS, NFS)
+    } catch {
+      // fs.watch failed — use polling fallback instead
+    }
+
+    // Polling fallback: fs.watch is unreliable on some platforms (macOS, NFS)
+    // Only run if fs.watch didn't succeed
+    if (!this.watcher) {
       this.watchInterval = setInterval(() => {
         try {
           const stat = statSync(this.configPath)
@@ -401,8 +407,6 @@ export class ConfigLoader {
           }
         } catch { /* config file may not exist yet */ }
       }, 5000)
-    } catch {
-      // File not exist yet or permission denied — skip watching
     }
   }
 

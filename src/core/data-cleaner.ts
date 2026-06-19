@@ -148,7 +148,7 @@ export class DataCleaner {
     issues: string[]
   }> {
     if (!this.llmEngine) {
-      return { valid: true, issues: [] }
+      return { valid: false, issues: ["LLM unavailable for validation"] }
     }
 
     try {
