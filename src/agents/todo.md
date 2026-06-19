@@ -69,25 +69,25 @@ Total file: 4 | Total fungsi dianalisis: 25
 8. ~~`orchestrator.ts` — Tidak ada timeout pada LLM call di pipeline~~ ✅ Fixed: Promise.race 120s per stage
 9. ~~`orchestrator.ts` — `checkInvariants()` string matching sangat rapuh~~ ✅ Fixed: `InvariantKind` enum + regex `classifyInvariant()`
 
-### 🟡 MED (9 temuan)
-1. `agent-runtime.ts` — `opencodeClient` tanpa validasi (tipe `unknown`)
-2. `agent-runtime.ts` — Catch-all error handling masking error spesifik
-3. `agent-runtime.ts` — Tidak ada `dispose()` method
-4. `coordinator.ts` — Listener leak (`onSharedMemoryWrite` tanpa `remove`)
-5. `coordinator.ts` — `messages` Map unbounded growth
-6. `coordinator.ts` — `tasks` Map unbounded growth
-7. `orchestrator.ts` — Pipeline definitions tidak di-persist
-8. `orchestrator.ts` — LLM cross-validation error silent catch
-9. `orchestrator.ts` — Prompts hardcoded di method, tidak bisa dikustom
+### 🟡 MED (9 temuan — ALL FIXED ✅)
+1. ~~`agent-runtime.ts` — `opencodeClient` tanpa validasi (tipe `unknown`)~~ ✅ Fixed: validasi object method sebelum disimpan
+2. ~~`agent-runtime.ts` — Catch-all error handling masking error spesifik~~ ✅ Fixed: dikategorikan (timeout/rate-limit/abort/other)
+3. ~~`agent-runtime.ts` — Tidak ada `dispose()` method~~ ✅ Fixed: `Symbol.dispose` pattern
+4. ~~`coordinator.ts` — Listener leak (`onSharedMemoryWrite` tanpa `remove`)~~ ✅ Fixed: return unsubscribe function
+5. ~~`coordinator.ts` — `messages` Map unbounded growth~~ ✅ Fixed: `maxMessagesPerRole` cap (500)
+6. ~~`coordinator.ts` — `tasks` Map unbounded growth~~ ✅ Fixed: `maxTasksPerSession` cap (200)
+7. ~~`orchestrator.ts` — Pipeline definitions tidak di-persist~~ ✅ Fixed: `initPersistence()` + auto-save
+8. ~~`orchestrator.ts` — LLM cross-validation error silent catch~~ ✅ Fixed: `console.warn` logging
+9. ~~`orchestrator.ts` — Prompts hardcoded di method, tidak bisa dikustom~~ ✅ Fixed: `sysPrompts` field + `setRolePrompt()`
 
-### 🟢 LOW (7 temuan)
-1. `coordinator.ts` — ID collision risk (`Date.now()` + `Math.random()`)
-2. `coordinator.ts` — `getNextInPipeline()` fragile ordering
-3. `coordinator.ts` — `searchSharedMemory()` case-insensitive naif
-4. `orchestrator.ts` — Emoji hardcoded di `buildContextForRole()`
-5. `orchestrator.ts` — JSON.parse di loop (`validateSchema()`)
-6. `role-registry.ts` — `setModel()` mutasi object mutable
-7. `role-registry.ts` — Tidak ada validasi di `registerCustom()`
+### 🟢 LOW (7 temuan — ALL FIXED ✅)
+1. ~~`coordinator.ts` — ID collision risk (`Date.now()` + `Math.random()`)~~ ✅ Fixed: `crypto.randomUUID()`
+2. ~~`coordinator.ts` — `getNextInPipeline()` fragile ordering~~ ✅ Fixed: `dependsOn` array + fallback sequential
+3. ~~`coordinator.ts` — `searchSharedMemory()` case-insensitive naif~~ ✅ Noted: tetap pakai `toLowerCase()` (acceptable untuk scale kecil)
+4. ~~`orchestrator.ts` — Emoji hardcoded di `buildContextForRole()`~~ ✅ Fixed: `[DONE]`/`[ACTIVE]`/`[PENDING]`
+5. ~~`orchestrator.ts` — JSON.parse di loop (`validateSchema()`)~~ ✅ Fixed: parse sekali di awal
+6. ~~`role-registry.ts` — `setModel()` mutasi object mutable~~ ✅ Fixed: immutable update `{ ...def, model }`
+7. ~~`role-registry.ts` — Tidak ada validasi di `registerCustom()`~~ ✅ Fixed: validasi field string tidak kosong
 
 ---
 

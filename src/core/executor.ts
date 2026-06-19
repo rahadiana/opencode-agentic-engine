@@ -1,6 +1,6 @@
-import type { Subtask, Plan } from "./intent-parser"
-import type { DomainRegistry } from "./domain-registry"
-import type { BudgetTracker } from "./budget-tracker"
+import type { Subtask, Plan } from "./intent-parser.js"
+import type { DomainRegistry } from "./domain-registry.js"
+import type { BudgetTracker } from "./budget-tracker.js"
 import { ContractVerifier, type FormalContract, type VerificationContext } from "./formal-model.js"
 
 export interface ExecutionResult {
@@ -36,7 +36,11 @@ export class Executor {
   private maxRetries = 3
   private states = new Map<string, ExecutionState>()
   private domainRegistry: DomainRegistry | null = null
-  private contractVerifier = new ContractVerifier()
+  private contractVerifier: ContractVerifier
+
+  constructor(contractVerifier?: ContractVerifier) {
+    this.contractVerifier = contractVerifier ?? new ContractVerifier()
+  }
 
   setDomainRegistry(registry: DomainRegistry): void {
     this.domainRegistry = registry
@@ -182,7 +186,10 @@ export class Executor {
       // NOTE: budgetTracker.recordStep() is NOT called here — it's handled in
       // execution-helpers.ts recordCompletion() to prevent double counting
     } else {
-      stepState.retryCount++
+      // Analyze error FIRST, then increment retry count
+      const errorCategory = this.detectErrorCategory(result.error ?? result.output)
+      const maxRetries = this.getMaxRetries(errorCategory)
+
       stepState.errorHistory.push({
         error: result.error ?? "Unknown error",
         attemptedFix: "",
@@ -190,13 +197,11 @@ export class Executor {
         success: false,
       })
 
-      // Adaptive: use per-category retry limit (Gap #13)
-      const errorCategory = this.detectErrorCategory(result.error ?? result.output)
-      const maxRetries = this.getMaxRetries(errorCategory)
-
       if (stepState.retryCount < maxRetries) {
+        stepState.retryCount++
         state.failedSteps.delete(result.stepId)
       } else {
+        stepState.retryCount++
         state.failedSteps.set(result.stepId, result.error ?? `Max retries (${maxRetries}) exceeded for category: ${errorCategory}`)
       }
     }
@@ -235,7 +240,6 @@ export class Executor {
 
   /** Detect error category from error text — domain-aware */
   private detectErrorCategory(errorText: string): string {
-    // First: try domain-specific error matchers
     if (this.domainRegistry) {
       const matchers = this.domainRegistry.getErrorMatchers()
       for (const matcher of matchers) {
@@ -243,10 +247,13 @@ export class Executor {
         if (result && result.matched) return result.category
       }
     }
-    // Fallback: domain-agnostic heuristic
     const lower = errorText.toLowerCase()
+    if (/cannot find module|module not found|could not resolve|import error/i.test(lower)) return "import"
+    if (/not assignable|does not exist on type|type.*mismatch/i.test(lower)) return "type"
+    if (/error ts|ts\d{3,}|compilation failed|syntax error|unexpected token/i.test(lower)) return "compile"
+    if (/test.*failed|assert.*fail|expect.*received/i.test(lower)) return "test"
     if (lower.includes("timeout") || lower.includes("econnrefused") || lower.includes("etimedout") || lower.includes("network")) return "runtime"
-    if (lower.includes("error") || lower.includes("fail")) return "error"
+    if (/error|fail|exception/i.test(lower)) return "error"
     return "unknown"
   }
 

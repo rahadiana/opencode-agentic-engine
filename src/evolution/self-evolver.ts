@@ -63,9 +63,31 @@ export class SelfEvolver {
   private stepStates: Array<{ stepId: string; success: boolean; output: string }> = []
   private traceEntries: Array<{ toolUsed: string; success: boolean; step: string }> = []
 
+  private seenEpisodeIds = new Set<string>()
+  private seenTaskIds = new Set<string>()
+  private autoApplyHighMin = 2
+  private autoApplyHighMax = 5
+  private autoApplyMediumMin = 10
+
   feedSkills(skills: SkillRecord[]): void { this.skills = skills }
-  feedEpisodes(episodes: Episode[]): void { this.episodes = episodes }
-  feedTasks(tasks: AgentTask[]): void { this.tasks = tasks }
+  feedEpisodes(episodes: Episode[]): void {
+    this.episodes = (episodes ?? []).filter(e => {
+      if (!e || typeof e !== "object") return false
+      if (!e.sessionId) return true
+      if (this.seenEpisodeIds.has(e.sessionId)) return false
+      this.seenEpisodeIds.add(e.sessionId)
+      return true
+    })
+  }
+  feedTasks(tasks: AgentTask[]): void {
+    this.tasks = (tasks ?? []).filter(t => {
+      if (!t || typeof t !== "object") return false
+      if (!t.id) return true
+      if (this.seenTaskIds.has(t.id)) return false
+      this.seenTaskIds.add(t.id)
+      return true
+    })
+  }
   feedStepStates(steps: Array<{ stepId: string; success: boolean; output: string }>): void { this.stepStates = steps }
   feedTraces(traces: Array<{ toolUsed: string; success: boolean; step: string }>): void { this.traceEntries = traces }
 
@@ -78,11 +100,9 @@ export class SelfEvolver {
     // Auto-apply safe prompt patches (low-risk, high-priority)
     const appliedPatches: PromptPatch[] = []
     for (const patch of promptPatches) {
-      // Auto-apply if: (1) high-priority AND (2) low occurrences (new pattern, not widespread)
-      // OR: medium-priority with very high occurrences (proven pattern)
-      const shouldAutoApply = 
-        (patch.priority === "high" && patch.occurrences >= 2 && patch.occurrences <= 5) ||
-        (patch.priority === "medium" && patch.occurrences >= 10)
+      const shouldAutoApply =
+        (patch.priority === "high" && patch.occurrences >= this.autoApplyHighMin && patch.occurrences <= this.autoApplyHighMax) ||
+        (patch.priority === "medium" && patch.occurrences >= this.autoApplyMediumMin)
       
       if (shouldAutoApply) {
         // Mark as applied (actual prompt injection happens in RoleRegistry)
@@ -104,15 +124,27 @@ export class SelfEvolver {
 
   private computeMetrics(): EvolutionMetrics {
     const sessions = new Set(this.episodes.map(e => e.sessionId))
-    const totalSteps = this.stepStates.length || this.tasks.length
     const useStepStates = this.stepStates.length > 0
-    const done = useStepStates
-      ? this.stepStates.filter(s => s.success).length
-      : this.tasks.filter(t => t.status === "done").length
+
+    // Weight success by task complexity (step count per task)
+    let weightedDone = 0
+    let weightedTotal = 0
+    if (useStepStates) {
+      weightedDone = this.stepStates.filter(s => s.success).length
+      weightedTotal = this.stepStates.length
+    } else {
+      for (const task of this.tasks) {
+        weightedTotal += 1
+        if (task.status === "done") weightedDone += 1
+      }
+    }
+    const totalSteps = weightedTotal || this.stepStates.length || this.tasks.length
+    const done = weightedDone
     const failed = useStepStates
       ? this.stepStates.filter(s => !s.success).length
       : this.tasks.filter(t => t.status === "failed").length
-    const total = (done + failed) || 1
+    const total = done + failed
+    const safeTotal = total || 1
 
     const errorCategories = new Map<string, number>()
     for (const ep of this.episodes) {
@@ -152,7 +184,7 @@ export class SelfEvolver {
 
     const recommendations: string[] = []
 
-    if (total > 0 && done / total < 0.5) {
+    if (safeTotal > 0 && done / safeTotal < 0.5) {
       recommendations.push("Task success rate is below 50%. Consider more granular task decomposition in agentic_plan.")
     }
 
@@ -168,12 +200,11 @@ export class SelfEvolver {
       recommendations.push(`Underutilized tools: ${unusedTools.join(", ")}. These could improve observability and quality.`)
     }
 
-    const retryFraction = failed / Math.max(total, 1)
+    const retryFraction = failed / Math.max(safeTotal, 1)
     if (retryFraction > 0.3) {
       recommendations.push("High retry rate (>30%). Consider adding more explicit verification criteria to plan steps.")
     }
 
-    // Error pattern analysis
     for (const step of this.stepStates) {
       if (!step.success && step.output.length > 0) {
         const lower = step.output.toLowerCase()
@@ -187,12 +218,12 @@ export class SelfEvolver {
     return {
       totalSessions: sessions.size,
       totalSteps,
-      successRate: total > 0 ? done / total : 0,
+      successRate: safeTotal > 0 ? done / safeTotal : 0,
       retryRate: retryFraction,
       avgRetriesPerFailure: failed > 0
         ? useStepStates
-          ? this.stepStates.length / Math.max(failed, 1)
-          : this.tasks.length / Math.max(failed, 1)
+          ? this.stepStates.length / failed
+          : this.tasks.length / failed
         : 0,
       topErrorCategories: topErrors,
       skillEffectiveness: skillEff,
@@ -205,27 +236,29 @@ export class SelfEvolver {
     const patches: SkillPatch[] = []
 
     for (const skill of this.skills) {
-      if (skill.successRate >= 0.8) continue // healthy skills
+      if (skill.successRate >= 0.8) continue
 
       const def = skill.definition
       const suggestions: SkillPatch["suggestedChanges"] = []
 
-      for (const scenario of def.quality.failureScenarios.slice(-3)) {
-        if (scenario.includes("rollback") || scenario.includes("undo")) {
+      const failureScenarios = def.quality.failureScenarios ?? []
+      for (const scenario of failureScenarios) {
+        const sc = scenario.toLowerCase()
+        if (sc.includes("rollback") || sc.includes("undo")) {
           suggestions.push({
             type: "add_rollback",
             description: "Add rollback step for failed operations",
             detail: "Each step that modifies state should have a corresponding undo action",
           })
         }
-        if (scenario.includes("timeout") || scenario.includes("slow")) {
+        if (sc.includes("timeout") || sc.includes("slow")) {
           suggestions.push({
             type: "add_step",
             description: "Add timeout/retry wrapper step",
             detail: "Wrap long-running operations with retry: utils/retry.ts handles exponential backoff",
           })
         }
-        if (scenario.includes("missing") || scenario.includes("not found")) {
+        if (sc.includes("missing") || sc.includes("not found")) {
           suggestions.push({
             type: "add_step",
             description: "Add pre-flight validation step",
@@ -309,13 +342,36 @@ export class SelfEvolver {
       }
     }
 
+    // Also consider error categories from episodes
+    const errorCategoryFailures = new Map<string, number>()
+    for (const ep of this.episodes) {
+      if (ep.outcome !== "success") {
+        for (const tag of ep.tags) {
+          errorCategoryFailures.set(tag, (errorCategoryFailures.get(tag) ?? 0) + 1)
+        }
+      }
+    }
+    const secKeywords = ["security", "vulnerability", "injection"]
+    if ([...errorCategoryFailures.entries()].some(([k, v]) => secKeywords.includes(k) && v >= 2)) {
+      if (!suggestions.some(s => s.name === "Security Auditor")) {
+        suggestions.push({
+          name: "Security Auditor",
+          triggerPattern: "error categories involving security",
+          suggestedTools: ["read", "grep", "agentic_guard", "agentic_verify"],
+          reason: "Security-related errors detected across multiple episodes. A dedicated security role could prevent these.",
+        })
+      }
+    }
+
+    // Coordinator suggestion: consider also failure rate per role
     const hasCoordinator = taskOutcomes.has("coordinator")
-    if (!hasCoordinator && this.tasks.length > 10) {
+    const highFailRoles = [...taskOutcomes.entries()].filter(([, v]) => v.total > 3 && v.failed / v.total > 0.4)
+    if ((!hasCoordinator && this.tasks.length > 10) || highFailRoles.length >= 2) {
       suggestions.push({
         name: "Task Coordinator",
         triggerPattern: "multi-step tasks with cross-cutting concerns",
         suggestedTools: ["agentic_plan", "agentic_status", "agentic_delegate", "agentic_parallel"],
-        reason: "With 10+ tasks and no coordinator role active, orchestration overhead may cause failures.",
+        reason: `${this.tasks.length} task(s) and ${highFailRoles.length} role(s) with >40% failure rate. A coordinator could improve orchestration.`,
       })
     }
 
@@ -327,49 +383,56 @@ export class SelfEvolver {
    * Maps error categories → specific instruction additions for the relevant agent role.
    */
   private suggestPromptPatches(metrics: EvolutionMetrics): PromptPatch[] {
+    return this.buildPromptPatches(metrics.topErrorCategories)
+  }
+
+  private errorToPatchConfig: Array<{
+    category: string
+    role: string
+    instruction: string
+    priority: "high" | "medium" | "low"
+  }> = [
+    {
+      category: "compile",
+      role: "developer",
+      instruction: "Before writing code, verify that all types and interfaces are compatible. Run `npx tsc --noEmit` to check for type errors before considering a step complete.",
+      priority: "high",
+    },
+    {
+      category: "type",
+      role: "developer",
+      instruction: "Always define explicit type annotations for function parameters and return values. Avoid `any` types. Verify type exports/imports match between files.",
+      priority: "high",
+    },
+    {
+      category: "import",
+      role: "architect",
+      instruction: "Before implementing, document all file dependencies and ensure import paths are correct. Verify the import exists at the expected relative path.",
+      priority: "high",
+    },
+    {
+      category: "test",
+      role: "qa",
+      instruction: "When reviewing code, check edge cases: empty inputs, null/undefined values, boundary conditions, and error paths. Ensure tests cover both success and failure scenarios.",
+      priority: "medium",
+    },
+    {
+      category: "runtime",
+      role: "developer",
+      instruction: "Add error handling for runtime edge cases: network timeouts, file not found, permission denied, and invalid input. Use try/catch blocks and return user-friendly error messages.",
+      priority: "medium",
+    },
+  ]
+
+  setPromptPatchConfig(config: typeof SelfEvolver.prototype.errorToPatchConfig): void {
+    this.errorToPatchConfig = config
+  }
+
+  private buildPromptPatches(topErrorCategories: Array<{ category: string; count: number }>): PromptPatch[] {
     const patches: PromptPatch[] = []
 
-    // Error category → (role, instruction) mapping
-    const errorToPatch: Array<{
-      category: string
-      role: string
-      instruction: string
-      priority: "high" | "medium" | "low"
-    }> = [
-      {
-        category: "compile",
-        role: "developer",
-        instruction: "Before writing code, verify that all types and interfaces are compatible. Run `npx tsc --noEmit` to check for type errors before considering a step complete.",
-        priority: "high",
-      },
-      {
-        category: "type",
-        role: "developer",
-        instruction: "Always define explicit type annotations for function parameters and return values. Avoid `any` types. Verify type exports/imports match between files.",
-        priority: "high",
-      },
-      {
-        category: "import",
-        role: "architect",
-        instruction: "Before implementing, document all file dependencies and ensure import paths are correct. Verify the import exists at the expected relative path.",
-        priority: "high",
-      },
-      {
-        category: "test",
-        role: "qa",
-        instruction: "When reviewing code, check edge cases: empty inputs, null/undefined values, boundary conditions, and error paths. Ensure tests cover both success and failure scenarios.",
-        priority: "medium",
-      },
-      {
-        category: "runtime",
-        role: "developer",
-        instruction: "Add error handling for runtime edge cases: network timeouts, file not found, permission denied, and invalid input. Use try/catch blocks and return user-friendly error messages.",
-        priority: "medium",
-      },
-    ]
-
-    for (const errCat of metrics.topErrorCategories) {
-      const mapping = errorToPatch.find(e => e.category === errCat.category)
+    for (const errCat of topErrorCategories) {
+      const mapping = this.errorToPatchConfig.find(e => e.category === errCat.category)
       if (mapping && errCat.count >= 2) {
         patches.push({
           role: mapping.role,

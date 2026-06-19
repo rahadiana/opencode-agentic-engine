@@ -42,7 +42,7 @@ export class RoleRegistry {
   private promptHistory: Map<string, PromptState> = new Map()
   private aliases: Map<string, string> = new Map()
 
-  private defaultModels: Record<string, string> = {
+  private defaultModels: Partial<Record<AgentRole, string>> = {
     analyst: "fast",
     builder: "capable",
     reviewer: "fast",
@@ -253,6 +253,9 @@ Focus on the "what" and "why".`,
   }
 
   registerCustom(def: CustomAgentDef): void {
+    if (!def.role || !def.role.trim()) throw new Error("Custom role must have a non-empty role name")
+    if (!def.name || !def.name.trim()) throw new Error("Custom role must have a non-empty name")
+    if (!def.prompt || !def.prompt.trim()) throw new Error("Custom role must have a non-empty prompt")
     this.custom.set(def.role, def)
     if (!this.promptHistory.has(def.role)) {
       this.addHistoryEntry(def.role, def.prompt, "manual", `Custom role: ${def.name}`)
@@ -313,6 +316,8 @@ Focus on the "what" and "why".`,
     const entry = state.history.find(e => e.version === version)
     if (!entry) return false
 
+    this.trimHistory(role, 50)
+
     const def = this.builtIn.get(role as AgentRole)
     if (def) {
       this.builtIn.set(role as AgentRole, { ...def, prompt: entry.prompt })
@@ -361,13 +366,22 @@ Focus on the "what" and "why".`,
 
     // 3. Auto-suggest based on role + complexity
     const base = this.defaultModels[role as AgentRole] ?? "capable"
-    if (complexity === "simple" && base === "capable") return "fast"
-    if (complexity === "complex" && base === "fast") return "capable"
-    return base
+    let result = base
+    if (complexity === "simple" && base === "capable") result = "fast"
+    if (complexity === "complex" && base === "fast") result = "capable"
+    console.debug(`[RoleRegistry] suggestModel(role=${role}, complexity=${complexity}) => ${result}`)
+    return result
   }
 
   setModel(role: string, model: string): void {
     const def = this.builtIn.get(role as AgentRole)
-    if (def) def.model = model
+    if (def) this.builtIn.set(role as AgentRole, { ...def, model })
+  }
+
+  private trimHistory(role: string, maxEntries: number): void {
+    const state = this.promptHistory.get(role)
+    if (state && state.history.length > maxEntries) {
+      state.history = state.history.slice(-maxEntries)
+    }
   }
 }

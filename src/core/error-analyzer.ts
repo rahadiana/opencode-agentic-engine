@@ -52,20 +52,20 @@ export class ErrorAnalyzer {
   /** Built-in fallback when no domain matchers match — uses old heuristics */
   private fallbackAnalyze(errorMessage: string, modifiedFiles: string[]): ErrorAnalysis {
     const msg = errorMessage.toLowerCase()
-    if (msg.includes("cannot find module") || msg.includes("module not found") || msg.includes("could not resolve")) {
+    if (/cannot find module|module not found|could not resolve/i.test(msg)) {
       const match = errorMessage.match(/['"]([@\w\-/.]+)['"]/)
       return { category: "import", summary: "Missing module or broken import", likelyRootCause: `The module ${match?.[1] ?? "imported"} could not be resolved`, suggestedFix: `Verify the import path`, affectedFiles: modifiedFiles, severity: "critical" }
     }
-    if (msg.includes("type") && (msg.includes("not assignable") || msg.includes("has no") || msg.includes("does not exist on type"))) {
+    if (msg.includes("type") && (msg.includes("not assignable") || msg.includes("has no") || /does not exist on type/i.test(msg))) {
       return { category: "type", summary: "Type mismatch", likelyRootCause: "A type mismatch or missing property was introduced", suggestedFix: "Check type annotations on recently modified code", affectedFiles: modifiedFiles, severity: "high" }
     }
-    if (msg.includes("error ts") || msg.includes("compilation failed") || msg.includes("syntax error") || msg.includes("unexpected token")) {
+    if (msg.includes("error ts") || msg.includes("compilation failed") || /syntax error|unexpected token/i.test(msg)) {
       return { category: "compile", summary: "Compilation error", likelyRootCause: "Syntax errors or broken references", suggestedFix: "Run the compiler to see exact line numbers", affectedFiles: modifiedFiles, severity: "high" }
     }
     if (msg.includes("test") && (msg.includes("failed") || msg.includes("assert") || msg.includes("expect"))) {
       return { category: "test", summary: "Test failure", likelyRootCause: "Code change broke existing behavior", suggestedFix: "Review failing test assertions", affectedFiles: modifiedFiles, severity: "medium" }
     }
-    if (msg.includes("error") && (msg.includes("throw") || msg.includes("cannot") || msg.includes("undefined") || msg.includes("null"))) {
+    if (/(?:error|throw|cannot|undefined|null)/.test(msg) && /throw|cannot|undefined|null/.test(msg)) {
       return { category: "runtime", summary: "Runtime error", likelyRootCause: "A code path hitting unexpected state", suggestedFix: "Add defensive checks at the point of failure", affectedFiles: modifiedFiles, severity: "high" }
     }
     return { category: "unknown", summary: "Unclassified error", likelyRootCause: "Error does not match known patterns", suggestedFix: "Review the error manually", affectedFiles: modifiedFiles, severity: "medium" }
@@ -94,10 +94,8 @@ ${modifiedFiles.map(f => `- ${f}`).join("\n")}`,
         temperature: 0.1,
       })
 
-      const cleaned = resp.content.trim()
-      const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0])
+      try {
+        const parsed = JSON.parse(resp.content.trim())
         return {
           category: parsed.category ?? "unknown",
           summary: parsed.summary ?? "LLM-analyzed error",
@@ -105,6 +103,21 @@ ${modifiedFiles.map(f => `- ${f}`).join("\n")}`,
           suggestedFix: parsed.suggestedFix ?? parsed.fix ?? "Could not determine fix",
           affectedFiles: modifiedFiles,
           severity: ["low", "medium", "high", "critical"].includes(parsed.severity) ? parsed.severity : "medium",
+        }
+      } catch {
+        const jsonMatch = resp.content.trim().match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          try {
+            const parsed = JSON.parse(jsonMatch[0])
+            return {
+              category: parsed.category ?? "unknown",
+              summary: parsed.summary ?? "LLM-analyzed error",
+              likelyRootCause: parsed.likelyRootCause ?? parsed.rootCause ?? "Could not determine root cause",
+              suggestedFix: parsed.suggestedFix ?? parsed.fix ?? "Could not determine fix",
+              affectedFiles: modifiedFiles,
+              severity: ["low", "medium", "high", "critical"].includes(parsed.severity) ? parsed.severity : "medium",
+            }
+          } catch { /* ignore */ }
         }
       }
     } catch {

@@ -67,7 +67,7 @@ export function buildGenericAgentPrompt(allTools: ToolEntry[]): string {
 
   t.instructions(
     `## Available Tools\n\n` +
-    genericTools.map(x => `- **${x.name}**: ${x.description.split(".")[0]}.`).join("\n"),
+    genericTools.map(x => `- **${x.name}**: ${x.description.length > 80 ? x.description.slice(0, 77) + "..." : x.description}`).join("\n"),
   )
 
   t.guardrails(
@@ -162,15 +162,16 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[]): PromptTemplat
   // FOOTER — <guardrails> : constraints & closing rules
   // ═══════════════════════════════════════════════════════════
 
-  let rules = `1. **ALWAYS prefer agentic_* tools over built-in tools**\n`
-  rules += `2. **Gather knowledge FIRST** before implementing\n`
-  rules += `3. **USE agentic_plan → agentic_execute → agentic_verify**\n`
-  rules += `4. Never ask "should I..." — just call the tool\n`
-  rules += `5. If a step fails, call **agentic_reflect** before retrying`
-  if (hasDebate) rules += `\n6. For analysis tasks: use **agentic_debate**`
-  if (hasRouter && hasRag) {
-    rules += `\n${hasDebate ? "7" : "6"}. For knowledge queries: use **agentic_router** then **agentic_rag**`
-  }
+  const guardrailItems: string[] = [
+    "ALWAYS prefer agentic_* tools over built-in tools",
+    "Gather knowledge FIRST before implementing",
+    "USE agentic_plan → agentic_execute → agentic_verify",
+    'Never ask "should I..." — just call the tool',
+    "If a step fails, call agentic_reflect before retrying",
+  ]
+  if (hasDebate) guardrailItems.push("For analysis tasks: use agentic_debate")
+  if (hasRouter && hasRag) guardrailItems.push("For knowledge queries: use agentic_router then agentic_rag")
+  let rules = guardrailItems.map((item, i) => `${i + 1}. ${item}`).join("\n")
   t.guardrails(rules)
 
   return t

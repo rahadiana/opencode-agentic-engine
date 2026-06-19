@@ -57,15 +57,18 @@ export class ContinuousEvolution {
   private degradationCallbacks: DegradationCallback[] = []
   private lastEvolveSession: string | null = null
   private evolveCount = 0
+  private maxEvolvePerSession: number
+  private trendCache: { key: string; trend: PerformanceTrend } | null = null
 
-  constructor(windowSize = 20) {
+  constructor(windowSize = 20, maxEvolvePerSession = 20) {
     this.windowSize = windowSize
+    this.maxEvolvePerSession = maxEvolvePerSession
   }
 
   /** Feed a step result into the rolling window */
   feedStepResult(result: StepResult): void {
     this.results.push(result)
-    // Keep bounded — retain 2× window for historical comparison
+    this.trendCache = null
     if (this.results.length > this.windowSize * 2 + 10) {
       this.results = this.results.slice(-this.windowSize * 2)
     }
@@ -73,8 +76,10 @@ export class ContinuousEvolution {
 
   /** Feed multiple results at once (e.g. after a session completes) */
   feedBatch(results: StepResult[]): void {
-    for (const r of results) {
-      this.feedStepResult(r)
+    this.results.push(...results)
+    this.trendCache = null
+    if (this.results.length > this.windowSize * 2 + 10) {
+      this.results = this.results.slice(-this.windowSize * 2)
     }
   }
 
@@ -83,36 +88,40 @@ export class ContinuousEvolution {
     this.degradationCallbacks.push(cb)
   }
 
-  /** Get current performance trend */
+  private static readonly DIR_IMPROVING = "improving" as const
+  private static readonly DIR_STABLE = "stable" as const
+  private static readonly DIR_DEGRADING = "degrading" as const
+
+  /** Get current performance trend (cached within same tick) */
   getTrend(): PerformanceTrend {
+    const cacheKey = `${this.results.length}:${this.results.slice(-5).map(r => r.success ? "1" : "0").join("")}`
+    if (this.trendCache?.key === cacheKey) return this.trendCache.trend
+
     const total = this.results.length
     const successes = this.results.filter(r => r.success).length
     const overallRate = total > 0 ? successes / total : 1
 
-    // Rolling window (most recent N)
     const recent = this.results.slice(-this.windowSize)
     const recentSuccesses = recent.filter(r => r.success).length
     const recentRate = recent.length > 0 ? recentSuccesses / recent.length : 1
 
-    // Earlier window for comparison
     const earlier = this.results.slice(0, Math.min(this.windowSize, this.results.length - recent.length))
     const earlierSuccesses = earlier.filter(r => r.success).length
     const earlierRate = earlier.length > 0 ? earlierSuccesses / earlier.length : 1
 
-    // Direction: ≥5% swing in either direction
     const direction = recentRate > earlierRate + 0.05
-      ? "improving"
+      ? ContinuousEvolution.DIR_IMPROVING
       : recentRate < earlierRate - 0.05
-        ? "degrading"
-        : "stable"
+        ? ContinuousEvolution.DIR_DEGRADING
+        : ContinuousEvolution.DIR_STABLE
 
-    const degradationDetected = direction === "degrading" && recentRate < 0.6
+    const degradationDetected = direction === ContinuousEvolution.DIR_DEGRADING && recentRate < 0.6
 
     const recentErrors: PerformanceTrend["recentErrors"] = []
     const categories = new Map<string, number>()
     for (const r of this.results) {
-      if (!r.success) {
-        if (r.category) categories.set(r.category, (categories.get(r.category) ?? 0) + 1)
+      if (!r.success && r.category) {
+        categories.set(r.category, (categories.get(r.category) ?? 0) + 1)
       }
     }
 
@@ -128,7 +137,7 @@ export class ContinuousEvolution {
     const recommendations: string[] = []
 
     // ── Predictive Degradation Forecast (Gap #12) ──
-    // Divide results into 5 chronological buckets and compute per-bucket rates
+    const numBuckets = 5
     const forecast: ForecastData = {
       nextWindowRate: recentRate,
       stepsUntilCritical: null,
@@ -137,9 +146,9 @@ export class ContinuousEvolution {
     }
 
     if (this.results.length >= 10) {
-      const bucketSize = Math.max(1, Math.floor(this.results.length / 5))
+      const bucketSize = Math.max(1, Math.floor(this.results.length / numBuckets))
       const bucketRates: number[] = []
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < numBuckets; i++) {
         const start = i * bucketSize
         const end = Math.min(start + bucketSize, this.results.length)
         const bucket = this.results.slice(start, end)
@@ -148,25 +157,21 @@ export class ContinuousEvolution {
       }
       forecast.bucketRates = bucketRates
 
-      // Exponential smoothing: weighted average, recent buckets weighted more
       const isDecreasing = bucketRates.length >= 3 &&
         bucketRates.slice(1).every((r, i) => r < bucketRates[i]) &&
         bucketRates[0] > bucketRates[bucketRates.length - 1]
 
       if (isDecreasing) {
-        // Exponential weighted smoothing: recent buckets get more weight
         let smoothed = bucketRates[0]
         const alpha = 0.4
         for (let i = 1; i < bucketRates.length; i++) {
           smoothed = alpha * bucketRates[i] + (1 - alpha) * smoothed
         }
 
-        // Predict next window rate using smoothed value
         const nextRate = Math.max(0, Math.min(1, smoothed))
         forecast.nextWindowRate = nextRate
         forecast.critical = nextRate < 0.5
 
-        // Estimate when rate would cross 50%
         const declineRate = bucketRates[0] - bucketRates[bucketRates.length - 1]
         const avgDecline = declineRate / (bucketRates.length - 1)
         if (bucketRates[bucketRates.length - 1] > 0.5 && avgDecline > 0) {
@@ -178,7 +183,28 @@ export class ContinuousEvolution {
           recommendations.push(`Forecast: Performance projected to drop to ${(nextRate * 100).toFixed(0)}% in the next window. ${forecast.stepsUntilCritical ? `Critical threshold (~50%) expected in ~${forecast.stepsUntilCritical} steps.` : "Consider proactive evolution analysis."}`)
         }
       }
+
+      // Seasonality detection: compare week-over-week if timestamps available
+      if (this.results.length >= 14) {
+        const timestamps = this.results.map(r => r.timestamp)
+        const minTs = Math.min(...timestamps)
+        const maxTs = Math.max(...timestamps)
+        const spanDays = (maxTs - minTs) / 86400000
+        if (spanDays >= 7) {
+          const weekMs = 7 * 86400000
+          const recentWeek = this.results.filter(r => r.timestamp > maxTs - weekMs)
+          const prevWeek = this.results.filter(r => r.timestamp <= maxTs - weekMs && r.timestamp > maxTs - 2 * weekMs)
+          if (recentWeek.length >= 5 && prevWeek.length >= 5) {
+            const rwRate = recentWeek.filter(r => r.success).length / recentWeek.length
+            const pwRate = prevWeek.filter(r => r.success).length / prevWeek.length
+            if (pwRate > 0 && Math.abs(rwRate - pwRate) / pwRate > 0.2) {
+              recommendations.push(`Seasonality detected: performance changed from ${(pwRate * 100).toFixed(0)}% to ${(rwRate * 100).toFixed(0)}% week-over-week.`)
+            }
+          }
+        }
+      }
     }
+
     if (degradationDetected) {
       recommendations.push("Performance degradation detected. Run `agentic_evolve evolve` or enable auto-evolution to analyze root causes.")
     }
@@ -195,7 +221,7 @@ export class ContinuousEvolution {
       recommendations.push("Recent improvement trend detected. Extract successful patterns as reusable skills via `agentic_skill extract`.")
     }
 
-    return {
+    const trend: PerformanceTrend = {
       overall: { total, success: successes, successRate: overallRate },
       rolling: { windowSize: this.windowSize, successRate: recentRate, direction },
       degradationDetected,
@@ -204,6 +230,9 @@ export class ContinuousEvolution {
       recommendations,
       forecast,
     }
+
+    this.trendCache = { key: cacheKey, trend }
+    return trend
   }
 
   /** Check trend and fire callbacks if degradation found. Returns current trend. */
@@ -220,7 +249,7 @@ export class ContinuousEvolution {
         },
       }
       for (const cb of this.degradationCallbacks) {
-        try { cb(trend, trigger) } catch { /* non-fatal */ }
+        try { cb(trend, trigger) } catch (err) { console.error("[ContinuousEvolution] callback error:", err) }
       }
     }
     return trend
@@ -236,8 +265,8 @@ export class ContinuousEvolution {
     // Don't evolve twice in the same session
     if (this.lastEvolveSession === sessionId) return null
 
-    // Cap total evolutions to prevent infinite loops (allow up to 20 per session)
-    if (this.evolveCount >= 20) return null
+    // Cap total evolutions to prevent infinite loops (configurable)
+    if (this.evolveCount >= this.maxEvolvePerSession) return null
 
     // Trigger 1: Degradation
     if (trend.degradationDetected) {
@@ -289,18 +318,20 @@ export class ContinuousEvolution {
   }
 
   /** Serialize for persistence */
-  toJSON(): { results: StepResult[]; evolveCount: number; windowSize: number } {
+  toJSON(): { results: StepResult[]; evolveCount: number; windowSize: number; lastEvolveSession: string | null } {
     return {
       results: this.results,
       evolveCount: this.evolveCount,
       windowSize: this.windowSize,
+      lastEvolveSession: this.lastEvolveSession,
     }
   }
 
   /** Restore from persisted state */
-  fromJSON(data: { results: StepResult[]; evolveCount: number; windowSize: number }): void {
+  fromJSON(data: { results: StepResult[]; evolveCount: number; windowSize: number; lastEvolveSession?: string | null }): void {
     this.results = data.results || []
     this.evolveCount = data.evolveCount || 0
-    if (data.windowSize) this.windowSize = data.windowSize
+    this.windowSize = Math.max(1, data.windowSize ?? this.windowSize)
+    this.lastEvolveSession = data.lastEvolveSession ?? null
   }
 }

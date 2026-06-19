@@ -56,16 +56,28 @@ function hashEmbedding(text: string, dim: number): number[] {
   return vec
 }
 
+function simpleHash(text: string): string {
+  let h = 0
+  for (let i = 0; i < text.length; i++) {
+    h = ((h << 5) - h) + text.charCodeAt(i)
+    h = h & h
+  }
+  return Math.abs(h).toString(36)
+}
+
 export class LocalEmbedder {
   private config: Required<EmbedderConfig>
-  private cache = new Map<string, EmbeddingResult>()
+  private cache = new Map<string, { result: EmbeddingResult; ts: number }>()
   private maxCacheSize: number
+  private maxCacheAgeMs: number
   private httpCall: (url: string, apiKey: string, body: unknown) => Promise<unknown>
+  private ttlTimer?: ReturnType<typeof setInterval>
 
   constructor(
     config: EmbedderConfig = {},
     httpCall?: (url: string, apiKey: string, body: unknown) => Promise<unknown>,
     maxCacheSize = 500,
+    maxCacheAgeMs = 300000,
   ) {
     this.config = {
       model: config.model ?? "text-embedding-3-small",
@@ -74,7 +86,10 @@ export class LocalEmbedder {
       dimension: config.dimension ?? FALLBACK_DIMENSION,
     }
     this.maxCacheSize = maxCacheSize
+    this.maxCacheAgeMs = maxCacheAgeMs
     this.httpCall = httpCall ?? this.defaultHttpCall
+    this.ttlTimer = setInterval(() => this.pruneExpired(), 60000)
+    if (this.ttlTimer) this.ttlTimer.unref()
   }
 
   private async defaultHttpCall(url: string, apiKey: string, body: unknown): Promise<unknown> {
@@ -97,6 +112,10 @@ export class LocalEmbedder {
     return resp.json()
   }
 
+  private hashCacheKey(text: string): string {
+    return `${this.config.model}:${simpleHash(text)}:${text.length}`
+  }
+
   private pruneCache(): void {
     if (this.cache.size <= this.maxCacheSize) return
     const toDelete = this.cache.size - this.maxCacheSize
@@ -106,20 +125,29 @@ export class LocalEmbedder {
     }
   }
 
+  private pruneExpired(): void {
+    const now = Date.now()
+    for (const [key, entry] of this.cache) {
+      if (now - entry.ts > this.maxCacheAgeMs) {
+        this.cache.delete(key)
+      }
+    }
+  }
+
   /**
    * Embed a single text string.
    */
   async embed(text: string): Promise<EmbeddingResult> {
-    const cacheKey = `${this.config.model}:${text.slice(0, 200)}`
+    const cacheKey = this.hashCacheKey(text)
     const cached = this.cache.get(cacheKey)
-    if (cached) return cached
+    if (cached) return cached.result
 
     // Try remote embedding endpoint
     if (this.config.endpoint !== null || this.config.apiKey !== null) {
       try {
         return await this.remoteEmbed(text)
-      } catch {
-        // Fall through to hash embedding
+      } catch (e) {
+        console.warn(`[LocalEmbedder] remote embedding failed, falling back to hash:`, e)
       }
     }
 
@@ -129,7 +157,7 @@ export class LocalEmbedder {
       model: "hash-fallback",
       dimensions: this.config.dimension,
     }
-    this.cache.set(cacheKey, result)
+    this.cache.set(cacheKey, { result, ts: Date.now() })
     this.pruneCache()
     return result
   }
@@ -149,19 +177,35 @@ export class LocalEmbedder {
         }) as { data?: Array<{ embedding: number[] }> }
 
         if (data.data && Array.isArray(data.data)) {
-          return data.data.map(d => ({
+          const results = data.data.map(d => ({
             vector: d.embedding,
             model: this.config.model,
             dimensions: d.embedding.length,
           }))
+          for (let i = 0; i < texts.length && i < results.length; i++) {
+            const ck = this.hashCacheKey(texts[i])
+            this.cache.set(ck, { result: results[i], ts: Date.now() })
+          }
+          this.pruneCache()
+          return results
         }
-      } catch {
-        // Fall through
+      } catch (e) {
+        console.warn(`[LocalEmbedder] batch embedding failed, falling back to hash:`, e)
       }
     }
 
-    // Fall back to individual hash embeddings (await each to resolve Promises)
-    return Promise.all(texts.map(t => this.embed(t)))
+    // Batch hash embedding: compute all hashes in one loop
+    const results = texts.map(t => ({
+      vector: hashEmbedding(t, this.config.dimension),
+      model: "hash-fallback" as const,
+      dimensions: this.config.dimension,
+    }))
+    for (let i = 0; i < texts.length; i++) {
+      const ck = this.hashCacheKey(texts[i])
+      this.cache.set(ck, { result: results[i], ts: Date.now() })
+    }
+    this.pruneCache()
+    return results
   }
 
   private async remoteEmbed(text: string): Promise<EmbeddingResult> {
@@ -185,8 +229,8 @@ export class LocalEmbedder {
       dimensions: data.data[0].embedding.length,
     }
 
-    const cacheKey = `${this.config.model}:${text.slice(0, 200)}`
-    this.cache.set(cacheKey, result)
+    const cacheKey = this.hashCacheKey(text)
+    this.cache.set(cacheKey, { result, ts: Date.now() })
     this.pruneCache()
     return result
   }
@@ -208,5 +252,9 @@ export class LocalEmbedder {
 
   clearCache(): void {
     this.cache.clear()
+  }
+
+  destroy(): void {
+    if (this.ttlTimer) clearInterval(this.ttlTimer)
   }
 }

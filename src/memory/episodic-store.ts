@@ -111,10 +111,11 @@ export class EpisodicStore {
 
   search(query: string): Episode[] {
     const q = query.toLowerCase()
+    const qTokens = new Set(q.split(/\s+/).filter(t => t.length > 0))
     return this.episodes
       .filter(e =>
         e.planGoal.toLowerCase().includes(q) ||
-        e.tags.some(t => t.includes(q)) ||
+        e.tags.some(t => qTokens.has(t)) ||
         e.decisions.some(d => d.toLowerCase().includes(q)) ||
         (e.domain?.toLowerCase().includes(q) ?? false) ||
         (e.filesChanged?.some(f => f.toLowerCase().includes(q)) ?? false)
@@ -176,7 +177,16 @@ export class EpisodicStore {
   }
 
   private extractTags(goal: string, decisions: string[]): string[] {
+    const stopWords = new Set(["this", "that", "with", "from", "have", "been", "were", "they", "them", "their", "what", "which", "when", "where", "will", "would", "could", "should", "about", "then", "than", "just", "also", "very", "more", "some", "such", "only", "other", "into", "over", "after", "before", "between", "through", "during", "because", "therefore", "however", "without", "within", "along", "across", "being", "doing", "having", "thing", "make", "made", "take", "took", "need", "want", "used", "using", "might", "must", "still", "well", "back", "much", "each", "every", "both", "few", "most"])
     const words = [...goal.split(/\s+/), ...decisions.join(" ").split(/\s+/)]
-    return [...new Set(words.filter(w => w.length > 3).map(w => w.toLowerCase()))]
+    return [...new Set(words.filter(w => w.length > 3 && !stopWords.has(w.toLowerCase())).map(w => w.toLowerCase()))]
+  }
+
+  snapshot(): Episode[] {
+    return JSON.parse(JSON.stringify(this.episodes))
+  }
+
+  restore(snapshot: Episode[]): void {
+    this.episodes = JSON.parse(JSON.stringify(snapshot))
   }
 }

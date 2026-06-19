@@ -150,11 +150,14 @@ export class LLMEngine {
   }
 
   private getCacheKey(req: LLMRequest): string {
-    // Use longer prefix + hash of full prompts to prevent collisions
-    // (debate loop has same prefix but different full prompts per round)
-    const sysPrefix = req.systemPrompt.slice(0, 200)
-    const userPrefix = req.userPrompt.slice(0, 500)
-    return `${this.config.provider}:${this.config.model}:${sysPrefix}:${userPrefix}:${req.jsonMode}:${req.bypassCache}`
+    const hashContent = `${req.systemPrompt}${req.userPrompt}${req.jsonMode}${req.bypassCache}`
+    let hash = 0
+    for (let i = 0; i < hashContent.length; i++) {
+      const chr = hashContent.charCodeAt(i)
+      hash = ((hash << 5) - hash) + chr
+      hash |= 0
+    }
+    return `${this.config.provider}:${this.config.model}:${hash}`
   }
 
   async call(req: LLMRequest): Promise<LLMResponse> {
@@ -595,15 +598,15 @@ export class LLMEngine {
       }
 
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 60000)
+      const signal = AbortSignal.timeout(60000)
+      signal.addEventListener("abort", () => controller.abort())
 
       const resp = await fetch(url, {
         method: "POST",
         headers,
         body: JSON.stringify(body),
-        signal: controller.signal,
+        signal,
       })
-      clearTimeout(timeout)
 
       let data: Record<string, unknown>
       const text = await resp.text()
@@ -632,7 +635,11 @@ export class LLMEngine {
         }
       }
 
-      const choice = d.choices?.[0]
+      if (!d.choices || !Array.isArray(d.choices) || d.choices.length === 0) {
+        return { content: JSON.stringify(data), finishReason: "empty_choices" }
+      }
+
+      const choice = d.choices[0]
       if (choice) {
         return {
           content: choice.message?.content ?? JSON.stringify(choice),
@@ -658,7 +665,7 @@ export class LLMEngine {
 
   private fallbackResponse(req: LLMRequest): LLMResponse {
     if (req.jsonMode) {
-      return { content: `{"_no_llm": true}`, finishReason: "no_llm" }
+      return { content: `{"status":"no_llm","data":null}`, finishReason: "no_llm" }
     }
     return { content: `[NO_LLM] No LLM configured. Set OPENAI_API_KEY (OpenAI/compatible), ANTHROPIC_API_KEY (Claude), or OPENAI_BASE_URL (local LLM), or run within OpenCode for native LLM access.`, finishReason: "no_llm" }
   }

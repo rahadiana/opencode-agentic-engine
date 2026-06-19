@@ -1,4 +1,4 @@
-import { writeFileSync, mkdirSync } from "node:fs"
+import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 import type { SkillRecord } from "./skill-store.js"
 import type { Episode } from "./episodic-store.js"
@@ -13,8 +13,13 @@ export interface TrainingExample {
 export interface TrainingDataset {
   format: "openai" | "instructions"
   totalExamples: number
-  qualityFilter: number
+  qualityFilter: SkillAndEpisodeFilter
   data: string
+}
+
+export interface SkillAndEpisodeFilter {
+  minSkillSuccessRate: number
+  minEpisodeQuality: number
 }
 
 /**
@@ -54,17 +59,43 @@ export function skillToTrainingExample(skill: SkillRecord): TrainingExample {
  * Export skills as OpenAI fine-tuning JSONL format.
  * Each line: {"messages": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]}
  */
-export function exportOpenAIJSONL(examples: TrainingExample[]): string {
+export function exportOpenAIJSONL(examples: TrainingExample[], systemPrompt?: string): string {
+  const sysPrompt = systemPrompt ?? "You are a senior software engineer implementing features following reusable patterns."
   return examples.map(ex => {
     const entry = {
       messages: [
-        { role: "system", content: "You are a senior software engineer implementing features following reusable patterns." },
+        { role: "system", content: sysPrompt },
         { role: "user", content: ex.instruction },
         { role: "assistant", content: ex.response },
       ],
     }
     return JSON.stringify(entry)
   }).join("\n")
+}
+
+/**
+ * Validate that the JSONL is safe for OpenAI fine-tuning.
+ * Checks: valid JSON per line, no unescaped control chars, reasonable length.
+ */
+export function validateOpenAIJSONL(jsonl: string): { valid: boolean; errors: string[] } {
+  const errors: string[] = []
+  const lines = jsonl.split("\n").filter(Boolean)
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    try {
+      JSON.parse(line)
+    } catch {
+      errors.push(`Line ${i + 1}: invalid JSON`)
+      continue
+    }
+    if (line.length > 150000) {
+      errors.push(`Line ${i + 1}: too long (${line.length} chars, max 150000)`)
+    }
+    if (/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(line)) {
+      errors.push(`Line ${i + 1}: contains unescaped control characters`)
+    }
+  }
+  return { valid: errors.length === 0, errors }
 }
 
 /**
@@ -90,7 +121,7 @@ export function trainingDatasetSummary(examples: TrainingExample[]): string {
   const mediumQuality = examples.filter(e => e.quality >= 0.5 && e.quality < 0.8).length
   const lowQuality = examples.filter(e => e.quality < 0.5).length
 
-  let out = `## 📊 Training Dataset Summary\n\n`
+  let out = `## Training Dataset Summary\n\n`
   out += `**Total examples:** ${examples.length}\n`
   out += `**Average quality score:** ${(avgQuality * 100).toFixed(0)}%\n`
   out += `**Quality distribution:**\n`
@@ -148,12 +179,11 @@ export function episodesToTrainingData(
   format: "openai" | "instructions" = "openai",
   minQuality = 0.0,
 ): TrainingDataset {
-  const examples = episodes
-    .filter(e => {
-      const q = e.outcome === "success" ? 1.0 : e.outcome === "partial" ? 0.5 : 0.0
-      return q >= minQuality
-    })
-    .map(e => episodeToTrainingExample(e))
+  const examples = episodes.reduce<TrainingExample[]>((acc, e) => {
+    const q = e.outcome === "success" ? 1.0 : e.outcome === "partial" ? 0.5 : 0.0
+    if (q >= minQuality) acc.push(episodeToTrainingExample(e))
+    return acc
+  }, [])
 
   const data = format === "openai"
     ? exportOpenAIJSONL(examples)
@@ -162,7 +192,7 @@ export function episodesToTrainingData(
   return {
     format,
     totalExamples: examples.length,
-    qualityFilter: minQuality,
+    qualityFilter: { minSkillSuccessRate: 0, minEpisodeQuality: minQuality },
     data,
   }
 }
@@ -181,12 +211,11 @@ export function prepareFineTuningDataset(
     .filter(s => s.successRate >= minSkillSuccessRate)
     .map(s => skillToTrainingExample(s))
 
-  const episodeExamples = episodes
-    .filter(e => {
-      const q = e.outcome === "success" ? 1.0 : e.outcome === "partial" ? 0.5 : 0.0
-      return q >= minEpisodeQuality
-    })
-    .map(e => episodeToTrainingExample(e))
+  const episodeExamples = episodes.reduce<TrainingExample[]>((acc, e) => {
+    const q = e.outcome === "success" ? 1.0 : e.outcome === "partial" ? 0.5 : 0.0
+    if (q >= minEpisodeQuality) acc.push(episodeToTrainingExample(e))
+    return acc
+  }, [])
 
   const allExamples = [...skillExamples, ...episodeExamples]
 
@@ -197,7 +226,7 @@ export function prepareFineTuningDataset(
   return {
     format,
     totalExamples: allExamples.length,
-    qualityFilter: Math.min(minSkillSuccessRate, minEpisodeQuality),
+    qualityFilter: { minSkillSuccessRate, minEpisodeQuality },
     data,
   }
 }
@@ -210,7 +239,6 @@ export function saveTrainingDataToFile(
   dataset: TrainingDataset,
   outputPath: string,
 ): string {
-  // Ensure parent directory exists
   const dir = dirname(outputPath)
   try { mkdirSync(dir, { recursive: true }) } catch {}
 
@@ -230,9 +258,10 @@ export function skillsToTrainingData(
   format: "openai" | "instructions" = "openai",
   minSuccessRate = 0.5,
 ): TrainingDataset {
-  const examples = skills
-    .filter(s => s.successRate >= minSuccessRate)
-    .map(s => skillToTrainingExample(s))
+  const examples = skills.reduce<TrainingExample[]>((acc, s) => {
+    if (s.successRate >= minSuccessRate) acc.push(skillToTrainingExample(s))
+    return acc
+  }, [])
 
   const data = format === "openai"
     ? exportOpenAIJSONL(examples)
@@ -241,7 +270,7 @@ export function skillsToTrainingData(
   return {
     format,
     totalExamples: examples.length,
-    qualityFilter: minSuccessRate,
+    qualityFilter: { minSkillSuccessRate: minSuccessRate, minEpisodeQuality: 0 },
     data,
   }
 }

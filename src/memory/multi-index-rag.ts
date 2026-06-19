@@ -103,11 +103,13 @@ export class MultiIndexRAG {
   }
 
   syncCategories(categories: string[]): void {
+    const newIndices = new Map(this.indices)
     for (const cat of categories) {
-      if (!this.indices.has(cat)) {
-        this.indices.set(cat, { episodes: [], skills: [] })
+      if (!newIndices.has(cat)) {
+        newIndices.set(cat, { episodes: [], skills: [] })
       }
     }
+    this.indices = newIndices
   }
 
   /**
@@ -343,8 +345,13 @@ export class MultiIndexRAG {
 
     // Enrich with vector scores if embedder is available
     if (this.embedder && result.entries.length > 0) {
-      const enriched = await enrichWithVectors(this.embedder, [result], query)
-      return enriched[0] ?? result
+      try {
+        const enriched = await enrichWithVectors(this.embedder, [result], query)
+        return enriched[0] ?? result
+      } catch {
+        // Partial vector fallback: TF-IDF results already populated
+        return result
+      }
     }
 
     return result
@@ -370,14 +377,31 @@ export class MultiIndexRAG {
    */
   autoCategory(query: string): string {
     const scores = new Map<string, number>()
+    const q = query.toLowerCase()
+    const domainKeywords: Record<string, string[]> = {
+      automotive: ["car", "vehicle", "engine", "motor", "drive", "auto", "wheel", "transmission", "brake", "fuel"],
+      financial: ["money", "bank", "finance", "account", "payment", "credit", "loan", "tax", "invest", "budget"],
+      tech: ["code", "software", "api", "function", "bug", "deploy", "server", "database", "app", "web", "config", "script"],
+      personal: ["user", "profile", "name", "email", "setting", "preference", "login", "password", "auth"],
+    }
 
     for (const [category] of this.indices) {
       const results = this.vectorStore.search(query, category, 5)
       let score = results.reduce((s, r) => s + r.score, 0)
 
       // Category name bonus
-      if (query.toLowerCase().includes(category)) {
+      if (q.includes(category)) {
         score += 2
+      }
+
+      // Domain keyword heuristic
+      const kws = domainKeywords[category]
+      if (kws) {
+        for (const kw of kws) {
+          if (q.includes(kw)) {
+            score += 1.5
+          }
+        }
       }
 
       scores.set(category, score)
@@ -442,11 +466,15 @@ export class MultiIndexRAG {
   importAll(data: Record<string, { episodes: Episode[]; skills: SkillRecord[]; tfidfDocs?: import("./vector-store.js").TfIdfDoc[] }>): void {
     for (const [cat, { episodes, skills, tfidfDocs }] of Object.entries(data)) {
       const index = this.indices.get(cat)
+      const epSet = new Set(index?.episodes.map(e => e.id) ?? [])
+      const skSet = new Set(index?.skills.map(s => s.definition.meta.id) ?? [])
+      const dedupedEpisodes = episodes.filter(e => !epSet.has(e.id))
+      const dedupedSkills = skills.filter(s => !skSet.has(s.definition.meta.id))
       if (index) {
-        index.episodes.push(...episodes)
-        index.skills.push(...skills)
+        index.episodes.push(...dedupedEpisodes)
+        index.skills.push(...dedupedSkills)
       } else {
-        this.indices.set(cat, { episodes: [...episodes], skills: [...skills] })
+        this.indices.set(cat, { episodes: [...dedupedEpisodes], skills: [...dedupedSkills] })
       }
       // Re-index into TF-IDF vector store
       if (tfidfDocs) {

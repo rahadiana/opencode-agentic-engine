@@ -104,14 +104,18 @@ export class DebateLoop {
       let draft = ""
       let issues: string[] = []
       try {
-        // bypassCache for round 2+ to prevent cache collisions (prompts differ after first 200 chars)
-        const draftResp = await this.llmEngine.call({
-          systemPrompt: EXECUTOR_PROMPT,
-          userPrompt: executorInput,
-          temperature: 0.3 + (round - 1) * 0.1, // Increase temperature each round for variation
-          maxTokens: 4096,
-          bypassCache: round > 1, // Skip cache for revision rounds
-        })
+        const draftResp = await Promise.race([
+          this.llmEngine.call({
+            systemPrompt: EXECUTOR_PROMPT,
+            userPrompt: executorInput,
+            temperature: 0.2,
+            maxTokens: 4096,
+            bypassCache: round > 1,
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("LLM call timed out after 60000ms")), 60_000)
+          ),
+        ])
         draft = draftResp.content
       } catch (error) {
         logParseError("executor call", error)
@@ -120,17 +124,18 @@ export class DebateLoop {
         break
       }
 
-      // ── Check for duplicate output (loop detection) ──
       if (round > 1) {
         const prevDraft = rounds[rounds.length - 1].draft
-        if (draft === prevDraft) {
-          // Executor produced identical output — force break to prevent infinite loop
+        const similarity = (draft.length > 0 && prevDraft.length > 0)
+          ? 1 - (levenshteinDistance(draft, prevDraft) / Math.max(draft.length, prevDraft.length))
+          : 0
+        if (similarity > 0.95) {
           rounds.push({
             round,
             draft,
-            review: "⚠️ AUTO-BREAK: Executor produced identical output as previous round. Loop detected.",
+            review: "AUTO-BREAK: Executor produced nearly identical output as previous round. Loop detected.",
             approved: false,
-            issues: ["Output identical to previous round — loop detected, debate terminated"],
+            issues: ["Output >95% similar to previous round -- loop detected, debate terminated"],
           })
           break
         }
@@ -154,13 +159,12 @@ export class DebateLoop {
           approved = true
           approvalMessage = approveMatch[1].trim()
         } else {
-          // Extract issues from review
           const issueLines = review
             .split("\n")
-            .filter(l => /^\d+[.)]/.test(l.trim()) || l.trim().startsWith("-") || l.toLowerCase().includes("issue") || l.toLowerCase().includes("problem") || l.toLowerCase().includes("error") || l.toLowerCase().includes("missing"))
-            .map(l => l.trim())
+            .filter(l => /^\d+[.)]/.test(l.trim()) || /^(?:-|\*)\s+(?:Issue|Problem|Error|Missing|Fix)/i.test(l.trim()))
+            .map(l => l.trim().replace(/^[-\*\d.)\s]+/, ""))
             .filter(l => l.length > 10)
-          issues = issueLines.length > 0 ? issueLines : [review.slice(0, 500)]
+          issues = issueLines.length > 0 ? issueLines : (review.length > 50 ? [review.slice(0, 500)] : [])
         }
       } catch (error) {
         logParseError("critic call", error)
@@ -217,7 +221,7 @@ export class DebateLoop {
 }
 
 export function formatDebateResult(result: DebateResult): string {
-  const status = result.approved ? "✅ Approved" : "❌ Not approved"
+  const status = result.approved ? "[Approved]" : "[Not approved]"
   const lines = [
     `## Debate Result: ${result.task}`,
     `**Status:** ${status}`,
@@ -240,11 +244,24 @@ export function formatDebateResult(result: DebateResult): string {
       }
     }
     if (round.approved) {
-      lines.push(`**✅ Approved**`)
+      lines.push(`**[Approved]**`)
       const approveMatch = round.review.match(/^APPROVED:\s*(.+)/im)
       if (approveMatch) lines.push(`> ${approveMatch[1].trim()}`)
     }
   }
 
   return lines.join("\n")
+}
+
+function levenshteinDistance(a: string, b: string): number {
+  const m = a.length, n = b.length
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0))
+  for (let i = 0; i <= m; i++) dp[i][0] = i
+  for (let j = 0; j <= n; j++) dp[0][j] = j
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
+    }
+  }
+  return dp[m][n]
 }

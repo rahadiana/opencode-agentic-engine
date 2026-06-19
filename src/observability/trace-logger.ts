@@ -1,8 +1,13 @@
-import { mkdir, writeFile, appendFile, readFile } from "node:fs/promises"
+import { mkdir, writeFile, appendFile, readFile, rename } from "node:fs/promises"
 import { createReadStream, createWriteStream } from "node:fs"
 import { createInterface } from "node:readline"
 import { join, dirname } from "node:path"
 import { existsSync } from "node:fs"
+import { createGzip } from "node:zlib"
+import { pipeline } from "node:stream/promises"
+import { statSync } from "node:fs"
+
+export type LogLevel = "info" | "warn" | "error"
 
 export interface TraceEntry {
   timestamp: string
@@ -12,6 +17,7 @@ export interface TraceEntry {
   toolUsed: string
   success: boolean
   durationMs: number
+  level?: LogLevel
   metadata?: Record<string, unknown>
 }
 
@@ -21,14 +27,58 @@ export class TraceLogger {
   private flushInterval: ReturnType<typeof setInterval> | null = null
   /** Retention days for trace entries (0 = never prune). Config-hot-reloadable. */
   private retentionDays = 7
+  private maxBufferSize: number
+  private batchSize: number
+  private maxFileSizeBytes: number
+  private useCompression: boolean
+  private minLevel: LogLevel
+  private flushLock = false
 
-  constructor(worktree: string) {
+  constructor(
+    worktree: string,
+    opts?: {
+      batchSize?: number
+      maxBufferSize?: number
+      maxFileSizeBytes?: number
+      useCompression?: boolean
+      minLevel?: LogLevel
+    },
+  ) {
     this.logPath = join(worktree || process.cwd(), ".agentic", "trace.jsonl")
+    this.batchSize = opts?.batchSize ?? 10
+    this.maxBufferSize = opts?.maxBufferSize ?? 10000
+    this.maxFileSizeBytes = opts?.maxFileSizeBytes ?? 100 * 1024 * 1024
+    this.useCompression = opts?.useCompression ?? false
+    this.minLevel = opts?.minLevel ?? "info"
+  }
+
+  private levelValue(level?: LogLevel): number {
+    return level === "error" ? 3 : level === "warn" ? 2 : 1
   }
 
   /** Set retention days for pruning old traces — called on config hot-reload. */
   setRetentionDays(days: number): void {
     this.retentionDays = Math.max(0, days)
+  }
+
+  private async rotateIfNeeded(): Promise<void> {
+    if (!existsSync(this.logPath)) return
+    try {
+      const size = statSync(this.logPath).size
+      if (size < this.maxFileSizeBytes) return
+      const ts = new Date().toISOString().replace(/[:.]/g, "-")
+      const rotatedPath = this.logPath.replace(".jsonl", `-${ts}.jsonl`)
+      await rename(this.logPath, rotatedPath)
+      if (this.useCompression) {
+        const gzPath = rotatedPath + ".gz"
+        const ws = createWriteStream(gzPath)
+        const gzip = createGzip()
+        const rs = createReadStream(rotatedPath)
+        await pipeline(rs, gzip, ws)
+      }
+    } catch {
+      // non-fatal rotation failure
+    }
   }
 
   /** Prune trace entries older than retentionDays, in-place rewriting the file. */
@@ -67,26 +117,41 @@ export class TraceLogger {
       })
       rl.close()
 
-      // Only replace if we actually removed something
       if (kept < total) {
         await writeFile(this.logPath, await readFile(tmpPath))
       }
       return total - kept
-    } catch { return 0 }
+    } catch (err) {
+      console.error("[TraceLogger] pruneOldTraces error:", err)
+      return 0
+    }
   }
 
   async init(): Promise<void> {
     const dir = dirname(this.logPath)
-    await mkdir(dir, { recursive: true })
+    try {
+      await mkdir(dir, { recursive: true })
+    } catch (err) {
+      throw new Error(`TraceLogger.init: failed to create directory ${dir}: ${err}`)
+    }
   }
 
-  log(entry: Omit<TraceEntry, "timestamp">): void {
+  log(entry: Omit<TraceEntry, "timestamp" | "level"> & { level?: LogLevel }): void {
+    const level = entry.level ?? "info"
+    if (this.levelValue(level) < this.levelValue(this.minLevel)) return
+
+    // Backpressure: bounded buffer
+    if (this.buffer.length >= this.maxBufferSize) {
+      this.buffer.shift()
+    }
+
     this.buffer.push({
       ...entry,
+      level,
       timestamp: new Date().toISOString(),
     })
 
-    if (this.buffer.length >= 10) {
+    if (this.buffer.length >= this.batchSize && !this.flushLock) {
       this.flush().catch(() => {})
     }
 
@@ -96,21 +161,42 @@ export class TraceLogger {
   }
 
   async flush(): Promise<void> {
-    if (this.buffer.length === 0) return
-
-    const snapshot = this.buffer
-    const lines = snapshot.map(e => JSON.stringify(e)).join("\n") + "\n"
-
+    if (this.flushLock) return
+    this.flushLock = true
     try {
-      await appendFile(this.logPath, lines)
-      this.buffer = []
-    } catch {
-      try {
-        await writeFile(this.logPath, lines)
-        this.buffer = []
-      } catch {
-        // Write failed — buffer preserved for next flush attempt
+      if (this.buffer.length === 0) return
+
+      const snapshot = this.buffer
+      let data: Buffer | string
+      const lines = snapshot.map(e => JSON.stringify(e)).join("\n") + "\n"
+
+      await this.rotateIfNeeded()
+
+      if (this.useCompression) {
+        data = await new Promise<Buffer>((resolve, reject) => {
+          const gzip = createGzip()
+          const chunks: Buffer[] = []
+          gzip.on("data", (c: Buffer) => chunks.push(c))
+          gzip.on("end", () => resolve(Buffer.concat(chunks)))
+          gzip.on("error", reject)
+          gzip.end(lines)
+        })
+        await appendFile(this.logPath + ".gz", data)
+      } else {
+        data = lines
+        try {
+          await appendFile(this.logPath, data)
+        } catch {
+          try {
+            await writeFile(this.logPath, data)
+          } catch {
+            return // buffer preserved
+          }
+        }
       }
+      this.buffer = []
+    } finally {
+      this.flushLock = false
     }
   }
 

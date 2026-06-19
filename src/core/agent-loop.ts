@@ -144,8 +144,9 @@ export class AgentLoop {
   }
 
   private hasConflict(a: Subtask, b: Subtask, filesModified: Map<string, string[]>): boolean {
-    const filesA = filesModified.get(a.id) ?? []
-    const filesB = filesModified.get(b.id) ?? []
+    const normalize = (p: string) => p.replace(/\\/g, "/").replace(/^\.\//, "")
+    const filesA = (filesModified.get(a.id) ?? []).map(normalize)
+    const filesB = (filesModified.get(b.id) ?? []).map(normalize)
     return filesA.some(f => filesB.includes(f))
   }
 
@@ -169,13 +170,18 @@ export class AgentLoop {
       return [r]
     }
 
-    const promises = batch.map(step =>
-      this.executeStepWithRetry(
-        step, sessionId, executor, verifier, errorAnalyzer,
-        depTracker, projectDir, stepExecutor, fixExecutor, 0,
+    const settled = await Promise.allSettled(
+      batch.map(step =>
+        this.executeStepWithRetry(
+          step, sessionId, executor, verifier, errorAnalyzer,
+          depTracker, projectDir, stepExecutor, fixExecutor, 0,
+        ),
       ),
     )
-    return Promise.all(promises)
+    return settled.map((s, i) => {
+      if (s.status === "fulfilled") return s.value
+      return { stepId: batch[i].id, success: false, filesModified: [] }
+    })
   }
 
   private async executeStepWithRetry(
@@ -198,7 +204,11 @@ export class AgentLoop {
     while (retryCount <= this.config.maxRetries) {
       this.observers.forEach(o => o.onStepStart(step.id, depth + 1))
 
-      const result = await stepExecutor(step)
+      const stepPromise = stepExecutor(step)
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`Step ${step.id} timed out after 120000ms`)), 120_000)
+      })
+      const result = await Promise.race([stepPromise, timeoutPromise])
 
       if (result.filesModified && result.filesModified.length > 0) {
         depTracker.recordChange(sessionId, step.id, result.filesModified)
@@ -277,8 +287,8 @@ export class AgentLoop {
         }
         return true // retry step execution even if bash fix failed
       }
-    } catch {
-      // LLM repair failed, but we can still try basic fixes
+    } catch (e) {
+      console.warn(`[AgentLoop] LLM repair failed for step ${_step.id}:`, e)
     }
 
     // Only allow retry if analysis suggests recovery (domain-agnostic)

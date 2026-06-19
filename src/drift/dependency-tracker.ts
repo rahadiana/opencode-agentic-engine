@@ -29,6 +29,11 @@ export interface ImpactAnalysis {
   risk: "low" | "medium" | "high"
 }
 
+export interface CircularDependency {
+  cycle: string[]
+  participants: string[]
+}
+
 export class DependencyTracker {
   private fileChanges = new Map<string, FileChange[]>()
   private dependencies = new Map<string, DependencyEdge[]>()
@@ -38,27 +43,15 @@ export class DependencyTracker {
 
   // ── File-level import parsing ──
 
-  /**
-   * Parse import/require statements from file content.
-   * Supports: import x from "y", import { x } from "y", import * as x from "y",
-   *           const x = require("y"), dynamic import(), re-exports.
-   */
   parseImports(content: string): string[] {
     const imports: string[] = []
     const seen = new Set<string>()
-
-    // Normalize line breaks for multi-line imports
     const normalized = content.replace(/\r\n/g, "\n")
 
-    // Single-line ESM import + export from
     const importRegex = /(?:import\s+(?:(?:\{[^}]*\}|[^;{]+?)\s+from\s+|)\s*["'`]|export\s+(?:\{[^}]*\}|\*)\s+from\s+["'`])([^"'`]+)["'`]/g
-    // Multi-line import: import { ...\n ... } from "module"
     const multiLineImportRegex = /import\s*\{[\s\S]*?\}\s*from\s*["'`]([^"'`]+)["'`]/g
-    // import type { ... } from "module"
     const typeImportRegex = /import\s+type\s+\{[\s\S]*?\}\s*from\s*["'`]([^"'`]+)["'`]/g
-    // require() calls
     const requireRegex = /(?:require|import)\s*\(\s*["'`]([^"'`]+)["'`]\s*\)/g
-    // dynamic import() (template literals with static parts)
     const dynamicImportRegex = /import\s*\(\s*["'`]([^"'`]+)["'`]\s*\)/g
 
     for (const match of normalized.matchAll(importRegex)) {
@@ -85,30 +78,19 @@ export class DependencyTracker {
     return imports
   }
 
-  /**
-   * Resolve a relative import specifier to possible filesystem paths.
-   * Also handles node: prefix, @scope/package, and package.json exports.
-   */
   resolveImportPath(sourceFile: string, specifier: string): string[] {
-    // Handle node: prefix — skip to built-in module
     if (specifier.startsWith("node:")) return []
-    // Handle @scope/package or bare package — skip
     if (!specifier.startsWith(".")) return []
     const sourceDir = dirname(sourceFile)
     const base = join(sourceDir, specifier).replace(/\\/g, "/")
-
-    // Remove known extension if present
     const withoutExt = base.replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/, "")
     const extensions = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]
 
     const candidates: string[] = []
-    // Try exact path first
     candidates.push(base)
-    // Try with/extensions
     for (const ext of extensions) {
       if (!base.endsWith(ext)) candidates.push(withoutExt + ext)
     }
-    // Try as index file in directory
     for (const ext of extensions) {
       candidates.push(join(withoutExt, "index") + ext)
     }
@@ -116,13 +98,6 @@ export class DependencyTracker {
     return candidates
   }
 
-  /**
-   * Scan a batch of files and build the file-level dependency graph.
-   * Only processes relative imports (local files), skips npm packages.
-   *
-   * @param files  Record<absoluteFilePath, fileContent>
-   * @param projectDir  Project root for computing relative paths
-   */
   scanFiles(files: Record<string, string>, projectDir: string): void {
     for (const [absPath, content] of Object.entries(files)) {
       const allImportSpecifiers = this.parseImports(content)
@@ -144,7 +119,7 @@ export class DependencyTracker {
           if (exists) {
             const targetRel = relative(projectDir, cand).replace(/\\/g, "/")
             resolvedTargets.push(targetRel)
-            break // first existing resolution wins
+            break
           }
         }
       }
@@ -160,9 +135,6 @@ export class DependencyTracker {
     }
   }
 
-  /**
-   * Get files that directly import the given file (via file-level graph).
-   */
   getFileDependents(filePath: string): string[] {
     const normalized = filePath.replace(/\\/g, "/")
     const result: string[] = []
@@ -177,36 +149,27 @@ export class DependencyTracker {
     return [...new Set(result)]
   }
 
-  /**
-   * Incrementally update the file graph for a single file (e.g., after creation/modification).
-   * Re-parses imports and replaces the entry in the graph.
-   */
   updateFile(absPath: string, content: string, projectDir: string): void {
     const relPath = relative(projectDir, absPath).replace(/\\/g, "/")
-    // Remove old entries for this file
     this.fileGraph.delete(relPath)
     this.dependencies.delete(relPath)
-    // Remove old edges where this file was the target
+
     for (const [_src, targets] of this.fileGraph) {
       if (targets.has(relPath)) {
         targets.delete(relPath)
       }
     }
-    // Re-scan
+
+    if (!existsSync(absPath)) return
+
     this.scanFiles({ [absPath]: content }, projectDir)
   }
 
-  /**
-   * Get files that a given file directly imports (via file-level graph).
-   */
   getFileImports(filePath: string): string[] {
     const normalized = filePath.replace(/\\/g, "/")
     return [...(this.fileGraph.get(normalized) ?? [])]
   }
 
-  /**
-   * Traverse transitive dependents (A imports B imports C → change C impacts A).
-   */
   private getTransitiveDependents(file: string, visited?: Set<string>): string[] {
     const visitedSet = visited ?? new Set<string>()
     if (visitedSet.has(file)) return []
@@ -260,16 +223,21 @@ export class DependencyTracker {
     return dependents
   }
 
+  private recencyWeight(timestamp: number, now: number): number {
+    const ageMs = now - timestamp
+    const halfLifeMs = 120_000
+    return Math.exp(-ageMs / halfLifeMs)
+  }
+
   analyzeImpact(sessionId: string, changedFiles: string[]): ImpactAnalysis[] {
+    const now = Date.now()
     const results: ImpactAnalysis[] = []
     for (const file of changedFiles) {
-      // Combine step-level + file-level dependents
       const stepDeps = this.getDependents(file).map(e => e.from)
       const fileDeps = this.getFileDependents(file)
       const transitiveDeps = this.getTransitiveDependents(file)
       const combinedFiles = [...new Set([...stepDeps, ...fileDeps, ...transitiveDeps])]
 
-      // Map back to steps
       const sessionFiles = this.stepFiles.get(sessionId)
       const impactedSteps: string[] = []
       if (sessionFiles) {
@@ -279,11 +247,21 @@ export class DependencyTracker {
         }
       }
 
+      const changes = this.fileChanges.get(sessionId) ?? []
+      const weightedImpact = changes
+        .filter(c => c.file === file)
+        .reduce((sum, c) => sum + this.recencyWeight(c.timestamp, now), 0)
+
+      const significantDeps = combinedFiles.filter(f => {
+        const depChanges = changes.filter(c => c.file === f)
+        return depChanges.some(c => this.recencyWeight(c.timestamp, now) > 0.3)
+      })
+
       results.push({
         file,
-        impactedFiles: combinedFiles,
+        impactedFiles: significantDeps.length > 0 ? significantDeps : combinedFiles,
         impactedSteps: [...new Set(impactedSteps)],
-        risk: combinedFiles.length > 5 ? "high" : combinedFiles.length > 2 ? "medium" : "low",
+        risk: combinedFiles.length > 5 || weightedImpact > 3 ? "high" : combinedFiles.length > 2 ? "medium" : "low",
       })
     }
     return results
@@ -298,7 +276,6 @@ export class DependencyTracker {
     const currentIdx = planSteps.indexOf(currentStepId)
     if (currentIdx <= 0) return []
 
-    // Build a set of step IDs that come before the current step for O(1) lookup
     const previousStepIds = new Set(planSteps.slice(0, currentIdx))
 
     const changes = this.fileChanges.get(sessionId) ?? []
@@ -378,7 +355,6 @@ export class DependencyTracker {
 
     let suggestion = ""
     if (likelyCulprit) {
-      // Check both file-level and step-level impact
       const fileImpact = this.analyzeImpact(sessionId, [likelyCulprit])
       const stepImpact = this.getDependents(likelyCulprit)
       const ri = fileImpact[0]
@@ -387,7 +363,6 @@ export class DependencyTracker {
         ...stepImpact.map(e => e.from),
       ])]
 
-      // Include file-level dependents in suggestion
       const fileLevelDeps = this.getFileDependents(likelyCulprit)
       suggestion = `Error likely originates from changes to ${likelyCulprit} (confidence: ${(confidence * 100).toFixed(0)}%).`
       if (combinedImpact.length > 0) {
@@ -406,6 +381,60 @@ export class DependencyTracker {
     return { likelyCulprit, affectedSteps: [...new Set(affectedSteps)], propagationPath, suggestion, rootCauseConfidence: confidence }
   }
 
+  // ── Tarjan's SCC Algorithm for Circular Dependency Detection ──
+
+  detectCircularDependencies(): CircularDependency[] {
+    const graph = new Map<string, string[]>()
+    for (const [src, targets] of this.fileGraph) {
+      graph.set(src, [...targets])
+    }
+
+    const indexMap = new Map<string, number>()
+    const lowLink = new Map<string, number>()
+    const onStack = new Set<string>()
+    const stack: string[] = []
+    let index = 0
+    const sccs: string[][] = []
+
+    const strongConnect = (v: string): void => {
+      indexMap.set(v, index)
+      lowLink.set(v, index)
+      index++
+      stack.push(v)
+      onStack.add(v)
+
+      const neighbors = graph.get(v) ?? []
+      for (const w of neighbors) {
+        if (!indexMap.has(w)) {
+          strongConnect(w)
+          lowLink.set(v, Math.min(lowLink.get(v)!, lowLink.get(w)!))
+        } else if (onStack.has(w)) {
+          lowLink.set(v, Math.min(lowLink.get(v)!, indexMap.get(w)!))
+        }
+      }
+
+      if (lowLink.get(v) === indexMap.get(v)) {
+        const scc: string[] = []
+        let w: string | undefined
+        do {
+          w = stack.pop()!
+          onStack.delete(w)
+          scc.push(w)
+        } while (w !== v)
+        if (scc.length > 1) sccs.push(scc)
+      }
+    }
+
+    for (const v of graph.keys()) {
+      if (!indexMap.has(v)) strongConnect(v)
+    }
+
+    return sccs.map(scc => ({
+      cycle: scc,
+      participants: [...new Set(scc.flatMap(n => [n, ...(graph.get(n) ?? []).filter(m => scc.includes(m))]))],
+    }))
+  }
+
   clear(sessionId?: string): void {
     if (sessionId) {
       this.fileChanges.delete(sessionId)
@@ -415,6 +444,7 @@ export class DependencyTracker {
       this.dependencies.clear()
       this.stepFiles.clear()
       this.fileGraph.clear()
+      this.statCache.clear()
     }
   }
 }

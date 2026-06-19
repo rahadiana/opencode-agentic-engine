@@ -77,14 +77,19 @@ export class AutoRetryManager {
   /** Exponential backoff dengan full jitter */
   getBackoffDelay(attempt: number): number {
     if (attempt <= 0) return 0
-    const exponent = Math.min(attempt - 1, 10) // cap exponent
+    const exponent = Math.min(attempt - 1, 10)
     const baseDelay = this.config.baseDelayMs * Math.pow(2, exponent)
     const maxDelay = Math.min(baseDelay, this.config.maxDelayMs)
-    return Math.random() * maxDelay // full jitter
+    return Math.max(this.config.baseDelayMs, Math.random() * maxDelay)
   }
+
+  private static readonly MAX_ATTEMPTS = 50
 
   /** Catat attempt yang gagal */
   recordAttempt(error: string, analysis: ErrorAnalysis | null, rolledBackFiles: string[]): void {
+    if (this.attempts.length >= AutoRetryManager.MAX_ATTEMPTS) {
+      this.attempts.shift()
+    }
     const attempt = this.attempts.length
     this.attempts.push({
       attempt,
@@ -118,8 +123,8 @@ export class AutoRetryManager {
       }
     }
 
-    // 2. Parse compile error untuk file paths — pola seperti "src/foo.ts:line:col"
-    const filePathRegex = /(?:src\/|lib\/|test\/)[\w./-]+\.(?:ts|js|tsx|jsx|py|go|rs)/g
+    // 2. Parse compile error untuk file paths — relatif ke project root
+    const filePathRegex = /(?:src\/|lib\/|test\/|app\/|cmd\/|pkg\/|internal\/)[\w./-]+\.(?:ts|js|tsx|jsx|py|go|rs|java|swift|kt)/g
     const errorFiles = compileError.match(filePathRegex)
     if (errorFiles) {
       for (const ef of errorFiles) {

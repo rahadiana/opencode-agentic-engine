@@ -69,16 +69,18 @@ export class GitIntegration {
     try {
       const output = execFileSync(
         "git",
-        ["log", `-${count}`, "--format=%H|||%s|||%aI", "--name-only"],
+        ["log", `-${count}`, "--format=%H%x00%s%x00%aI", "--name-only"],
         { cwd: this.cwd, encoding: "utf-8" }
       )
       const commits: CommitInfo[] = []
       let current: CommitInfo | null = null
 
       for (const line of output.split("\n")) {
-        if (line.includes("|||")) {
+        if (line.includes("\x00")) {
           if (current) commits.push(current)
-          const [hash, message, timestamp] = line.split("|||")
+          const [hash, ...rest] = line.split("\x00")
+          const message = rest.slice(0, -1).join("\x00")
+          const timestamp = rest[rest.length - 1] ?? ""
           current = { hash, message, timestamp, files: [] }
         } else if (line && current) {
           current.files.push(line.trim())
@@ -137,7 +139,7 @@ export class GitIntegration {
         "--head", branch,
       ], { cwd: this.cwd, encoding: "utf-8" }).trim()
 
-      const urlMatch = output.match(/https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/(\d+)/)
+      const urlMatch = output.match(/https:\/\/[^/]+\/[^/]+\/[^/]+\/pull\/(\d+)/)
       if (urlMatch) {
         return {
           url: urlMatch[0],

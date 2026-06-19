@@ -11,6 +11,9 @@ import type { BudgetTracker } from "./budget-tracker.js"
 import type { HallucinationGuard } from "../drift/hallucination-guard.js"
 import type { SkillStore } from "../memory/skill-store.js"
 import type { ConfigLoader } from "./config.js"
+import type { FileWrittenEvent } from "./event-taxonomy.js"
+
+type AgenticFilePayload = FileWrittenEvent["payload"]
 
 // ── File writing ──
 
@@ -32,6 +35,7 @@ export function writeFiles(
   source?: { stepId?: string; taskId?: string; pipelineRunId?: string },
 ): string[] {
   const written: string[] = []
+  const failed: string[] = []
   for (const f of files) {
     const absPath = join(projectDir, f.path)
     try {
@@ -40,20 +44,22 @@ export function writeFiles(
       written.push(f.path)
 
       if (eventBus) {
-        eventBus.emit({
-          type: "file.written",
-          payload: {
-            sessionID,
-            filePath: f.path,
-            bytesWritten: Buffer.byteLength(f.content, "utf-8"),
-            sourceStepId: source?.stepId,
-            sourceTaskId: source?.taskId,
-          },
-        } as any)
+        const payload: AgenticFilePayload = {
+          sessionID,
+          filePath: f.path,
+          bytesWritten: Buffer.byteLength(f.content, "utf-8"),
+          sourceStepId: source?.stepId,
+          sourceTaskId: source?.taskId,
+        }
+        eventBus.emit({ type: "file.written", payload })
       }
-    } catch {
-      // non-fatal: skip files that can't be written
+    } catch (e) {
+      console.error(`[writeFiles] Failed to write ${f.path}:`, e)
+      failed.push(f.path)
     }
+  }
+  if (failed.length > 0) {
+    console.warn(`[writeFiles] ${failed.length}/${files.length} files failed to write:`, failed)
   }
   return written
 }
@@ -87,10 +93,11 @@ export function parseFileEntries(raw: string): FileWriteEntry[] {
     files.push({ path: m[1].replace(/^\/+/, ""), content: m[2] })
   }
 
-  // Try generic code blocks as last resort
-  if (files.length === 0 && !raw.includes("NO_CHANGES") && !raw.includes('"noChanges"')) {
+  // Fallback: only if raw has clear FILE: patterns or JSON structure suggesting code
+  if (files.length === 0 && !raw.includes("NO_CHANGES") && !raw.includes('"noChanges"') &&
+      (raw.includes("```") || raw.includes("\"files\""))) {
     const cbMatch = raw.match(/```(?:\w+)?\n([\s\S]*?)```/)
-    if (cbMatch) {
+    if (cbMatch && raw.length > 100) {
       files.push({ path: "src/generated.ts", content: cbMatch[1] })
     }
   }
@@ -159,20 +166,20 @@ export async function recordCompletion(
     guardPassed = guardResult.passed
 
     if (deps.eventBus) {
+      const claims = guardResult.claims.slice(0, 20) as unknown as Array<{ claim: string; type: "file" | "function" | "import"; verified: boolean; expected: string; actual: string | null }>
+      const unverifiedCount = claims.filter(c => !c.verified).length
       deps.eventBus.emit({
         type: "guard.check.completed",
         payload: {
           sessionID: record.sessionID,
           stepId: record.stepId ?? record.taskId ?? "",
-          totalClaims: guardResult.claims.length,
-          unverifiedClaims: guardResult.claims.filter((c: any) => !c.verified).length,
-          hallucinationRate: guardResult.claims.length > 0
-            ? guardResult.claims.filter((c: any) => !c.verified).length / guardResult.claims.length
-            : 0,
+          totalClaims: claims.length,
+          unverifiedClaims: unverifiedCount,
+          hallucinationRate: claims.length > 0 ? unverifiedCount / claims.length : 0,
           passed: guardPassed,
-          claims: guardResult.claims.slice(0, 20),
+          claims,
         },
-      } as any)
+      })
     }
   }
 
@@ -197,7 +204,7 @@ export async function recordCompletion(
               sourceStepId: record.stepId,
               successRate: skill.successRate,
             },
-          } as any)
+          })
         }
       }
     } catch {

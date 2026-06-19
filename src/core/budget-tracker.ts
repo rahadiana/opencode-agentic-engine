@@ -145,9 +145,14 @@ export class BudgetTracker {
     this.behaviors.delete(scope)
   }
 
-  /** Dapatkan limits untuk scope (atau default Infinity) */
+  /** Dapatkan limits untuk scope (atau default Infinity) plus behavior */
   getLimits(scope: BudgetScope): Required<BudgetLimits> {
     return this.limits.get(scope) ?? { ...NO_LIMIT }
+  }
+
+  /** Dapatkan behavior untuk scope */
+  getBehavior(scope: BudgetScope): OnExceededBehavior {
+    return this.behaviors.get(scope) ?? "hard-stop"
   }
 
   // ── Accumulators ──
@@ -175,13 +180,9 @@ export class BudgetTracker {
     entry.cacheReadTokens += cacheReadTokens
     entry.cacheWriteTokens += cacheWriteTokens
 
-    // Hitung cost berdasarkan model price
     const price = this.lookupPrice(modelId)
-    entry.cost += this.calculateCost(
-      inputTokens, outputTokens, reasoningTokens,
-      cacheReadTokens, cacheWriteTokens,
-      price,
-    )
+    const costInMicroCents = Math.round(this.calculateCost(inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWriteTokens, price) * 1_000_000)
+    entry.cost = (entry.cost * 1_000_000 + costInMicroCents) / 1_000_000
   }
 
   /** Catat completion satu subtask step */
@@ -350,24 +351,30 @@ export class BudgetTracker {
   }
 
   private lookupPrice(modelId: string): ModelPriceEntry {
-    return this.modelPrices[modelId] ?? this.modelPrices["openai/gpt-4o"] ?? { input: 2.5, output: 10, cacheRead: 0.3, cacheWrite: 0 }
+    const price = this.modelPrices[modelId]
+    if (!price) {
+      const fallback = this.modelPrices["openai/gpt-4o"] ?? { input: 2.5, output: 10, cacheRead: 0.3, cacheWrite: 0 }
+      console.warn(`[BudgetTracker] No price configured for model "${modelId}", using gpt-4o fallback`)
+      return fallback
+    }
+    return price
   }
 
   private calculateCost(
     inputTokens: number,
     outputTokens: number,
-    _reasoningTokens: number,
+    reasoningTokens: number,
     cacheReadTokens: number,
     cacheWriteTokens: number,
     price: ModelPriceEntry,
   ): number {
-    // Token ke unit: harga per 1K token
-    const inputCost = (inputTokens / 1000) * price.input
-    const outputCost = (outputTokens / 1000) * price.output
-    const cacheReadCost = (cacheReadTokens / 1000) * price.cacheRead
-    const cacheWriteCost = (cacheWriteTokens / 1000) * price.cacheWrite
-    // Reasoning tokens dihitung sama dengan output (best practice)
-    return inputCost + outputCost + cacheReadCost + cacheWriteCost
+    const totalOutput = outputTokens + reasoningTokens
+    return (
+      (inputTokens / 1000) * price.input +
+      (totalOutput / 1000) * price.output +
+      (cacheReadTokens / 1000) * price.cacheRead +
+      (cacheWriteTokens / 1000) * price.cacheWrite
+    )
   }
 
   private emitExceeded(

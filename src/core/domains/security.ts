@@ -26,20 +26,24 @@ const securityDetect = (input: string): number => {
   for (const kw of securityKeywords) {
     if (lower.includes(kw)) score += 0.06
   }
-  // Check for security config files
+  const projectDir = process.cwd()
   const securityFiles = [".sast.config", "security.txt", "csp.json", "owasp.json"]
   for (const f of securityFiles) {
-    try { if (existsSync(f)) score += 0.3 } catch { /* skip */ }
+    try {
+      const fullPath = resolve(projectDir, f)
+      if (existsSync(fullPath)) score += 0.3
+    } catch { /* skip */ }
   }
-  // Also detect package.json with security deps
   try {
-    const pkg = JSON.parse(readFileSync("package.json", "utf-8"))
+    const pkgPath = resolve(projectDir, "package.json")
+    if (!existsSync(pkgPath)) return Math.min(score, 1.0)
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"))
     const secDeps = ["helmet", "cors", "bcrypt", "jsonwebtoken", "csurf", "express-rate-limit", "sanitize-html", "dompurify"]
     const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) }
     for (const dep of Object.keys(allDeps)) {
       if (secDeps.includes(dep)) score += 0.15
     }
-  } catch { /* no package.json */ }
+  } catch { /* no package.json or parse error */ }
   return Math.min(score, 1.0)
 }
 
@@ -65,8 +69,9 @@ const securityVerifiers: VerifierStrategy[] = [
             { pattern: /AKIA[0-9A-Z]{16}/, name: "AWS access key" },
           ]
 
+          const isExampleOrTest = /example|test|mock|dummy|placeholder|your-/i.test(content.slice(0, 200))
           for (const { pattern, name } of secretPatterns) {
-            if (pattern.test(content)) {
+            if (pattern.test(content) && !isExampleOrTest) {
               issues.push(`${file}: ${name}`)
             }
           }

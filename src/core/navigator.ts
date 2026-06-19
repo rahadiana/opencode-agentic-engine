@@ -157,13 +157,17 @@ export class CodebaseNavigator {
 
   private async detectProjectLanguages(root: string): Promise<string[]> {
     const detected: string[] = []
-    for (const lang of this.languages) {
-      for (const pf of lang.projectFiles) {
-        try {
-          await stat(join(root, pf))
-          if (!detected.includes(lang.name)) detected.push(lang.name)
-          break
-        } catch { /* non-fatal */ }
+    const checks = this.languages.flatMap(lang =>
+      lang.projectFiles.map(pf => ({ lang, pf }))
+    )
+    const results = await Promise.allSettled(
+      checks.map(({ lang, pf }) =>
+        stat(join(root, pf)).then(() => ({ lang, exists: true })).catch(() => ({ lang, exists: false }))
+      )
+    )
+    for (const r of results) {
+      if (r.status === "fulfilled" && r.value.exists && !detected.includes(r.value.lang.name)) {
+        detected.push(r.value.lang.name)
       }
     }
     return detected
@@ -179,16 +183,28 @@ export class CodebaseNavigator {
 
     const isTestTask = /\b(test|spec|verify|assert|qa)\b/i.test(taskDescription)
 
+    const totalModules = this.index.modules.length
+    const kwDocFreq = new Map<string, number>()
+    for (const kw of keywords) {
+      let count = 0
+      for (const m of this.index.modules) {
+        if (m.name.toLowerCase().includes(kw) || m.path.toLowerCase().includes(kw)) count++
+      }
+      kwDocFreq.set(kw, count)
+    }
+
     const scored = this.index.modules.map(m => {
       let score = 0
       const name = m.name.toLowerCase()
       const path = m.path.toLowerCase()
 
       for (const kw of keywords) {
-        if (name.includes(kw)) score += 10
-        if (path.includes(kw)) score += 5
-        if (m.imports.some(i => i.toLowerCase().includes(kw))) score += 3
-        if (m.exports.some(e => e.toLowerCase().includes(kw))) score += 8
+        const df = kwDocFreq.get(kw) ?? 1
+        const idf = Math.log(1 + totalModules / (1 + df))
+        if (name.includes(kw)) score += 10 * idf
+        if (path.includes(kw)) score += 5 * idf
+        if (m.imports.some(i => i.toLowerCase().includes(kw))) score += 3 * idf
+        if (m.exports.some(e => e.toLowerCase().includes(kw))) score += 8 * idf
       }
 
       if (!isTestTask && m.ext.match(/test|spec/)) score -= 2
@@ -260,11 +276,12 @@ export class CodebaseNavigator {
   }
 
   private isSystemDirectory(dirPath: string): boolean {
+    const normalized = dirPath.replace(/[/\\]+$/, "").replace(/\\/g, "/")
+    if (normalized === "/") return true
     const systemPrefixes = [
       "/lib", "/usr", "/var", "/etc", "/boot", "/sys", "/proc",
       "/dev", "/run", "/snap", "/opt", "/sbin", "/bin",
     ]
-    const normalized = dirPath.replace(/\/+$/, "")
     return systemPrefixes.some(prefix => normalized === prefix || normalized.startsWith(prefix + "/"))
   }
 
@@ -303,13 +320,14 @@ export class CodebaseNavigator {
         if (!lang.sourceExtensions.includes(ext)) continue
 
         let size = 0
-        try { size = (await stat(fullPath)).size } catch { /* non-fatal */ }
+        try { size = (await stat(fullPath)).size } catch { /* skip */ }
 
         const imports: string[] = []
         const exports: string[] = []
         try {
           const content = await readFile(fullPath, "utf-8")
-          for (const line of content.split("\n")) {
+          const headerLines = content.split("\n").slice(0, 50)
+          for (const line of headerLines) {
             const impMatch = line.match(lang.importPattern)
             if (impMatch) {
               const captured = impMatch[1] ?? impMatch[2]
@@ -318,7 +336,7 @@ export class CodebaseNavigator {
             const expMatch = line.match(lang.exportPattern)
             if (expMatch) exports.push(expMatch[expMatch.length - 1])
           }
-        } catch { /* non-fatal */ }
+        } catch { /* skip */ }
 
         modules.push({
           path: fullPath,

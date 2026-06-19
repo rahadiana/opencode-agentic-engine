@@ -19,6 +19,18 @@ interface TaskPattern {
 
 const TASK_PATTERNS: TaskPattern[] = [
   {
+    type: TaskType.TESTING,
+    keywords: /\b(test|verify|validate|check|qa|quality|coverage|assert|expect|spec)\b/i,
+  },
+  {
+    type: TaskType.DEBUGGING,
+    keywords: /\b(debug|fix|error|bug|crash|issue|problem|troubleshoot|diagnose|investigate)\b/i,
+  },
+  {
+    type: TaskType.DOCUMENTATION,
+    keywords: /\b(document|readme|comment|explain|describe|guide|tutorial|example|doc)\b/i,
+  },
+  {
     type: TaskType.CODING,
     keywords: /\b(implement|create|add|build|code|develop|write|program|construct|generate|refactor)\b/i,
   },
@@ -26,40 +38,29 @@ const TASK_PATTERNS: TaskPattern[] = [
     type: TaskType.REASONING,
     keywords: /\b(design|architect|analyze|decide|evaluate|assess|compare|tradeoff|strategy|plan|approach|consider)\b/i,
   },
-  {
-    type: TaskType.TESTING,
-    keywords: /\b(test|verify|validate|check|qa|quality|coverage|assert|expect|spec)\b/i,
-  },
-  {
-    type: TaskType.DOCUMENTATION,
-    keywords: /\b(document|readme|comment|explain|describe|guide|tutorial|example|doc)\b/i,
-  },
-  {
-    type: TaskType.DEBUGGING,
-    keywords: /\b(debug|fix|error|bug|crash|issue|problem|troubleshoot|diagnose|investigate)\b/i,
-  },
 ]
 
 /**
- * Detect task type from description using keyword matching.
- * 
- * @param description Task description or action text
- * @returns Detected task type (defaults to CODING if no match)
+ * Detect task type from description using score-based matching.
  */
 export function detectTaskType(description: string): TaskType {
   if (!description || typeof description !== 'string') {
-    return TaskType.CODING // Default fallback
+    return TaskType.CODING
   }
 
-  // Check each pattern in order of priority
+  let bestType = TaskType.CODING
+  let bestScore = 0
+
   for (const pattern of TASK_PATTERNS) {
-    if (pattern.keywords.test(description)) {
-      return pattern.type
+    const matches = description.match(pattern.keywords)
+    const score = matches ? matches.length : 0
+    if (score > bestScore) {
+      bestScore = score
+      bestType = pattern.type
     }
   }
 
-  // Default to CODING if no keywords matched
-  return TaskType.CODING
+  return bestType
 }
 
 /**

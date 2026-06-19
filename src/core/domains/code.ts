@@ -19,9 +19,10 @@ const codeDetect = (input: string): number => {
   for (const kw of codeKeywords) {
     if (lower.includes(kw)) score += 0.05
   }
+  const projectDir = process.cwd()
   const projectFiles = ["package.json", "Cargo.toml", "go.mod", "pyproject.toml", "setup.py", "tsconfig.json"]
   for (const f of projectFiles) {
-    try { if (existsSync(f)) score += 0.2 } catch { /* non-fatal */ }
+    try { if (existsSync(resolve(projectDir, f))) score += 0.2 } catch { /* skip */ }
   }
   return Math.min(score, 1.0)
 }

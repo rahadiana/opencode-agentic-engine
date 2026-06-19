@@ -47,6 +47,7 @@ export function createSkillDefinition(
   keywords: string[],
   steps: { action: string; description: string; tool?: string; expectedOutput: string; rollback?: string }[],
   triggerContext?: string[],
+  author?: "agent" | "human",
 ): SkillDefinition {
   const now = new Date().toISOString()
   return {
@@ -55,7 +56,7 @@ export function createSkillDefinition(
       id: `skill-${Date.now()}`,
       name,
       version: 1,
-      author: "agent",
+      author: author ?? "agent",
     },
     trigger: {
       pattern: triggerPattern,
@@ -91,30 +92,40 @@ export function createSkillDefinition(
 function inferRollback(action: string, description: string): string | undefined {
   const lower = action.toLowerCase() + " " + description.toLowerCase()
 
-  if (lower.includes("create") || lower.includes("add") || lower.includes("write")) {
+  // Specific keywords first, then general
+  if (lower.includes("add dep") || lower.includes("install")) {
+    return "Remove dependency: npm uninstall <package>"
+  }
+  if (lower.includes("create file") || lower.includes("write file")) {
     return "Delete the created file or revert the addition"
+  }
+  if (lower.includes("rename") || lower.includes("move")) {
+    return "Move file back to original location"
   }
   if (lower.includes("delete") || lower.includes("remove")) {
     return "Restore from git: git checkout -- <file>"
   }
+  if (lower.includes("create") || lower.includes("add") || lower.includes("write")) {
+    return "Delete the created file or revert the addition"
+  }
   if (lower.includes("modify") || lower.includes("update") || lower.includes("edit")) {
     return "Revert changes: git checkout -- <file> or git revert <commit>"
   }
-  if (lower.includes("install") || lower.includes("add dep")) {
-    return "Remove dependency: npm uninstall <package>"
-  }
   if (lower.includes("migrate")) {
     return "Run down migration: <tool> migrate down"
-  }
-  if (lower.includes("rename") || lower.includes("move")) {
-    return "Move file back to original location"
   }
 
   return "Undo changes via git: git stash or git checkout"
 }
 
+function jsonSafeReplacer(_key: string, value: unknown): unknown {
+  if (typeof value === "bigint") return value.toString() + "n"
+  if (value === undefined) return null
+  return value
+}
+
 export function serializeSkill(skill: SkillDefinition): string {
-  return JSON.stringify(skill, null, 2)
+  return JSON.stringify(skill, jsonSafeReplacer, 2)
 }
 
 export function deserializeSkill(json: string): SkillDefinition | null {
@@ -127,19 +138,23 @@ export function deserializeSkill(json: string): SkillDefinition | null {
   }
 }
 
+function escapeMd(text: string): string {
+  return text.replace(/[_*[\]()`~>#+|!]/g, "\\$&")
+}
+
 export function inspectSkill(skill: SkillDefinition): string {
-  let out = `## Skill: ${skill.meta.name}\n\n`
+  let out = `## Skill: ${escapeMd(skill.meta.name)}\n\n`
   out += `**Format:** ${skill.meta.format}\n`
   out += `**Version:** ${skill.meta.version}\n`
   out += `**Author:** ${skill.meta.author}\n`
   out += `**Success Rate:** ${(skill.quality.successRate * 100).toFixed(0)}%\n`
   out += `**Usage:** ${skill.quality.usageCount}\n\n`
-  out += `### Trigger\n- Pattern: "${skill.trigger.pattern}"\n- Keywords: ${skill.trigger.keywords.join(", ")}\n\n`
+  out += `### Trigger\n- Pattern: "${escapeMd(skill.trigger.pattern)}"\n- Keywords: ${skill.trigger.keywords.map(escapeMd).join(", ")}\n\n`
   out += `### Workflow\n`
   for (const step of skill.workflow.steps) {
-    out += `${step.order}. **${step.action}** — ${step.description}\n`
+    out += `${step.order}. **${escapeMd(step.action)}** — ${escapeMd(step.description)}\n`
     if (step.tool) out += `   Tool: \`${step.tool}\`\n`
-    out += `   Expected: ${step.expectedOutput}\n`
+    out += `   Expected: ${escapeMd(step.expectedOutput)}\n`
   }
   return out
 }

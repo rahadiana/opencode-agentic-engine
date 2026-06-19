@@ -14,12 +14,19 @@ export interface TimelineEvent {
   durationMs: number
 }
 
+export interface LatencyPercentiles {
+  p50: number
+  p95: number
+  p99: number
+}
+
 export interface Statistics {
   totalCalls: number
   successRate: number
   averageLatency: number
-  toolsUsed: Map<string, number>
+  toolsUsed: Record<string, number>
   peakConcurrency: number
+  latencyPercentiles?: LatencyPercentiles
 }
 
 export interface Anomaly {
@@ -28,13 +35,21 @@ export interface Anomaly {
   detectedAt: string
   tool?: string
   count?: number
+  severity?: "critical" | "warning" | "info"
 }
 
 export class Dashboard {
-  private concurrencyWindowMs: number
+  private timelineLimit: number
 
-  constructor(concurrencyWindowMs = 2000) {
-    this.concurrencyWindowMs = concurrencyWindowMs
+  constructor(_concurrencyWindowMs = 2000, timelineLimit = 20) {
+    this.timelineLimit = timelineLimit
+  }
+
+  private computeLatencyPercentiles(durations: number[]): LatencyPercentiles | undefined {
+    if (durations.length === 0) return undefined
+    const sorted = [...durations].sort((a, b) => a - b)
+    const p = (k: number) => sorted[Math.floor((k / 100) * (sorted.length - 1))]
+    return { p50: p(50), p95: p(95), p99: p(99) }
   }
 
   generate(traces: TraceEntry[], _sessionStart: number): DashboardData {
@@ -49,10 +64,12 @@ export class Dashboard {
     const totalCalls = traces.length
     const successCount = traces.filter(t => t.success).length
     const avgLatency = traces.reduce((sum, t) => sum + t.durationMs, 0) / Math.max(totalCalls, 1)
-    const toolsUsed = new Map<string, number>()
+    const toolsUsedMap = new Map<string, number>()
     for (const t of traces) {
-      toolsUsed.set(t.toolUsed, (toolsUsed.get(t.toolUsed) ?? 0) + 1)
+      toolsUsedMap.set(t.toolUsed, (toolsUsedMap.get(t.toolUsed) ?? 0) + 1)
     }
+    const toolsUsed: Record<string, number> = {}
+    for (const [k, v] of toolsUsedMap) toolsUsed[k] = v
 
     const statistics: Statistics = {
       totalCalls,
@@ -60,6 +77,7 @@ export class Dashboard {
       averageLatency: avgLatency,
       toolsUsed,
       peakConcurrency: this.computePeakConcurrency(traces),
+      latencyPercentiles: this.computeLatencyPercentiles(traces.map(t => t.durationMs)),
     }
 
     const anomalies = this.detectAnomalies(traces)
@@ -67,8 +85,9 @@ export class Dashboard {
     return { timeline, statistics, anomalies }
   }
 
-  formatForDisplay(data: DashboardData): string {
-    let output = `## 📈 Observability Dashboard\n\n`
+  formatForDisplay(data: DashboardData, limit?: number): string {
+    const tlLimit = limit ?? this.timelineLimit
+    let output = `## Observability Dashboard\n\n`
 
     // Stats
     output += `### Statistics\n`
@@ -77,30 +96,36 @@ export class Dashboard {
     output += `| Success rate | ${(data.statistics.successRate * 100).toFixed(1)}% |\n`
     output += `| Avg latency | ${data.statistics.averageLatency.toFixed(0)}ms |\n`
     output += `| Peak concurrent | ${data.statistics.peakConcurrency} |\n`
+    if (data.statistics.latencyPercentiles) {
+      const lp = data.statistics.latencyPercentiles
+      output += `| Latency p50/p95/p99 | ${lp.p50}ms / ${lp.p95}ms / ${lp.p99}ms |\n`
+    }
 
     // Tools used
     output += `\n### Tools Used\n`
-    for (const [tool, count] of [...data.statistics.toolsUsed].sort((a, b) => b[1] - a[1])) {
+    const toolsArr = Object.entries(data.statistics.toolsUsed).sort((a, b) => b[1] - a[1])
+    for (const [tool, count] of toolsArr) {
       output += `| \`${tool}\` | ${count} |\n`
     }
 
     // Timeline
-    output += `\n### Timeline (last 20)\n`
-    const recent = data.timeline.slice(-20)
+    output += `\n### Timeline (last ${tlLimit})\n`
+    const recent = data.timeline.slice(-tlLimit)
     for (const evt of recent) {
-      const icon = evt.success ? "✅" : "❌"
+      const icon = evt.success ? "[OK]" : "[FAIL]"
       const dur = evt.durationMs > 0 ? ` (${evt.durationMs}ms)` : ""
       output += `| ${evt.time.slice(11, 19)} | ${icon} \`${evt.tool}\` | ${evt.step}${dur} |\n`
     }
 
     // Anomalies
     if (data.anomalies.length > 0) {
-      output += `\n### ⚠️ Anomalies Detected\n`
+      output += `\n### Anomalies Detected\n`
       for (const a of data.anomalies) {
-        output += `- **${a.type}**: ${a.description}\n`
+        const sev = a.severity ? ` [${a.severity}]` : ""
+        output += `- **${a.type}${sev}**: ${a.description}\n`
       }
     } else {
-      output += `\n### ✅ No anomalies detected\n`
+      output += `\n### [OK] No anomalies detected\n`
     }
 
     return output
@@ -108,54 +133,67 @@ export class Dashboard {
 
   private computePeakConcurrency(traces: TraceEntry[]): number {
     if (traces.length === 0) return 0
-    // Sort by timestamp, then use sweep line with configurable window
-    const sorted = traces.map(t => new Date(t.timestamp).getTime()).sort((a, b) => a - b)
+    // Use start/end time ranges if metadata has _start/_end, otherwise timestamp-based
+    const intervals = traces.map(t => {
+      const ts = new Date(t.timestamp).getTime()
+      const start = (t.metadata?._start as number) ?? ts
+      const end = (t.metadata?._end as number) ?? (ts + t.durationMs)
+      return { start, end }
+    }).filter(i => i.end > i.start).sort((a, b) => a.start - b.start)
+
+    if (intervals.length === 0) return 0
+
     let max = 0
-    let concurrent = 0
-    let j = 0
-    for (let i = 0; i < sorted.length; i++) {
-      // Move window start forward
-      while (j < i && sorted[i] - sorted[j] > this.concurrencyWindowMs) {
-        concurrent--
-        j++
-      }
-      concurrent++
-      max = Math.max(max, concurrent)
+    const ends: number[] = []
+    for (const { start, end } of intervals) {
+      while (ends.length > 0 && ends[0] <= start) ends.shift()
+      ends.push(end)
+      ends.sort((a, b) => a - b)
+      max = Math.max(max, ends.length)
     }
     return max
   }
 
   private detectAnomalies(traces: TraceEntry[]): Anomaly[] {
-    const anomalies: Anomaly[] = []
+    const anomaliesMap = new Map<string, Anomaly>()
 
     // Slow operations (>30s)
     for (const t of traces) {
       if (t.durationMs > 30_000) {
-        anomalies.push({
-          type: "timeout",
-          description: `Slow operation: ${t.toolUsed} took ${t.durationMs}ms`,
-          detectedAt: t.timestamp,
-          tool: t.toolUsed,
-        })
+        const key = `timeout|${t.step}|${t.toolUsed}`
+        if (!anomaliesMap.has(key)) {
+          anomaliesMap.set(key, {
+            type: "timeout",
+            description: `Slow operation: ${t.toolUsed} took ${t.durationMs}ms`,
+            detectedAt: t.timestamp,
+            tool: t.toolUsed,
+            severity: t.durationMs > 60_000 ? "critical" : "warning",
+          })
+        }
       }
     }
 
-    // Retry storms (>3 failures for same step)
+    // Retry storms (>3 failures for same step) — regex match
+    const executeRe = /^execute:/i
     const failCounts = new Map<string, number>()
     for (const t of traces) {
-      if (!t.success && t.step.startsWith("execute:")) {
-        const stepId = t.step.replace("execute:", "")
+      if (!t.success && executeRe.test(t.step)) {
+        const stepId = t.step.replace(/^execute:/i, "")
         failCounts.set(stepId, (failCounts.get(stepId) ?? 0) + 1)
       }
     }
     for (const [stepId, count] of failCounts) {
       if (count >= 3) {
-        anomalies.push({
-          type: "retry_storm",
-          description: `Step "${stepId}" failed ${count} times`,
-          detectedAt: new Date().toISOString(),
-          count,
-        })
+        const key = `retry_storm|${stepId}`
+        if (!anomaliesMap.has(key)) {
+          anomaliesMap.set(key, {
+            type: "retry_storm",
+            description: `Step "${stepId}" failed ${count} times`,
+            detectedAt: new Date().toISOString(),
+            count,
+            severity: count >= 5 ? "critical" : "warning",
+          })
+        }
       }
     }
 
@@ -167,46 +205,53 @@ export class Dashboard {
       const key = `${traces[i].step}|${traces[i].toolUsed}`
       const prev = seen.get(key)
       if (prev !== undefined && i - prev <= 5) {
-        anomalies.push({
-          type: "loop",
-          description: `Repeating pattern: ${traces[i].toolUsed} at index ${prev} and ${i}`,
-          detectedAt: traces[i].timestamp,
-          tool: traces[i].toolUsed,
-          count: 2,
-        })
+        const aKey = `loop|${key}`
+        if (!anomaliesMap.has(aKey)) {
+          anomaliesMap.set(aKey, {
+            type: "loop",
+            description: `Repeating pattern: ${traces[i].toolUsed} at index ${prev} and ${i}`,
+            detectedAt: traces[i].timestamp,
+            tool: traces[i].toolUsed,
+            count: 2,
+            severity: "warning",
+          })
+        }
         break
       }
       seen.set(key, i)
-      // Evict old entries to keep map bounded
       if (seen.size > maxLookback * 2) {
         for (const [k] of seen) { seen.delete(k); break }
       }
     }
 
-    // Silent failures (false success claims with failed verify — match by stepId)
+    // Silent failures — regex match step prefix
+    const verifyRe = /^verify:/i
+    const executeOnlyRe = /^execute:/i
     const verifyFailures = new Map<string, string>()
     for (const t of traces) {
-      const prefix = "verify:"
-      if (t.step.startsWith(prefix) && !t.success) {
-        verifyFailures.set(t.step.slice(prefix.length), t.timestamp)
+      if (verifyRe.test(t.step) && !t.success) {
+        verifyFailures.set(t.step.replace(verifyRe, ""), t.timestamp)
       }
     }
     for (const t of traces) {
-      const prefix = "execute:"
-      if (t.step.startsWith(prefix) && t.success) {
-        const stepId = t.step.slice(prefix.length)
+      if (executeOnlyRe.test(t.step) && t.success) {
+        const stepId = t.step.replace(executeOnlyRe, "")
         const failedAt = verifyFailures.get(stepId)
         if (failedAt) {
-          anomalies.push({
-            type: "silent_failure",
-            description: `Step "${stepId}" reported success but verification had failed`,
-            detectedAt: t.timestamp,
-            tool: t.toolUsed,
-          })
+          const key = `silent_failure|${stepId}`
+          if (!anomaliesMap.has(key)) {
+            anomaliesMap.set(key, {
+              type: "silent_failure",
+              description: `Step "${stepId}" reported success but verification had failed`,
+              detectedAt: t.timestamp,
+              tool: t.toolUsed,
+              severity: "critical",
+            })
+          }
         }
       }
     }
 
-    return anomalies
+    return [...anomaliesMap.values()]
   }
 }

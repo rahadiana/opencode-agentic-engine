@@ -1,124 +1,69 @@
-/**
- * PatternDiscovery — cross-session pattern analysis for self-evolving agents.
- *
- * Analyzes episodic memory, error history, file changes, and skill usage
- * across sessions to identify recurring issues, systemic improvements,
- * and actionable recommendations.
- *
- * Aligns with the paper's vision of agents that learn from collective
- * experience rather than operating in isolation.
- */
-
 import type { Episode } from "../memory/episodic-store.js"
 import type { StepResult } from "../evolution/continuous-evolution.js"
 
-// ── Interfaces ──
-
 export interface ErrorPattern {
-  /** Error category (compile, type, import, test, runtime) */
   category: string
-  /** Number of distinct sessions where this error occurred */
   sessionCount: number
-  /** Total occurrences across all sessions */
   totalOccurrences: number
-  /** Percentage of sessions that experienced this error */
   sessionAffinity: number
-  /** Most recent occurrence timestamp */
   lastOccurrence: string
-  /** Actionable suggestion */
   suggestion: string
-  /** Example session IDs */
   sampleSessions: string[]
+  confidenceInterval?: { lower: number; upper: number }
 }
 
 export interface FilePattern {
-  /** File path (relative) */
   filePath: string
-  /** Number of sessions where this file was modified */
   sessionCount: number
-  /** Total modifications across sessions */
   totalChanges: number
-  /** Files frequently changed together with this one (co-change frequency) */
   coChangedFiles: Array<{ filePath: string; coOccurrences: number }>
-  /** Whether this file is a "hot spot" (frequently changed, high risk) */
   isHotSpot: boolean
-  /** Suggestion */
   suggestion: string
 }
 
 export interface SessionOutcomePattern {
-  /** Description of the pattern */
   description: string
-  /** Outcome statistics for sessions matching this pattern */
   outcomeStats: { total: number; success: number; partial: number; failed: number }
-  /** Number of sessions matching */
   matchingSessions: number
-  /** Success rate among matching sessions */
   successRate: number
-  /** Tags or characteristics common to these sessions */
   commonTags: string[]
-  /** Trend over time */
   trend: "improving" | "degrading" | "stable"
-  /** Actionable insight */
   insight: string
 }
 
 export interface SkillEffectiveness {
-  /** Skill name */
   skillName: string
-  /** Current success rate (0-1) */
   successRate: number
-  /** Usage count */
   usageCount: number
-  /** Success rate trend: recent 5 vs overall */
   recentTrend: "improving" | "degrading" | "stable" | "insufficient_data"
-  /** Whether this skill should be reviewed or promoted */
   status: "healthy" | "needs_review" | "underperforming" | "highly_effective"
-  /** Suggestion */
   suggestion: string
 }
 
 export interface Recommendation {
-  /** Priority level */
   priority: "high" | "medium" | "low"
-  /** Category of recommendation */
   category: "error_prevention" | "architecture" | "testing" | "process" | "skill" | "infrastructure"
-  /** Human-readable description */
   description: string
-  /** Concrete action to take */
   action: string
-  /** Number of sessions affected by this issue */
   affectedSessions: number
 }
 
 export interface PatternReport {
-  /** When the analysis was generated */
   timestamp: string
-  /** Number of sessions analyzed */
   totalSessions: number
-  /** Error patterns found */
   errorPatterns: ErrorPattern[]
-  /** File change patterns found */
   filePatterns: FilePattern[]
-  /** Session outcome patterns found */
   sessionPatterns: SessionOutcomePattern[]
-  /** Skill effectiveness analysis */
   skillEffectiveness: SkillEffectiveness[]
-  /** Actionable recommendations */
   recommendations: Recommendation[]
 }
 
-// ── PatternDiscovery Class ──
+const TOP_N_FILES = 200
 
 export class PatternDiscovery {
-  /**
-   * Generate a comprehensive pattern report from session data.
-   *
-   * @param episodes All recorded episodes (cross-session memory)
-   * @param stepResults Step execution results (from ContinuousEvolution)
-   * @param skills Known skills with usage stats
-   * @param options Analysis options
-   */
+  private processedSessionIds = new Set<string>()
+  private errorFixMemory = new Map<string, { suggestion: string; successCount: number }>()
+
   analyze(
     episodes: Episode[],
     stepResults: StepResult[] = [],
@@ -142,6 +87,10 @@ export class PatternDiscovery {
       sessionIds,
     })
 
+    for (const sid of sessionIds) {
+      this.processedSessionIds.add(sid)
+    }
+
     return {
       timestamp: new Date().toISOString(),
       totalSessions: sessionIds.length,
@@ -161,7 +110,6 @@ export class PatternDiscovery {
     sessionIds: string[],
     minSessions: number,
   ): ErrorPattern[] {
-    // Collect error categories from step results
     const errorByCategory = new Map<string, {
       sessions: Set<string>
       count: number
@@ -181,10 +129,24 @@ export class PatternDiscovery {
       if (r.timestamp > entry.lastTimestamp) entry.lastTimestamp = r.timestamp
     }
 
-    // Also infer errors from failed episodes
     for (const ep of episodes) {
-      if (ep.outcome === "failed" || ep.outcome === "partial") {
-        // Try to extract error category from plan goal
+      if (ep.outcome !== "failed" && ep.outcome !== "partial") continue
+
+      const relevantStepResults = stepResults.filter(sr => sr.sessionId === ep.sessionId && !sr.success)
+
+      if (relevantStepResults.length > 0) {
+        for (const sr of relevantStepResults) {
+          const cat = sr.category ?? "unknown"
+          let entry = errorByCategory.get(cat)
+          if (!entry) {
+            entry = { sessions: new Set(), count: 0, lastTimestamp: 0 }
+            errorByCategory.set(cat, entry)
+          }
+          entry.sessions.add(sr.sessionId)
+          entry.count++
+          if (sr.timestamp > entry.lastTimestamp) entry.lastTimestamp = sr.timestamp
+        }
+      } else {
         const goal = ep.planGoal.toLowerCase()
         const inferredCat = this.inferCategory(goal)
         if (inferredCat) {
@@ -205,18 +167,24 @@ export class PatternDiscovery {
     for (const [category, data] of errorByCategory) {
       if (data.sessions.size < minSessions) continue
 
+      const pValue = this.computeConfidenceInterval(data.sessions.size, totalSessions)
+      const affinity = totalSessions > 0 ? data.sessions.size / totalSessions : 0
+
       patterns.push({
         category,
         sessionCount: data.sessions.size,
         totalOccurrences: data.count,
-        sessionAffinity: totalSessions > 0 ? data.sessions.size / totalSessions : 0,
+        sessionAffinity: affinity,
         lastOccurrence: data.lastTimestamp > 0 ? new Date(data.lastTimestamp).toISOString() : new Date().toISOString(),
-        suggestion: this.suggestErrorFix(category),
+        suggestion: this.suggestErrorFix(category, affinity),
         sampleSessions: [...data.sessions].slice(0, 3),
+        confidenceInterval: {
+          lower: Math.max(0, affinity - pValue),
+          upper: Math.min(1, affinity + pValue),
+        },
       })
     }
 
-    // Sort by session count descending
     patterns.sort((a, b) => b.sessionCount - a.sessionCount)
     return patterns
   }
@@ -228,28 +196,35 @@ export class PatternDiscovery {
     sessionIds: string[],
     hotSpotThreshold: number,
   ): FilePattern[] {
-    // Track file changes per session
-    const fileSessions = new Map<string, Set<string>>()  // filePath → Set<sessionId>
-    const fileChanges = new Map<string, number>()  // filePath → total changes
-    const coChangeMatrix = new Map<string, Map<string, number>>()  // filePath → { coFile → count }
+    const fileSessions = new Map<string, Set<string>>()
+    const fileChanges = new Map<string, number>()
+    const coChangeMatrix = new Map<string, Map<string, number>>()
 
+    const changeFreq = new Map<string, number>()
     for (const ep of episodes) {
       const files = ep.filesChanged ?? []
+      for (const f of files) {
+        changeFreq.set(f, (changeFreq.get(f) ?? 0) + 1)
+      }
+    }
+    const topFiles = new Set([...changeFreq.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, TOP_N_FILES)
+      .map(([f]) => f))
+
+    for (const ep of episodes) {
+      const files = (ep.filesChanged ?? []).filter(f => topFiles.has(f))
       if (files.length === 0) continue
 
       for (const file of files) {
-        // Track sessions per file
         let sessions = fileSessions.get(file)
         if (!sessions) {
           sessions = new Set()
           fileSessions.set(file, sessions)
         }
         sessions.add(ep.sessionId)
-
-        // Track total changes
         fileChanges.set(file, (fileChanges.get(file) ?? 0) + 1)
 
-        // Track co-changes
         for (const other of files) {
           if (other === file) continue
           let matrix = coChangeMatrix.get(file)
@@ -266,7 +241,7 @@ export class PatternDiscovery {
     const patterns: FilePattern[] = []
 
     for (const [filePath, sessions] of fileSessions) {
-      if (sessions.size < 2) continue  // skip files changed in only 1 session
+      if (sessions.size < 2) continue
 
       const coChanged: Array<{ filePath: string; coOccurrences: number }> = []
       const matrix = coChangeMatrix.get(filePath)
@@ -283,13 +258,12 @@ export class PatternDiscovery {
         filePath,
         sessionCount: sessions.size,
         totalChanges,
-        coChangedFiles: coChanged.slice(0, 5),  // top 5 co-changed
+        coChangedFiles: coChanged.slice(0, 5),
         isHotSpot: sessions.size >= hotSpotThreshold,
         suggestion: this.suggestFileAction(filePath, sessions.size, totalSessions, coChanged.length),
       })
     }
 
-    // Sort: hot spots first, then by session count
     patterns.sort((a, b) => {
       if (a.isHotSpot && !b.isHotSpot) return -1
       if (!a.isHotSpot && b.isHotSpot) return 1
@@ -307,9 +281,8 @@ export class PatternDiscovery {
   ): SessionOutcomePattern[] {
     const patterns: SessionOutcomePattern[] = []
 
-    if (sessionIds.length < 3) return patterns
+    if (sessionIds.length < 2) return patterns
 
-    // Pattern 1: Sessions with many file changes tend to fail more
     const highChangeSessions = episodes.filter(e =>
       (e.filesChanged?.length ?? 0) >= 5 && sessionIds.includes(e.sessionId)
     )
@@ -322,14 +295,13 @@ export class PatternDiscovery {
         matchingSessions: highChangeSessions.length,
         successRate,
         commonTags: ["high-churn", "large-change"],
-        trend: this.computeTrend(highChangeSessions),
+        trend: this.computeTrendEWMA(highChangeSessions),
         insight: successRate < 0.6
           ? "Large changes tend to fail. Consider breaking into smaller, independent steps."
           : "Large changes are handled well. Keep current decomposition strategy.",
       })
     }
 
-    // Pattern 2: Sessions with specific tags
     const tagGroups = this.groupByTags(episodes, sessionIds)
     for (const [tag, tagEpisodes] of tagGroups) {
       if (tagEpisodes.length < 2) continue
@@ -341,14 +313,13 @@ export class PatternDiscovery {
         matchingSessions: tagEpisodes.length,
         successRate,
         commonTags: [tag],
-        trend: this.computeTrend(tagEpisodes),
+        trend: this.computeTrendEWMA(tagEpisodes),
         insight: successRate < 0.5
           ? `Tasks involving "${tag}" frequently fail. Consider adding targeted verification or pre-checks.`
           : `Tasks involving "${tag}" perform well. Consider extracting as a reusable pattern.`,
       })
     }
 
-    // Pattern 3: Sessions with "refactor" or "migration" in goal
     const refactorSessions = episodes.filter(e =>
       (e.planGoal.toLowerCase().includes("refactor") ||
        e.planGoal.toLowerCase().includes("migrate") ||
@@ -363,7 +334,7 @@ export class PatternDiscovery {
         matchingSessions: refactorSessions.length,
         successRate: outcomes.total > 0 ? outcomes.success / outcomes.total : 0,
         commonTags: ["refactor", "migration"],
-        trend: this.computeTrend(refactorSessions),
+        trend: this.computeTrendEWMA(refactorSessions),
         insight: "Refactoring tasks benefit from pre-change baseline tests and incremental commits.",
       })
     }
@@ -377,7 +348,6 @@ export class PatternDiscovery {
     skills: Array<{ name: string; successRate: number; usageCount: number }>,
   ): SkillEffectiveness[] {
     return skills.map(skill => {
-      // Determine status based on success rate and usage
       let status: SkillEffectiveness["status"]
       let suggestion: string
 
@@ -398,7 +368,6 @@ export class PatternDiscovery {
         suggestion = `Success rate is critically low (${(skill.successRate * 100).toFixed(0)}%). Consider retiring and replacing with a more reliable pattern.`
       }
 
-      // Determine recent trend based on mock data or mark as insufficient
       const recentTrend: SkillEffectiveness["recentTrend"] =
         skill.usageCount < 3 ? "insufficient_data" : skill.successRate >= 0.8 ? "improving" : skill.successRate >= 0.5 ? "stable" : "degrading"
 
@@ -425,7 +394,6 @@ export class PatternDiscovery {
   }): Recommendation[] {
     const recs: Recommendation[] = []
 
-    // Error-based recommendations
     for (const ep of context.errorPatterns) {
       if (ep.sessionAffinity >= 0.5) {
         recs.push({
@@ -446,7 +414,6 @@ export class PatternDiscovery {
       }
     }
 
-    // File hotspot recommendations
     for (const fp of context.filePatterns) {
       if (fp.isHotSpot && fp.coChangedFiles.length >= 3) {
         recs.push({
@@ -459,7 +426,6 @@ export class PatternDiscovery {
       }
     }
 
-    // Session outcome recommendations
     for (const sp of context.sessionPatterns) {
       if (sp.successRate < 0.5 && sp.matchingSessions >= 2) {
         recs.push({
@@ -472,7 +438,6 @@ export class PatternDiscovery {
       }
     }
 
-    // Skill recommendations
     for (const sk of context.skillEffectiveness) {
       if (sk.status === "underperforming") {
         recs.push({
@@ -493,7 +458,6 @@ export class PatternDiscovery {
       }
     }
 
-    // Global observations
     if (context.sessionIds.length >= 3) {
       const recentEps = [...context.episodes]
         .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
@@ -512,7 +476,6 @@ export class PatternDiscovery {
       }
     }
 
-    // Sort by priority
     const priorityOrder = { high: 0, medium: 1, low: 2 }
     recs.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority])
 
@@ -523,15 +486,25 @@ export class PatternDiscovery {
 
   private inferCategory(text: string): string | null {
     const lower = text.toLowerCase()
-    if (lower.includes("import") || lower.includes("module") || lower.includes("require") || lower.includes("not found")) return "import"
-    if (lower.includes("type") || lower.includes("assignable") || lower.includes("interface")) return "type"
-    if (lower.includes("compile") || lower.includes("syntax") || lower.includes("build") || lower.includes("tsc")) return "compile"
-    if (lower.includes("test") || lower.includes("spec") || lower.includes("assert") || lower.includes("expect")) return "test"
-    if (lower.includes("runtime") || lower.includes("undefined") || lower.includes("null") || lower.includes("error") || lower.includes("exception")) return "runtime"
+    if (/\b(import|module|require|resolve)\b/.test(lower)) return "import"
+    if (/\b(type|interface|generic|typeof)\b/.test(lower)) return "type"
+    if (/\b(compile|build|syntax|parse)\b/.test(lower)) return "compile"
+    if (/\b(test|spec|assert|expect|mock)\b/.test(lower)) return "test"
+    if (/\b(runtime|error|crash|undefined|null)\b/.test(lower)) return "runtime"
     return null
   }
 
-  private suggestErrorFix(category: string): string {
+  private suggestErrorFix(category: string, affinity?: number): string {
+    const memKey = `${category}:${affinity ? Math.round(affinity * 10) : "default"}`
+    const mem = this.errorFixMemory.get(memKey)
+
+    const suggestion = this.buildErrorSuggestion(category)
+    this.errorFixMemory.set(memKey, { suggestion, successCount: (mem?.successCount ?? 0) + 1 })
+
+    return mem?.suggestion ?? suggestion
+  }
+
+  private buildErrorSuggestion(category: string): string {
     const suggestions: Record<string, string> = {
       import: "Add import path verification before execution. Check module existence and export names.",
       type: "Run TypeScript type-checker before implementation. Ensure interfaces match between modules.",
@@ -566,7 +539,8 @@ export class PatternDiscovery {
     const groups = new Map<string, Episode[]>()
     for (const ep of episodes) {
       if (!sessionIds.includes(ep.sessionId)) continue
-      for (const tag of ep.tags) {
+      const tags = ep.tags ?? []
+      for (const tag of tags) {
         let group = groups.get(tag)
         if (!group) {
           group = []
@@ -578,19 +552,28 @@ export class PatternDiscovery {
     return groups
   }
 
-  private computeTrend(episodes: Episode[]): "improving" | "degrading" | "stable" {
+  private computeTrendEWMA(episodes: Episode[]): "improving" | "degrading" | "stable" {
     if (episodes.length < 4) return "stable"
 
     const sorted = [...episodes].sort((a, b) => a.timestamp.localeCompare(b.timestamp))
-    const mid = Math.floor(sorted.length / 2)
-    const firstHalf = sorted.slice(0, mid)
-    const secondHalf = sorted.slice(mid)
+    const alpha = 0.3
+    let ema = sorted[0].outcome === "success" ? 1 : 0
 
-    const firstSuccess = firstHalf.filter(e => e.outcome === "success").length / firstHalf.length
-    const secondSuccess = secondHalf.filter(e => e.outcome === "success").length / secondHalf.length
+    for (let i = 1; i < sorted.length; i++) {
+      const val = sorted[i].outcome === "success" ? 1 : 0
+      ema = alpha * val + (1 - alpha) * ema
+    }
 
-    if (secondSuccess > firstSuccess + 0.1) return "improving"
-    if (secondSuccess < firstSuccess - 0.1) return "degrading"
+    if (ema > 0.65) return "improving"
+    if (ema < 0.35) return "degrading"
     return "stable"
+  }
+
+  private computeConfidenceInterval(sampleSize: number, populationSize: number): number {
+    if (populationSize === 0) return 0
+    const p = sampleSize / populationSize
+    const z = 1.96
+    const se = Math.sqrt((p * (1 - p)) / populationSize)
+    return z * se
   }
 }

@@ -382,32 +382,37 @@ export class ConfigLoader {
     try {
       this.watcher = watch(this.configPath, (eventType) => {
         if (eventType === "change") {
+          try {
+            this.load()
+            for (const listener of this.listeners) {
+              listener(this.config)
+            }
+          } catch (e) {
+            this.stopWatch()
+            console.error(`[ConfigLoader] Config watcher error, stopped:`, e)
+          }
+        }
+      })
+      // Polling only as fallback if fs.watch is not available (e.g., some NFS)
+      if (this.watcher) return
+    } catch {
+      // fs.watch failed — use polling fallback instead
+    }
+
+    // fs.watch not available, use polling
+    this.lastModified = Date.now()
+    this.watchInterval = setInterval(() => {
+      try {
+        const stat = statSync(this.configPath)
+        if (stat.mtimeMs > this.lastModified) {
+          this.lastModified = stat.mtimeMs
           this.load()
           for (const listener of this.listeners) {
             listener(this.config)
           }
         }
-      })
-    } catch {
-      // fs.watch failed — use polling fallback instead
-    }
-
-    // Polling fallback: fs.watch is unreliable on some platforms (macOS, NFS)
-    // Only run if fs.watch didn't succeed
-    if (!this.watcher) {
-      this.watchInterval = setInterval(() => {
-        try {
-          const stat = statSync(this.configPath)
-          if (stat.mtimeMs > this.lastModified) {
-            this.lastModified = stat.mtimeMs
-            this.load()
-            for (const listener of this.listeners) {
-              listener(this.config)
-            }
-          }
-        } catch { /* config file may not exist yet */ }
-      }, 5000)
-    }
+      } catch { /* config file may not exist yet */ }
+    }, 5000)
   }
 
   /** Stop watching and clear all listeners */
@@ -443,14 +448,18 @@ export class ConfigLoader {
     return this.config.memory.mode
   }
 
-  /** Deep merge helper (simple version, no array merge) */
+  /** Deep merge helper (handles objects and arrays) */
   private mergeDeep<T extends Record<string, any>>(target: T, source: Partial<T>): T {
     const result = { ...target }
     for (const key of Object.keys(source) as Array<keyof T>) {
       const val = source[key]
-      if (val !== undefined && val !== null && typeof val === "object" && !Array.isArray(val)) {
+      if (val === undefined) continue
+      if (Array.isArray(val)) {
+        const existing = result[key]
+        result[key] = (Array.isArray(existing) ? [...existing, ...val] : [...val]) as T[keyof T]
+      } else if (val !== null && typeof val === "object") {
         result[key] = this.mergeDeep(result[key] as Record<string, any>, val as Record<string, any>) as T[keyof T]
-      } else if (val !== undefined) {
+      } else {
         result[key] = val as T[keyof T]
       }
     }

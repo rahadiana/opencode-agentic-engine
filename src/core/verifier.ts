@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
+import { readFile } from "node:fs/promises"
 import { resolve } from "node:path"
 import type { DomainRegistry } from "./domain-registry.js"
 import type { LLMEngine } from "./llm.js"
@@ -120,7 +121,7 @@ export class Verifier {
     for (const f of changedFiles) {
       const absPath = resolve(projectDir, f)
       try {
-        fileContents[f] = readFileSync(absPath, "utf-8")
+        fileContents[f] = await readFile(absPath, "utf-8")
       } catch { /* skip unreadable files */ }
     }
 
@@ -164,10 +165,11 @@ export class Verifier {
 
     const checks: CheckResult[] = []
 
-    // Compile: pake cache kalau file tidak berubah
     const filesChanged = changedFiles ?? []
-    const filesSame = filesChanged.length === this.lastCompileFiles.length &&
-      filesChanged.every((f, i) => f === this.lastCompileFiles[i])
+    const sortedChanged = [...filesChanged].sort()
+    const sortedLast = [...this.lastCompileFiles].sort()
+    const filesSame = sortedChanged.length === sortedLast.length &&
+      sortedChanged.every((f, i) => f === sortedLast[i])
 
     if (this.lastCompileResult && filesSame) {
       checks.push({
@@ -278,7 +280,28 @@ export class Verifier {
   verifyTests(projectDir: string, testPattern = ""): CheckResult {
     const lang = this.detectedLang === "unknown" ? this.detectLanguage(projectDir) : this.detectedLang
     const config = LANGUAGE_CONFIGS[lang] ?? LANGUAGE_CONFIGS.unknown
-    const { bin, args, timeout } = config.testCmd(projectDir, testPattern)
+
+    // Detect test runner from project config
+    let customConfig = config
+    if (lang === "typescript" || lang === "javascript") {
+      const pkgPath = resolve(projectDir, "package.json")
+      try {
+        const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"))
+        const scripts = (pkg.scripts as Record<string, string>) ?? {}
+        if (scripts.test) {
+          const testBin = scripts.test.startsWith("jest") ? "npx" : "npx"
+          const testArgs = scripts.test.startsWith("jest")
+            ? ["jest", ...(testPattern ? ["--", testPattern] : [])]
+            : ["vitest", "run", "--reporter", "verbose", ...(testPattern ? ["--", testPattern] : [])]
+          customConfig = {
+            ...config,
+            testCmd: () => ({ bin: testBin, args: testArgs, timeout: 60000 }),
+          }
+        }
+      } catch { /* use default */ }
+    }
+
+    const { bin, args, timeout } = customConfig.testCmd(projectDir, testPattern)
 
     try {
       const output = execFileSync(bin, args, {
@@ -335,7 +358,7 @@ export class Verifier {
     }
   }
 
-  verifyAll(stepId: string, projectDir: string): VerificationResult {
+  verifyAll(stepId: string, projectDir: string, testPattern?: string): VerificationResult {
     if (this.detectedLang === "unknown") this.detectLanguage(projectDir)
 
     const checks = [
@@ -344,7 +367,7 @@ export class Verifier {
     if (this.detectedLang !== "unknown") {
       checks.push(this.verifyLint(projectDir))
     }
-    checks.push(this.verifyTests(projectDir))
+    checks.push(this.verifyTests(projectDir, testPattern ?? ""))
 
     const errors = checks.filter(c => !c.passed).map(c => c.output)
 

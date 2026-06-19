@@ -19,6 +19,11 @@ export interface ExecutorSnapshot {
   stepStates: Map<string, { id: string; success: boolean }>
 }
 
+/**
+ * SessionStore — NOT thread-safe. All access must be from a single event loop.
+ * Uses in-memory Maps; modifications are not locked.
+ * Auto-persists to disk every 30s via enableAutoSave().
+ */
 export class SessionStore {
   private sessions = new Map<string, SessionState>()
   private executorSnapshots = new Map<string, ExecutorSnapshot>()
@@ -29,6 +34,7 @@ export class SessionStore {
   private persistLayer?: import("./persistence.js").PersistenceLayer
   private persistNs = "sessions"
   private persistInterval?: ReturnType<typeof setInterval>
+  private pruneInterval?: ReturnType<typeof setInterval>
 
   /** Enable auto-save to disk every 30s */
   enableAutoSave(layer: import("./persistence.js").PersistenceLayer, namespace = "sessions"): void {
@@ -37,12 +43,20 @@ export class SessionStore {
     if (this.persistInterval) clearInterval(this.persistInterval)
     this.persistInterval = setInterval(() => this.persistAll(), 30000)
     this.persistInterval.unref()
+    // Also prune every 60s with batch limit
+    if (this.pruneInterval) clearInterval(this.pruneInterval)
+    this.pruneInterval = setInterval(() => this.pruneExpiredBatched(), 60000)
+    this.pruneInterval.unref()
   }
 
   disableAutoSave(): void {
     if (this.persistInterval) {
       clearInterval(this.persistInterval)
       this.persistInterval = undefined
+    }
+    if (this.pruneInterval) {
+      clearInterval(this.pruneInterval)
+      this.pruneInterval = undefined
     }
   }
 
@@ -101,12 +115,13 @@ export class SessionStore {
     this.forgetAfterDays = Math.max(0, days)
   }
 
-  /** Remove sessions that haven't been touched since TTL. */
-  pruneExpired(): number {
+  /** Batch-prune expired sessions with a limit per call. */
+  pruneExpiredBatched(batchSize = 50): number {
     if (this.forgetAfterDays <= 0) return 0
     const cutoff = Date.now() - this.forgetAfterDays * 24 * 60 * 60 * 1000
     let removed = 0
     for (const [id, session] of this.sessions) {
+      if (removed >= batchSize) break
       const lastTurn = session.turns[session.turns.length - 1]
       if (lastTurn && lastTurn.timestamp < cutoff) {
         this.removeSession(id)
@@ -138,10 +153,32 @@ export class SessionStore {
     session.turns.push(turn)
   }
 
+  private summarizeTurns(turns: ConversationTurn[]): string {
+    if (turns.length === 0) return ""
+    const roles = new Set(turns.map(t => t.role))
+    const lastUser = [...turns].reverse().find(t => t.role === "user")
+    const lastAssistant = [...turns].reverse().find(t => t.role === "assistant" || t.role === "tool")
+    let summary = `[${turns.length} turns; roles: ${[...roles].join(", ")}]`
+    if (lastUser) summary += ` last user: "${lastUser.content.slice(0, 100)}${lastUser.content.length > 100 ? "..." : ""}"`
+    if (lastAssistant) summary += ` last response: "${lastAssistant.content.slice(0, 100)}${lastAssistant.content.length > 100 ? "..." : ""}"`
+    return summary
+  }
+
   getContext(sessionId: string, maxTurns = 20): ConversationTurn[] {
     const session = this.sessions.get(sessionId)
     if (!session) return []
-    return session.turns.slice(-maxTurns)
+    const recent = session.turns.slice(-maxTurns)
+    if (session.turns.length > maxTurns) {
+      const older = session.turns.slice(0, session.turns.length - maxTurns)
+      const summary: ConversationTurn = {
+        role: "tool",
+        content: `[Summarized ${older.length} older turns] ${this.summarizeTurns(older)}`,
+        timestamp: older[0]?.timestamp ?? Date.now(),
+        metadata: { summarized: true, originalCount: older.length },
+      }
+      return [summary, ...recent]
+    }
+    return recent
   }
 
   getContextSummary(sessionId: string): string {

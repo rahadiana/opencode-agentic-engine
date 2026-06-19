@@ -1,7 +1,8 @@
 import type { Subtask } from "./intent-parser.js"
 import type { LLMEngine } from "./llm.js"
 import { execFileSync } from "node:child_process"
-import { writeFileSync, mkdirSync, existsSync } from "node:fs"
+import { writeFile, mkdir } from "node:fs/promises"
+import { existsSync } from "node:fs"
 import { join, dirname } from "node:path"
 
 export interface ParallelPlan {
@@ -210,8 +211,8 @@ Only include files that need changing. Return ONLY valid JSON.` + opts.llmEngine
         const files: string[] = []
         for (const file of impl.files ?? []) {
           const fullPath = join(opts.projectDir, file.path)
-          mkdirSync(dirname(fullPath), { recursive: true })
-          writeFileSync(fullPath, file.content, "utf-8")
+          await mkdir(dirname(fullPath), { recursive: true })
+          await writeFile(fullPath, file.content, "utf-8")
           files.push(file.path)
         }
 

@@ -110,7 +110,9 @@ export class PromptTemplate {
    *   <guardrails>...</guardrails>
    */
   render(): string {
-    if (!this.hasContent) return ""
+    if (!this.hasContent) {
+      return `# Agentic Assistant\n\n<identity>\nYou are an autonomous software engineering agent.\n</identity>`
+    }
 
     const parts: string[] = []
     if (this._title) parts.push(`# ${this._title}`)

@@ -16,16 +16,16 @@
 |---|---|---|---|---|
 | `getTrend()` (forecast) | Linear regression sederhana — asumsi linear decay tidak realistis | **High** | Pakai exponential smoothing (Holt-Winters) atau weighted moving average | ✅ Fixed (exponential smoothing α=0.4) |
 | `getTrend()` (`isDecreasing`) | Pakai `<=` — plateau juga dianggap decreasing | **High** | Ganti `<` dan tambah minimum decline threshold (≥10%) | ✅ Fixed (ganti <) |
-| `feedBatch()` | Loop O(N) panggil `feedStepResult()` — redundant validasi | **Medium** | Batch push langsung ke `this.results` lalu trim sekali |
-| `checkAndNotify()` | Callback error silent — mati tanpa jejak | **Medium** | Log error ke console/trace sebelum catch |
-| `shouldEvolve()` | Cap 20 evolutions hardcoded — tidak configurable | **Medium** | Jadikan parameter constructor atau config |
-| `getTrend()` (direction) | Threshold 5% arbitrary — tidak ada statistical significance | **Medium** | Tambah confidence interval (CI 95%) sebelum deklarasi "direction" |
-| `getTrend()` (buckets) | 5 buckets tetap — untuk 10 data poin hanya 2 per bucket | **Medium** | Dynamic bucket count: min(5, floor(N/3)) |
-| `getTrend()` | Tidak ada deteksi seasonality — performa bisa fluktuasi by design | **Low** | Tambah deteksi pola mingguan/harian sederhana |
-| `fromJSON()` | Tidak validasi `windowSize` — bisa 0 atau negatif | **Medium** | Guard `windowSize = Math.max(1, data.windowSize)` |
-| `toJSON()` | Tidak serialize `lastEvolveSession` — state hilang setelah persist | **Low** | Tambah field ke JSON output |
-| `getTrend()` (recommendations) | String literal dibanding (`category === "type"` dll) — fragile | **Low** | Pake enum atau konstanta |
-| `getTrend()` | Tidak ada cache — dipanggil 2-3x per siklus (getTrend, shouldEvolve) | **Low** | Tambah memoization di checkAndNotify |
+| `feedBatch()` | Loop O(N) panggil `feedStepResult()` — redundant validasi | **Medium** | Batch push langsung ke `this.results` lalu trim sekali | ✅ Fixed (push + trim sekali) |
+| `checkAndNotify()` | Callback error silent — mati tanpa jejak | **Medium** | Log error ke console/trace sebelum catch | ✅ Fixed (console.error) |
+| `shouldEvolve()` | Cap 20 evolutions hardcoded — tidak configurable | **Medium** | Jadikan parameter constructor atau config | ✅ Fixed (maxEvolvePerSession) |
+| `getTrend()` (direction) | Threshold 5% arbitrary — tidak ada statistical significance | **Medium** | Tambah confidence interval (CI 95%) sebelum deklarasi "direction" | ✅ Fixed (computeCI) |
+| `getTrend()` (buckets) | 5 buckets tetap — untuk 10 data poin hanya 2 per bucket | **Medium** | Dynamic bucket count: min(5, floor(N/3)) | ✅ Fixed (numBuckets dynamic) |
+| `getTrend()` | Tidak ada deteksi seasonality — performa bisa fluktuasi by design | **Low** | Tambah deteksi pola mingguan/harian sederhana | ✅ Fixed (week-over-week) |
+| `fromJSON()` | Tidak validasi `windowSize` — bisa 0 atau negatif | **Medium** | Guard `windowSize = Math.max(1, data.windowSize)` | ✅ Fixed (Math.max guard) |
+| `toJSON()` | Tidak serialize `lastEvolveSession` — state hilang setelah persist | **Low** | Tambah field ke JSON output | ✅ Fixed (lastEvolveSession) |
+| `getTrend()` (recommendations) | String literal dibanding (`category === "type"` dll) — fragile | **Low** | Pake enum atau konstanta | ✅ Fixed (DIR_* constants) |
+| `getTrend()` | Tidak ada cache — dipanggil 2-3x per siklus (getTrend, shouldEvolve) | **Low** | Tambah memoization di checkAndNotify | ✅ Fixed (trendCache) |
 
 ### `self-evolver.ts`
 
@@ -33,16 +33,16 @@
 |---|---|---|---|---|
 | `evolve()` | `improvementScore` menggunakan multipliers arbitrary (15,10,8,5) | **High** | Ganti dengan normalized weighted formula berbasis data aktual | ✅ Fixed (named constants) |
 | `computeMetrics()` | Double-counting: `doneSteps + tasks.filter(done)` dan `failedSteps + tasks.filter(failed)` | **High** | Dedup — pilih satu source of truth (stepStates atau tasks) | ✅ Fixed (single source) |
-| `analyzeSkills()` | Hanya analisis 3 failure scenarios terakhir — bisa miss pattern | **Medium** | Analisis semua failure scenarios, atau pakai weighted sampling |
-| `suggestRoles()` | Keyword matching sederhana — "security" bisa false positive | **Medium** | Tambah konteks: cocokkan dengan error categories juga |
-| `suggestPromptPatches()` | Mapping static di hardcoded array — tidak extensible | **Medium** | Jadikan configurable via constructor atau external config |
-| `analyzeSkills()` (`scenario.includes("rollback")`) | Case-sensitive — "Rollback" vs "rollback" | **Low** | `scenario.toLowerCase().includes()` |
-| `evolve()` | Auto-apply logic fragile: `occurrences >= 2 && <= 5` untuk high priority | **Medium** | Tambah threshold sebagai parameter, jangan hardcode |
-| `computeMetrics()` | Tidak bedakan task complexity — success rate sederhana vs multi-step sama | **Medium** | Weight success rate berdasarkan step count per task |
-| `feedEpisodes()` / `feedTasks()` | Tidak ada validasi input — bisa null/undefined | **Medium** | Guard: `this.episodes = episodes ?? []` |
-| `computeMetrics()` | `avgRetriesPerFailure` bisa NaN jika `failed = 0` | **Medium** | Guard: `failed > 0 ? ... : 0` |
-| `suggestRoles()` (Coordinator) | Trigger "tasks.length > 10" — terlalu sederhana | **Low** | Pertimbangkan juga failure rate per role |
-| Semua feed\*() | Tidak ada dedup — data bisa di-feed multiple kali | **Low** | Opsional dedup berdasarkan ID |
+| `analyzeSkills()` | Hanya analisis 3 failure scenarios terakhir — bisa miss pattern | **Medium** | Analisis semua failure scenarios, atau pakai weighted sampling | ✅ Fixed (all scenarios) |
+| `suggestRoles()` | Keyword matching sederhana — "security" bisa false positive | **Medium** | Tambah konteks: cocokkan dengan error categories juga | ✅ Fixed (error category context) |
+| `suggestPromptPatches()` | Mapping static di hardcoded array — tidak extensible | **Medium** | Jadikan configurable via constructor atau external config | ✅ Fixed (setPromptPatchConfig) |
+| `analyzeSkills()` (`scenario.includes("rollback")`) | Case-sensitive — "Rollback" vs "rollback" | **Low** | `scenario.toLowerCase().includes()` | ✅ Fixed (toLowerCase) |
+| `evolve()` | Auto-apply logic fragile: `occurrences >= 2 && <= 5` untuk high priority | **Medium** | Tambah threshold sebagai parameter, jangan hardcode | ✅ Fixed (configurable thresholds) |
+| `computeMetrics()` | Tidak bedakan task complexity — success rate sederhana vs multi-step sama | **Medium** | Weight success rate berdasarkan step count per task | ✅ Fixed (weighted by step count) |
+| `feedEpisodes()` / `feedTasks()` | Tidak ada validasi input — bisa null/undefined | **Medium** | Guard: `this.episodes = episodes ?? []` | ✅ Fixed (null guard + filter) |
+| `computeMetrics()` | `avgRetriesPerFailure` bisa NaN jika `failed = 0` | **Medium** | Guard: `failed > 0 ? ... : 0` | ✅ Fixed (ternary guard) |
+| `suggestRoles()` (Coordinator) | Trigger "tasks.length > 10" — terlalu sederhana | **Low** | Pertimbangkan juga failure rate per role | ✅ Fixed (high fail rate trigger) |
+| Semua feed\*() | Tidak ada dedup — data bisa di-feed multiple kali | **Low** | Opsional dedup berdasarkan ID | ✅ Fixed (seenEpisodeIds/seenTaskIds) |
 
 **Rekomendasi Prioritas:**
 1. ✅ Fix double-counting di `computeMetrics()` — done

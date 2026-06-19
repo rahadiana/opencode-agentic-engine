@@ -29,30 +29,28 @@ const dsDetect = (input: string): number => {
   for (const kw of dsKeywords) {
     if (lower.includes(kw)) score += 0.05
   }
-  // Check for data science project files
+  const projectDir = process.cwd()
   const dsFiles = ["requirements.txt", "environment.yml", "Pipfile",
     "setup.py", "pyproject.toml",
   ]
   for (const f of dsFiles) {
-    try { if (existsSync(f)) score += 0.1 } catch { /* skip */ }
+    try { if (existsSync(resolve(projectDir, f))) score += 0.1 } catch { /* skip */ }
   }
-  // Check for jupyter notebooks
   try {
-    const files = readdirSync(".")
+    const files = readdirSync(projectDir).slice(0, 200)
     const notebooks = files.filter(f => f.endsWith(".ipynb"))
-    score += notebooks.length * 0.2
-    const pyFiles = files.filter(f => f.endsWith(".py"))
-    // If there are python files with data-science imports, boost score
+    score += Math.min(notebooks.length, 3) * 0.2
+    const pyFiles = files.filter(f => f.endsWith(".py")).slice(0, 10)
     for (const pf of pyFiles) {
       try {
-        const content = readFileSync(pf, "utf-8")
+        const content = readFileSync(resolve(projectDir, pf), "utf-8")
         const dsImports = ["pandas", "numpy", "sklearn", "tensorflow", "torch", "matplotlib", "seaborn"]
         for (const imp of dsImports) {
           if (content.includes(imp)) { score += 0.1; break }
         }
       } catch { /* skip */ }
     }
-  } catch { /* non-fatal */ }
+  } catch { /* skip */ }
   return Math.min(score, 1.0)
 }
 

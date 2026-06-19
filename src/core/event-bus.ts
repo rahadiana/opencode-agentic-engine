@@ -10,17 +10,19 @@ import type { AgenticEvent } from "./event-taxonomy.js"
 type EventHandler = (event: AgenticEvent) => void | Promise<void>
 
 export class EventBus {
-  private subscribers = new Map<string, Set<EventHandler>>()
+  private subscribers = new Map<string, Map<string, EventHandler>>()
   private history: AgenticEvent[] = []
   private maxHistory = 200
+  private subscriberIdCounter = 0
 
-  /** Subscribe ke satu event type */
+  /** Subscribe ke satu event type. Returns unsubscribe function. */
   on(type: string, handler: EventHandler): () => void {
     if (!this.subscribers.has(type)) {
-      this.subscribers.set(type, new Set())
+      this.subscribers.set(type, new Map())
     }
-    this.subscribers.get(type)!.add(handler)
-    return () => { this.subscribers.get(type)?.delete(handler) }
+    const id = `sub_${++this.subscriberIdCounter}`
+    this.subscribers.get(type)!.set(id, handler)
+    return () => { this.subscribers.get(type)?.delete(id) }
   }
 
   /** Subscribe ke semua event (wildcard) */
@@ -28,18 +30,16 @@ export class EventBus {
     return this.on("*", handler)
   }
 
-  /** Emit event — synchronous, non-blocking (tidak await Promise) */
+  /** Emit event — sequential but async-safe */
   emit(event: AgenticEvent): void {
-    // Record historia
     if (this.history.length >= this.maxHistory) {
       this.history.shift()
     }
     this.history.push(event)
 
-    // Panggil subscriber spesifik
-    const specific = this.subscribers.get(event.type)
-    if (specific) {
-      for (const handler of specific) {
+    const emitTo = (handlers: Map<string, EventHandler> | undefined) => {
+      if (!handlers) return
+      for (const [, handler] of handlers) {
         try {
           const result = handler(event)
           if (result instanceof Promise) {
@@ -51,20 +51,8 @@ export class EventBus {
       }
     }
 
-    // Panggil wildcard subscriber
-    const wildcard = this.subscribers.get("*")
-    if (wildcard) {
-      for (const handler of wildcard) {
-        try {
-          const result = handler(event)
-          if (result instanceof Promise) {
-            result.catch(e => console.error(`[EventBus] wildcard subscriber error:`, e))
-          }
-        } catch (e) {
-          console.error(`[EventBus] wildcard subscriber error:`, e)
-        }
-      }
-    }
+    emitTo(this.subscribers.get(event.type))
+    emitTo(this.subscribers.get("*"))
   }
 
   /** Dapatkan history event terbaru, filter by type */
@@ -88,5 +76,13 @@ export class EventBus {
       count += set.size
     }
     return count
+  }
+
+  /** Setel ulang max history */
+  setMaxHistory(max: number): void {
+    this.maxHistory = max
+    if (this.history.length > max) {
+      this.history = this.history.slice(-max)
+    }
   }
 }

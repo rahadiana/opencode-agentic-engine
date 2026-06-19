@@ -41,11 +41,19 @@ const STOP_WORDS = new Set([
 function tokenize(text: string): string[] {
   // Use Unicode property escapes (\p{L} = any letter, \p{N} = any number)
   // to support non-Latin scripts (Cyrillic, Arabic, CJK, etc.)
-  return text
+  const words = text
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .split(/\s+/)
     .filter(t => t.length > 1 && !STOP_WORDS.has(t))
+
+  // Add bigrams for n-gram support
+  const bigrams: string[] = []
+  for (let i = 0; i < words.length - 1; i++) {
+    bigrams.push(words[i] + "_" + words[i + 1])
+  }
+
+  return [...words, ...bigrams]
 }
 
 function computeTf(term: string, docTokens: string[]): number {
@@ -137,8 +145,13 @@ export class VectorStore {
 
     const catIndex = this.invertedIndex.get(entry.doc.category)
     if (catIndex) {
-      for (const [, postings] of catIndex) {
-        postings.delete(id)
+      // Only iterate tokens that belong to this document
+      for (const token of entry.tokens) {
+        const postings = catIndex.get(token)
+        if (postings) {
+          postings.delete(id)
+          if (postings.size === 0) catIndex.delete(token)
+        }
       }
     }
 
@@ -152,10 +165,17 @@ export class VectorStore {
 
   /**
    * Search within a category using TF-IDF scoring.
+   * If query is empty or all stop words, returns recent documents as fallback.
    */
   search(query: string, category: string, limit = 10): ScoredResult[] {
     const qTokens = tokenize(query)
-    if (qTokens.length === 0) return []
+    if (qTokens.length === 0) {
+      // Fallback to recent docs in this category
+      return [...this.docs.values()]
+        .filter(e => e.doc.category === category)
+        .slice(0, limit)
+        .map(({ doc }) => ({ doc, score: 0, matchFields: ["recent"] }))
+    }
 
     const catIndex = this.invertedIndex.get(category)
     if (!catIndex) return []
@@ -227,6 +247,14 @@ export class VectorStore {
       scores.set(docId, existing)
     }
 
+    // Length normalization: divide score by sqrt(doc token count)
+    for (const [docId, data] of scores) {
+      const entry = this.docs.get(docId)
+      if (entry) {
+        data.score = data.score / Math.sqrt(entry.tokens.length + 1)
+      }
+    }
+
     return [...scores.entries()]
       .sort((a, b) => b[1].score - a[1].score)
       .slice(0, limit)
@@ -241,11 +269,108 @@ export class VectorStore {
    * Search across all categories.
    */
   searchAll(query: string, limit = 10): ScoredResult[] {
+    const qTokens = tokenize(query)
     const results: ScoredResult[] = []
     for (const [category] of this.invertedIndex) {
-      results.push(...this.search(query, category, limit))
+      if (qTokens.length === 0) {
+        results.push(...this.search(query, category, limit))
+      } else {
+        // Tokenize once and pass pre-tokenized query
+        const catResults = this.searchWithTokens(qTokens, query, category, limit)
+        results.push(...catResults)
+      }
     }
     return results.sort((a, b) => b.score - a.score).slice(0, limit)
+  }
+
+  private searchWithTokens(qTokens: string[], query: string, category: string, limit: number): ScoredResult[] {
+    if (qTokens.length === 0) {
+      return [...this.docs.values()]
+        .filter(e => e.doc.category === category)
+        .slice(0, limit)
+        .map(({ doc }) => ({ doc, score: 0, matchFields: ["recent"] }))
+    }
+
+    const catIndex = this.invertedIndex.get(category)
+    if (!catIndex) return []
+
+    const n = this.docCount.get(category) ?? 0
+    if (n === 0) return []
+
+    const scores = new Map<string, { score: number; fields: Set<string> }>()
+
+    for (const qTerm of qTokens) {
+      const idf = Math.log10(1 + n / (1 + (catIndex.get(qTerm)?.size ?? 0)))
+      const postings = catIndex.get(qTerm)
+      if (!postings) continue
+      for (const docId of postings) {
+        const entry = this.docs.get(docId)
+        if (!entry) continue
+        const tf = computeTf(qTerm, entry.tokens)
+        const existing = scores.get(docId) ?? { score: 0, fields: new Set<string>() }
+        existing.score += tf * idf
+        existing.fields.add("content")
+        scores.set(docId, existing)
+      }
+    }
+
+    const matchedTitleIds = new Set<string>()
+    for (const qTerm of qTokens) {
+      const titleMatches = this.titleIndex.get(qTerm)
+      if (titleMatches) {
+        for (const docId of titleMatches) {
+          const entry = this.docs.get(docId)
+          if (!entry || entry.doc.category !== category) continue
+          matchedTitleIds.add(docId)
+        }
+      }
+    }
+    const qLower = query.toLowerCase()
+    for (const docId of matchedTitleIds) {
+      const entry = this.docs.get(docId)!
+      const titleLower = entry.doc.title.toLowerCase()
+      let bonus = 1.5
+      if (titleLower.includes(qLower)) bonus = 2.0
+      const existing = scores.get(docId) ?? { score: 0, fields: new Set<string>() }
+      existing.score += bonus
+      existing.fields.add("title")
+      scores.set(docId, existing)
+    }
+
+    const matchedKwIds = new Set<string>()
+    for (const qTerm of qTokens) {
+      for (const [kw, ids] of this.keywordIndex) {
+        if (kw.includes(qTerm)) {
+          for (const docId of ids) {
+            const entry = this.docs.get(docId)
+            if (!entry || entry.doc.category !== category) continue
+            matchedKwIds.add(docId)
+          }
+        }
+      }
+    }
+    for (const docId of matchedKwIds) {
+      const existing = scores.get(docId) ?? { score: 0, fields: new Set<string>() }
+      existing.score += 1.5
+      existing.fields.add("keyword")
+      scores.set(docId, existing)
+    }
+
+    for (const [docId, data] of scores) {
+      const entry = this.docs.get(docId)
+      if (entry) {
+        data.score = data.score / Math.sqrt(entry.tokens.length + 1)
+      }
+    }
+
+    return [...scores.entries()]
+      .sort((a, b) => b[1].score - a[1].score)
+      .slice(0, limit)
+      .map(([docId, { score, fields }]) => ({
+        doc: this.docs.get(docId)!.doc,
+        score,
+        matchFields: [...fields],
+      }))
   }
 
   /**

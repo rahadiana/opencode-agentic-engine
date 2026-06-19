@@ -27,7 +27,7 @@ const mobileDetect = (input: string): number => {
   for (const kw of mobileKeywords) {
     if (lower.includes(kw)) score += 0.06
   }
-  // Check for mobile project files
+  const projectDir = process.cwd()
   const mobileFiles = [
     "AndroidManifest.xml", "build.gradle", "build.gradle.kts",
     "Podfile", "Cartfile", "project.pbxproj",
@@ -35,7 +35,10 @@ const mobileDetect = (input: string): number => {
     "Info.plist", ".entitlements",
   ]
   for (const f of mobileFiles) {
-    try { if (existsSync(f)) score += 0.25 } catch { /* skip */ }
+    try {
+      const fullPath = resolve(projectDir, f)
+      if (existsSync(fullPath)) score += 0.25
+    } catch { /* skip */ }
   }
   return Math.min(score, 1.0)
 }

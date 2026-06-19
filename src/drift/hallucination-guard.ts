@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, realpathSync } from "node:fs"
 import { resolve, isAbsolute } from "node:path"
 
 export interface HallucinationCheck {
@@ -91,13 +91,28 @@ export class HallucinationGuard {
 
   private resolveSafe(claim: string): string | null {
     const normalized = claim.replace(/['"]/g, "")
+    let resolved: string
     if (isAbsolute(normalized)) {
       if (!normalized.startsWith(this.worktree)) return null
-      return normalized
+      resolved = normalized
+    } else {
+      resolved = resolve(this.worktree, normalized)
     }
-    const resolved = resolve(this.worktree, normalized)
     if (!resolved.startsWith(this.worktree)) return null
-    return resolved
+    try {
+      return realpathSync(resolved)
+    } catch {
+      return resolved
+    }
+  }
+
+  private findInFile(pattern: RegExp, absolutePath: string): boolean {
+    try {
+      const content = readFileSync(absolutePath, "utf-8")
+      return pattern.test(content)
+    } catch {
+      return false
+    }
   }
 
   private extractFileClaims(output: string): string[] {
@@ -123,7 +138,6 @@ export class HallucinationGuard {
 
     for (const match of output.matchAll(pattern)) {
       const funcName = match[1]
-      // Skip false positives like "file", "the", "a", "an"
       if (/^(?:file|the|a|an|this|that|some|new|our|their|my|your)$/i.test(funcName)) continue
       results.push({ function: funcName, file: match[2] })
     }
@@ -133,11 +147,17 @@ export class HallucinationGuard {
 
   private extractImportClaims(output: string): string[] {
     const files = new Set<string>()
-    const pattern = /(?:import|require)\s+.*?['"](.+?)['"]/g
+    const lines = output.split("\n")
 
-    for (const match of output.matchAll(pattern)) {
-      const imp = match[1]
-      if (imp && imp.length > 1) files.add(imp)
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed.startsWith("//") || trimmed.startsWith("#") || trimmed.startsWith("/*") || trimmed.startsWith("*")) continue
+
+      const pattern = /(?:import|require)\s+.*?['"](.+?)['"]/g
+      for (const match of trimmed.matchAll(pattern)) {
+        const imp = match[1]
+        if (imp && imp.length > 1) files.add(imp)
+      }
     }
 
     return [...files]
@@ -163,8 +183,6 @@ export class HallucinationGuard {
 
   private verifyApiSignature(methodName: string, relativePath: string, absolutePath: string): boolean {
     try {
-      const content = readFileSync(absolutePath, "utf-8")
-      // Escape regex special characters to prevent crash on method names like "foo(bar)"
       const escaped = methodName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
       const isPython = relativePath.endsWith(".py")
@@ -174,18 +192,18 @@ export class HallucinationGuard {
       if (isPython) {
         const defPattern = new RegExp(`def\\s+${escaped}\\s*\\(`)
         const classPattern = new RegExp(`class\\s+${escaped}\\s*[(:]`)
-        return defPattern.test(content) || classPattern.test(content)
+        return this.findInFile(defPattern, absolutePath) || this.findInFile(classPattern, absolutePath)
       }
 
       if (isGo) {
         const funcPattern = new RegExp(`func\\s+(?:\\(\\w+\\s+\\*?\\w+\\)\\s+)?${escaped}\\s*\\(`)
-        return funcPattern.test(content)
+        return this.findInFile(funcPattern, absolutePath)
       }
 
       if (isRust) {
         const fnPattern = new RegExp(`(?:pub\\s+)?fn\\s+${escaped}\\s*[<(]`)
         const implPattern = new RegExp(`impl\\s+.*\\{[^}]*fn\\s+${escaped}\\s*[<(]`)
-        return fnPattern.test(content) || implPattern.test(content)
+        return this.findInFile(fnPattern, absolutePath) || this.findInFile(implPattern, absolutePath)
       }
 
       const patterns = [
@@ -193,7 +211,7 @@ export class HallucinationGuard {
         new RegExp(`(?:^|\\n)\\s*(?:export\\s+(?:default\\s+)?)?(?:const|let|var)\\s+${escaped}\\s*[:=]\\s*(?:\\(|function|async)`),
         new RegExp(`(?:^|\\n)\\s*(?:export\\s+)?(?:async\\s+)?${escaped}\\s*\\(`),
       ]
-      return patterns.some(p => p.test(content))
+      return patterns.some(p => this.findInFile(p, absolutePath))
     } catch {
       return false
     }
@@ -201,15 +219,13 @@ export class HallucinationGuard {
 
   private functionExists(funcName: string, file: string, _knownFiles: string[]): boolean {
     try {
-      const content = readFileSync(file, "utf-8")
-      // Escape regex special characters to prevent crash on names like "$parse" or "get.value"
       const escaped = funcName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
       const patterns = [
         new RegExp(`(?:^|\\n)\\s*(?:export\\s+(?:default\\s+)?)?(?:async\\s+)?function\\s+${escaped}\\b`),
         new RegExp(`(?:^|\\n)\\s*(?:export\\s+(?:default\\s+)?)?(?:const|let|var)\\s+${escaped}\\s*[:=]\\s*(?:\\(|function|async)`),
         new RegExp(`(?:^|\\n)\\s*(?:export\\s+)?(?:async\\s+)?${escaped}\\s*\\(`),
       ]
-      return patterns.some(p => p.test(content))
+      return patterns.some(p => this.findInFile(p, file))
     } catch {
       return false
     }

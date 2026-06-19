@@ -174,26 +174,16 @@ export class DataCleaner {
     return { valid: true, issues: [] }
   }
 
-  private stripDebateMarkers(text: string): string {
-    const patterns = [
-      /^I\s+(agree|see|understand|noticed|think).*$/gim,
-      /^(Good|Great|Excellent|Perfect|Nice)\s+(point|catch|job|work).*$/gim,
-      /^You'?re\s+(right|correct|wrong|missing).*$/gim,
-      /^Let\s+me\s+(fix|revise|update|clarify|explain|add).*$/gim,
-      /^(Fixed|Updated|Revised|Added|Changed|Modified)\s+as\s+(requested|suggested).*$/gim,
-      /^I'?ve\s+(fixed|updated|revised|added|changed).*$/gim,
-      /^Here['']s\s+(my|the)\s+(revised|updated|fixed).*$/gim,
-      /^APPROVED:.*$/gim,
-      /^\d+[.)]\s+(In)?valid\s+(point|observation|critique).*$/gim,
-      /^Thank\s+(you|sir|ma'am).*$/gim,
-      /^You\s+make\s+a\s+good\s+point.*$/gim,
-    ]
+  private static readonly MAX_INPUT_LENGTH = 100_000
 
-    for (const pattern of patterns) {
-      text = text.replace(pattern, "")
+  private stripDebateMarkers(text: string): string {
+    if (text.length > DataCleaner.MAX_INPUT_LENGTH) {
+      text = text.slice(0, DataCleaner.MAX_INPUT_LENGTH)
     }
 
-    // Remove empty lines from removals
+    const combined = /^(?:I\s+(?:agree|see|understand|noticed|think)|(?:Good|Great|Excellent|Perfect|Nice)\s+(?:point|catch|job|work)|You'?re\s+(?:right|correct|wrong|missing)|Let\s+me\s+(?:fix|revise|update|clarify|explain|add)|(?:Fixed|Updated|Revised|Added|Changed|Modified)\s+as\s+(?:requested|suggested)|I'?ve\s+(?:fixed|updated|revised|added|changed)|Here['']s\s+(?:my|the)\s+(?:revised|updated|fixed)|APPROVED:.*|\d+[.)]\s+(?:In)?valid\s+(?:point|observation|critique)|Thank\s+(?:you|sir|ma'am)|You\s+make\s+a\s+good\s+point).*$/gim
+
+    text = text.replace(combined, "")
     text = text.replace(/\n{3,}/g, "\n\n")
 
     return text.trim()
@@ -203,7 +193,6 @@ export class DataCleaner {
     try {
       return JSON.parse(content)
     } catch {
-      // Try extracting from code fences
       const match = content.match(/```(?:json)?\s*\n?([\s\S]*?)\s*\n?```/)
       if (match) {
         try {

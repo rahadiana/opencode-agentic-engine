@@ -3854,10 +3854,10 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
 
               const { prepareFineTuningDataset } = await import("./memory/skill-training.js")
               const dataset = prepareFineTuningDataset(skills, episodes, format, minQuality)
-              const savedPath = saveTrainingDataToFile(dataset, outputPath)
+              const savedPath = await saveTrainingDataToFile(dataset, outputPath)
 
               return {
-                output: `✅ Dataset saved to \`${savedPath}\`\n**Examples:** ${dataset.totalExamples}\n**Format:** ${format}`,
+                output: `Dataset saved to \`${savedPath}\`\n**Examples:** ${dataset.totalExamples}\n**Format:** ${format}`,
               }
             }
 
@@ -4058,7 +4058,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
               if (dataset.totalExamples === 0) {
                 return { output: "Error: No training examples after filtering. Try lowering minQuality." }
               }
-              saveTrainingDataToFile(dataset, savePath)
+              await saveTrainingDataToFile(dataset, savePath)
 
               // Upload to OpenAI
               try {
@@ -4115,7 +4115,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
               const episodes = episodicStore?.getRecent(1000) ?? []
               const savePath = outputPath ?? ".agentic/fine-tuning-data.jsonl"
               const dataset = prepareFineTuningDataset(skills, episodes, "openai", minQuality)
-              saveTrainingDataToFile(dataset, savePath)
+              await saveTrainingDataToFile(dataset, savePath)
 
               try {
                 const result = await client.fullPipeline(savePath, {

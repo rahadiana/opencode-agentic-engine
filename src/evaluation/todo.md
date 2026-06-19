@@ -17,15 +17,15 @@
 | `computeErrorRecovery()` | Return `1` (sempurna) ketika tidak ada error — false positive | **High** | Return `null` atau `undefined` untuk "no data", jangan inflate score | ✅ Fixed (return 0) |
 | `computeContextStability()` | Return `1` ketika navigasi kosong — bias optimistis | **High** | Sama, bedakan "no data" vs "perfect score" | ✅ Fixed (return 0) |
 | `computeMultiAgent()` | Return `1` ketika delegasi kosong — melebih-lebihkan performa | **High** | Sama seperti di atas | ✅ Fixed (return 0) |
-| `computeSkillReuse()` | Return `0.5` (arbitrer) ketika tidak ada skill lookup — nilai tebakan | **Medium** | Return `null`, biarkan weighted sum menyesuaikan |
-| `computeScore()` | Tidak ada validasi weights total = 1.0 (saat ini benar, tapi rapuh) | **Low** | Normalisasi weights secara otomatis di `computeScore()` |
-| `computeScore()` | Tidak handle NaN/Infinity — bisa crash kalau ada edge-case | **Medium** | Guard `isNaN` / `isFinite` setelah kalkulasi |
-| `formatReport()` | Menggunakan emoji (`📊`, `✅`, `⚠️`, `❌`, `🔧`) — melanggar AGENTS.md | **Low** | Ganti dengan ASCII (`[OK]`, `[WARN]`, `[FAIL]`) |
-| `computeScore()` | Tidak ada `confidenceInterval` atau `standardDeviation` per dimensi | **Medium** | Tambah statistik dasar (mean, stddev dari sliding window) |
-| `feedStepResult()` | Tidak ada timestamp — tidak bisa time-series analysis | **Low** | Tambah field `timestamp` opsional |
-| `fromJSON()` | Tidak validasi data — silent corruption jika JSON rusak | **Medium** | Tambah Zod/io-ts schema validation |
-| `computeContextStability()` | Threshold ≤10 results sebagai "focused" — terlalu sederhana | **Low** | Jadikan configurable, atau gunakan relevansi score |
-| Semua compute\*() | Tidak ada session-scoping — data tercampur antar sesi | **Medium** | Filter berdasarkan sessionId waktu compute |
+| `computeSkillReuse()` | Return `0.5` (arbitrer) ketika tidak ada skill lookup — nilai tebakan | **Medium** | Return `null`, biarkan weighted sum menyesuaikan | ✅ Fixed (return 0) |
+| `computeScore()` | Tidak ada validasi weights total = 1.0 (saat ini benar, tapi rapuh) | **Low** | Normalisasi weights secara otomatis di `computeScore()` | ✅ Fixed (auto-normalize) |
+| `computeScore()` | Tidak handle NaN/Infinity — bisa crash kalau ada edge-case | **Medium** | Guard `isNaN` / `isFinite` setelah kalkulasi | ✅ Fixed (safeScore helper) |
+| `formatReport()` | Menggunakan emoji (`📊`, `✅`, `⚠️`, `❌`, `🔧`) — melanggar AGENTS.md | **Low** | Ganti dengan ASCII (`[OK]`, `[WARN]`, `[FAIL]`) | ✅ Fixed (ASCII) |
+| `computeScore()` | Tidak ada `confidenceInterval` atau `standardDeviation` per dimensi | **Medium** | Tambah statistik dasar (mean, stddev dari sliding window) | ✅ Fixed (computeCI) |
+| `feedStepResult()` | Tidak ada timestamp — tidak bisa time-series analysis | **Low** | Tambah field `timestamp` opsional | ✅ Fixed (Date.now()) |
+| `fromJSON()` | Tidak validasi data — silent corruption jika JSON rusak | **Medium** | Tambah Zod/io-ts schema validation | ✅ Fixed (schema check) |
+| `computeContextStability()` | Threshold ≤10 results sebagai "focused" — terlalu sederhana | **Low** | Jadikan configurable, atau gunakan relevansi score | ✅ Fixed (setStabilityThreshold) |
+| Semua compute\*() | Tidak ada session-scoping — data tercampur antar sesi | **Medium** | Filter berdasarkan sessionId waktu compute | ✅ Fixed (sessionID param) |
 
 **Rekomendasi Prioritas:**
 1. ✅ Fix false-positive returns (no data = null, bukan 1) — DONE: return 0 instead

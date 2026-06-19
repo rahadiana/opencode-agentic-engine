@@ -16,31 +16,29 @@ export class TechDebtScorer {
     const breakdown: DebtCategory[] = []
     let totalIssues = 0
 
-    // 1. Coupling analysis
+    const isCodeTask = /code|implement|build|fix|refactor|test|api|function|bug/i.test(_planGoal)
+
     const coupling = this.analyzeCoupling(filesChanged, fileContents)
     breakdown.push(coupling)
     totalIssues += coupling.issues.length
 
-    // 2. File size analysis
     const size = this.analyzeSize(filesChanged, fileContents)
     breakdown.push(size)
     totalIssues += size.issues.length
 
-    // 3. Change scope analysis
-    const scope = this.analyzeScope(filesChanged)
+    const scope = this.analyzeScope(filesChanged, isCodeTask)
     breakdown.push(scope)
     totalIssues += scope.issues.length
 
-    // 4. Pattern analysis
     const patterns = this.analyzePatterns(fileContents)
     breakdown.push(patterns)
     totalIssues += patterns.issues.length
 
-    const maxScore = Math.max(...breakdown.map(b => b.score))
+    const avgScore = breakdown.reduce((sum, b) => sum + b.score, 0) / breakdown.length
     let overall: DebtScore["overall"] = "low"
-    if (maxScore >= 8) overall = "critical"
-    else if (maxScore >= 6) overall = "high"
-    else if (maxScore >= 3) overall = "medium"
+    if (avgScore >= 8) overall = "critical"
+    else if (avgScore >= 6) overall = "high"
+    else if (avgScore >= 3) overall = "medium"
 
     const suggestion = this.generateSuggestion(overall, breakdown, totalIssues)
 
@@ -57,7 +55,7 @@ export class TechDebtScorer {
     }
 
     for (const [file, content] of contents) {
-      const importCount = (content.match(/^import\s/gm) || []).length
+      const importCount = (content.match(/^(?:import|const\s+\w+\s*=\s*require)\s/gm) || []).length
       if (importCount > 10) {
         issues.push(`${file} has ${importCount} imports — consider splitting`)
         score += 1
@@ -85,7 +83,7 @@ export class TechDebtScorer {
     return { category: "size", score: Math.min(score, 10), issues }
   }
 
-  private analyzeScope(filesChanged: string[]): DebtCategory {
+  private analyzeScope(filesChanged: string[], isCodeTask = true): DebtCategory {
     const issues: string[] = []
     let score = 0
 
@@ -95,10 +93,12 @@ export class TechDebtScorer {
       score += 2
     }
 
-    const hasTest = filesChanged.some(f => f.includes(".test.") || f.includes(".spec."))
-    if (!hasTest && filesChanged.length > 0) {
-      issues.push("No test files changed — add tests for new code")
-      score += 2
+    if (isCodeTask) {
+      const hasTest = filesChanged.some(f => f.includes(".test.") || f.includes(".spec."))
+      if (!hasTest && filesChanged.length > 0) {
+        issues.push("No test files changed — add tests for new code")
+        score += 2
+      }
     }
 
     return { category: "scope", score: Math.min(score, 10), issues }
@@ -109,16 +109,33 @@ export class TechDebtScorer {
     let score = 0
 
     for (const [file, content] of contents) {
-      // Match ': any' type annotation, not just the word "any" in strings/comments
-      if (/:\s*any\b/.test(content)) {
+      const lines = content.split("\n")
+      const codeRegex = /:\s*any\b/
+      const isComment = (line: string) => {
+        const trimmed = line.trim()
+        return trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")
+      }
+
+      let anyMatch = false
+      let todoCount = 0
+      let unknownAsCount = 0
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]
+        if (isComment(line)) continue
+        if (!anyMatch && codeRegex.test(line)) anyMatch = true
+        if (/\/\/\s*TODO/i.test(line)) todoCount++
+        if (line.includes("as unknown as") && !isComment(line)) unknownAsCount++
+      }
+
+      if (anyMatch) {
         issues.push(`${file} uses 'any' type — replace with specific types`)
         score += 2
       }
-      if ((content.match(/\/\/\s*TODO/g) || []).length > 2) {
-        issues.push(`${file} has multiple TODOs — address before merging`)
+      if (todoCount > 2) {
+        issues.push(`${file} has ${todoCount} TODOs — address before merging`)
         score += 1
       }
-      if (content.includes("as unknown as")) {
+      if (unknownAsCount > 0) {
         issues.push(`${file} uses 'as unknown as' cast — type-safety bypass`)
         score += 1
       }

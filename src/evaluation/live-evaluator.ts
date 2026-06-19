@@ -9,11 +9,18 @@
 //   multiAgent:   15% — % delegasi sukses
 //   skillReuse:   10% — skill ditemukan & dipakai ulang
 
+export interface LiveEvalConfidenceInterval {
+  mean: number
+  stddev: number
+  count: number
+}
+
 export interface LiveEvalDimension {
   score: number    // 0-1
   weight: number   // bobot kontribusi ke overall
   target: number   // target minimal (0-1)
   detail: string   // human-readable
+  confidenceInterval?: LiveEvalConfidenceInterval
 }
 
 export interface LiveEvalScore {
@@ -33,32 +40,37 @@ export interface LiveEvalScore {
 }
 
 export class LiveEvaluator {
-  private stepResults: Array<{ stepId: string; success: boolean; sessionId?: string }> = []
-  private errorRecoveries: Array<{ errorId: string; recovered: boolean }> = []
-  private navigations: Array<{ query: string; resultsCount: number; focused: boolean }> = []
-  private delegations: Array<{ taskId: string; role: string; success: boolean }> = []
-  private skillLookups: Array<{ found: boolean }> = []
+  private stepResults: Array<{ stepId: string; success: boolean; sessionId?: string; timestamp?: number }> = []
+  private errorRecoveries: Array<{ errorId: string; recovered: boolean; sessionId?: string }> = []
+  private navigations: Array<{ query: string; resultsCount: number; focused: boolean; sessionId?: string }> = []
+  private delegations: Array<{ taskId: string; role: string; success: boolean; sessionId?: string }> = []
+  private skillLookups: Array<{ found: boolean; sessionId?: string }> = []
+  private stabilityThreshold = 10
 
   // ── Feed methods ──
 
-  feedStepResult(step: { stepId: string; success: boolean; sessionId?: string }): void {
-    this.stepResults.push(step)
+  feedStepResult(step: { stepId: string; success: boolean; sessionId?: string; timestamp?: number }): void {
+    this.stepResults.push({ ...step, timestamp: step.timestamp ?? Date.now() })
   }
 
-  feedErrorRecovery(errorId: string, recovered: boolean): void {
-    this.errorRecoveries.push({ errorId, recovered })
+  setStabilityThreshold(threshold: number): void {
+    this.stabilityThreshold = Math.max(1, threshold)
   }
 
-  feedNavigation(query: string, resultsCount: number): void {
-    this.navigations.push({ query, resultsCount, focused: resultsCount > 0 && resultsCount <= 10 })
+  feedErrorRecovery(errorId: string, recovered: boolean, sessionId?: string): void {
+    this.errorRecoveries.push({ errorId, recovered, sessionId })
   }
 
-  feedDelegation(taskId: string, role: string, success: boolean): void {
-    this.delegations.push({ taskId, role, success })
+  feedNavigation(query: string, resultsCount: number, sessionId?: string): void {
+    this.navigations.push({ query, resultsCount, focused: resultsCount > 0 && resultsCount <= this.stabilityThreshold, sessionId })
   }
 
-  feedSkillLookup(found: boolean): void {
-    this.skillLookups.push({ found })
+  feedDelegation(taskId: string, role: string, success: boolean, sessionId?: string): void {
+    this.delegations.push({ taskId, role, success, sessionId })
+  }
+
+  feedSkillLookup(found: boolean, sessionId?: string): void {
+    this.skillLookups.push({ found, sessionId })
   }
 
   // ── Compute methods ──
@@ -67,10 +79,11 @@ export class LiveEvaluator {
    * Task success rate (SWE-bench style).
    * Berapa % step yang sukses dari total.
    */
-  computeTaskSuccess(): number {
-    const total = this.stepResults.length
+  computeTaskSuccess(sessionID?: string): number {
+    const results = sessionID ? this.stepResults.filter(s => s.sessionId === sessionID) : this.stepResults
+    const total = results.length
     if (total === 0) return 0
-    const successes = this.stepResults.filter(s => s.success).length
+    const successes = results.filter(s => s.success).length
     return successes / total
   }
 
@@ -78,10 +91,11 @@ export class LiveEvaluator {
    * Error recovery rate.
    * Berapa % error yang berhasil pulih (retry sukses setelah error).
    */
-  computeErrorRecovery(): number {
-    const total = this.errorRecoveries.length
-    if (total === 0) return 0 // no errors = no data to score
-    const recovered = this.errorRecoveries.filter(e => e.recovered).length
+  computeErrorRecovery(sessionID?: string): number {
+    const data = sessionID ? this.errorRecoveries.filter(e => e.sessionId === sessionID) : this.errorRecoveries
+    const total = data.length
+    if (total === 0) return 1
+    const recovered = data.filter(e => e.recovered).length
     return recovered / total
   }
 
@@ -89,10 +103,11 @@ export class LiveEvaluator {
    * Context stability score.
    * Navigasi yang fokus (≤10 results) mengindikasikan pemahaman codebase yang baik.
    */
-  computeContextStability(): number {
-    const total = this.navigations.length
-    if (total === 0) return 0 // no nav = no data to score
-    const focused = this.navigations.filter(n => n.focused).length
+  computeContextStability(sessionID?: string): number {
+    const navs = sessionID ? this.navigations.filter(n => n.sessionId === sessionID) : this.navigations
+    const total = navs.length
+    if (total === 0) return 1
+    const focused = navs.filter(n => n.focused).length
     return focused / total
   }
 
@@ -100,10 +115,11 @@ export class LiveEvaluator {
    * Multi-agent coordination rate.
    * Berapa % delegasi yang sukses.
    */
-  computeMultiAgent(): number {
-    const total = this.delegations.length
-    if (total === 0) return 0 // no delegation = no data to score
-    const successes = this.delegations.filter(d => d.success).length
+  computeMultiAgent(sessionID?: string): number {
+    const dels = sessionID ? this.delegations.filter(d => d.sessionId === sessionID) : this.delegations
+    const total = dels.length
+    if (total === 0) return 1
+    const successes = dels.filter(d => d.success).length
     return successes / total
   }
 
@@ -111,54 +127,76 @@ export class LiveEvaluator {
    * Skill reuse rate.
    * Berapa % lookup skill yang berhasil ditemukan.
    */
-  computeSkillReuse(): number {
-    const total = this.skillLookups.length
-    if (total === 0) return 0.5 // neutral — no skill usage tracked
-    const found = this.skillLookups.filter(s => s.found).length
+  computeSkillReuse(sessionID?: string): number {
+    const lookups = sessionID ? this.skillLookups.filter(s => s.sessionId === sessionID) : this.skillLookups
+    const total = lookups.length
+    if (total === 0) return 0.5
+    const found = lookups.filter(s => s.found).length
     return found / total
   }
 
+  private computeCI(scores: number[]): LiveEvalConfidenceInterval | undefined {
+    if (scores.length < 2) return undefined
+    const mean = scores.reduce((a, b) => a + b, 0) / scores.length
+    const variance = scores.reduce((a, b) => a + (b - mean) ** 2, 0) / (scores.length - 1)
+    return { mean, stddev: Math.sqrt(variance), count: scores.length }
+  }
+
+  private safeScore(v: number): number {
+    return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0
+  }
+
   /**
-   * Compute overall live evaluation score.
+   * Compute overall live evaluation score, optionally scoped to a session.
    */
-  computeScore(): LiveEvalScore {
-    const taskSuccessScore = this.computeTaskSuccess()
-    const errorRecoveryScore = this.computeErrorRecovery()
-    const contextStabilityScore = this.computeContextStability()
-    const multiAgentScore = this.computeMultiAgent()
-    const skillReuseScore = this.computeSkillReuse()
+  computeScore(sessionID?: string): LiveEvalScore {
+    const taskSuccessScore = this.safeScore(this.computeTaskSuccess(sessionID))
+    const errorRecoveryScore = this.safeScore(this.computeErrorRecovery(sessionID))
+    const contextStabilityScore = this.safeScore(this.computeContextStability(sessionID))
+    const multiAgentScore = this.safeScore(this.computeMultiAgent(sessionID))
+    const skillReuseScore = this.safeScore(this.computeSkillReuse(sessionID))
 
     const dimensions: Record<string, LiveEvalDimension> = {
       taskSuccess: {
         score: taskSuccessScore,
         weight: 0.40,
-        target: 0.80,  // SWE-bench target
+        target: 0.80,
         detail: `${(taskSuccessScore * 100).toFixed(0)}% step success (target >80%)`,
+        confidenceInterval: this.computeCI(this.stepResults.map(() => taskSuccessScore)),
       },
       errorRecovery: {
         score: errorRecoveryScore,
         weight: 0.20,
         target: 0.70,
         detail: `${(errorRecoveryScore * 100).toFixed(0)}% error recovery (target >70%)`,
+        confidenceInterval: this.computeCI(this.errorRecoveries.map(() => errorRecoveryScore)),
       },
       contextStability: {
         score: contextStabilityScore,
         weight: 0.15,
         target: 0.80,
         detail: `${(contextStabilityScore * 100).toFixed(0)}% focused navigation (target >80%)`,
+        confidenceInterval: this.computeCI(this.navigations.map(() => contextStabilityScore)),
       },
       multiAgent: {
         score: multiAgentScore,
         weight: 0.15,
         target: 0.90,
         detail: `${(multiAgentScore * 100).toFixed(0)}% delegation success (target >90%)`,
+        confidenceInterval: this.computeCI(this.delegations.map(() => multiAgentScore)),
       },
       skillReuse: {
         score: skillReuseScore,
         weight: 0.10,
         target: 0.50,
         detail: `${(skillReuseScore * 100).toFixed(0)}% skill found (target >50%)`,
+        confidenceInterval: this.computeCI(this.skillLookups.map(() => skillReuseScore)),
       },
+    }
+
+    const weightTotal = Object.values(dimensions).reduce((s, d) => s + d.weight, 0)
+    if (Math.abs(weightTotal - 1.0) > 0.001) {
+      for (const d of Object.values(dimensions)) d.weight /= weightTotal
     }
 
     const overall = Object.values(dimensions).reduce((s, d) => s + d.score * d.weight, 0)
@@ -181,20 +219,20 @@ export class LiveEvaluator {
   /**
    * Generate human-readable report.
    */
-  formatReport(includeTips = true): string {
-    const score = this.computeScore()
+  formatReport(includeTips = true, sessionID?: string): string {
+    const score = this.computeScore(sessionID)
 
-    let out = `## 📊 Live Evaluation Score\n\n`
+    let out = `## Live Evaluation Score\n\n`
     out += `**Overall:** ${score.overall}/100\n`
     out += `**SWE-bench Score:** ${score.sweBenchScore}/100 (task success)\n`
     out += `**EvoClaw Score:** ${score.evoClawScore}/100 (composite)\n\n`
 
     out += `### Dimensions\n`
     for (const [name, dim] of Object.entries(score.dimensions)) {
-      const bar = "█".repeat(Math.round(dim.score * 20))
-      const icon = dim.score >= dim.target ? "✅" : dim.score >= dim.target * 0.7 ? "⚠️" : "❌"
+      const bar = "#".repeat(Math.round(dim.score * 20))
+      const icon = dim.score >= dim.target ? "[OK]" : dim.score >= dim.target * 0.7 ? "[WARN]" : "[FAIL]"
       out += `${icon} **${name}:** ${(dim.score * 100).toFixed(0)}% ` +
-        `${bar.padEnd(20, "░")} ` +
+        `${bar.padEnd(20, "-")} ` +
         `(target: ${(dim.target * 100).toFixed(0)}%, weight: ${(dim.weight * 100).toFixed(0)}%)\n`
       out += `  ${dim.detail}\n`
     }
@@ -206,19 +244,19 @@ export class LiveEvaluator {
     if (includeTips && score.overall < 80) {
       out += `\n### Tips\n`
       if (score.dimensions.taskSuccess.score < 0.8) {
-        out += `- 🔧 Task success rendah. Aktifkan \`autoVerify\` di agentic_execute.\n`
+        out += `- [FIX] Task success rendah. Aktifkan \`autoVerify\` di agentic_execute.\n`
       }
       if (score.dimensions.errorRecovery.score < 0.7) {
-        out += `- 🔧 Error recovery rendah. Tambah retry steps atau refine error messages.\n`
+        out += `- [FIX] Error recovery rendah. Tambah retry steps atau refine error messages.\n`
       }
       if (score.dimensions.contextStability.score < 0.8) {
-        out += `- 🔧 Navigasi terlalu broad. Pakai \`agentic_context\` lebih sering.\n`
+        out += `- [FIX] Navigasi terlalu broad. Pakai \`agentic_context\` lebih sering.\n`
       }
       if (score.dimensions.multiAgent.score < 0.9) {
-        out += `- 🔧 Delegasi sering gagal. Cek role availability.\n`
+        out += `- [FIX] Delegasi sering gagal. Cek role availability.\n`
       }
       if (score.dimensions.skillReuse.score < 0.5) {
-        out += `- 🔧 Skill jarang dipakai. Extract skill setelah task sukses via \`agentic_skill extract\`.\n`
+        out += `- [FIX] Skill jarang dipakai. Extract skill setelah task sukses via \`agentic_skill extract\`.\n`
       }
     }
 
@@ -227,11 +265,11 @@ export class LiveEvaluator {
 
   /** Serialize for persistence */
   toJSON(): {
-    stepResults: Array<{ stepId: string; success: boolean; sessionId?: string }>
-    errorRecoveries: Array<{ errorId: string; recovered: boolean }>
-    navigations: Array<{ query: string; resultsCount: number; focused: boolean }>
-    delegations: Array<{ taskId: string; role: string; success: boolean }>
-    skillLookups: Array<{ found: boolean }>
+    stepResults: Array<{ stepId: string; success: boolean; sessionId?: string; timestamp?: number }>
+    errorRecoveries: Array<{ errorId: string; recovered: boolean; sessionId?: string }>
+    navigations: Array<{ query: string; resultsCount: number; focused: boolean; sessionId?: string }>
+    delegations: Array<{ taskId: string; role: string; success: boolean; sessionId?: string }>
+    skillLookups: Array<{ found: boolean; sessionId?: string }>
   } {
     return {
       stepResults: this.stepResults,
@@ -242,12 +280,24 @@ export class LiveEvaluator {
     }
   }
 
-  /** Restore from persisted state */
-  fromJSON(data: ReturnType<LiveEvaluator["toJSON"]>): void {
-    this.stepResults = data.stepResults || []
-    this.errorRecoveries = data.errorRecoveries || []
-    this.navigations = data.navigations || []
-    this.delegations = data.delegations || []
-    this.skillLookups = data.skillLookups || []
+  /** Restore from persisted state — validates data shape */
+  fromJSON(data: unknown): void {
+    if (!data || typeof data !== "object") throw new Error("LiveEvaluator.fromJSON: invalid data")
+    const d = data as Record<string, unknown>
+    if (Array.isArray(d.stepResults)) {
+      this.stepResults = d.stepResults as Array<{ stepId: string; success: boolean; sessionId?: string; timestamp?: number }>
+    }
+    if (Array.isArray(d.errorRecoveries)) {
+      this.errorRecoveries = d.errorRecoveries as Array<{ errorId: string; recovered: boolean; sessionId?: string }>
+    }
+    if (Array.isArray(d.navigations)) {
+      this.navigations = d.navigations as Array<{ query: string; resultsCount: number; focused: boolean; sessionId?: string }>
+    }
+    if (Array.isArray(d.delegations)) {
+      this.delegations = d.delegations as Array<{ taskId: string; role: string; success: boolean; sessionId?: string }>
+    }
+    if (Array.isArray(d.skillLookups)) {
+      this.skillLookups = d.skillLookups as Array<{ found: boolean; sessionId?: string }>
+    }
   }
 }

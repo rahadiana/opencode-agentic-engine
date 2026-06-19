@@ -32,11 +32,9 @@ export class MemorySchemaVersion {
   }
 
   registerMigration(migration: SchemaMigration): void {
-    // Validate: no branching migrations (only one migration per source version)
     const existingFromSame = this.migrations.filter(m => m.from === migration.from)
     if (existingFromSame.length > 0 && existingFromSame.some(m => m.to !== migration.to)) {
-      console.warn(`SchemaMigrator: branching migration detected from v${migration.from} — skipping. Existing: v${migration.from}->v${existingFromSame[0].to}, attempted: v${migration.from}->v${migration.to}`)
-      return
+      throw new Error(`SchemaMigrator: branching migration detected from v${migration.from} — existing: v${migration.from}->v${existingFromSame[0].to}, attempted: v${migration.from}->v${migration.to}`)
     }
     const exists = this.migrations.some(m => m.from === migration.from && m.to === migration.to)
     if (!exists) {
@@ -47,15 +45,26 @@ export class MemorySchemaVersion {
 
   upgrade<T>(data: T, currentVersion: number): T {
     let result = data
-    // Apply migrations in chain until we reach the latest version
-    let maxIterations = 100 // safety limit
-    while (maxIterations-- > 0) {
+    const visited = new Set<number>()
+    while (true) {
+      if (visited.has(currentVersion)) {
+        throw new Error(`SchemaMigrator: circular migration detected at v${currentVersion}`)
+      }
+      visited.add(currentVersion)
       const m = this.migrations.find(m => m.from === currentVersion)
       if (!m) break
       result = m.apply(result) as T
       currentVersion = m.to
     }
     return result
+  }
+
+  upgradeWithRollback<T>(data: T, currentVersion: number): { result: T; rollback: () => T } {
+    const snapshot = JSON.parse(JSON.stringify(data))
+    return {
+      result: this.upgrade(data, currentVersion),
+      rollback: () => JSON.parse(JSON.stringify(snapshot)),
+    }
   }
 
   getMigrations(): SchemaMigration[] {
@@ -78,7 +87,9 @@ export function createMemoryEnvelope<T>(data: T, type: string): { schema_version
 
 export function parseMemoryEnvelope<T>(envelope: unknown): { version: number; type: string; data: T; createdAt: string } | null {
   const e = envelope as Record<string, unknown> | undefined
-  if (!e || typeof e.schema_version !== "number" || typeof e.type !== "string" || !e.data) return null
+  if (!e || typeof e.schema_version !== "number" || !Number.isInteger(e.schema_version) || e.schema_version < 0) return null
+  if (e.schema_version > MEMORY_SCHEMA_VERSION + 10) return null
+  if (typeof e.type !== "string" || !e.data) return null
   return {
     version: e.schema_version,
     type: e.type,

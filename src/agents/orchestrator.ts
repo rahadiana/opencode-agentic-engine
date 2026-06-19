@@ -4,6 +4,7 @@ import type { BudgetTracker } from "../core/budget-tracker.js"
 import type { EventBus } from "../core/event-bus.js"
 import type { Condition } from "../core/formal-model.js"
 import { parseFileEntries, writeFiles, recordCompletion } from "../core/execution-helpers.js"
+import fs from "node:fs"
 
 export interface PipelineStage {
   role: string
@@ -88,13 +89,43 @@ export class Orchestrator {
     stageResults: Map<string, { output: string; issues: string[]; validatedBy: string[] }>
   }>()
   private llmEngine: LLMEngine | null = null
+  private persistencePath: string | null = null
+  private sysPrompts: Record<string, string> = {
+    pm: `You are a PM. Define requirements and acceptance criteria concisely. Return JSON: {"spec": "...", "criteria": ["..."]}`,
+    architect: `You are an architect. Design architecture and interface contracts. Return JSON: {"architecture": "...", "interfaces": [{...}], "designNotes": "..."}`,
+    developer: `Return JSON array of {path, content}. Write COMPLETE file contents. Rules: ESM imports (.js) · match existing patterns · valid imports. {"files":[{"path":"src/x.ts","content":"..."}]} or {"noChanges":true}`,
+    qa: `You are QA. Review the implementation for correctness, edge cases, and regressions. Return JSON: {"issues": [{"severity":"error|warning|info","description":"...","file":"..."}], "summary": "verdict", "passed": true/false}`,
+    coordinator: `You are a coordinator. Verify pipeline completion and consistency. Return JSON: {"summary": "...", "gaps": ["..."], "approved": true/false}`,
+  }
 
   setLLMEngine(engine: LLMEngine): void {
     this.llmEngine = engine
   }
 
+  setRolePrompt(role: string, prompt: string): void {
+    this.sysPrompts[role] = prompt
+  }
+
+  initPersistence(filePath: string): void {
+    this.persistencePath = filePath
+    if (fs.existsSync(filePath)) {
+      try {
+        const data: WorkflowPipeline[] = JSON.parse(fs.readFileSync(filePath, "utf-8"))
+        for (const p of data) this.pipelines.set(p.id, p)
+      } catch { console.warn(`[Orchestrator] Failed to load pipelines from ${filePath}`) }
+    }
+  }
+
+  private savePipelines(): void {
+    if (!this.persistencePath) return
+    try {
+      fs.writeFileSync(this.persistencePath, JSON.stringify([...this.pipelines.values()], null, 2))
+    } catch { /* non-fatal */ }
+  }
+
   definePipeline(pipeline: WorkflowPipeline): void {
     this.pipelines.set(pipeline.id, pipeline)
+    this.savePipelines()
   }
 
   getPipeline(id: string): WorkflowPipeline | undefined {
@@ -166,13 +197,16 @@ export class Orchestrator {
   validateSchema(output: string, schema: SchemaField[]): SchemaValidationResult[] {
     const results: SchemaValidationResult[] = []
     const lower = output.toLowerCase()
+    let parsed: any = null
+    try {
+      parsed = JSON.parse(output)
+    } catch { /* not JSON */ }
     for (const field of schema) {
       const name = field.name.toLowerCase()
       let found = false
-      try {
-        const parsed = JSON.parse(output)
+      if (parsed) {
         found = parsed[name] !== undefined || Object.keys(parsed).some(k => k.toLowerCase() === name)
-      } catch {
+      } else {
         found = lower.includes(name)
       }
       if (!found && field.required) {
@@ -294,7 +328,9 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
             }
           }
         }
-      } catch { /* LLM call failed */ }
+      } catch {
+        console.warn(`[Orchestrator] LLM cross-validation failed for stage ${targetRole}`)
+      }
     }
 
     const passed = issues.filter(i => i.severity === "error").length === 0
@@ -313,7 +349,7 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
     if (pipeline) {
       parts.push(`## Pipeline: ${pipeline.name}`)
       parts.push(pipeline.stages.map((s, i) =>
-        `  ${i < run.currentStageIndex ? "✅" : i === run.currentStageIndex ? "▶" : "⏳"} **${s.role}**: ${s.description}`
+        `  ${i < run.currentStageIndex ? "[DONE]" : i === run.currentStageIndex ? "[ACTIVE]" : "[PENDING]"} **${s.role}**: ${s.description}`
       ).join("\n"))
       parts.push("")
     }
@@ -417,7 +453,9 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
           const xv = await this.crossValidate("coordinator", goal, allStageResults)
           if (!xv.passed) verifyNote += ` ⚠️ Cross-validation: ${xv.issues.length} issues`
         }
-      } catch { /* non-fatal */ }
+      } catch {
+        console.warn(`[Orchestrator] Cross-validation failed for run ${runId}`)
+      }
     }
 
     const allPipelineStages = pipeline.stages.map(s => s.role)
@@ -443,21 +481,11 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
     return null
   }
 
-  private getSysPrompts(): Record<string, string> {
-    return {
-      pm: `You are a PM. Define requirements and acceptance criteria concisely. Return JSON: {"spec": "...", "criteria": ["..."]}`,
-      architect: `You are an architect. Design architecture and interface contracts. Return JSON: {"architecture": "...", "interfaces": [{...}], "designNotes": "..."}`,
-      developer: `Return JSON array of {path, content}. Write COMPLETE file contents. Rules: ESM imports (.js) · match existing patterns · valid imports. {"files":[{"path":"src/x.ts","content":"..."}]} or {"noChanges":true}`,
-      qa: `You are QA. Review the implementation for correctness, edge cases, and regressions. Return JSON: {"issues": [{"severity":"error|warning|info","description":"...","file":"..."}], "summary": "verdict", "passed": true/false}`,
-      coordinator: `You are a coordinator. Verify pipeline completion and consistency. Return JSON: {"summary": "...", "gaps": ["..."], "approved": true/false}`,
-    }
-  }
-
   private async executeStage(
     stage: PipelineStage, params: any, stageTaskId: string, runId: string,
   ): Promise<{ stop: boolean; verifyNote?: string; hasNoLLM?: boolean; budgetExceeded?: boolean; raw?: string }> {
     const { goal, constraints, filesBlock, codebaseSummary, memoryContexts, skillContexts, coordinator, sessionID } = params
-    const sysPrompts = this.getSysPrompts()
+    const sysPrompts = this.sysPrompts
 
     coordinator.delegate(stage.role, {
       id: stageTaskId, assignedTo: stage.role,

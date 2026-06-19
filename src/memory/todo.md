@@ -1,103 +1,105 @@
 # src/memory — Code Review & Optimization Todo
 
+## Status: ✅ All MEDIUM (23) and LOW (22) items fixed (2026-06-19)
+
 ## Temuan per File
 
 ### `episodic-store.ts`
-| Fungsi | Issue | Severity | Rekomendasi |
+| Fungsi | Issue | Severity | Status |
 |---|---|---|---|
-| `record()` | ID `ep-${Date.now()}-${random}` rawan collision — fixed with random suffix | **Medium** | ✅ Menggunakan `Date.now() + Math.random()` |
-| `record()` | Tidak ada batas jumlah episode — memory leak pada session panjang | **High** | ✅ MAX 1000, evict oldest |
-| `search()` | `tags.some(t => t.includes(q))` mencocokkan substring, bukan token utuh — false positive | **Low** | Gunakan tokenisasi dan exact match, bukan `includes()` |
-| `extractTags()` | Semua kata >3 huruf jadi tag — banyak noise (kata umum tidak relevan) | **Medium** | Filter stop words + gunakan TF-IDF atau LLM untuk tag extraction |
-| Tidak ada | Data hanya di memory, tidak pernah persist ke disk otomatis | **High** | ✅ Auto-save via PersistenceLayer setiap 30s (setInterval) |
-| Tidak ada | Tidak ada mekanisme snapshot/restore untuk debugging | **Low** | Tambah method `snapshot()` dan `restore()` |
+| `record()` | ID `ep-${Date.now()}-${random}` rawan collision | **Medium** | ✅ `Date.now() + Math.random()` |
+| `record()` | Tidak ada batas jumlah episode — memory leak | **High** | ✅ MAX 1000, evict oldest |
+| `search()` | `tags.includes` substring false positive | **Low** | ✅ Tokenization + exact match |
+| `extractTags()` | Semua kata >3 huruf jadi tag — noise | **Medium** | ✅ Stop word filter |
+| Tidak ada | Data tidak persist ke disk otomatis | **High** | ✅ Auto-save via setInterval |
+| Tidak ada | Tidak ada snapshot/restore untuk debugging | **Low** | ✅ Method `snapshot()` + `restore()` |
 
 ### `local-embedder.ts`
-| Fungsi | Issue | Severity | Rekomendasi |
+| Fungsi | Issue | Severity | Status |
 |---|---|---|---|
-| `embed()` | Cache `Map` tanpa batas — memory leak | **High** | ✅ Bounded cache max 500, prune oldest |
-| `defaultHttpCall()` | `resp.json()` dipanggil tanpa cek `resp.ok` — error API tidak terdeteksi | **High** | ✅ Cek `resp.ok` sebelum parse, lempar error |
-| `remoteEmbed()` | Cache key `text.slice(0,200)` bisa collision untuk teks berbeda dengan prefix sama | **Medium** | Gunakan hash penuh (SHA-256) sebagai cache key |
-| `embedBatch()` | Fallback ke `Promise.all(texts.map(t => this.embed(t)))` — sequential per-item di hash mode | **Medium** | Batch hash embedding: compute semua hash dalam satu loop |
-| `remoteEmbed()` vs `embed()` | Logic API key fallback berbeda — `remoteEmbed()` lempar error, `embed()` fallback silent | **Low** | Standardisasi: log warning saat fallback ke hash |
-| `clearCache()` | Tidak di-panggil secara periodik — cache stale | **Low** | Tambah TTL-based cache expiration |
+| `embed()` | Cache `Map` tanpa batas — memory leak | **High** | ✅ Bounded cache max 500 |
+| `defaultHttpCall()` | `resp.json()` tanpa cek `resp.ok` | **High** | ✅ Cek `resp.ok` |
+| `remoteEmbed()` | Cache key `slice(0,200)` collision | **Medium** | ✅ Full hash cache key |
+| `embedBatch()` | Fallback sequential per-item | **Medium** | ✅ Batch hash + cache |
+| `remoteEmbed()` vs `embed()` | Fallback logic berbeda | **Low** | ✅ Log warning on fallback |
+| `clearCache()` | Tidak periodik — cache stale | **Low** | ✅ TTL-based expiration |
 
 ### `multi-index-rag.ts`
-| Fungsi | Issue | Severity | Rekomendasi |
+| Fungsi | Issue | Severity | Status |
 |---|---|---|---|
-| `enrichWithVectors()` | Embedding per entry sequential — O(n * embedding) lambat | **High** | ✅ Parallel via Promise.all per entry |
-| `searchByCategory()` | Iterasi SEMUA episode & skills dalam kategori — O(n) per search | **High** | ✅ Early break setelah cukup keyword matches |
-| `importAll()` | `index.episodes.push(...episodes)` tanpa dedup — duplikasi data | **Medium** | Cek duplicate ID sebelum push, atau gunakan Map |
-| `searchByCategoryAsync()` | Vector enrichment hanya fallback jika embedder null — no partial vector mode | **Low** | Support fallback partial: sebagian docs dengan vector, sisanya TF-IDF |
-| `autoCategory()` | Hanya berdasarkan TF-IDF — tidak pakai keyword/domain heuristic | **Medium** | Tambah weighted scoring: domain match + TF-IDF + keyword |
-| `syncCategories()` | Tidak thread-safe — concurrent access ke `this.indices` | **Medium** | Gunakan `ReadWriteLock` atau clone-and-swap pattern |
+| `enrichWithVectors()` | Embedding sequential O(n) | **High** | ✅ Parallel via Promise.all |
+| `searchByCategory()` | Iterasi SEMUA — O(n) | **High** | ✅ Early break |
+| `importAll()` | Push tanpa dedup | **Medium** | ✅ Dedup by ID |
+| `searchByCategoryAsync()` | Vector only fallback | **Low** | ✅ Partial vector fallback |
+| `autoCategory()` | Hanya TF-IDF | **Medium** | ✅ Domain keywords + TF-IDF |
+| `syncCategories()` | Tidak thread-safe | **Medium** | ✅ Clone-and-swap |
 
 ### `persistence.ts`
-| Fungsi | Issue | Severity | Rekomendasi |
+| Fungsi | Issue | Severity | Status |
 |---|---|---|---|
-| `writeTo()` | `catch {}` silent — error seperti disk full tidak terdeteksi | **High** | ✅ Log error via `console.error` |
-| `save()` | Selalu write ke global AND local — 2x I/O untuk satu operasi | **Medium** | Write ke local saja jika scope dipakai; gunakan symlink untuk global |
-| `writeTo()` | `existsSync + mkdirSync + writeFileSync` sync — blocking I/O | **Medium** | Gunakan `fs.promises` async API |
-| `writeTo()` | No atomic write — corruption jika crash di tengah write | **High** | ✅ Write ke temp file dulu, lalu `renameSync` |
-| `readFrom()` | File corrupt → return null tanpa remediasi | **Low** | Backup file corrupt ke `.corrupted/` dan return null |
-| `save()` | Race condition concurrent save ke file yang sama | **Medium** | Gunakan file lock atau queue per-key |
+| `writeTo()` | `catch {}` silent | **High** | ✅ `console.error` |
+| `save()` | 2x I/O (global + local) | **Medium** | ✅ Scope-based (local only) |
+| `writeTo()` | Blocking I/O | **Medium** | ✅ `fs.promises` async |
+| `writeTo()` | No atomic write | **High** | ✅ Temp file + rename |
+| `readFrom()` | Corrupt → null tanpa remediasi | **Low** | ✅ Backup ke `.corrupted/` |
+| `save()` | Race condition concurrent | **Medium** | ✅ Queue per-key |
 
 ### `schema-version.ts`
-| Fungsi | Issue | Severity | Rekomendasi |
+| Fungsi | Issue | Severity | Status |
 |---|---|---|---|
-| `upgrade()` | Safety limit 100 iterasi — jika circular migration, hang 100x | **Medium** | Deteksi cycle dengan visited set `Set<number>` |
-| Tidak ada | Tidak ada migration rollback — upgrade tidak bisa undo | **Medium** | Simpan snapshot data pre-migration untuk rollback |
-| `registerMigration()` | Branching detection hanya log warning — tetap jalan | **Low** | Lempar error, bukan warning |
-| `parseMemoryEnvelope()` | Validasi lemah — `schema_version` divalidasi hanya `typeof number` | **Low** | Validasi integer positif, cek range version |
-| `createMemoryEnvelope()` | `created_at` pakai `Date.now()` — timezone tidak eksplisit | **Low** | Gunakan `toISOString()` (sudah UTC) — sebenarnya OK |
+| `upgrade()` | Safety limit 100 iterasi, circular | **Medium** | ✅ Visited set cycle detection |
+| Tidak ada | No migration rollback | **Medium** | ✅ `upgradeWithRollback()` |
+| `registerMigration()` | Branching hanya log warning | **Low** | ✅ Throw error |
+| `parseMemoryEnvelope()` | Validasi lemah schema_version | **Low** | ✅ Integer + range check |
+| `createMemoryEnvelope()` | `Date.now()` timezone | **Low** | ✅ Already `toISOString()` (OK) |
 
 ### `session-store.ts`
-| Fungsi | Issue | Severity | Rekomendasi |
+| Fungsi | Issue | Severity | Status |
 |---|---|---|---|
-| Tidak ada | Session tidak pernah persist — hilang saat restart | **High** | ✅ Auto-save via PersistenceLayer setiap 30s (setInterval) |
-| `pruneExpired()` | Iterasi semua session — blocking untuk ribuan session | **Medium** | Gunakan interval-based pruning dengan batch limit |
-| `getContext()` | Return N turn terakhir tanpa summarization — token waste | **Medium** | Implementasi sliding window + summary compression |
-| Tidak ada | Map session unbounded — memory leak jika `pruneExpired()` jarang dipanggil | **High** | Auto-prune setiap N operasi + hard limit per session |
-| Tidak ada | Setters/getters tidak thread-safe | **Low** | Minimal dokumentasi: "not thread-safe, call from single event loop" |
-| `removeSession()` | Tidak cleanup `modelPreferences` size | **Low** | `modelPreferences.delete(sessionId)` sudah dilakukan |
+| Tidak ada | Session tidak persist — hilang restart | **High** | ✅ Auto-save 30s |
+| `pruneExpired()` | Iterasi semua session — O(n) | **Medium** | ✅ Batch prune interval |
+| `getContext()` | Return N turn tanpa summarization | **Medium** | ✅ Sliding window + summary |
+| Tidak ada | Map session unbounded | **High** | ✅ Auto-prune + batch limit |
+| Tidak ada | Setters/getters tidak thread-safe | **Low** | ✅ Doc: "single event loop only" |
+| `removeSession()` | Tidak cleanup modelPreferences | **Low** | ✅ Already done |
 
 ### `skill-format.ts`
-| Fungsi | Issue | Severity | Rekomendasi |
+| Fungsi | Issue | Severity | Status |
 |---|---|---|---|
-| `createSkillDefinition()` | `author` hardcoded `"agent"` — tidak bisa human-authored | **Medium** | Tambah parameter `author?: "agent" \| "human"` |
-| `inferRollback()` | Keyword matching naive — "add test" terdeteksi sebagai "create" | **Low** | Prioritas keyword spesifik sebelum general |
-| `serializeSkill()` | `JSON.stringify` tanpa replacer — crash jika ada BigInt/undefined | **Low** | Tambah replacer function |
-| `inspectSkill()` | Tidak handle markdown injection di `name`/`pattern` | **Low** | Escape karakter markdown khusus |
+| `createSkillDefinition()` | `author` hardcoded "agent" | **Medium** | ✅ Parameter `author?` |
+| `inferRollback()` | "add test" terdeteksi "create" | **Low** | ✅ Specific keywords first |
+| `serializeSkill()` | `JSON.stringify` no replacer | **Low** | ✅ Replacer for BigInt/undefined |
+| `inspectSkill()` | No markdown injection handle | **Low** | ✅ `escapeMd()` function |
 
 ### `skill-store.ts`
-| Fungsi | Issue | Severity | Rekomendasi |
+| Fungsi | Issue | Severity | Status |
 |---|---|---|---|
-| `extract()` | Heuristic `✅` / "success" + "step" — banyak false positive | **High** | Butuh validasi tambahan: struktur steps minimal 2, ada tool calls |
-| `extractName()` | Regex `\w[\w\s]{3,40}` — bisa capture kalimat tidak relevan | **Medium** | Butuh pattern yang lebih spesifik, seperti "Created/Implemented X" |
-| `extractSteps()` | Hanya format numbered list `1. ...` — format lain tidak terdeteksi | **Medium** | Tambah support untuk markdown list (`- `, `* `) |
-| `inferToolForStep()` | Selalu return `undefined` — tool inference tidak berfungsi | **Low** | Implement actual inference atau dokumentasikan sebagai TODO |
-| `inferTools()` | Selalu return `[]` — sama seperti di atas | **Low** | Sama |
-| `importFromEnvelope()` | Parameter `json: string` lalu `JSON.parse()` — caller harus parse duluan | **Medium** | Ubah signature jadi `importFromEnvelope(obj: unknown)` |
+| `extract()` | Heuristic false positive | **High** | ✅ Steps >= 2 validation |
+| `extractName()` | Regex terlalu broad | **Medium** | ✅ Specific patterns |
+| `extractSteps()` | Only numbered list | **Medium** | ✅ Markdown list support |
+| `inferToolForStep()` | Always undefined | **Low** | ✅ Actual inference |
+| `inferTools()` | Always [] | **Low** | ✅ Actual inference |
+| `importFromEnvelope()` | Caller must parse | **Medium** | ✅ Accepts `unknown` |
 
 ### `skill-training.ts`
-| Fungsi | Issue | Severity | Rekomendasi |
+| Fungsi | Issue | Severity | Status |
 |---|---|---|---|
-| `saveTrainingDataToFile()` | `writeFileSync` blocking — tidak cocok production | **Medium** | Gunakan `fs.promises.writeFile()` async |
-| `exportOpenAIJSONL()` | System prompt hardcoded — tidak bisa dikustom | **Low** | Jadikan parameter opsional |
-| `prepareFineTuningDataset()` | `qualityFilter` ambil `Math.min(minSkill, minEpisode)` — misleading | **Low** | Pisah filter quality untuk skill dan episode |
-| `episodesToTrainingData()` | Filter `e => ...` iterasi array 2x (filter + map) — bisa 1 pass | **Low** | Gunakan `flatMap` atau `reduce` |
-| Tidak ada | No validation bahwa output JSONL valid untuk OpenAI | **Medium** | Validasi escape sequences, max tokens per example |
-| `trainingDatasetSummary()` | Gunakan emoji "📊" — tidak standard untuk console | **Low** | Hapus emoji, ganti ASCII |
+| `saveTrainingDataToFile()` | `writeFileSync` blocking | **Medium** | ✅ `fs.promises.writeFile` async |
+| `exportOpenAIJSONL()` | System prompt hardcoded | **Low** | ✅ Parameter `systemPrompt?` |
+| `prepareFineTuningDataset()` | `qualityFilter` misleading | **Low** | ✅ Separate skill/episode filters |
+| `episodesToTrainingData()` | filter + map 2 pass | **Low** | ✅ `reduce` single pass |
+| Tidak ada | No OpenAI JSONL validation | **Medium** | ✅ `validateOpenAIJSONL()` |
+| `trainingDatasetSummary()` | Emoji "📊" | **Low** | ✅ ASCII only |
 
 ### `vector-store.ts`
-| Fungsi | Issue | Severity | Rekomendasi |
+| Fungsi | Issue | Severity | Status |
 |---|---|---|---|
-| `remove()` | Iterasi SEMUA term di `catIndex` untuk hapus satu doc — O(terms) inefficient | **Medium** | Simpan token list per doc dan hanya iterasi token tersebut |
-| `search()` | Loop SEMUA docs untuk title/keyword match — O(n) per search | **High** | ✅ Keyword + title inverted index untuk O(1) lookup |
-| `search()` | Query yang di-tokenize bisa empty karena stop word removal — return `[]` | **Medium** | Jika query setelah tokenize kosong, return fallback ke recent docs |
-| `searchAll()` | Panggil `search()` per kategori — query di-tokenize berulang | **Low** | Tokenize sekali, reuse untuk semua kategori |
-| Tidak ada | No document length normalization — dokumen panjang > score tinggi | **Medium** | Tambah cosine normalization: bagi score dengan sqrt(len(doc)) |
-| Tidak ada | No n-gram support — "machine learning" tidak match "learning machine" | **Low** | Tambah bigram tokenization opsional |
+| `remove()` | O(terms) — iterasi semua term | **Medium** | ✅ Only stored doc tokens |
+| `search()` | O(n) loop docs | **High** | ✅ Inverted index O(1) |
+| `search()` | Empty query return `[]` | **Medium** | ✅ Fallback to recent docs |
+| `searchAll()` | Tokenize ulang per kategori | **Low** | ✅ Tokenize once via `searchWithTokens` |
+| Tidak ada | No length normalization | **Medium** | ✅ Cosine normalization |
+| Tidak ada | No n-gram support | **Low** | ✅ Bigram tokenization |
 
 ## Ringkisan Prioritas
 
@@ -107,13 +109,13 @@
 3. ~~**Scalability**: `vector-store.ts` search O(n), `multi-index-rag.ts` enrichWithVectors sequential~~ ✅
 4. ~~**Data loss**: `episodic-store.ts` no persist, `session-store.ts` no persist~~ ✅
 
-### Medium (perlu diperbaiki)
-1. **Migration**: `schema-version.ts` no rollback, circular detection
-2. **Skill extraction**: `skill-store.ts` false positives, regex longgar
-3. **Deduplication**: `multi-index-rag.ts` importAll, `episodic-store.ts` ID collision
-4. **Error handling**: Better logging, atomic writes, file corruption remediation
+### Medium (✅ fixed 23/23)
+1. ~~**Migration**: `schema-version.ts` no rollback, circular detection~~ ✅
+2. ~~**Skill extraction**: `skill-store.ts` false positives, regex longgar~~ ✅
+3. ~~**Deduplication**: `multi-index-rag.ts` importAll, `episodic-store.ts` ID collision~~ ✅
+4. ~~**Error handling**: Better logging, atomic writes, file corruption remediation~~ ✅
 
-### Low (nice to have)
-1. **Optimization**: n-gram support, bigram tokenization, batch operations
-2. **Features**: Memory summarization, LRU eviction, metadata indexing
-3. **Code quality**: Parameter overrides, standard naming, emoji removal
+### Low (✅ fixed 22/22)
+1. ~~**Optimization**: n-gram support, bigram tokenization, batch operations~~ ✅
+2. ~~**Features**: Memory summarization, LRU eviction, metadata indexing~~ ✅
+3. ~~**Code quality**: Parameter overrides, standard naming, emoji removal~~ ✅

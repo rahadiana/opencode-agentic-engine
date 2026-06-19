@@ -1,3 +1,4 @@
+import crypto from "node:crypto"
 import { RoleRegistry, type AgentDef, type CustomAgentDef } from "./role-registry.js"
 import type { SkillStore } from "../memory/skill-store.js"
 
@@ -14,6 +15,7 @@ export interface AgentTask {
   validatedBy?: string[]
   pipelineRunId?: string
   delegationDepth?: number
+  dependsOn?: string[]
 }
 
 export interface SharedMemoryEntry {
@@ -50,6 +52,8 @@ export class AgentCoordinator {
   private skillStore?: SkillStore
   private mutexQueue: ResolveLock[] = []
   private locked = false
+  private readonly maxMessagesPerRole = 500
+  private readonly maxTasksPerSession = 200
 
   constructor(skillStore?: SkillStore) {
     this.registry = new RoleRegistry()
@@ -85,8 +89,12 @@ export class AgentCoordinator {
     return this.maxDepth
   }
 
-  onSharedMemoryWrite(listener: SharedMemoryListener): void {
+  onSharedMemoryWrite(listener: SharedMemoryListener): () => void {
     this.memoryListeners.push(listener)
+    return () => {
+      const idx = this.memoryListeners.indexOf(listener)
+      if (idx >= 0) this.memoryListeners.splice(idx, 1)
+    }
   }
 
   async writeSharedMemory(key: string, value: string, agentRole: string): Promise<SharedMemoryEntry> {
@@ -150,16 +158,24 @@ export class AgentCoordinator {
 
   // --- Message Bus ---
 
+  private pruneMessages(role: string): void {
+    const inbox = this.messages.get(role)
+    if (inbox && inbox.length > this.maxMessagesPerRole) {
+      this.messages.set(role, inbox.slice(-this.maxMessagesPerRole))
+    }
+  }
+
   sendMessage(msg: Omit<AgentMessage, "id" | "timestamp" | "read">): AgentMessage {
     const message: AgentMessage = {
       ...msg,
-      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: crypto.randomUUID(),
       timestamp: Date.now(),
       read: false,
     }
     const inbox = this.messages.get(msg.to) ?? []
     inbox.push(message)
     this.messages.set(msg.to, inbox)
+    this.pruneMessages(msg.to)
     return message
   }
 
@@ -225,6 +241,7 @@ export class AgentCoordinator {
     const sessionTasks = this.tasks.get(sessionId) ?? []
     sessionTasks.push(clonedTask)
     this.tasks.set(sessionId, sessionTasks)
+    this.pruneTasks(sessionId)
 
     return clonedTask
   }
@@ -254,18 +271,36 @@ export class AgentCoordinator {
     return true
   }
 
+  private pruneTasks(sessionId: string): void {
+    const tasks = this.tasks.get(sessionId)
+    if (tasks && tasks.length > this.maxTasksPerSession) {
+      this.tasks.set(sessionId, tasks.slice(-this.maxTasksPerSession))
+    }
+  }
+
   /** Get downstream tasks that depend on a completed task via the pipeline */
   getNextInPipeline(taskId: string, sessionId: string): AgentTask | null {
     const tasks = this.tasks.get(sessionId) ?? []
+    const current = tasks.find(t => t.id === taskId)
+    if (!current || current.status !== "done") return null
+
+    // Prefer tasks with explicit dependsOn
+    const nextWithDep = tasks.find(t =>
+      t.status === "pending" &&
+      t.dependsOn &&
+      t.dependsOn.length > 0 &&
+      t.dependsOn.every(depId => {
+        const dep = tasks.find(d => d.id === depId)
+        return dep && dep.status === "done"
+      })
+    )
+    if (nextWithDep) return nextWithDep
+
+    // Fallback: sequential order
     const currentIdx = tasks.findIndex(t => t.id === taskId)
     if (currentIdx < 0 || currentIdx >= tasks.length - 1) return null
-
-    const current = tasks[currentIdx]
-    if (current.status !== "done") return null
-
     for (let i = currentIdx + 1; i < tasks.length; i++) {
-      const next = tasks[i]
-      if (next.status === "pending") return next
+      if (tasks[i].status === "pending") return tasks[i]
     }
     return null
   }
@@ -293,7 +328,9 @@ export class AgentCoordinator {
         if (llmRole && ["architect", "developer", "qa", "coordinator", "pm"].includes(llmRole)) {
           return llmRole as AgentRole
         }
-      } catch { /* fall through to keyword */ }
+      } catch {
+        console.warn(`[Coordinator] LLM suggestRole failed for "${description.slice(0, 60)}", falling back to keyword matching`)
+      }
     }
 
     // Keyword fallback

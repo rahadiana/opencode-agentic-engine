@@ -100,25 +100,23 @@ const devopsVerifiers: VerifierStrategy[] = [
         try {
           const absPath = resolve(context.projectDir, file)
           const content = readFileSync(absPath, "utf-8")
-          // Basic YAML parse check via node
+          if (!content.trim()) {
+            issues.push(`${file}: Empty YAML file`)
+            continue
+          }
           try {
-            // eslint-disable-next-line @typescript-eslint/no-var-requires
-            const yaml = file.endsWith(".yml") || file.endsWith(".yaml")
-            if (yaml && !content.trim()) {
-              issues.push(`${file}: Empty YAML file`)
-            }
-            // Check for tab indentation (yaml uses spaces)
-            if (content.includes("\t") && (content.includes(":\n") || content.includes("-\n"))) {
-              // Only flag if there are actual tabs at line start
-              const lines = content.split("\n")
-              for (let i = 0; i < lines.length; i++) {
-                if (lines[i].startsWith("\t")) {
-                  issues.push(`${file}: Line ${i + 1} uses tab indentation — YAML requires spaces`)
-                  break
-                }
+            JSON.parse(content)
+            issues.push(`${file}: Looks like JSON, not YAML — use .json extension`)
+          } catch { /* not JSON, good */ }
+          if (content.includes("\t") && (content.includes(":\n") || content.includes("-\n"))) {
+            const lines = content.split("\n")
+            for (let i = 0; i < lines.length; i++) {
+              if (lines[i].startsWith("\t")) {
+                issues.push(`${file}: Line ${i + 1} uses tab indentation — YAML requires spaces`)
+                break
               }
             }
-          } catch { /* skip parse errors */ }
+          }
         } catch { /* skip unreadable */ }
       }
       if (issues.length > 0) {

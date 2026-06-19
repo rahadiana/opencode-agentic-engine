@@ -44,20 +44,22 @@ export class DomainRegistry {
   }
 
   unregister(name: DomainName): void {
-    this.domains.delete(name)
     if (this.currentDomain === name) {
       this.currentDomain = null
       this.activeVerifiers = []
       this.activeErrorMatchers = []
     }
+    this.domains.delete(name)
   }
+
+  private static readonly MIN_CONFIDENCE = 0.15
 
   detect(input: string): DomainPack | null {
     let best: DomainPack | null = null
     let bestScore = 0
     for (const pack of this.domains.values()) {
       const score = pack.detect(input)
-      if (score > bestScore) {
+      if (score > bestScore && score >= DomainRegistry.MIN_CONFIDENCE) {
         bestScore = score
         best = pack
       }
@@ -77,8 +79,11 @@ export class DomainRegistry {
 
   activateFor(input: string): DomainPack | null {
     const pack = this.detect(input)
-    if (pack) this.activate(pack.name)
-    return pack
+    if (pack) {
+      const activated = this.activate(pack.name)
+      return activated ? pack : null
+    }
+    return null
   }
 
   getCurrentDomain(): DomainName | null {

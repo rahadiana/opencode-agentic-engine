@@ -43,8 +43,14 @@ export class AgentRuntime {
     this.engineOrder = []
   }
 
+  [Symbol.dispose](): void {
+    this.dispose()
+  }
+
   setOpencodeClient(client: unknown): void {
-    this.opencodeClient = client
+    if (client && typeof client === 'object') {
+      this.opencodeClient = client
+    }
   }
 
   setModelRegistry(registry: ModelRegistry): void {
@@ -126,7 +132,18 @@ export class AgentRuntime {
       }
       return { output, success: true, modelUsed: engine.getCurrentModel() }
     } catch (e) {
-      return { output: "", success: false, error: (e as Error).message }
+      const err = e as Error
+      const msg = err.message
+      if (msg.includes('timeout') || msg.includes('timed out')) {
+        return { output: '', success: false, error: `LLM timeout: ${msg}` }
+      }
+      if (msg.includes('rate limit') || msg.includes('rate_limit') || msg.includes('rateLimit')) {
+        return { output: '', success: false, error: `Rate limit exceeded: ${msg}` }
+      }
+      if (msg.includes('abort') || msg.includes('AbortError')) {
+        return { output: '', success: false, error: `LLM call aborted: ${msg}` }
+      }
+      return { output: "", success: false, error: msg }
     }
   }
 }

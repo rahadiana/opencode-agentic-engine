@@ -104,8 +104,9 @@ export class SkillStore {
     return JSON.stringify(createMemoryEnvelope(record.definition, "skill"), null, 2)
   }
 
-  importFromEnvelope(json: string): boolean {
-    const parsed = parseMemoryEnvelope<SkillDefinition>(JSON.parse(json))
+  importFromEnvelope(obj: unknown): boolean {
+    const envelope = typeof obj === "string" ? JSON.parse(obj) : obj
+    const parsed = parseMemoryEnvelope<SkillDefinition>(envelope)
     if (!parsed || parsed.type !== "skill") return false
 
     const existing = this.skills.get(parsed.data.meta.id)
@@ -133,13 +134,16 @@ export class SkillStore {
 
   private extractName(content: string): string | null {
     const patterns = [
-      /(?:created|added|implemented|built)\s+(\w[\w\s]{3,40})/i,
+      /(?:Created|Added|Implemented|Built|Fixed)\s+(?:the\s+)?(.{3,60}?)(?:\.|$)/i,
       /Step\s+\w+:\s*(.+?)(?:\.|$)/i,
       /Completed\s+(.+?)(?:\.|$)/i,
     ]
     for (const p of patterns) {
       const m = content.match(p)
-      if (m) return m[1].trim().slice(0, 50)
+      if (m) {
+        const name = m[1].trim().slice(0, 50)
+        if (name.length >= 3) return name
+      }
     }
     return null
   }
@@ -148,8 +152,10 @@ export class SkillStore {
     const steps: string[] = []
     const lines = content.split("\n")
     for (const line of lines) {
-      const m = line.match(/^\d+\.\s+(.+)/)
-      if (m) steps.push(m[1].trim())
+      const mNum = line.match(/^\d+[.)]\s+(.+)/)
+      if (mNum) { steps.push(mNum[1].trim()); continue }
+      const mDash = line.match(/^[-*]\s+(.+)/)
+      if (mDash) { steps.push(mDash[1].trim()); continue }
     }
     return steps
   }
@@ -177,11 +183,29 @@ export class SkillStore {
     return "execute"
   }
 
-  private inferToolForStep(_stepDesc: string): string | undefined {
+  private inferToolForStep(stepDesc: string): string | undefined {
+    const lower = stepDesc.toLowerCase()
+    if (lower.includes("search") || lower.includes("cari") || lower.includes("find") || lower.includes("lookup")) return "agentic_nav"
+    if (lower.includes("plan") || lower.includes("rencana") || lower.includes("design")) return "agentic_plan"
+    if (lower.includes("execute") || lower.includes("run") || lower.includes("jalankan")) return "agentic_execute"
+    if (lower.includes("verify") || lower.includes("test") || lower.includes("check")) return "agentic_verify"
+    if (lower.includes("delegate") || lower.includes("assign")) return "agentic_delegate"
+    if (lower.includes("reflect") || lower.includes("analyz")) return "agentic_reflect"
+    if (lower.includes("message") || lower.includes("send")) return "agentic_message"
+    if (lower.includes("snapshot") || lower.includes("checkpoint")) return "agentic_snapshot"
+    if (lower.includes("debate") || lower.includes("review")) return "agentic_debate"
     return undefined
   }
 
-  private inferTools(_content: string): string[] {
-    return []
+  private inferTools(content: string): string[] {
+    const lower = content.toLowerCase()
+    const tools: string[] = []
+    if (lower.includes("search") || lower.includes("find")) tools.push("agentic_nav")
+    if (lower.includes("plan")) tools.push("agentic_plan")
+    if (lower.includes("execute") || lower.includes("implement")) tools.push("agentic_execute")
+    if (lower.includes("test") || lower.includes("verify")) tools.push("agentic_verify")
+    if (lower.includes("delegate")) tools.push("agentic_delegate")
+    if (lower.includes("message")) tools.push("agentic_message")
+    return [...new Set(tools)]
   }
 }

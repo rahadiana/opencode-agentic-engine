@@ -117,14 +117,15 @@ export class RouterAgent {
     const matches: Array<{ category: RouteCategory; score: number; matchedKeywords: string[] }> = []
 
     for (const cat of this.categories) {
-      if (cat.keywords.length === 0) continue // 'general' has no keywords
+      if (cat.keywords.length === 0) continue
       let score = 0
       const matchedKeywords: string[] = []
+      const kwSet = new Set(cat.keywords.map(k => k.toLowerCase()))
 
-      for (const keyword of cat.keywords) {
-        if (normalizedInput.includes(keyword)) {
+      for (const word of normalizedInput.split(/\s+/)) {
+        if (kwSet.has(word)) {
           score += 1
-          matchedKeywords.push(keyword)
+          matchedKeywords.push(word)
         }
       }
 
@@ -137,19 +138,16 @@ export class RouterAgent {
       return null
     }
 
-    // Sort by score descending
     matches.sort((a, b) => b.score - a.score)
     const top = matches[0]
-    const totalKeywords = top.category.keywords.length
-    // Use higher denominator for small keyword sets to prevent over-confident routing
-    const confidence = Math.min(1.0, top.score / Math.max(2, totalKeywords * 0.5))
+    const maxPossible = Math.max(2, normalizedInput.split(/\s+/).length)
+    const confidence = Math.min(1.0, top.score / maxPossible)
 
-    // Only return if confidence is reasonable
     if (confidence < 0.3) return null
 
     return {
       input,
-      intent: `Terkait ${top.category.name}`,
+      intent: `Related to ${top.category.name}`,
       category: top.category.id,
       confidence: parseFloat(confidence.toFixed(2)),
       usedLlm: false,
@@ -203,8 +201,8 @@ export class RouterAgent {
             reasoning: parsed.reasoning ?? `LLM classified as ${catId}`,
           }
         }
-      } catch {
-        // LLM fallback failed — fall through to general
+      } catch (e) {
+        console.error(`[RouterAgent] LLM fallback failed:`, e)
       }
     }
 
