@@ -268,6 +268,148 @@ src/
 
 > **Note:** Domain packs (`core/domains/`) mendefinisikan tool set, verifier, error matchers, dan decomposition rules per domain. Prompt agent di-generate dinamis via `prompt-builder.ts` sesuai domain aktif. `navigator.ts` mendukung 8 bahasa (TS, JS, Python, PHP, Go, Rust, Java, Generic) dengan auto-deteksi dari project files.
 
+## Engineering Techniques
+
+Berikut teknik-teknik engineering yang digunakan di setiap modul, berdasarkan studi kode sumber:
+
+### `core/` — Inti Engine (29 file)
+
+| Kategori | Teknik | Detail |
+|----------|--------|--------|
+| **Planning** | Template-based decomposition | 13 template (create, fix, refactor, test, deploy, migrate, doc, perf, security, docker, CI/CD, research, generic) dengan scoring-based rule selection + cycle detection otomatis |
+| **Planning** | LLM decomposition fallback | `decomposeWithLLM()` — panggil LLM untuk generate structured plan jika template tidak cocok |
+| **Planning** | Multi-strategy scoring | Pattern match (2pt) + keyword match (1pt) + keyword density (0.5pt/kw) + domain bonus (1pt) |
+| **Execution** | Dependency-based scheduling | `getReadySteps()` — topological order via Kahn's algorithm, hanya step dengan semua dependensi terpenuhi yang siap |
+| **Execution** | Per-category retry policy | Retry limit berbeda per error category: import/type/compile/test/runtime/unknown dengan regex pattern matching |
+| **Verification** | Formal contract (G5) | `FormalModel A=(M,T,M,Π)` — Pre/post-condition + invariant checking dengan pluggable `ConditionEvaluator` |
+| **Verification** | Multi-language auto-detection | 6 bahasa (TS, JS, Python, Go, Rust, unknown) — deteksi via file marker (`tsconfig.json`, `Cargo.toml`, dll) |
+| **Verification** | Semantic LLM verification | `verifySemantic()` — LLM memeriksa kesesuaian implementasi terhadap intent/goal |
+| **Agent Loop** | Batch execution + conflict detection | `batchSteps()` — kelompokkan step non-konflik file → eksekusi parallel via `Promise.allSettled` |
+| **Agent Loop** | Anti-stuck loop detection | Rolling window 60 detik dengan hash — break jika 5+ panggilan identik dalam 60s |
+| **Agent Loop** | Circuit breaker (budget) | Cek BudgetTracker sebelum setiap iterasi & retry — stop jika exceeded |
+| **Agent Loop** | Auto-retry with timeout | `Promise.race` step vs 120s timeout + ErrorAnalyzer untuk repair suggestion |
+| **Agent Loop** | Observer pattern | `LoopObserver` — hooks untuk onStepStart, onStepComplete, onLoopComplete |
+| **Auto-Retry** | Strategy rotation | 4 mode bergilir: direct_fix → conservative → type_first → split_changes |
+| **Auto-Retry** | Exponential backoff + full jitter | `getBackoffDelay()` — baseDelay × 2^attempt, capped, lalu `Math.random() * maxDelay` |
+| **Auto-Retry** | Selective rollback | Parse compile error untuk extract file paths via 4 metode — hanya rollback file bermasalah |
+| **Auto-Retry** | Failure context injection | `buildRetryPrompt()` — sertakan error analysis + strategy instructions ke retry prompt |
+| **LLM** | Multi-provider | 4 provider: OpenAI, Anthropic, Local (Ollama), OpenCode SDK — auto-detect dari env vars |
+| **LLM** | Response caching | TTL 30 detik, bounded cache (1000 entries) — evict oldest 20% |
+| **LLM** | JSON extraction fallback chain | 3 level: JSON.parse → ```json codeblock → regex match `{...key...}` |
+| **LLM** | Memory context injection | Auto-inject 3 relevant episodes + 3 relevant skills ke setiap LLM call |
+| **LLM** | Token usage → BudgetTracker | Setiap LLM call record tokens + cost estimation → feed ke BudgetTracker |
+| **Event System** | Pub/sub EventBus | `on/onAny/emit` — unsubscribe function pattern, async-safe, sequential |
+| **Event System** | Event taxonomy | 9 namespace: step.*, plan.*, pipeline.*, budget.*, guard.*, task.*, llm.*, file.*, memory.* |
+| **Domain** | Domain Registry | Auto-detect domain, activate/deactivate, per-domain error matchers + verifier strategies |
+| **Domain** | 6 domain packs | code (SE), data-science (ML), devops (infra), generic (fallback), mobile (Android/iOS), security (vuln) |
+
+### `agents/` — Multi-Agent System (4 file)
+
+| Kategori | Teknik | Detail |
+|----------|--------|--------|
+| **Runtime** | Isolated LLM per (session, role) | Setiap role mendapat instance LLMEngine sendiri dengan session ID unik |
+| **Coordinator** | Shared memory with mutex | `writeSharedMemory()` dengan async mutex (queue-based) — atomic batch writes |
+| **Coordinator** | Message bus | 6 message types: result, review_request, review_response, clarification, approval, revision |
+| **Coordinator** | Task delegation with context | Auto-inject shared memory + relevant skills ke task description |
+| **Coordinator** | Role suggestion | LLM first → keyword fallback untuk menentukan role terbaik |
+| **Orchestrator** | Formal pipeline contracts | `PipelineContract` — Input/output schema per stage, pre/post-conditions, cross-stage invariants |
+| **Orchestrator** | Schema validation | `validateSchema()` — cek field required dalam output JSON tiap stage |
+| **Orchestrator** | LLM cross-validation (G4) | Schema checks + invariant checks + LLM semantic validation antar-stage |
+| **Orchestrator** | 4 built-in pipelines | feature-dev (PM→Arch→Dev→QA), fix-verify, refactor-review, deploy-check |
+| **Role Registry** | Versioned prompt history | Setiap role punya riwayat perubahan prompt dengan version tracking |
+| **Role Registry** | Rollback support | `rollbackPrompt(role, version)` — revert ke versi prompt sebelumnya |
+| **Role Registry** | 9 built-in roles | 5 engineering (architect, developer, qa, pm, coordinator) + 4 generic (analyst, builder, reviewer, planner) |
+
+### `drift/` — Error Detection & Recovery (5 file)
+
+| Kategori | Teknik | Detail |
+|----------|--------|--------|
+| **Checkpoints** | Risk-based checkpointing | 3 tipe: warning, review, block — block dapat hentikan eksekusi |
+| **Checkpoints** | Risk evaluation | Deteksi: file deletion, mass changes, API changes, config/secret, system path, test-only, schema/migration |
+| **Context** | Rule-based extraction | Ekstrak decisions, fileChanges, invariants, openItems via regex dari conversation |
+| **Context** | LLM compression fallback | Jika context melebihi threshold, gunakan LLM untuk summarization |
+| **Dependencies** | Import graph | Parse ESM/CommonJS/dynamic imports — build directed graph file-level |
+| **Dependencies** | Error propagation analysis | `analyzeErrorPropagation()` — traverse dependents transitif untuk akar error |
+| **Hallucination Guard** | Multi-claim verification | 4 tipe: file_exists, function_exists, import_valid, api_signature |
+| **Hallucination Guard** | Path traversal protection | `resolveSafe()` — semua path harus di dalam worktree |
+| **Hallucination Guard** | Multi-language function detection | Regex pattern per bahasa: TS/JS, Python, Go, Rust |
+| **Pattern Discovery** | Cross-session pattern analysis | Analisis error patterns, file changes, session outcomes, skill effectiveness |
+| **Pattern Discovery** | Trend computation | Bandingkan first-half vs second-half success rate untuk deteksi improving/degrading |
+
+### `memory/` — Memory & Skill System (10 file)
+
+| Kategori | Teknik | Detail |
+|----------|--------|--------|
+| **Episodic Store** | Cross-session memory | Record episode dengan tags, decisions, filesChanged — relevance scoring dengan TF + recency + success bonus |
+| **Episodic Store** | Schema versioning | Envelope-based serialization dengan migrasi berantai |
+| **Skill Store** | Auto-extraction | Deteksi pola extractable: success markers + completion markers + action words |
+| **Skill Store** | Sliding window success rate | 20-window untuk hitung success rate akurat |
+| **Skill Store** | TF-IDF skill search | Relevance scoring: token overlap + recency bonus + success rate bonus |
+| **Skill Store** | Multi-lingual action verbs | English + Indonesian action verbs untuk step extraction |
+| **RAG** | Multi-index RAG | Per-category indexes dengan hybrid search (TF-IDF + Vector) |
+| **RAG** | Auto-category | Pilih kategori terbaik untuk query secara otomatis |
+| **Vector Store** | TF-IDF tanpa dependensi | Inverted index per kategori, incremental indexing, title/keyword bonus |
+| **Session Store** | TTL-based pruning | Auto-hapus sesi expired berdasarkan forgetAfterDays |
+| **Training Data** | Skill → fine-tuning | Konversi skill & episode ke OpenAI JSONL atau instructions JSON |
+
+### `evaluation/` — Live Evaluation (1 file)
+
+| Kategori | Teknik | Detail |
+|----------|--------|--------|
+| **Weighted scoring** | 5 dimensi | taskSuccess (40%) + errorRecovery (20%) + contextStability (15%) + multiAgent (15%) + skillReuse (10%) |
+| **Dual metrics** | SWE-bench & EvoClaw | Task success rate (SWE-bench style) + composite weighted score (EvoClaw style) |
+| **Auto-tips** | Actionable feedback | Jika score < 80, generate tips spesifik per dimensi yang kurang |
+| **Confidence interval** | Statistical rigor | Mean + stddev untuk setiap dimensi evaluasi |
+
+### `evolution/` — Self-Evolution (2 file)
+
+| Kategori | Teknik | Detail |
+|----------|--------|--------|
+| **Continuous Evolution** | Rolling window performance | 30-step sliding window — deteksi degrading/improving/stable |
+| **Forecast (Gap #12)** | Predictive degradation | Bucket-based trend analysis + exponential smoothing untuk prediksi future success rate |
+| **Seasonality** | Week-over-week | Deteksi cyclical patterns dengan perbandingan mingguan |
+| **Hysteresis** | Cooldown protection | 2 menit cooldown + min 10 data points sebelum auto-evolve |
+| **Self Evolver** | Skill patch generation | Analisis skill < 80% success rate → suggest fixes (rollback, retry, split, validate) |
+| **Self Evolver** | Role suggestion | Deteksi pola kegagalan → suggest new agent roles |
+| **Self Evolver** | Prompt patching | Map error categories → prompt instructions untuk role tertentu |
+
+### `observability/` — Observability (2 file)
+
+| Kategori | Teknik | Detail |
+|----------|--------|--------|
+| **Trace Logger** | JSONL buffered writer | Buffer 10 entries + auto-flush 5 detik — atomic file write |
+| **Trace Logger** | Retention pruning | Auto-hapus trace tua berdasarkan retentionDays |
+| **Dashboard** | 4 anomaly types | timeout (>30s), retry_storm (3+ failures), loop (sama dalam 5 step), silent_failure |
+| **Dashboard** | Latency percentiles | p50/p95/p99 |
+| **Dashboard** | Peak concurrency | Interval-based overlap detection |
+
+### Design Patterns Used
+
+| Pattern | Location |
+|---------|----------|
+| **Dependency Injection** | LLMEngine → Executor/Verifier/ErrorAnalyzer via setter methods |
+| **Observer/Observable** | EventBus, AgentLoop.addObserver, DegradationCallback |
+| **Strategy Pattern** | RetryStrategy rotation, DomainRegistry verifier strategies |
+| **Chain of Responsibility** | JSON parsing fallback chain, condition evaluator chain, error analysis fallback |
+| **State Machine** | ExecutionState (completed/failed/blocked), PipelineStage lifecycle |
+| **Builder** | PromptTemplate XML composition (identity/instructions/guardrails) |
+| **Circuit Breaker** | BudgetTracker multi-axis (tokens, steps, time, cost) |
+| **Singleton** | Semua services di index.ts (Executor, Verifier, dll — lazy init) |
+| **Template Method** | 13 planner templates dengan scoring-based selection |
+| **Facade** | AgentLoop (orchestrates executor + verifier + errorAnalyzer) |
+| **Mutex** | Coordinator shared memory — async queue-based mutex |
+
+### ID Chain Architecture
+
+```
+sessionID ⊃ pipelineRunId ⊃ taskId ⊃ stepId
+                                           
+   ↓              ↓              ↓          ↓
+[session]   [pipeline-run]    [task]     [step]
+```
+
+Format canonical: `run-{sessionID}-{pipelineId}`. Setiap level di-track dengan namespace terpisah untuk isolation dan dependency resolution.
+
 ## Testing
 
 ```bash
@@ -318,7 +460,15 @@ Semua aktivitas dicatat ke `.agentic/trace.jsonl`:
 - Step execution + error propagation
 - Retry history & anomaly detection
 
-## Recent Updates (v0.4.5 — 2026-06-19)
+## Recent Updates (v0.4.6 — 2026-06-20)
+
+### 📚 v0.4.6 — Comprehensive Engineering Documentation
+
+- **Engineering Techniques section**: Dokumentasi lengkap 50+ teknik engineering per modul — algoritma, design patterns, dan pendekatan implementasi
+- **Design Patterns catalog**: 11 design patterns yang digunakan (DI, Observer, Strategy, Chain of Responsibility, State Machine, Builder, Circuit Breaker, Singleton, Template Method, Facade, Mutex)
+- **ID Chain documentation**: Visualisasi arsitektur `sessionID ⊃ pipelineRunId ⊃ taskId ⊃ stepId`
+
+### 🚀 v0.4.5 — 2026-06-19
 
 ### 🚀 v0.4.4 — Domain-Agnostic + Sub-Agent Integration
 
