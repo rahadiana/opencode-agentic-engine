@@ -24,7 +24,7 @@ Berdasarkan konsep dari paper **"The End of Software Engineering"** (arXiv:2606.
 | `agentic_plan` | I | Create structured execution plan. Auto-decompose via templates (create/fix/refactor/test/deploy/migrate/doc/perf/security/docker/CI) + LLM fallback | Template-based decomposition, scoring-based rule matching, cycle detection (Kahn's), LLM auto-decompose |
 | `agentic_execute` | I | Record subtask completion. Auto-verify compile on success, error recovery guidance + propagation tracing, user feedback for continuous learning | File writing chokepoint, hallucination guard auto-check, skill auto-extract, budget step tracking |
 | `agentic_reflect` | I | Analyze failed step: diagnose error category, trace error propagation across step chain via dependency graph, suggest recovery plan | Import graph traversal, transitive dependents analysis, multi-category error matching |
-| `agentic_verify` | I | Full verification: compile + lint + test suite. Auto-detect language (TS/JS/Python/Go/Rust). Error analysis on failure | Multi-language execFileSync, compile cache, semantic LLM verification, domain verifier strategies |
+| `agentic_verify` | I | Full verification: compile + lint + test + semantic + security + performance + architecture + dependency audit (Gap #4). 3-tier system: fast/standard/deep | Multi-language execFileSync, compile cache, semantic LLM verification, domain verifier strategies |
 | `agentic_status` | I | Execution dashboard: progress bar, health, blocked steps, dependency graph, retry history, file change summary | ExecutionState snapshot, topological dependency visualization |
 | `agentic_nav` | II | Scan codebase for task-relevant files. Multi-language scanner (TS/JS/Python/PHP/Go/Rust/Java/generic) | LanguageConfig per bahasa, relevance scoring, import/export indexing |
 | `agentic_context` | II | View & compress execution context. Summarizes conversation history preserving decisions, file changes, invariants | Rule-based extraction + LLM compression fallback, token estimation |
@@ -229,7 +229,8 @@ src/
 │   │   └── code.ts
 │   ├── planner.ts           # Domain-aware auto-decompose (generic + code templates)
 │   ├── executor.ts          # Step execution, domain-aware error categorization
-│   ├── verifier.ts          # Compile + test verification (execFileSync)
+│   ├── verifier.ts          # Compile + test + Gap #4: multi-dimensional (security, perf, arch, deps) with 3-tier system
+│   ├── semantic-cache.ts    # Gap #7: TF-IDF + cosine similarity LLM response cache
 │   ├── error-analyzer.ts    # Error categorization
 │   ├── navigator.ts         # Multi-language codebase scanning (TS/JS/Py/PHP/Go/Rust/Java)
 │   ├── prompt-builder.ts    # Dynamic agent prompt per active domain
@@ -262,8 +263,8 @@ src/
 │   ├── self-evolver.ts       # Auto-improvement analysis
 │   └── continuous-evolution.ts # Continuous self-evolution pipeline
 └── observability/
-    ├── trace-logger.ts       # JSONL trace writer (buffered, auto-flush)
-    └── dashboard.ts          # Timeline + stats + anomaly detection
+    ├── trace-logger.ts       # JSONL trace writer (buffered, auto-flush, dedup guard)
+    └── dashboard.ts          # Timeline + stats + anomaly detection + model reliability
 ```
 
 > **Note:** Domain packs (`core/domains/`) mendefinisikan tool set, verifier, error matchers, dan decomposition rules per domain. Prompt agent di-generate dinamis via `prompt-builder.ts` sesuai domain aktif. `navigator.ts` mendukung 8 bahasa (TS, JS, Python, PHP, Go, Rust, Java, Generic) dengan auto-deteksi dari project files.
@@ -460,7 +461,28 @@ Semua aktivitas dicatat ke `.agentic/trace.jsonl`:
 - Step execution + error propagation
 - Retry history & anomaly detection
 
-## Recent Updates (v0.4.6 — 2026-06-20)
+## Recent Updates
+
+### v0.5.1 — Gap #4 Verification Fidelity + Gap #7 Semantic Cache (2026-06-20)
+
+**Gap #4 — Multi-Dimensional Verification:**
+- `verifier.ts` — `verifySecurity()`, `verifyPerformance()`, `verifyArchitecture()`, `verifyDeps()`
+- `verifyAllDeep()` 3-tier system: fast (compile), standard (compile+lint+test), deep (all + security/perf/arch/deps)
+- `DeepVerificationConfig` per-dimension toggle
+- Agent loop: intermediate → standard, final → deep
+
+**Gap #7 — Semantic Cache:**
+- `semantic-cache.ts` — TF-IDF + cosine similarity LLM response cache
+- LLMEngine integration: semantic lookup before exact-match cache
+- `enableSemanticCache()` / `disableSemanticCache()` / `getSemanticCacheStats()`
+
+**Other:**
+- Trace dedup guard (false positive loop anomaly resolved)
+- Model Reliability section in dashboard
+- COLLABORATION_SCENARIOS.md + TOOLS.md updated
+- **744 unit tests** (was 663)
+
+### v0.4.6 — Comprehensive Engineering Documentation (2026-06-20)
 
 ### 📚 v0.4.6 — Comprehensive Engineering Documentation
 
@@ -528,8 +550,8 @@ Semua aktivitas dicatat ke `.agentic/trace.jsonl`:
 ### Stats
 
 - **29 tools** (was 21) — 5 stages + 5 blueprints
-- **663 unit tests** — mock-based, no LLM needed
-- **v0.4.5** — latest release
+- **744 unit tests** — mock-based, no LLM needed
+- **v0.5.1** — latest release
 
 ## License
 
