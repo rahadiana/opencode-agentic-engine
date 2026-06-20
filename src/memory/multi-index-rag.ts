@@ -16,6 +16,27 @@ export interface IndexEntry {
   vectorScore?: number
   /** Combined hybrid score */
   hybridScore?: number
+  /** Confidence score 0.0–1.0 (populated by searchWithConfidence) */
+  confidence?: number
+}
+
+/**
+ * Result from searchWithConfidence — includes aggregate confidence metrics.
+ */
+export interface SearchWithConfidenceResult {
+  entries: IndexEntry[]
+  /** Average confidence across all returned entries */
+  averageConfidence: number
+  /** Highest single entry confidence */
+  topConfidence: number
+  /** True if at least one entry has confidence >= 0.6 */
+  hasHighConfidence: boolean
+  /** True if no results found */
+  isEmpty: boolean
+  /** The search query used */
+  query: string
+  /** Categories searched */
+  categories: string[]
 }
 
 export interface IndexSearchResult {
@@ -370,6 +391,71 @@ export class MultiIndexRAG {
     }
 
     return results
+  }
+
+  /**
+   * Search with confidence scoring — designed for knowledge-first injection.
+   *
+   * Searches across all (or specific) categories and returns results with:
+   * - Per-entry confidence scores (0.0–1.0)
+   * - Aggregate metrics (average, top, hasHighConfidence)
+   * - Empty detection for mandatory research flow
+   *
+   * Confidence heuristic:
+   *   hybridScore >= 0.3  → confidence = hybridScore (scaled to 0-1)
+   *   hybridScore < 0.3   → confidence = hybridScore * 0.5 (penalized)
+   *   No results           → confidence = 0.0
+   *
+   * Thresholds: >= 0.8 = HIGH, >= 0.6 = MEDIUM, >= 0.3 = LOW, < 0.3 = UNKNOWN
+   */
+  async searchWithConfidence(query: string, categories?: string[], limit = 5): Promise<SearchWithConfidenceResult> {
+    const cats = categories && categories.length > 0
+      ? categories
+      : [...this.indices.keys()]
+
+    const allResults: IndexEntry[] = []
+
+    for (const cat of cats) {
+      if (!this.indices.has(cat)) continue
+      let catResult: IndexSearchResult
+
+      if (this.embedder) {
+        catResult = await this.searchByCategoryAsync(query, cat, limit)
+      } else {
+        catResult = this.searchByCategory(query, cat, limit)
+      }
+
+      for (const entry of catResult.entries) {
+        // Compute confidence from hybridScore
+        const rawScore = entry.hybridScore ?? 0
+        // Penalize very low scores — if hybrid < 0.3, confidence drops sharply
+        const confidence = rawScore >= 0.3 ? rawScore : rawScore * 0.5
+        entry.confidence = Math.min(1, Math.max(0, confidence))
+        allResults.push(entry)
+      }
+    }
+
+    // Sort by confidence descending
+    allResults.sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))
+
+    // Trim to limit across all categories
+    const trimmed = allResults.slice(0, limit)
+
+    const confidences = trimmed.map(e => e.confidence ?? 0)
+    const averageConfidence = confidences.length > 0
+      ? confidences.reduce((s, c) => s + c, 0) / confidences.length
+      : 0
+    const topConfidence = confidences.length > 0 ? Math.max(...confidences) : 0
+
+    return {
+      entries: trimmed,
+      averageConfidence,
+      topConfidence,
+      hasHighConfidence: topConfidence >= 0.6,
+      isEmpty: trimmed.length === 0,
+      query,
+      categories: cats,
+    }
   }
 
   /**

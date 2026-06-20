@@ -158,6 +158,86 @@ export class RouterAgent {
   }
 
   /**
+   * Extract meaningful keywords from user input for RAG search.
+   *
+   * Strategy:
+   * 1. Tokenize input (split by whitespace/punctuation)
+   * 2. Filter out common stop words (English + Indonesian)
+   * 3. Detect category from matched keywords
+   * 4. Score and rank keywords by relevance
+   *
+   * Returns deduplicated, ranked keywords + detected category.
+   */
+  extractKeywords(input: string): { keywords: string[]; category: string } {
+    // Common stop words (English + Indonesian)
+    const stopWords = new Set([
+      "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+      "have", "has", "had", "do", "does", "did", "will", "would", "could",
+      "should", "may", "might", "shall", "can", "need", "dare", "ought",
+      "used", "to", "of", "in", "for", "on", "with", "at", "by", "from",
+      "as", "into", "through", "during", "before", "after", "above", "below",
+      "between", "out", "off", "over", "under", "again", "further", "then",
+      "once", "here", "there", "when", "where", "why", "how", "all", "each",
+      "every", "both", "few", "more", "most", "other", "some", "such", "no",
+      "nor", "not", "only", "own", "same", "so", "than", "too", "very", "just",
+      "because", "but", "and", "or", "if", "while", "although", "though",
+      "what", "which", "who", "whom", "this", "that", "these", "those",
+      "it", "its", "i", "me", "my", "we", "our", "you", "your", "he", "him",
+      "his", "she", "her", "they", "them", "their",
+      // Indonesian
+      "dan", "di", "ke", "dari", "yang", "ini", "itu", "dengan", "untuk",
+      "pada", "adalah", "telah", "sudah", "akan", "bisa", "dapat", "tidak",
+      "ada", "juga", "atau", "saya", "kami", "kita", "mereka", "dia",
+      "oleh", "sebagai", "tentang", "karena", "jika", "saat", "setelah",
+      "sebelum", "antara", "tanpa", "sambil", "meski", "walaupun",
+      "sangat", "agak", "cukup", "paling", "semua", "masing", "sendiri",
+      "hal", "banyak", "sedikit", "lain", "baru", "lama", "besar", "kecil",
+      "tolong", "mohon", "silakan", "terima", "kasih", "maaf",
+    ])
+
+    const normalized = input.toLowerCase()
+    const tokens = normalized.split(/[\s,.;:!?(){}[\]"'/\\@#$%^&*+=<>~`|]+/).filter(t => t.length > 2)
+
+    // Score each token by relevance
+    const scored = new Map<string, number>()
+    const matchedCategory = new Map<string, number>()
+
+    for (const token of tokens) {
+      if (stopWords.has(token)) continue
+      if (/^\d+$/.test(token)) continue  // skip pure numbers
+
+      const currentScore = scored.get(token) ?? 0
+      scored.set(token, currentScore + 1)
+
+      // Bonus if token matches a category keyword
+      for (const cat of this.categories) {
+        if (cat.keywords.some(kw => kw.toLowerCase() === token)) {
+          matchedCategory.set(cat.id, (matchedCategory.get(cat.id) ?? 0) + 2)
+          scored.set(token, (scored.get(token) ?? 0) + 2)
+        }
+      }
+    }
+
+    // Sort by score descending
+    const sorted = [...scored.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)  // max 10 keywords
+      .map(([word]) => word)
+
+    // Detect best category
+    let bestCategory = "general"
+    let bestScore = 0
+    for (const [cat, score] of matchedCategory) {
+      if (score > bestScore) {
+        bestScore = score
+        bestCategory = cat
+      }
+    }
+
+    return { keywords: sorted, category: bestCategory }
+  }
+
+  /**
    * Routing with LLM fallback — keyword first, LLM if confidence < threshold.
    */
   async route(input: string): Promise<RouteMatch> {

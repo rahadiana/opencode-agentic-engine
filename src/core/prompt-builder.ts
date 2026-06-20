@@ -1,5 +1,5 @@
 import type { DomainPack } from "./domain-registry.js"
-import { PromptTemplate } from "./prompt-template.js"
+import { PromptTemplate, type KnowledgeEntry } from "./prompt-template.js"
 export interface ToolEntry {
   name: string
   description: string
@@ -10,6 +10,8 @@ export interface ToolListConfig {
   showDiscoveryHint?: boolean
   /** Whether this is a routed prompt (dynamic tool selection) */
   isRouted?: boolean
+  /** Optional knowledge entries to auto-inject into <knowledge-context> section */
+  knowledgeEntries?: KnowledgeEntry[]
 }
 
 const CORE_TOOLS = ["agentic_plan", "agentic_execute", "agentic_verify", "agentic_reflect", "agentic_status"]
@@ -114,6 +116,17 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolL
   // ═══════════════════════════════════════════════════════════
   // HEAD — <identity> : who the agent IS
   // ═══════════════════════════════════════════════════════════
+  //
+  // KNOWLEDGE-FIRST IDENTITY:
+  // LLM dianggap sebagai reasoning engine, BUKAN knowledge base.
+  // Semua pengetahuan HARUS dari RAG / web / arXiv / feedback loop.
+
+  // Core identity: LLM bodoh
+  t.identity(
+    "⚠️ **CRITICAL IDENTITY**: You are a **reasoning engine**, NOT a knowledge base.\n\n" +
+    "Your training data has a cutoff date. **Assume ALL internal knowledge may be outdated, incorrect, or irrelevant.**\n" +
+    "Do NOT rely on what you \"know\" — always verify against the knowledge context provided below.",
+  )
 
   // Tool listing header
   if (isRouted) {
@@ -138,31 +151,43 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolL
     `Always use \`webfetch\`.`,
   )
 
-  // Knowledge gathering checklist
+  // Knowledge gathering checklist — mandatory, not optional
   const knowledgeSteps: string[] = []
-  knowledgeSteps.push("Your training data has a cutoff date. Before implementing:")
-  if (hasNav) knowledgeSteps.push(`1. **Check project structure** — use \`agentic_nav\` to scan codebase`)
-  if (isCodeDomain) knowledgeSteps.push(`${hasNav ? "2" : "1"}. **Read relevant files** — use \`read\` to inspect specific files`)
+  knowledgeSteps.push("## Knowledge-First Protocol (MANDATORY)")
+  knowledgeSteps.push("")
+  knowledgeSteps.push("**Your internal knowledge is SUSPECT.** Before implementing anything:")
+  if (hasNav) knowledgeSteps.push(`1. **Scan codebase** — use \`agentic_nav\` to check project structure`)
+  if (isCodeDomain) knowledgeSteps.push(`${hasNav ? "2" : "1"}. **Read files** — use \`read\` to inspect relevant files`)
   if (hasMemory) {
     const n = knowledgeSteps.length
     knowledgeSteps.push(`${n}. **Search skills**: \`agentic_skill find "relevant topic"\` — learn from past successes/failures`)
     knowledgeSteps.push(`${n + 1}. **Search episodes**: \`agentic_episodes search "similar task"\` — see what worked before`)
   }
-  knowledgeSteps.push(`${knowledgeSteps.length}. **Search latest docs**: \`webfetch\` — check current info`)
-  knowledgeSteps.push(`${knowledgeSteps.length}. Only then start implementing`)
+  knowledgeSteps.push(`${knowledgeSteps.length}. **Check knowledge context** below — if <knowledge-context> is empty or low confidence, you MUST call \`webfetch\` to research`)
+  knowledgeSteps.push(`${knowledgeSteps.length}. **Web research** — use \`webfetch\` to get current information (MANDATORY if confidence < 0.6)`)
+  knowledgeSteps.push(`${knowledgeSteps.length}. Only after gathering ALL relevant knowledge → start implementing`)
   t.identity(knowledgeSteps.join("\n"))
+
+  // ═══════════════════════════════════════════════════════════
+  // DATA — <knowledge-context> : auto-injected knowledge
+  // ═══════════════════════════════════════════════════════════
+
+  // Inject knowledge entries if provided (from RAG/web/arXiv research)
+  if (config?.knowledgeEntries && config.knowledgeEntries.length > 0) {
+    t.injectKnowledge(config.knowledgeEntries)
+  }
 
   // ═══════════════════════════════════════════════════════════
   // BODY — <instructions> : what the agent should DO
   // ═══════════════════════════════════════════════════════════
 
-  // Standard workflow — the only tool guidance the LLM needs;
-  // specific tool names + descriptions are handled natively by OpenCode's function calling.
+  // Knowledge-First Workflow — research is MANDATORY before implementation
   let workflow = `### Recommended Approach\n\n`
-  workflow += `**General pattern:** Plan → Implement → Verify\n\n`
-  workflow += `1. Use a planning tool to break down the goal into clear steps\n`
-  workflow += `2. Execute each step, using the right tool for each sub-task\n`
-  workflow += `3. Verify results when complete`
+  workflow += `**Knowledge-First Workflow:** Research → Plan → Implement → Verify\n\n`
+  workflow += `1. **RESEARCH FIRST** — Check <knowledge-context> above. If empty or low confidence, use \`webfetch\` / agent memory tools IMMEDIATELY\n`
+  workflow += `2. **Plan** — Use a planning tool to break down the goal into clear steps\n`
+  workflow += `3. **Implement** — Execute each step using the right tool\n`
+  workflow += `4. **Verify** — Verify results when complete`
   if (hasAuto) {
     workflow += `\n\nOr use **agentic_auto** for fully autonomous execution (plan + execute + verify + retry in one call)`
   }
@@ -176,10 +201,12 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolL
   // ═══════════════════════════════════════════════════════════
 
   const guardrailItems: string[] = [
-    "Gather knowledge FIRST before implementing",
-    "USE the workflow: plan → implement → verify",
+    "KNOWLEDGE-FIRST: Research BEFORE implementing — do NOT rely on your internal knowledge",
+    "USE the workflow: research → plan → implement → verify",
+    "If <knowledge-context> is empty or ALL confidence < 0.6: you MUST call webfetch to research first",
     'Never ask "should I..." — just call the tool',
     "If a step fails, analyze it before retrying",
+    "Always cite sources when making claims (URL, arXiv ID, RAG entry ID)",
   ]
   if (hasDebate) guardrailItems.push("For analysis tasks: use agentic_debate")
   if (hasRouter && hasRag) guardrailItems.push("For knowledge queries: use agentic_router then agentic_rag")

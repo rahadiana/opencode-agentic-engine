@@ -57,6 +57,7 @@ import { DataCleaner } from "./core/data-cleaner.js"
 import { MultiIndexRAG } from "./memory/multi-index-rag.js"
 import { MCPClient } from "./core/mcp-client.js"
 import { buildAgenticSystemInstructions, type ToolEntry } from "./core/prompt-builder.js"
+import { type KnowledgeEntry } from "./core/prompt-template.js"
 import { ToolRouter, type RoutingContext } from "./core/tool-router.js"
 
 // ── Build-time version injected by esbuild define ──
@@ -4609,14 +4610,22 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
     },
 
     // ── Dynamic system prompt injection per LLM call ──
-    // Parent agent: full XML-structured prompt (identity + workflow + guardrails).
-    // Sub-agent: role-aware minimal injection — tool list from RoleRegistry,
-    // critical reminders, anti-hallucination. Avoids conflicting tool counts.
+    // KNOWLEDGE-FIRST ARCHITECTURE (2026):
+    //   Sebelum prompt dikirim ke LLM, kita auto-inject:
+    //   1. RAG results → <knowledge-context> section
+    //   2. Confidence scoring → mandatory research flow
+    //   3. Tool selection → instructions section
+    //   4. Guardrails → anti-hallucination
+    //
+    //   LLM = reasoning engine, BUKAN knowledge base.
+    //   Semua pengetahuan HARUS dari RAG / web / arXiv.
     "experimental.chat.system.transform": async (_input: { sessionID?: string; model: unknown }, output: { system: string[] }) => {
       const systemText = output.system.join("\n")
       const subAgent = detectSubAgentRole(systemText)
 
       let injection: string
+      let hasHighConfidenceKnowledge = false
+
       if (subAgent) {
         // Role-aware minimal injection
         injection = buildSubAgentInjection(subAgent.role, subAgent.tools)
@@ -4632,17 +4641,67 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
           isSubAgent: false,
         }
 
+        // ── KNOWLEDGE-FIRST: Auto-inject RAG results ──
+        // Extract keywords from USER CONVERSATION (bukan system prompt text!)
+        // Pakai sessionID untuk ambil percakapan dari SessionStore
+        let knowledgeEntries: KnowledgeEntry[] = []
+        let queryForRag = ""
+
+        try {
+          // 1. Ambil user message terakhir dari session store
+          const sessionId = _input.sessionID
+          if (sessionId) {
+            const turns = sessionStore.getContext(sessionId, 3)
+            const userTurns = turns.filter(t => t.role === "user")
+            if (userTurns.length > 0) {
+              queryForRag = userTurns[userTurns.length - 1].content
+            }
+          }
+
+          // 2. Fallback: gunakan system text jika tidak ada user messages
+          if (!queryForRag) {
+            queryForRag = systemText.slice(-2000)
+          }
+
+          // 3. Extract keywords dari pesan user, search RAG
+          const { keywords, category } = routerAgent.extractKeywords(queryForRag)
+          if (keywords.length > 0) {
+            const ragResult = await multiIndexRAG.searchWithConfidence(keywords.join(" "), [category], 5)
+            if (!ragResult.isEmpty) {
+              knowledgeEntries = ragResult.entries
+                .map(entry => ({
+                  source: entry.title,
+                  confidence: entry.confidence ?? 0,
+                  content: entry.episode?.summary ?? entry.skill?.definition.trigger.pattern ?? "",
+                  category: entry.category,
+                }))
+                .filter(e => e.content.length > 0)
+
+              hasHighConfidenceKnowledge = knowledgeEntries.some(e => e.confidence >= 0.6)
+            }
+          }
+        } catch (e) {
+          // Non-critical: RAG failure shouldn't break the prompt
+          console.error("[Knowledge-First] RAG search failed:", e instanceof Error ? e.message : e)
+        }
+
+        // ── Tool selection ──
         const { selected } = toolRouter.selectTools(routingCtx)
         const toolListText = toolRouter.buildToolList(selected)
         const alwaysExposeHint = toolRouter.buildAlwaysExposeHint()
         const searchHint = toolRouter.buildSearchToolsHint()
 
-        // Build filtered TOOL_REGISTRY from selected tools (for backward compat with prompt-builder)
+        // Build filtered TOOL_REGISTRY from selected tools
         const filteredRegistry: ToolEntry[] = selected.map(t => ({ name: t.name, description: t.description }))
         const hasTools = filteredRegistry.length > 0
 
         if (hasTools) {
-          injection = buildAgenticSystemInstructions(pack, filteredRegistry, { isRouted: true, showDiscoveryHint: true })
+          // Build prompt WITH auto-injected knowledge context
+          injection = buildAgenticSystemInstructions(pack, filteredRegistry, {
+            isRouted: true,
+            showDiscoveryHint: true,
+            knowledgeEntries: knowledgeEntries.length > 0 ? knowledgeEntries : undefined,
+          })
 
           // Append tool list + discovery hints
           injection += `\n\n### Selected Tools for This Task (${selected.length} of ${TOOL_REGISTRY.length})\n\n`
@@ -4650,8 +4709,24 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
           injection += alwaysExposeHint
           injection += searchHint
         } else {
-          // Fallback: show all domain-appropriate tools if router returned nothing
-          injection = buildAgenticSystemInstructions(pack, TOOL_REGISTRY)
+          // Fallback: show all domain-appropriate tools
+          injection = buildAgenticSystemInstructions(pack, TOOL_REGISTRY, {
+            knowledgeEntries: knowledgeEntries.length > 0 ? knowledgeEntries : undefined,
+          })
+        }
+
+        // ── Mandatory research flow ──
+        // If no high-confidence knowledge, append mandatory webfetch instruction
+        if (!hasHighConfidenceKnowledge) {
+          injection += `\n\n---\n`
+          injection += `⚠️ **MANDATORY RESEARCH REQUIRED**\n\n`
+          injection += `No high-confidence knowledge context was found for this task.\n`
+          injection += `**You MUST research before implementing:**\n\n`
+          injection += `1. Use \`webfetch\` to search for current information, documentation, or API references\n`
+          injection += `2. For academic/research topics: fetch from arxiv.org (e.g., \`webfetch https://arxiv.org/search/?query=...\`)\n`
+          injection += `3. Verify ALL claims against external sources — do NOT rely on your internal knowledge\n`
+          injection += `4. Cite sources (URLs) for every claim in your response\n\n`
+          injection += `> 💡 **Why?** Your training data has a cutoff date. What the user asks about may have changed since then.`
         }
       }
 
@@ -4799,6 +4874,6 @@ export { ConfigLoader, validateConfig } from "./core/config.js"
 export { PersistenceLayer } from "./memory/persistence.js"
 export { EpisodicStore } from "./memory/episodic-store.js"
 export { STOP_WORDS, isStopWord, filterStopWords, getStopWordStats } from "./memory/stopwords.js"
-export { PromptTemplate } from "./core/prompt-template.js"
+export { PromptTemplate, type KnowledgeEntry } from "./core/prompt-template.js"
 export { ToolRouter } from "./core/tool-router.js"
 export { buildAgentPrompt, buildAgenticSystemInstructions, buildGenericAgentPrompt } from "./core/prompt-builder.js"
