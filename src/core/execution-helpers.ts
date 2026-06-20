@@ -12,6 +12,7 @@ import type { HallucinationGuard } from "../drift/hallucination-guard.js"
 import type { SkillStore } from "../memory/skill-store.js"
 import type { ConfigLoader } from "./config.js"
 import type { FileWrittenEvent } from "./event-taxonomy.js"
+import type { ConfidenceScorer, ConfidenceStore, ScoringSignals } from "./confidence-scorer.js"
 
 type AgenticFilePayload = FileWrittenEvent["payload"]
 
@@ -112,6 +113,10 @@ export interface CompletionDeps {
   budgetTracker?: BudgetTracker
   /** HallucinationGuard — auto-check jika ada dan filesModified non-kosong */
   hallucinationGuard?: HallucinationGuard
+  /** ConfidenceScorer — confidence scoring per output (Gap #2) */
+  confidenceScorer?: ConfidenceScorer
+  /** ConfidenceStore — per-step confidence record store */
+  confidenceStore?: ConfidenceStore
   /** SkillStore — auto-extract jika ada, role=developer, dan filesModified non-kosong */
   skillStore?: SkillStore
   configLoader?: ConfigLoader
@@ -137,6 +142,8 @@ export interface CompletionResult {
   guardPassed: boolean
   /** Whether a skill was actually extracted */
   skillExtracted: boolean
+  /** Confidence score for this step's output (Gap #2) */
+  confidenceScore?: import("./confidence-scorer.js").ConfidenceScore
 }
 
 /**
@@ -156,13 +163,15 @@ export async function recordCompletion(
 ): Promise<CompletionResult> {
   let guardPassed = true
   let skillExtracted = false
+  let guardResult: { passed: boolean; claims: Array<{ verified: boolean }> } | undefined
+  let confidenceScore_: import("./confidence-scorer.js").ConfidenceScore | undefined
 
   // 1. Budget step count — independent
   deps.budgetTracker?.recordStep()
 
   // 2. Hallucination guard — independent
   if (deps.hallucinationGuard && record.filesModified.length > 0) {
-    const guardResult = deps.hallucinationGuard.check(record.output, record.filesModified)
+    guardResult = deps.hallucinationGuard.check(record.output, record.filesModified)
     guardPassed = guardResult.passed
 
     if (deps.eventBus) {
@@ -181,6 +190,16 @@ export async function recordCompletion(
         },
       })
     }
+  }
+
+  // 2b. Confidence scoring (Gap #2) — uses guard result + other available signals
+  if (deps.confidenceScorer && deps.confidenceStore) {
+    const signals: ScoringSignals = {
+      stepId: record.stepId ?? record.taskId ?? "unknown",
+      guardResult,
+    }
+    confidenceScore_ = deps.confidenceScorer.score(signals)
+    deps.confidenceStore.set(record.stepId ?? record.taskId ?? "unknown", confidenceScore_)
   }
 
   // 3. Skill extraction — independent, ONLY for developer stage with files
@@ -212,5 +231,5 @@ export async function recordCompletion(
     }
   }
 
-  return { guardPassed, skillExtracted }
+  return { guardPassed, skillExtracted, confidenceScore: confidenceScore_ }
 }

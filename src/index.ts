@@ -28,7 +28,7 @@ import type { AgentRole, AgentTask } from "./agents/coordinator.js"
 import { Orchestrator, type WorkflowPipeline } from "./agents/orchestrator.js"
 import { SkillStore } from "./memory/skill-store.js"
 import { EpisodicStore } from "./memory/episodic-store.js"
-import { HallucinationGuard, type ClaimResult } from "./drift/hallucination-guard.js"
+import { HallucinationGuard, type ClaimResult, type HallucinationCheck } from "./drift/hallucination-guard.js"
 import { ParallelExecutor } from "./core/parallel.js"
 import { Dashboard } from "./observability/dashboard.js"
 import { CheckpointSystem } from "./drift/checkpoints.js"
@@ -59,6 +59,8 @@ import { MCPClient } from "./core/mcp-client.js"
 import { buildAgenticSystemInstructions, type ToolEntry } from "./core/prompt-builder.js"
 import { type KnowledgeEntry } from "./core/prompt-template.js"
 import { ToolRouter, type RoutingContext } from "./core/tool-router.js"
+import { ConfidenceScorer, ConfidenceStore, type ConfidenceScore } from "./core/confidence-scorer.js"
+import { codeIntentAnalyzer } from "./core/code-intent-analyzer.js"
 
 // ── Build-time version injected by esbuild define ──
 declare const __VERSION__: string
@@ -347,9 +349,11 @@ const createEngine: Plugin = async (input, _options) => {
   const selfEvolver = new SelfEvolver()
   const continuousEvolution = new ContinuousEvolution()
   const patternDiscovery = new PatternDiscovery()
-  const liveEvaluator = new LiveEvaluator()
-  const modelRegistry = new ModelRegistry()
-  const eventBus = new EventBus()
+const liveEvaluator = new LiveEvaluator()
+const modelRegistry = new ModelRegistry()
+const eventBus = new EventBus()
+const confidenceScorer = new ConfidenceScorer()
+const confidenceStore = new ConfidenceStore()
   const llmEngine = new LLMEngine()
   llmEngine.setOpencodeClient(input.client)
     llmEngine.setModelRegistry(modelRegistry)
@@ -360,6 +364,11 @@ const createEngine: Plugin = async (input, _options) => {
   errorAnalyzer.setLLM(llmEngine)
   verifier.setLLM(llmEngine)
   verifier.setDomainRegistry(domainRegistry)
+
+  // Wire up CodeIntentAnalyzer for Gap #3: program-analysis grounding
+  codeIntentAnalyzer.setNavigator(navigator)
+  codeIntentAnalyzer.setDependencyTracker(depTracker)
+  codeIntentAnalyzer.setLLM(llmEngine)
 
   const agentRuntime = new AgentRuntime()
   agentRuntime.setOpencodeClient(input.client)
@@ -814,6 +823,22 @@ const createEngine: Plugin = async (input, _options) => {
             }
           }
 
+          // Gap #3: Intent Inference via Program Analysis — ground the plan with function-level intent
+          let codeIntentMap = null
+          const projectDir = ctxDir(context)
+          try {
+            codeIntentMap = await codeIntentAnalyzer.analyze(args.goal, projectDir)
+            if (codeIntentMap && codeIntentMap.files.length > 0) {
+              sessionStore.getOrCreate(context.sessionID).codeIntentMap = codeIntentMap
+              // Inject relevant files from intent analysis if none provided
+              if (!args.relevantFiles || args.relevantFiles.length === 0) {
+                plan.intent.context.relevantFiles = codeIntentMap.files.map(f => f.relativePath)
+              }
+            }
+          } catch {
+            // Non-fatal — plan works without intent analysis
+          }
+
           traceLogger.log({
             step: "plan",
             input: args.goal,
@@ -844,6 +869,22 @@ const createEngine: Plugin = async (input, _options) => {
           if (suggestedPipelineObj && suggestedPipelineObj.stages.length > 0) {
             const stageList = suggestedPipelineObj.stages.map(s => `\`${s.role}\``).join(" → ")
             planOutput += `\n\n### 💡 Suggested Pipeline\nThis goal matches the **${suggestedPipelineObj.name}** pipeline (${stageList}). Run \`agentic_pipeline action="run" pipelineId="${suggestedPipelineId}"\` to delegate to specialized agents.`
+          }
+
+          if (codeIntentMap && codeIntentMap.files.length > 0) {
+            const totalFuncs = codeIntentMap.files.reduce((s, f) => s + f.functions.length, 0)
+            planOutput += `\n\n### 🔍 Code Intent Analysis\n**Files analyzed:** ${codeIntentMap.files.length}  \n**Functions extracted:** ${totalFuncs}  \n**Language:** ${codeIntentMap.primaryLanguage ?? "unknown"}\n\n`
+            const topFiles = codeIntentMap.files.slice(0, 3)
+            for (const file of topFiles) {
+              const intentTags = file.functions.slice(0, 4).map(fn => `\`${fn.functionName}\``).join(", ")
+              planOutput += `- **${file.relativePath}** (${file.complexity}) — ${file.summary}`
+              if (intentTags) planOutput += ` → ${intentTags}`
+              planOutput += "\n"
+            }
+            if (codeIntentMap.files.length > 3) {
+              planOutput += `  ... and ${codeIntentMap.files.length - 3} more files\n`
+            }
+            planOutput += `\n*Intent analysis provides program-aware grounding for implementation. Use this context with \`agentic_execute\` for better code generation.*`
           }
 
           return {
@@ -1013,9 +1054,10 @@ const createEngine: Plugin = async (input, _options) => {
             }
           }
 
+          let guardResult: HallucinationCheck | undefined
           if (args.success && configLoader.get().agent.autoHallucinationCheck) {
             response += `\n### Auto-Hallucination Check\n`
-            const guardResult = hallucinationGuard.check(args.output, args.filesModified ?? [])
+            guardResult = hallucinationGuard.check(args.output, args.filesModified ?? [])
 
             if (guardResult.claims.length > 0) {
               const failedClaims = guardResult.claims.filter((c: ClaimResult) => !c.verified)
@@ -1055,6 +1097,38 @@ const createEngine: Plugin = async (input, _options) => {
             } else {
               response += `✅ No claims detected (clean output)\n`
             }
+          }
+
+          // ── Confidence Scoring per Output (Gap #2) ──
+          const modelId = llmEngine.getCurrentModel()
+          let confidenceScore_: ConfidenceScore | undefined
+          if (args.filesModified && args.filesModified.length > 0) {
+            const signals: import("./core/confidence-scorer.js").ScoringSignals = {
+              stepId: args.stepId,
+              modelName: modelId ?? undefined,
+              compileResult: verifyResult ? { passed: verifyResult.passed, output: verifyResult.checks.map(c => c.output).join("\n") } : undefined,
+              guardResult: guardResult ? { passed: guardResult.passed, claims: guardResult.claims } : undefined,
+              testResult: undefined,
+              lintResult: verifyResult?.checks.find(c => c.name === "lint") ? { passed: verifyResult.checks.find(c => c.name === "lint")!.passed } : undefined,
+            }
+            if (modelId) {
+              const modelScore = modelRegistry.getScore(modelId)
+              if (modelScore) {
+                signals.modelReliability = modelScore.reliability
+              }
+            }
+            confidenceScore_ = confidenceScorer.score(signals)
+            confidenceStore.set(args.stepId, confidenceScore_, modelId ?? undefined)
+
+            response += `\n### Confidence Score (Gap #2)\n`
+            response += confidenceScorer.format(confidenceScore_)
+
+            // Feed to LiveEvaluator
+            liveEvaluator.feedStepResult({
+              stepId: `confidence-${args.stepId}`,
+              success: confidenceScore_.passed,
+              sessionId: context.sessionID,
+            })
           }
 
           if (!args.success) {
@@ -1301,16 +1375,18 @@ const createEngine: Plugin = async (input, _options) => {
       }),
 
       agentic_verify: tool({
-        description: "Run full verification: compile + lint + test suite. Auto-detects language (TypeScript, Python, Go, Rust, JavaScript). Includes error analysis on failure.",
+        description: "Run deep verification: compile + lint + test + semantic + security + performance + architecture + dependency audit. Gap #4 multi-dimensional.",
         args: {
           stepId: tool.schema.string().optional().describe("Label for this verification"),
           projectDir: tool.schema.string().optional().describe("Project directory (default: worktree)"),
+          tier: tool.schema.string().optional().describe("Verification tier: 'fast', 'standard', or 'deep' (default: 'deep')"),
         },
         async execute(args, context) {
           const projectDir = args.projectDir ?? ctxDir(context)
           const stepId = args.stepId ?? "full"
+          const tier = (args.tier ?? "deep") as import("./core/verifier.js").VerificationTier
 
-          const result = verifier.verifyAll(stepId, projectDir)
+          const result = await verifier.verifyAllDeep(stepId, projectDir, undefined, [], false, tier)
 
           traceLogger.log({
             step: `verify:${stepId}`,
@@ -1437,6 +1513,25 @@ const createEngine: Plugin = async (input, _options) => {
               }
             }
             output += `\n`
+          }
+
+          // Confidence Score per Step (Gap #2)
+          const confRecords = confidenceStore.getAll()
+          if (confRecords.length > 0) {
+            output += `\n### 📊 Confidence per Step (Gap #2)\n`
+            const avg = confidenceStore.getAverage()
+            output += `**Average:** ${(avg * 100).toFixed(0)}% | **Steps scored:** ${confRecords.length}\n\n`
+            for (const rec of confRecords) {
+              const emoji = rec.passed ? "✅" : "⚠️"
+              const bar = "█".repeat(Math.round(rec.score * 10))
+              const empty = "░".repeat(10 - Math.round(rec.score * 10))
+              output += `- **${rec.stepId}** ${emoji} ${bar}${empty} ${(rec.score * 100).toFixed(0)}%\n`
+            }
+            const lowConf = confidenceStore.getLowConfidence()
+            if (lowConf.length > 0) {
+              output += `\n⚠️ **${lowConf.length} step(s) below threshold** — review recommended\n`
+            }
+            output += "\n"
           }
 
           return { output, metadata: { progress, nextStep: nextStep?.id, blockedSteps, isComplete, isHealthy } }
@@ -4757,6 +4852,27 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
           })
         }
 
+        // ── Gap #3: Code Intent Injection ──
+        try {
+          const sessionId = _input.sessionID
+          if (sessionId) {
+            const session = sessionStore.getOrCreate(sessionId)
+            if (session.codeIntentMap && session.codeIntentMap.files.length > 0) {
+              const compactSummary = codeIntentAnalyzer.getCompactSummary(session.codeIntentMap, 4)
+              if (compactSummary) {
+                injection += `\n\n---\n### 🔍 Code Analysis Context (Intent Inference)\n`
+                injection += `The following intent analysis was derived from code structure (function names, signatures, dependencies):\n\n`
+                injection += compactSummary
+                injection += `\n\nUse this context to understand what each function is intended to do before generating code.\n`
+                injection += `⚠️ This is REFERENCE DATA — function names may not reflect actual implementation.\n`
+                injection += `---`
+              }
+            }
+          }
+        } catch {
+          // Non-fatal: intent injection shouldn't break the prompt
+        }
+
         // ── Mandatory research flow ──
         // If no high-confidence knowledge, append mandatory webfetch instruction
         if (!hasHighConfidenceKnowledge) {
@@ -4918,4 +5034,5 @@ export { EpisodicStore } from "./memory/episodic-store.js"
 export { STOP_WORDS, isStopWord, filterStopWords, getStopWordStats } from "./memory/stopwords.js"
 export { PromptTemplate, type KnowledgeEntry } from "./core/prompt-template.js"
 export { ToolRouter } from "./core/tool-router.js"
+export { SemanticCache } from "./core/semantic-cache.js"
 export { buildAgentPrompt, buildAgenticSystemInstructions, buildGenericAgentPrompt } from "./core/prompt-builder.js"

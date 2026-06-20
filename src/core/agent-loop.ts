@@ -274,9 +274,13 @@ export class AgentLoop {
 
       if (stepSuccess) {
         if (this.config.verifyAfterEach) {
+          // Gap #4: intermediate steps use standard tier (compile+lint+tests+semantic),
+          // final/release gate use 'deep' tier (adds security+performance+architecture+deps)
+          const isFinalStep = executor.getNextStep(sessionId) === null
+          const tier = isFinalStep ? "deep" : "standard"
           const verifyResult = result.filesModified.length > 0
-            ? verifier.verifyRelated(step.id, projectDir, result.filesModified)
-            : verifier.verifyAll(step.id, projectDir)
+            ? await verifier.verifyAllDeep(step.id, projectDir, step.description, result.filesModified, false, tier)
+            : await verifier.verifyAllDeep(step.id, projectDir, undefined, [], false, tier)
 
           if (!verifyResult.passed) {
             stepSuccess = false

@@ -9,7 +9,7 @@ Plugin OpenCode yang mengimplementasikan agentic software engineering workflow b
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
                     # postbuild: auto-copy ke ~/.cache/opencode/packages/ (jika ada)
-node test/run.mjs   # 663 unit tests (mock, no LLM needed)
+node test/run.mjs   # 744 unit tests (mock, no LLM needed)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
 node test/e2e-scenario.mjs # EvoClaw: 50-file codebase, 5 iterations
@@ -54,9 +54,10 @@ src/
 │   ├── prompt-builder.ts      # Dynamic prompt construction
 │   ├── prompt-template.ts     # XML-based prompt templates (head/body/footer)
 │   ├── router-agent.ts        # Intent classification + routing
+│   ├── semantic-cache.ts      # Gap #7: TF-IDF + cosine similarity LLM response cache
 │   ├── task-classifier.ts     # Task type classification
 │   ├── tech-debt-scorer.ts    # Coupling/size/scope/patterns analysis
-│   └── verifier.ts            # Compile + test verification (execFileSync)
+│   └── verifier.ts            # Compile + test + Gap #4: multi-dimensional verification (security, perf, architecture, deps) with 3-tier system (fast/standard/deep)
 │   └── domains/               # Domain-specific generators
 │       ├── code.ts, data-science.ts, devops.ts
 │       ├── generic.ts, mobile.ts, security.ts
@@ -100,8 +101,8 @@ src/
 │
 └── observability/
     ├── README.md              # Dokumentasi 2 file
-    ├── dashboard.ts           # Timeline + stats + anomaly detection
-    └── trace-logger.ts        # JSONL trace writer (buffered, auto-flush)
+    ├── dashboard.ts           # Timeline + stats + anomaly detection + model reliability
+    └── trace-logger.ts        # JSONL trace writer (buffered, auto-flush, dedup guard)
 ```
 
 ## 29 Tools
@@ -111,7 +112,7 @@ src/
 | agentic_plan | I | Plan + auto-decompose (LLM-first) |
 | agentic_execute | I | Execute step + auto-verify + checkpoint |
 | agentic_reflect | I | Error analysis + propagation tracing |
-| agentic_verify | I | Compile + test verification |
+| agentic_verify | I | Compile + test + Gap #4: multi-dimensional verification (security, perf, architecture, deps) with 3-tier system (fast/standard/deep) |
 | agentic_status | I | Dashboard + blocked steps |
 | agentic_nav | II | Codebase scan + file search |
 | agentic_context | II | Context view + compress |
@@ -127,7 +128,7 @@ src/
 | agentic_parallel | III | Dependency-based concurrency |
 | agentic_skill | III | Extract/find/list reusable skills |
 | agentic_episodes | III | Cross-session memory search |
-| agentic_dashboard | III | Timeline + anomaly detection |
+| agentic_dashboard | III | Timeline + stats + anomaly detection + model reliability |
 | agentic_guard | III | Hallucination detection |
 | agentic_evolve | IV | Inspect + extend the agent system |
 | agentic_auto | V | Fully autonomous loop: plan → execute → verify → retry in one call |
@@ -244,6 +245,37 @@ KNOWLEDGE-FIRST PROMPT INJECTION PIPELINE
 | `multi-index-rag.ts` | Tambah `searchWithConfidence()` dengan confidence heuristic + aggregate metrics |
 | `router-agent.ts` | Tambah `extractKeywords()` dengan stop word filtering + category detection |
 | `index.ts` (system.transform) | Auto-inject RAG results, mandatory research flow jika confidence < 0.6 |
+
+## Recent Updates
+
+### v0.4.7 — Gap #4 Verification Fidelity + Trace Dedup (2026-06-20)
+
+- **Gap #4 (Verification Fidelity)**: `verifier.ts` — 4 new LLM-first methods:
+  - `verifySecurity()` — SQL injection, XSS, path traversal, hardcoded secrets detection
+  - `verifyPerformance()` — N+1 queries, missing indexes, O(n²) loops detection
+  - `verifyArchitecture()` — circular dependencies, layer violations detection
+  - `verifyDeps()` — `npm audit` integration for dependency vulnerabilities
+  - `verifyAllDeep()` — 3-tier system: **fast** (compile only), **standard** (compile+lint+test), **deep** (all + security/perf/arch/deps)
+  - `DeepVerificationConfig` — per-dimension enable/disable toggle
+- **`agentic_verify`**: Now calls `verifyAllDeep()` deep tier by default
+- **`agentic_dashboard`**: Model Reliability section added (tracks LLM call stats)
+- **Trace dedup**: Dedup guard in `trace-logger.ts` prevents consecutive duplicate entries — false positive loop anomaly resolved
+- **Agent loop**: Intermediate steps use `standard` tier, final verification uses `deep` tier
+- **707 unit tests** (was 663) — 44 new Gap #4 tests (G4-1a through G4-18c)
+- **Model Reliability**: Dashboard tracks reliability/hallucination/consecutive failures per model via `model-registry.ts` `getSummary()` — data recorded when plugin's `LLMEngine.call()` is used (not in chat mode where LLM routes through platform)
+
+### v0.4.8 — Gap #7 Semantic Cache (2026-06-20)
+
+- **Gap #7 (Semantic Caching)**: `semantic-cache.ts` — TF-IDF + cosine similarity-based LLM response cache
+  - `SemanticCache` class with configurable `maxEntries`, `ttlMs`, `similarityThreshold`, `evictFraction`
+  - Tokenizer: Unicode-aware unigrams + bigrams, stop word filtering
+  - Algorithm: TF-IDF vectorization + cosine similarity against all cached entries
+  - Cache hit if similarity >= threshold (default: 0.7) and TTL not expired
+- **LLMEngine integration**: Semantic cache lookup runs BEFORE exact-match cache in `call()`
+  - `enableSemanticCache()` / `disableSemanticCache()` methods
+  - `getSemanticCacheStats()` for hit/miss tracking
+  - Responses cached in both exact-match and semantic caches after successful LLM calls
+- **744 unit tests** (was 707) — 37 new Gap #7 semantic cache tests (G7-1a through G7-13b)
 
 ## When Adding Features
 

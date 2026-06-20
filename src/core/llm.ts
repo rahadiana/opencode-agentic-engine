@@ -55,6 +55,7 @@ const DEFAULT_MODELS: Record<string, string> = {
 import type { ModelRegistry } from "./model-registry.js"
 import type { BudgetTracker } from "./budget-tracker.js"
 import { SessionReader } from "./session-reader.js"
+import { SemanticCache } from "./semantic-cache.js"
 
 export class LLMEngine {
   private config: LLMConfig
@@ -72,6 +73,7 @@ export class LLMEngine {
   private responseCache = new Map<string, { response: LLMResponse; timestamp: number }>()
   private readonly CACHE_TTL = 30_000 // 30s cache for identical requests
   private readonly CACHE_MAX_ENTRIES = 1000 // prevent unbounded memory growth
+  private semanticCache?: SemanticCache // Gap #7: semantic similarity-based cache
 
   constructor(config: Partial<LLMConfig> = {}) {
     this.config = {
@@ -163,6 +165,28 @@ export class LLMEngine {
     return this.config.model ?? "opencode/default"
   }
 
+  /** Enable Gap #7 semantic cache with optional config */
+  enableSemanticCache(config?: import("./semantic-cache.js").SemanticCacheConfig): void {
+    if (!this.semanticCache) {
+      this.semanticCache = new SemanticCache(config)
+    } else if (config) {
+      this.semanticCache.updateConfig(config)
+    }
+  }
+
+  /** Disable semantic cache and clear all entries */
+  disableSemanticCache(): void {
+    if (this.semanticCache) {
+      this.semanticCache.clear()
+      this.semanticCache = undefined
+    }
+  }
+
+  /** Get semantic cache stats (or null if disabled) */
+  getSemanticCacheStats(): { size: number; hits: number; misses: number; hitRate: number } | null {
+    return this.semanticCache?.stats() ?? null
+  }
+
   /**
    * Mendapatkan model ASLI dari OpenCode session.
    * Lebih akurat karena ini model beneran yang dipakai sama OpenCode.
@@ -206,6 +230,24 @@ export class LLMEngine {
     let success = false
     let response: LLMResponse
 
+    if (!req.bypassCache && this.semanticCache) {
+      const query = `${req.systemPrompt}${req.userPrompt}`
+      const semanticHit = this.semanticCache.get(query)
+      if (semanticHit) {
+        return {
+          content: semanticHit.text,
+          usage: semanticHit.usage ? {
+            promptTokens: semanticHit.usage.inputTokens ?? 0,
+            completionTokens: semanticHit.usage.outputTokens ?? 0,
+            reasoningTokens: semanticHit.usage.reasoningTokens ?? 0,
+            cacheReadTokens: semanticHit.usage.cacheReadTokens ?? 0,
+            cacheWriteTokens: semanticHit.usage.cacheWriteTokens ?? 0,
+          } : undefined,
+          finishReason: "cache-hit",
+        }
+      }
+    }
+
     // Check cache for identical requests (TTL: 30s) — skip if bypassCache is set
     const cacheKey = this.getCacheKey(req)
     if (!req.bypassCache) {
@@ -243,6 +285,20 @@ export class LLMEngine {
     // Cache successful responses (bounded to prevent memory leak)
     if (success) {
       this.responseCache.set(cacheKey, { response, timestamp: Date.now() })
+      // Gap #7: Also cache in semantic cache for similar-query lookups
+      if (this.semanticCache) {
+        const query = `${req.systemPrompt}${req.userPrompt}`
+        this.semanticCache.set(query, {
+          text: response.content,
+          usage: response.usage ? {
+            inputTokens: response.usage.promptTokens,
+            outputTokens: response.usage.completionTokens,
+            reasoningTokens: response.usage.reasoningTokens,
+            cacheReadTokens: response.usage.cacheReadTokens,
+            cacheWriteTokens: response.usage.cacheWriteTokens,
+          } : undefined,
+        })
+      }
       // Evict oldest entries if cache exceeds limit
       if (this.responseCache.size > this.CACHE_MAX_ENTRIES) {
         const oldest = [...this.responseCache.entries()]

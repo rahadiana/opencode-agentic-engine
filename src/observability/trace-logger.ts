@@ -136,9 +136,17 @@ export class TraceLogger {
     }
   }
 
+  private lastLoggedEntry: string | null = null
+
   log(entry: Omit<TraceEntry, "timestamp" | "level"> & { level?: LogLevel }): void {
     const level = entry.level ?? "info"
     if (this.levelValue(level) < this.levelValue(this.minLevel)) return
+
+    const dedupKey = `${entry.step}|${entry.toolUsed}|${entry.input}`
+    if (dedupKey === this.lastLoggedEntry) {
+      return
+    }
+    this.lastLoggedEntry = dedupKey
 
     // Backpressure: bounded buffer
     if (this.buffer.length >= this.maxBufferSize) {

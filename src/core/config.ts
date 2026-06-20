@@ -125,6 +125,16 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
       softBlockReliability: { type: "number", min: 0, max: 1 },
       minSampleSize: { type: "number", min: 1 },
     })
+    // Validate nested deepVerification
+    const dv = (cfg.agent as Record<string, unknown>).deepVerification
+    if (dv && typeof dv === "object") {
+      validateObject("agent.deepVerification", dv, {
+        security: { type: "boolean" },
+        performance: { type: "boolean" },
+        architecture: { type: "boolean" },
+        deps: { type: "boolean" },
+      })
+    }
   }
 
   // Validate storage
@@ -200,6 +210,17 @@ export interface MemoryConfig {
   }
 }
 
+export interface DeepVerificationAgentConfig {
+  /** Enable LLM-based security review on deep verification (default: true) */
+  security?: boolean
+  /** Enable LLM-based performance anti-pattern detection (default: true) */
+  performance?: boolean
+  /** Enable LLM-based architecture analysis (default: true) */
+  architecture?: boolean
+  /** Enable package-manager dependency auditing (default: true) */
+  deps?: boolean
+}
+
 export interface AgentConfig {
   maxDelegationDepth: number
   autoSkillExtract: boolean
@@ -211,6 +232,8 @@ export interface AgentConfig {
   hardBlockReliability: number
   softBlockReliability: number
   minSampleSize: number
+  /** Gap #4 — per-dimension toggle for deep verification (all enabled by default) */
+  deepVerification?: DeepVerificationAgentConfig
 }
 
 export interface StorageConfig {
@@ -276,6 +299,12 @@ export const DEFAULT_CONFIG: AgenticConfigSchema = {
     hardBlockReliability: 0.2,
     softBlockReliability: 0.4,
     minSampleSize: 5,
+    deepVerification: {
+      security: true,
+      performance: true,
+      architecture: true,
+      deps: true,
+    },
   },
   storage: {
     traceRetentionDays: 7,

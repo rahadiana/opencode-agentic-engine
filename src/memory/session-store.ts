@@ -12,6 +12,7 @@ export interface SessionState {
   artifacts: Map<string, string>
   currentTaskType?: string
   currentDomain?: string
+  codeIntentMap?: import("../core/code-intent-analyzer").CodeIntentMap
 }
 
 export interface ExecutorSnapshot {

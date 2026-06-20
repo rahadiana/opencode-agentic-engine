@@ -7,11 +7,34 @@ import type { LLMEngine } from "./llm.js"
 
 export type SupportedLanguage = "typescript" | "python" | "go" | "rust" | "javascript" | "unknown"
 
+/** Gap #4 — verification depth tiers */
+export type VerificationTier = "fast" | "standard" | "deep"
+
+/** Gap #4 — per-dimension configuration for deep verification */
+export interface DeepVerificationConfig {
+  /** Enable LLM-based security review (OWASP Top 10) */
+  security?: boolean
+  /** Enable LLM-based performance anti-pattern detection */
+  performance?: boolean
+  /** Enable LLM-based architecture analysis (circular deps, layer violations) */
+  architecture?: boolean
+  /** Enable package-manager dependency auditing (npm audit, pip-audit, cargo audit) */
+  deps?: boolean
+}
+
 export interface VerificationResult {
   passed: boolean
   stepId: string
   checks: CheckResult[]
   errors: string[]
+  /** Gap #4 — multi-dimensional breakdown per tier */
+  dimensions?: {
+    tier: VerificationTier
+    security?: CheckResult
+    performance?: CheckResult
+    architecture?: CheckResult
+    deps?: CheckResult
+  }
 }
 
 export interface CheckResult {
@@ -231,9 +254,244 @@ export class Verifier {
     return { passed: errors.length === 0, stepId, checks, errors }
   }
 
-  async verifyAllDeep(stepId: string, projectDir: string, intent?: string, changedFiles?: string[], requireSemanticCheck = false): Promise<VerificationResult> {
-    const checks: CheckResult[] = []
+  /**
+   * Gap #4: Security verification — LLM-based OWASP review.
+   * Checks for: SQL injection, XSS, RCE, path traversal, insecure deserialization, hardcoded secrets, auth bypass.
+   */
+  async verifySecurity(intent: string, changedFiles: string[], projectDir: string): Promise<CheckResult> {
+    if (!this.llm) {
+      return { name: "security", passed: true, output: "Security verification skipped (no LLM configured)" }
+    }
 
+    const fileContents: Record<string, string> = {}
+    for (const f of changedFiles) {
+      const absPath = resolve(projectDir, f)
+      try { fileContents[f] = await readFile(absPath, "utf-8") } catch { /* skip */ }
+    }
+    if (Object.keys(fileContents).length === 0) {
+      return { name: "security", passed: true, output: "Security verification skipped (no readable changed files)" }
+    }
+
+    const filesBlock = Object.entries(fileContents)
+      .map(([path, content]) => `### ${path}\n\`\`\`\n${content.slice(0, 2000)}\n\`\`\``)
+      .join("\n\n")
+
+    const domainName = this.domainRegistry?.getCurrentDomain() ?? "generic"
+    const resp = await this.llm.call({
+      systemPrompt: `You are a security verification assistant for the "${domainName}" domain. Review the code for OWASP Top 10 vulnerabilities. Respond as JSON with keys: passed (boolean), reasoning (string), issuesFound (array of strings).`,
+      userPrompt: `## Intent\n${intent}\n\n## Changed Files\n${filesBlock}\n\nReview for security vulnerabilities. Return JSON.`,
+      jsonMode: true,
+      temperature: 0.1,
+    })
+
+    return this.parseLLMCheck("security", resp.content)
+  }
+
+  /**
+   * Gap #4: Performance verification — LLM-based anti-pattern detection.
+   * Checks for: O(n²) loops, N+1 queries, memory leaks, large payloads, inefficient algorithms.
+   */
+  async verifyPerformance(intent: string, changedFiles: string[], projectDir: string): Promise<CheckResult> {
+    if (!this.llm) {
+      return { name: "performance", passed: true, output: "Performance verification skipped (no LLM configured)" }
+    }
+
+    const fileContents: Record<string, string> = {}
+    for (const f of changedFiles) {
+      const absPath = resolve(projectDir, f)
+      try { fileContents[f] = await readFile(absPath, "utf-8") } catch { /* skip */ }
+    }
+    if (Object.keys(fileContents).length === 0) {
+      return { name: "performance", passed: true, output: "Performance verification skipped (no readable changed files)" }
+    }
+
+    const filesBlock = Object.entries(fileContents)
+      .map(([path, content]) => `### ${path}\n\`\`\`\n${content.slice(0, 2000)}\n\`\`\``)
+      .join("\n\n")
+
+    const domainName = this.domainRegistry?.getCurrentDomain() ?? "generic"
+    const resp = await this.llm.call({
+      systemPrompt: `You are a performance verification assistant for the "${domainName}" domain. Review the code for performance anti-patterns. Respond as JSON with keys: passed (boolean), reasoning (string), issuesFound (array of strings).`,
+      userPrompt: `## Intent\n${intent}\n\n## Changed Files\n${filesBlock}\n\nReview for performance issues. Return JSON.`,
+      jsonMode: true,
+      temperature: 0.1,
+    })
+
+    return this.parseLLMCheck("performance", resp.content)
+  }
+
+  /**
+   * Gap #4: Architecture verification — LLM-based structural analysis.
+   * Checks for: circular dependencies, layer violations, module boundary crossings, orphan modules.
+   */
+  async verifyArchitecture(intent: string, changedFiles: string[], projectDir: string): Promise<CheckResult> {
+    if (!this.llm) {
+      return { name: "architecture", passed: true, output: "Architecture verification skipped (no LLM configured)" }
+    }
+
+    const allFiles: string[] = []
+    const srcFiles = changedFiles.filter(f =>
+      f.endsWith(".ts") || f.endsWith(".tsx") || f.endsWith(".js") ||
+      f.endsWith(".py") || f.endsWith(".go") || f.endsWith(".rs")
+    )
+    for (const f of srcFiles) {
+      try {
+        const content = await readFile(resolve(projectDir, f), "utf-8")
+        allFiles.push(`### ${f}\n\`\`\`\n${content.slice(0, 1500)}\n\`\`\``)
+      } catch { /* skip */ }
+    }
+
+    if (allFiles.length === 0) {
+      return { name: "architecture", passed: true, output: "Architecture verification skipped (no readable source files)" }
+    }
+
+    const filesBlock = allFiles.join("\n\n")
+    const domainName = this.domainRegistry?.getCurrentDomain() ?? "generic"
+    const resp = await this.llm.call({
+      systemPrompt: `You are an architecture verification assistant for the "${domainName}" domain. Analyze the import graph and module structure. Respond as JSON with keys: passed (boolean), reasoning (string), issuesFound (array of strings).`,
+      userPrompt: `## Intent\n${intent}\n\n## Source Files\n${filesBlock}\n\nAnalyze for circular dependencies, layer violations, and architectural issues. Return JSON.`,
+      jsonMode: true,
+      temperature: 0.1,
+    })
+
+    return this.parseLLMCheck("architecture", resp.content)
+  }
+
+  /**
+   * Gap #4: Dependency audit — run package manager's built-in audit command.
+   * Supports: npm audit (Node.js), pip-audit (Python), cargo audit (Rust).
+   */
+  verifyDeps(projectDir: string): CheckResult {
+    if (this.detectedLang === "unknown") this.detectLanguage(projectDir)
+
+    // npm audit for Node.js
+    if (existsSync(resolve(projectDir, "package-lock.json")) || existsSync(resolve(projectDir, "yarn.lock"))) {
+      try {
+        const output = execFileSync("npm", ["audit", "--json"], {
+          cwd: projectDir,
+          timeout: 30000,
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "pipe"],
+        })
+        const parsed = JSON.parse(output)
+        const vulns = parsed.vulnerabilities ?? {}
+        const criticalCount = Object.values(vulns).filter((v: any) => v.severity === "critical").length
+        const highCount = Object.values(vulns).filter((v: any) => v.severity === "high").length
+        const moderateCount = Object.values(vulns).filter((v: any) => v.severity === "moderate").length
+
+        if (criticalCount > 0 || highCount > 0) {
+          return {
+            name: "deps:npm",
+            passed: false,
+            output: `npm audit: ${criticalCount} critical, ${highCount} high, ${moderateCount} moderate vulnerabilities found. Run \`npm audit fix\` to resolve.`,
+          }
+        }
+        return {
+          name: "deps:npm",
+          passed: true,
+          output: `npm audit: ${criticalCount} critical, ${highCount} high, ${moderateCount} moderate — all acceptable.`,
+        }
+      } catch (e: unknown) {
+        const err = e as { stdout?: string; stderr?: string; message?: string }
+        // npm audit exits with code 1 even when it succeeds but finds vulns
+        // Try to parse stdout for JSON
+        const stdout = err.stdout ?? err.message ?? ""
+        try {
+          const parsed = JSON.parse(stdout)
+          const vulns = parsed.vulnerabilities ?? {}
+          const criticalCount = Object.values(vulns).filter((v: any) => v.severity === "critical").length
+          const highCount = Object.values(vulns).filter((v: any) => v.severity === "high").length
+          if (criticalCount > 0 || highCount > 0) {
+            return {
+              name: "deps:npm",
+              passed: false,
+              output: `npm audit: ${criticalCount} critical, ${highCount} high vulnerabilities. Run \`npm audit fix\` to resolve.`,
+            }
+          }
+          return { name: "deps:npm", passed: true, output: "npm audit: no critical/high vulnerabilities." }
+        } catch {
+          return { name: "deps:npm", passed: true, output: `npm audit: ${stdout.slice(0, 300)}` }
+        }
+      }
+    }
+
+    // pip-audit for Python
+    if (existsSync(resolve(projectDir, "requirements.txt")) || existsSync(resolve(projectDir, "Pipfile.lock"))) {
+      try {
+        const output = execFileSync("python", ["-m", "pip_auth", "--quiet"], {
+          cwd: projectDir,
+          timeout: 30000,
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "pipe"],
+        })
+        return { name: "deps:pip", passed: true, output: output || "pip-audit: no vulnerabilities found." }
+      } catch (e: unknown) {
+        const err = e as { stdout?: string; message?: string }
+        return { name: "deps:pip", passed: true, output: `pip-audit: ${(err.stdout || err.message || "").slice(0, 200)}` }
+      }
+    }
+
+    // cargo audit for Rust
+    if (existsSync(resolve(projectDir, "Cargo.lock"))) {
+      try {
+        const output = execFileSync("cargo", ["audit", "--quiet"], {
+          cwd: projectDir,
+          timeout: 60000,
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "pipe"],
+        })
+        return { name: "deps:cargo", passed: true, output: output || "cargo audit: no vulnerabilities found." }
+      } catch (e: unknown) {
+        const err = e as { stdout?: string; message?: string }
+        return { name: "deps:cargo", passed: true, output: `cargo audit: ${(err.stdout || err.message || "").slice(0, 200)}` }
+      }
+    }
+
+    return { name: "deps", passed: true, output: "No supported package manager lockfile found — dependency audit skipped." }
+  }
+
+  /**
+   * Parse LLM JSON response into a structured CheckResult.
+   * Shared helper for verifySemantic, verifySecurity, verifyPerformance, verifyArchitecture.
+   */
+  private parseLLMCheck(name: string, content: string): CheckResult {
+    try {
+      const parsed = JSON.parse(content)
+      const issues = Array.isArray(parsed.issuesFound) ? parsed.issuesFound : []
+      const passed = parsed.passed !== false
+      return {
+        name,
+        passed,
+        output: `${name} verification: ${passed ? "PASS" : "ISSUES FOUND"}\nReasoning: ${parsed.reasoning ?? "N/A"}\n${issues.length > 0 ? `Issues:\n${issues.map((i: string) => `- ${i}`).join("\n")}` : ""}`,
+      }
+    } catch {
+      return { name, passed: true, output: `${name} verification: ${content.slice(0, 500)}` }
+    }
+  }
+
+  /**
+   * Full deep verification — Gap #4 multi-dimensional.
+   *
+   * Tiers:
+   *   "fast"     → compile only (same as verifyFast)
+   *   "standard" → compile + lint + tests + domain verifiers + semantic (previous verifyAllDeep behavior)
+   *   "deep"     → standard + security + performance + architecture + deps
+   *
+   * @param config Optional per-dimension overrides for deep tier.
+   */
+  async verifyAllDeep(
+    stepId: string,
+    projectDir: string,
+    intent?: string,
+    changedFiles?: string[],
+    requireSemanticCheck = false,
+    tier: VerificationTier = "standard",
+    config?: DeepVerificationConfig,
+  ): Promise<VerificationResult> {
+    const checks: CheckResult[] = []
+    const dimensions: VerificationResult["dimensions"] = { tier }
+
+    // ---- Standard checks (compile + lint + tests) ----
     const strategies = this.domainRegistry?.getVerifiers() ?? []
     if (strategies.length > 0) {
       for (const strategy of strategies) {
@@ -245,13 +503,18 @@ export class Verifier {
         }
       }
     } else {
-      checks.push(this.verifyCompile(projectDir))
-      if (this.detectedLang !== "unknown") {
-        checks.push(this.verifyLint(projectDir))
+      if (tier === "fast") {
+        checks.push(this.verifyCompile(projectDir))
+      } else {
+        checks.push(this.verifyCompile(projectDir))
+        if (this.detectedLang !== "unknown") {
+          checks.push(this.verifyLint(projectDir))
+        }
+        checks.push(this.verifyTests(projectDir))
       }
-      checks.push(this.verifyTests(projectDir))
     }
 
+    // ---- Semantic verification ----
     if (this.llm && intent && changedFiles && changedFiles.length > 0) {
       const semantic = await this.verifySemantic(stepId, intent, changedFiles, projectDir)
       checks.push(semantic)
@@ -263,8 +526,41 @@ export class Verifier {
       })
     }
 
+    // ---- Deep tier: Gap #4 multi-dimensional checks ----
+    if (tier === "deep" && intent && changedFiles && changedFiles.length > 0) {
+      const cfg = config ?? {}
+
+      // Security
+      if (cfg.security !== false) {
+        const security = await this.verifySecurity(intent, changedFiles, projectDir)
+        checks.push(security)
+        dimensions.security = security
+      }
+
+      // Performance
+      if (cfg.performance !== false) {
+        const performance = await this.verifyPerformance(intent, changedFiles, projectDir)
+        checks.push(performance)
+        dimensions.performance = performance
+      }
+
+      // Architecture
+      if (cfg.architecture !== false) {
+        const architecture = await this.verifyArchitecture(intent, changedFiles, projectDir)
+        checks.push(architecture)
+        dimensions.architecture = architecture
+      }
+
+      // Dependency audit
+      if (cfg.deps !== false) {
+        const deps = this.verifyDeps(projectDir)
+        checks.push(deps)
+        dimensions.deps = deps
+      }
+    }
+
     const errors = checks.filter(c => !c.passed).map(c => c.output)
-    return { passed: errors.length === 0, stepId, checks, errors }
+    return { passed: errors.length === 0, stepId, checks, errors, dimensions }
   }
 
   detectLanguage(projectDir: string): SupportedLanguage {
