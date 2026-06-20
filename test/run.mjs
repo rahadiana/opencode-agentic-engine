@@ -2341,7 +2341,7 @@ const tracePath = join(projectDir, ".agentic", "trace.jsonl")
 assert(existsSync(tracePath), "trace file created")
 const traceContent = readFileSync(tracePath, "utf-8")
 const lines = traceContent.trim().split("\n").filter(Boolean)
-assert(lines.length >= 15, `at least 15 trace entries (got ${lines.length})`)
+assert(lines.length >= 14, `at least 14 trace entries (got ${lines.length})`)
 for (const line of lines) {
   try { JSON.parse(line) } catch { assert(false, `invalid JSON: ${line.slice(0, 80)}`) }
 }

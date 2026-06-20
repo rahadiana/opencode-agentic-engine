@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, cpSync
 import { execFileSync } from "node:child_process"
 import { join, dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { tmpdir, homedir } from "node:os"
+import { tmpdir } from "node:os"
 import { DomainRegistry, type DomainPack } from "./core/domain-registry.js"
 import { genericDomain } from "./core/domains/generic.js"
 import { codeDomain } from "./core/domains/code.js"
@@ -267,34 +267,13 @@ const createEngine: Plugin = async (input, _options) => {
     ].join("\n")
   }
 
-  // ── Static agent file: minimal bootstrap identity ──
+  // ── Agent identity ──
+  // Agent registration is done programmatically via the `config` hook
+  // (see return hooks below), which sets config.agent.agentic.
   // ALL dynamic instructions (tools, CRITICAL RULES, domain context)
   // are injected per-LLM-call via `experimental.chat.system.transform` hook.
   // This avoids file I/O latency, stale prompts, and corrupt-agent errors.
   let currentInjectDomain: DomainPack = genericDomain
-  function writeStaticAgentFile() {
-    const content = `---
-description: Agentic Engineering Agent — autonomous software engineering with planning, execution, and verification
-mode: all
----
-
-# Agentic Engineering Agent
-
-You are an autonomous software engineering agent.
-Your full instructions, tool list, and domain-specific rules are injected dynamically into every LLM call by the agentic-engine plugin.
-`
-    try {
-      const globalAgentsDir = join(homedir(), ".config", "opencode", "agents")
-      mkdirSync(globalAgentsDir, { recursive: true })
-      writeFileSync(join(globalAgentsDir, "agentic.md"), content, "utf-8")
-    } catch { /* non-fatal */ }
-    try {
-      const localAgentsDir = join(worktree, ".opencode", "agents")
-      mkdirSync(localAgentsDir, { recursive: true })
-      writeFileSync(join(localAgentsDir, "agentic.md"), content, "utf-8")
-    } catch { /* non-fatal */ }
-  }
-  writeStaticAgentFile()
 
   // Write initial prompt (deferred — after persistence is available for smart cache)
 
@@ -4605,6 +4584,22 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
         },
       }),
 
+    },
+
+    // ── Config hook: register agent programmatically ──
+    // Replaces the old writeStaticAgentFile() approach.
+    // OpenCode's config hook lets plugins add agent definitions directly
+    // to config.agent without writing static .md files to disk.
+    config: async (config) => {
+      if (typeof config !== "object" || config === null) return
+      const agentDef: Record<string, unknown> = {
+        description: "Agentic Engineering Agent — autonomous software engineering with planning, execution, and verification",
+        mode: "all",
+        prompt: `You are an autonomous software engineering agent.
+Your full instructions, tool list, and domain-specific rules are injected dynamically into every LLM call by the agentic-engine plugin.`,
+      }
+      if (!config.agent) config.agent = {}
+      config.agent.agentic = agentDef
     },
 
     // ── Dynamic system prompt injection per LLM call ──
