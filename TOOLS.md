@@ -73,15 +73,28 @@ Mendiagnosa kategori error (import/type/compile/test/runtime), menelusuri propag
 
 ### agentic_verify
 
-Full verification: compile + test suite dengan auto-detect bahasa.
+Full multi-dimensional verification: compile + lint + test + semantic + security + performance + architecture + dependency audit (Gap #4). 3-tier system.
 
 | Parameter | Tipe | Required | Deskripsi |
 |-----------|------|----------|-----------|
 | `stepId` | `string` | ✅ | Label untuk verifikasi ini |
 | `projectDir` | `string` | ❌ | Project directory (default: worktree) |
+| `tier` | `string` | ❌ | `fast` (compile), `standard` (compile+lint+test), `deep` (all + security/perf/arch/deps) — default: `deep` |
 
 **Deskripsi**:  
-Auto-detect bahasa (TypeScript, Python, Go, Rust, JavaScript). Menjalankan compile + lint + test suite. Sertakan error analysis jika gagal. Juga mendukung semantic verification jika LLM tersedia.
+Auto-detect bahasa (TypeScript, Python, Go, Rust, JavaScript). **3-tier system**:
+
+| Tier | Checks | Cocok untuk |
+|------|--------|------------|
+| **fast** | Compile only | Rapid iteration, instant feedback |
+| **standard** | Compile + lint + test | Intermediate steps |
+| **deep** | Standard + security + performance + architecture + npm audit | Final verification, critical changes |
+
+**Gap #4 dimensions (deep tier)**:
+- `verifySecurity()` — SQL injection, XSS, path traversal, hardcoded secrets
+- `verifyPerformance()` — N+1 queries, missing indexes, O(n²) loops
+- `verifyArchitecture()` — circular dependencies, layer violations
+- `verifyDeps()` — `npm audit` integration
 
 **Stage**: I
 
@@ -572,7 +585,14 @@ Total                    [28 tools]  (27 named + model_reset sebagai tool terpis
 
 ### Pattern 1: Standard Workflow (Stage I)
 ```
-agentic_plan → [agentic_execute × N] → agentic_verify → agentic_status
+agentic_plan → [agentic_execute × N] → agentic_verify tier="deep" → agentic_status
+```
+
+### Pattern 1a: Tiered Verification (Gap #4)
+```
+agentic_execute (intermediate) → agentic_verify tier="standard" (compile+lint+test)
+agentic_execute (final step)    → agentic_verify tier="deep" (all + security/perf/arch/deps)
+agentic_execute (quick check)   → agentic_verify tier="fast" (compile only)
 ```
 
 ### Pattern 2: Full Multi-Agent Pipeline (Stage III)
