@@ -167,7 +167,7 @@ function inferTaskType(input: string): string[] {
 export class ToolRouter {
   private metas: Map<string, ToolMeta> = new Map()
   private toolCallHistory: Map<string, { count: number; successes: number; totalLatency: number; lastUsed: number }> = new Map()
-  private allocatedToolCount = 6  // default: show 6 agentic tools + always-expose built-ins
+  private allocatedToolCount = 10  // default: show 10 agentic tools + always-expose built-ins
 
   // ── Transition probability graph (AutoTool-inspired: arXiv:2511.14650) ──
   // Tracks which tools follow which — used for inertia-based scoring
@@ -357,12 +357,13 @@ export class ToolRouter {
     }
   }
 
-  /** Build the tool listing text for prompt injection */
+  /** Build the tool listing text for prompt injection — concise format */
   buildToolList(selected: ToolMeta[]): string {
     if (selected.length === 0) return ""
     return selected.map(t => {
-      const hint = this.buildConsolidationHint(t.name)
-      return `- **${t.name}**: ${t.description}${hint}`
+      // Extract a concise summary: first sentence or up to 120 chars
+      const desc = t.description.length > 120 ? t.description.slice(0, 117) + "..." : t.description
+      return `- **${t.name}**: ${desc}`
     }).join("\n")
   }
 
@@ -371,12 +372,7 @@ export class ToolRouter {
     return `\n\nAdditionally, these built-in tools are always available: \`${[...ALWAYS_EXPOSE].join("`, `")}\`.`
   }
 
-  /** Build the search_tools meta-tool hint */
-  buildSearchToolsHint(): string {
-    return `\n\n> 💡 **Need a different tool?** Use \`search_tools("what you need")\` to discover and load additional tools.`
-  }
-
-  /** Set how many agentic tools to show (default: 6) */
+  /** Set how many agentic tools to show (default: 10) */
   setAllocatedToolCount(n: number): void {
     this.allocatedToolCount = Math.max(3, Math.min(15, n))
   }

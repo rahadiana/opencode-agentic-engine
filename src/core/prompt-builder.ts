@@ -6,8 +6,6 @@ export interface ToolEntry {
 }
 
 export interface ToolListConfig {
-  /** Whether to show the search_tools discovery hint */
-  showDiscoveryHint?: boolean
   /** Whether this is a routed prompt (dynamic tool selection) */
   isRouted?: boolean
   /** Optional knowledge entries to auto-inject into <knowledge-context> section */
@@ -76,8 +74,7 @@ export function buildGenericAgentPrompt(allTools: ToolEntry[]): string {
 
   t.instructions(
     `## Available Tools\n\n` +
-    genericTools.map(x => `- **${x.name}**: ${x.description.length > 80 ? x.description.slice(0, 77) + "..." : x.description}`).join("\n") +
-    `\n\n> 💡 **Need a different tool?** Use \`search_tools("what you need")\` to discover additional tools.`,
+    genericTools.map(x => `- **${x.name}**: ${x.description.length > 80 ? x.description.slice(0, 77) + "..." : x.description}`).join("\n"),
   )
 
   t.guardrails(
@@ -97,7 +94,6 @@ export function buildGenericAgentPrompt(allTools: ToolEntry[]): string {
 
 function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolListConfig): PromptTemplate {
   const domainName = domain.name
-  const isCodeDomain = domainName === "code"
 
   const relevantToolNames = domain.tools ?? allTools.map(t => t.name)
   const relevantTools = allTools.filter(t => relevantToolNames.includes(t.name))
@@ -116,63 +112,53 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolL
   // ═══════════════════════════════════════════════════════════
   // HEAD — <identity> : who the agent IS
   // ═══════════════════════════════════════════════════════════
-  //
-  // KNOWLEDGE-FIRST IDENTITY:
-  // LLM dianggap sebagai reasoning engine, BUKAN knowledge base.
-  // Semua pengetahuan HARUS dari RAG / web / arXiv / feedback loop.
 
-  // Core identity: LLM bodoh
+  // Core identity: reasoning engine, not knowledge base
   t.identity(
-    "⚠️ **CRITICAL IDENTITY**: You are a **reasoning engine**, NOT a knowledge base.\n\n" +
-    "Your training data has a cutoff date. **Assume ALL internal knowledge may be outdated, incorrect, or irrelevant.**\n" +
-    "Do NOT rely on what you \"know\" — always verify against the knowledge context provided below.",
+    "You are an autonomous software engineering agent.\n\n" +
+    "⚠️ **CRITICAL**: You are a **reasoning engine**, NOT a knowledge base. " +
+    "Assume ALL internal knowledge may be outdated.",
   )
 
-  // Tool listing header
+  // Tool listing header (concise)
   if (isRouted) {
     t.identity(
-      `The following agentic tools have been **selected based on your current task** from a pool of 29 available tools. ` +
-      `Use them when they fit. Built-in tools (\`read\`, \`edit\`, \`bash\`, \`grep\`, \`webfetch\`, \`write\`) are always available.`,
+      `The following agentic tools have been **selected for your task**. ` +
+      `Built-in tools (\`read\`, \`edit\`, \`bash\`, \`grep\`, \`webfetch\`, \`write\`) are always available.`,
     )
   } else {
     t.identity(
       `You have access to **${relevantTools.length} specialized agentic_* tools**. ` +
-      `Use them when they fit. Built-in tools (\`read\`, \`edit\`, \`bash\`, \`grep\`, \`webfetch\`, \`write\`) are always available.`,
+      `Built-in tools (\`read\`, \`edit\`, \`bash\`, \`grep\`, \`webfetch\`, \`write\`) are always available.`,
     )
   }
 
   t.identity(
-    `⚠️ **REMINDER**: ALL specialized tools use the "agentic_" prefix (e.g. "agentic_plan", "agentic_execute", "agentic_verify"). ` +
-    `There is NO tool named just "execute", "plan", "verify", etc. Always include the prefix.`,
+    `⚠️ **REMINDER**: ALL specialized tools use the "agentic_" prefix (e.g. "agentic_plan"). ` +
+    `There is NO tool named just "execute", "plan", "verify". Always include the prefix.`,
   )
 
   t.identity(
-    `⚠️ **WEB TOOL NAME**: The web search tool is called **"webfetch"** — NOT "websearch", NOT "search_web", NOT "browser". ` +
-    `Always use \`webfetch\`.`,
+    `⚠️ **WEB TOOL**: The web tool is called **\`webfetch\`** — NOT "websearch" or "search_web". Always use \`webfetch\`.`,
   )
 
-  // Knowledge gathering checklist — mandatory, not optional
+  // Knowledge gathering checklist — dynamic numbering
   const knowledgeSteps: string[] = []
-  knowledgeSteps.push("## Knowledge-First Protocol (MANDATORY)")
-  knowledgeSteps.push("")
-  knowledgeSteps.push("**Your internal knowledge is SUSPECT.** Before implementing anything:")
-  if (hasNav) knowledgeSteps.push(`1. **Scan codebase** — use \`agentic_nav\` to check project structure`)
-  if (isCodeDomain) knowledgeSteps.push(`${hasNav ? "2" : "1"}. **Read files** — use \`read\` to inspect relevant files`)
+  knowledgeSteps.push("### Knowledge-First Protocol")
+  knowledgeSteps.push("Research BEFORE implementing:")
+  let stepNum = 1
+  if (hasNav) knowledgeSteps.push(`${stepNum++}. \`agentic_nav\` — scan codebase for relevant files`)
   if (hasMemory) {
-    const n = knowledgeSteps.length
-    knowledgeSteps.push(`${n}. **Search skills**: \`agentic_skill find "relevant topic"\` — learn from past successes/failures`)
-    knowledgeSteps.push(`${n + 1}. **Search episodes**: \`agentic_episodes search "similar task"\` — see what worked before`)
+    knowledgeSteps.push(`${stepNum++}. \`agentic_skill find\` / \`agentic_episodes search\` — learn from past tasks`)
   }
-  knowledgeSteps.push(`${knowledgeSteps.length}. **Check knowledge context** below — if <knowledge-context> is empty or low confidence, you MUST call \`webfetch\` to research`)
-  knowledgeSteps.push(`${knowledgeSteps.length}. **Web research** — use \`webfetch\` to get current information (MANDATORY if confidence < 0.6)`)
-  knowledgeSteps.push(`${knowledgeSteps.length}. Only after gathering ALL relevant knowledge → start implementing`)
+  knowledgeSteps.push(`${stepNum++}. Check <knowledge-context> below. If empty or low confidence → \`webfetch\` to research`)
+  knowledgeSteps.push(`${stepNum++}. Only after all relevant knowledge is gathered → start implementing`)
   t.identity(knowledgeSteps.join("\n"))
 
   // ═══════════════════════════════════════════════════════════
   // DATA — <knowledge-context> : auto-injected knowledge
   // ═══════════════════════════════════════════════════════════
 
-  // Inject knowledge entries if provided (from RAG/web/arXiv research)
   if (config?.knowledgeEntries && config.knowledgeEntries.length > 0) {
     t.injectKnowledge(config.knowledgeEntries)
   }
@@ -181,18 +167,15 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolL
   // BODY — <instructions> : what the agent should DO
   // ═══════════════════════════════════════════════════════════
 
-  // Knowledge-First Workflow — research is MANDATORY before implementation
+  // Workflow instructions (concise)
   let workflow = `### Recommended Approach\n\n`
-  workflow += `**Knowledge-First Workflow:** Research → Plan → Implement → Verify\n\n`
-  workflow += `1. **RESEARCH FIRST** — Check <knowledge-context> above. If empty or low confidence, use \`webfetch\` / agent memory tools IMMEDIATELY\n`
-  workflow += `2. **Plan** — Use a planning tool to break down the goal into clear steps\n`
-  workflow += `3. **Implement** — Execute each step using the right tool\n`
-  workflow += `4. **Verify** — Verify results when complete`
+  workflow += `**Research → Plan → Implement → Verify**\n\n`
+  workflow += `1. **Research** — Scan codebase (\`agentic_nav\`), read files (\`read\`), search memory (\`agentic_skill\`/\`agentic_episodes\`), web research (\`webfetch\`)\n`
+  workflow += `2. **Plan** — \`agentic_plan\` to decompose the goal into ordered steps\n`
+  workflow += `3. **Implement** — Execute each step with \`agentic_execute\`. For complex sub-tasks, use \`agentic_delegate\` to assign to specialist agents.\n`
+  workflow += `4. **Verify** — \`agentic_verify\` for final compile+lint+test+security check. Check progress with \`agentic_status\`.`
   if (hasAuto) {
-    workflow += `\n\nOr use **agentic_auto** for fully autonomous execution (plan + execute + verify + retry in one call)`
-  }
-  if (!isRouted) {
-    workflow += `\n\n> 💡 **Tip:** Need a different tool? Use \`search_tools("what you need")\` to discover and load additional tools on demand.`
+    workflow += `\n\n**Quick path**: \`agentic_auto\` does plan+execute+verify+retry in one call for simple tasks.`
   }
   t.instructions(workflow)
 
@@ -201,15 +184,14 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolL
   // ═══════════════════════════════════════════════════════════
 
   const guardrailItems: string[] = [
-    "KNOWLEDGE-FIRST: Research BEFORE implementing — do NOT rely on your internal knowledge",
-    "USE the workflow: research → plan → implement → verify",
-    "If <knowledge-context> is empty or ALL confidence < 0.6: you MUST call webfetch to research first",
+    "Research FIRST — do NOT rely on internal knowledge",
+    "Use the workflow: research → plan → implement → verify",
     'Never ask "should I..." — just call the tool',
-    "If a step fails, analyze it before retrying",
-    "Always cite sources when making claims (URL, arXiv ID, RAG entry ID)",
+    "If a step fails, call \`agentic_reflect\` to analyze before retrying",
+    "Always cite sources (URL, arXiv ID, RAG entry ID)",
   ]
-  if (hasDebate) guardrailItems.push("For analysis tasks: use agentic_debate")
-  if (hasRouter && hasRag) guardrailItems.push("For knowledge queries: use agentic_router then agentic_rag")
+  if (hasDebate) guardrailItems.push("For deep analysis: use \`agentic_debate\` (executor ↔ critic)")
+  if (hasRouter && hasRag) guardrailItems.push("For knowledge queries: \`agentic_router\` then \`agentic_rag\`")
   let rules = guardrailItems.map((item, i) => `${i + 1}. ${item}`).join("\n")
   t.guardrails(rules)
 

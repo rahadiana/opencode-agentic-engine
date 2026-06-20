@@ -4826,7 +4826,6 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
         const { selected } = toolRouter.selectTools(routingCtx)
         const toolListText = toolRouter.buildToolList(selected)
         const alwaysExposeHint = toolRouter.buildAlwaysExposeHint()
-        const searchHint = toolRouter.buildSearchToolsHint()
 
         // Build filtered TOOL_REGISTRY from selected tools
         const filteredRegistry: ToolEntry[] = selected.map(t => ({ name: t.name, description: t.description }))
@@ -4836,15 +4835,13 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
           // Build prompt WITH auto-injected knowledge context
           injection = buildAgenticSystemInstructions(pack, filteredRegistry, {
             isRouted: true,
-            showDiscoveryHint: true,
             knowledgeEntries: knowledgeEntries.length > 0 ? knowledgeEntries : undefined,
           })
 
-          // Append tool list + discovery hints
+          // Append concise tool list + always-expose hint (ONE listing, not duplicated)
           injection += `\n\n### Selected Tools for This Task (${selected.length} of ${TOOL_REGISTRY.length})\n\n`
           injection += toolListText
           injection += alwaysExposeHint
-          injection += searchHint
         } else {
           // Fallback: show all domain-appropriate tools
           injection = buildAgenticSystemInstructions(pack, TOOL_REGISTRY, {
@@ -4878,13 +4875,9 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
         if (!hasHighConfidenceKnowledge) {
           injection += `\n\n---\n`
           injection += `⚠️ **MANDATORY RESEARCH REQUIRED**\n\n`
-          injection += `No high-confidence knowledge context was found for this task.\n`
-          injection += `**You MUST research before implementing:**\n\n`
-          injection += `1. Use \`webfetch\` to search for current information, documentation, or API references\n`
-          injection += `2. For academic/research topics: fetch from arxiv.org (e.g., \`webfetch https://arxiv.org/search/?query=...\`)\n`
-          injection += `3. Verify ALL claims against external sources — do NOT rely on your internal knowledge\n`
-          injection += `4. Cite sources (URLs) for every claim in your response\n\n`
-          injection += `> 💡 **Why?** Your training data has a cutoff date. What the user asks about may have changed since then.`
+          injection += `No high-confidence knowledge was found. ` +
+            `Use \`webfetch\` to research before implementing. ` +
+            `Cite sources (URLs) for every claim.`
         }
       }
 
