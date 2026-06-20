@@ -19,37 +19,37 @@ Berdasarkan konsep dari paper **"The End of Software Engineering"** (arXiv:2606.
 
 ### 29 Tools
 
-| Tool | Stage | Description |
-|---|---|---|
-| `agentic_plan` | I | Plan + auto-decompose (LLM-first) |
-| `agentic_execute` | I | Execute step + auto-verify + checkpoint |
-| `agentic_reflect` | I | Error analysis + propagation tracing |
-| `agentic_verify` | I | Compile + test verification |
-| `agentic_status` | I | Dashboard + blocked steps |
-| `agentic_nav` | II | Codebase scan + file search |
-| `agentic_context` | II | Context view + compress |
-| `agentic_snapshot` | II | Save/list execution checkpoints |
-| `agentic_pr` | II | Generate PR + description |
-| `agentic_score` | II | Tech debt analysis |
-| `agentic_model` | II | Configure per-role LLM model preferences per session |
-| `agentic_model_reset` | II | Reset model stats to recover from degraded performance |
-| `agentic_budget` | II | Set/view/reset budget limits (tokens, steps, time, cost) |
-| `agentic_delegate` | III | Assign to architect/developer/qa/coordinator — pipeline-aware with cross-validation |
-| `agentic_pipeline` | III | Define and run multi-agent workflow pipelines (PM→Arch→Dev→QA) |
-| `agentic_message` | III | Inter-agent messaging: send, inbox, conversation, review requests |
-| `agentic_parallel` | III | Dependency-based concurrency |
-| `agentic_skill` | III | Extract/find/list reusable skills |
-| `agentic_episodes` | III | Cross-session memory search |
-| `agentic_dashboard` | III | Timeline + anomaly detection |
-| `agentic_guard` | III | Hallucination detection |
-| `agentic_finetune` | III | Fine-tuning pipeline: prepare → upload → create/monitor jobs |
-| `agentic_evolve` | IV | Inspect + extend the agent system |
-| `agentic_auto` | V | Fully autonomous agent loop (plan→execute→verify→retry in one call) |
-| `agentic_debate` | 🏗 Blueprint | Debate loop — Agent A (executor) ↔ Agent B (critic) |
-| `agentic_router` | 🏗 Blueprint | Keyword-first intent classifier, zero LLM cost for clear intents |
-| `agentic_clean` | 🏗 Blueprint | Strip debate artifacts, reformat to markdown/json, validate schema |
-| `agentic_rag` | 🏗 Blueprint | Multi-index RAG: TF-IDF + vector hybrid search per category |
-| `agentic_mcp` | 🏗 Blueprint | MCP Client — connect to DB/APIs via stdio or HTTP(S) |
+| Tool | Stage | Description | Teknik Kunci |
+|---|---|---|---|
+| `agentic_plan` | I | Create structured execution plan. Auto-decompose via templates (create/fix/refactor/test/deploy/migrate/doc/perf/security/docker/CI) + LLM fallback | Template-based decomposition, scoring-based rule matching, cycle detection (Kahn's), LLM auto-decompose |
+| `agentic_execute` | I | Record subtask completion. Auto-verify compile on success, error recovery guidance + propagation tracing, user feedback for continuous learning | File writing chokepoint, hallucination guard auto-check, skill auto-extract, budget step tracking |
+| `agentic_reflect` | I | Analyze failed step: diagnose error category, trace error propagation across step chain via dependency graph, suggest recovery plan | Import graph traversal, transitive dependents analysis, multi-category error matching |
+| `agentic_verify` | I | Full verification: compile + lint + test suite. Auto-detect language (TS/JS/Python/Go/Rust). Error analysis on failure | Multi-language execFileSync, compile cache, semantic LLM verification, domain verifier strategies |
+| `agentic_status` | I | Execution dashboard: progress bar, health, blocked steps, dependency graph, retry history, file change summary | ExecutionState snapshot, topological dependency visualization |
+| `agentic_nav` | II | Scan codebase for task-relevant files. Multi-language scanner (TS/JS/Python/PHP/Go/Rust/Java/generic) | LanguageConfig per bahasa, relevance scoring, import/export indexing |
+| `agentic_context` | II | View & compress execution context. Summarizes conversation history preserving decisions, file changes, invariants | Rule-based extraction + LLM compression fallback, token estimation |
+| `agentic_snapshot` | II | Save/restore/list execution checkpoints. Checkpoints store plan progress, file changes, decisions | Full state serialization, restore resets execution state |
+| `agentic_pr` | II | Generate PR description from plan + step results + files changed. Optionally create actual PR via GitHub CLI (`gh`) | Plan→Step→Files summary pipeline, git integration |
+| `agentic_score` | II | Technical debt analysis: coupling, file size, scope, code patterns (`any` type, TODO, casts) | Coupling analysis, file entropy, pattern detection |
+| `agentic_model` | II | Configure per-role LLM model preferences per session. Persisted to `.agentic/models.json` | ModelRegistry alias resolution, per-task-type scoring |
+| `agentic_model_reset` | II | Reset model statistics to recover from degraded performance. Single/stale/all modes | Quarantine system, stale detection (7d), consecutive failure tracking |
+| `agentic_budget` | II | Circuit breaker for resource limits: tokens, steps, time, cost. Multi-scope (session/task) with per-model ledger | PDP/PEP pattern, 4-axis tracking, model price ledger |
+| `agentic_delegate` | III | Assign task to specialist role (architect/developer/qa/coordinator/pm). Pipeline-aware with cross-validation + inter-agent messaging | Shared memory injection, skill context enrichment, delegation depth control |
+| `agentic_pipeline` | III | Define & run multi-agent pipelines (PM→Arch→Dev→QA). Cross-validation between stages with formal contracts | PipelineContract (I/O schema), invariant checking, LLM cross-validation |
+| `agentic_message` | III | Inter-agent messaging: send, inbox, conversation threads, review requests. 6 message types | Message bus with pruning (max 500/role), conversation threading |
+| `agentic_parallel` | III | Dependency-based concurrency: analyze parallelism, execute ready steps concurrently with conflict detection | Kahn's algorithm phasing, Promise.allSettled, same-file conflict detection |
+| `agentic_skill` | III | Extract/find/list reusable skills from successful task completions. Self-describing `agentic-skill/v1` format | Auto-extraction (success+completion+action markers), sliding window success rate |
+| `agentic_episodes` | III | Cross-session memory search. Search past task outcomes to avoid repeating mistakes | TF-IDF relevance scoring, recency + success bonus, schema versioning |
+| `agentic_dashboard` | III | Observability dashboard: timeline, statistics, tool usage, anomaly detection (timeout, retry storm, loop, silent failure), model reliability | 4 anomaly types, latency p50/p95/p99, peak concurrency via interval overlap |
+| `agentic_guard` | III | Manual re-run of hallucination guard. Auto-runs inside agentic_execute; standalone for re-audit or detailed per-claim breakdown | 4 claim types verification, path traversal protection, multi-language function detection |
+| `agentic_finetune` | III | End-to-end fine-tuning pipeline: prepare dataset → save → upload to OpenAI → create & monitor job | OpenAI API integration, hyperparameter config (epochs, batch, LR), polling |
+| `agentic_evolve` | IV | Inspect & extend the agent system: register custom roles, versioned memory schemas, export skills, run self-evolution, prompt management | Versioned prompt history, rollback support, EvolutionReport generation |
+| `agentic_auto` | V | Fully autonomous orchestrator: one call handles memory + skills → architecture → code → guard check → verify → score → learn | Full pipeline orchestration, auto-retry with strategy rotation, post-processing async |
+| `agentic_debate` | 🏗 Blueprint | Executor ↔ Critic debate loop for thorough analysis. Multi-round: draft → review → revise until approved | Loop detection (identical output), configurable rounds (max 5) |
+| `agentic_router` | 🏗 Blueprint | Lightweight intent classifier. Keyword-based routing (zero LLM cost) with LLM fallback for low-confidence | Keyword matching + LLM fallback, configurable categories |
+| `agentic_clean` | 🏗 Blueprint | Strip debate artifacts, reformat to markdown/json, validate against schema. Post-processing for debate/analysis output | Regex stripping, LLM-based reformatting, schema validation |
+| `agentic_rag` | 🏗 Blueprint | Multi-index RAG: store/search knowledge in category-segregated indices. Hybrid search (TF-IDF + Vector) | Per-category indexes, auto-category, vector enrichment via cosine similarity |
+| `agentic_mcp` | 🏗 Blueprint | MCP client: connect to external servers (DB, APIs) via stdio or HTTP(S). Auto-discover tools via `tools/list`, call via JSON-RPC | JSON-RPC protocol, tool discovery, connection lifecycle management |
 
 ## Quick Start
 
