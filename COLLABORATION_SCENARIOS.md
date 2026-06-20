@@ -1,7 +1,7 @@
 # 🤝 Collaboration Scenarios — OpenCode Agentic Engine
 
 > Panduan lengkap tool chaining patterns, multi-agent workflows, dan collaboration scenarios
-> untuk 27 agentic_* tools. Referensi utama untuk autonomous software engineering.
+> untuk 29 agentic_* tools. Referensi utama untuk autonomous software engineering.
 
 ---
 
@@ -12,6 +12,7 @@
 3. [Learning & Memory](#3-learning--memory)
 4. [Fine-Tuning Pipeline](#4-fine-tuning-pipeline)
 5. [Observability & Evaluation](#5-observability--evaluation)
+    - [5.5 Semantic LLM Cache (Gap #7)](#55-semantic-llm-cache-gap-7)
 6. [Error Recovery Patterns](#6-error-recovery-patterns)
 7. [Parallel Execution](#7-parallel-execution)
 8. [Self-Evolution](#8-self-evolution)
@@ -46,7 +47,56 @@ Step 3: agentic_verify      — Compile + test verification
 
 // agentic_verify
 { "stepId": "verify-1" }
+
+// Deep verification (Gap #4) — security + perf + architecture + deps
+// agentic_verify
+{ "stepId": "verify-1", "tier": "deep" }
 ```
+
+### 1.1a Deep Multi-Dimensional Verification (Gap #4)
+
+```
+agentic_execute  →  agentic_verify (deep)
+```
+
+**Use case**: Setelah implementasi kritis, verifikasi penuh lintas dimensi: security, performance, architecture, dan dependency audit.
+
+**3-tier system**:
+| Tier | Checks |
+|------|--------|
+| `fast` | Compile only — super cepat, cocok untuk iterasi |
+| `standard` | Compile + lint + test — tengah-tengah |
+| `deep` | Standard + security + performance + architecture + npm audit — komprehensif |
+
+**Pattern**:
+```json
+// Fast verification (compile only, ~1 detik)
+{ "stepId": "quick-check", "tier": "fast" }
+
+// Standard (compile + lint + test)
+{ "stepId": "step-3", "tier": "standard" }
+
+// Deep — all dimensions: security (SQL injection, XSS, secrets),
+//   performance (N+1, O(n²), missing indexes), architecture (circular deps),
+//   deps (npm audit vulnerabilities)
+{ "stepId": "final", "tier": "deep" }
+```
+
+**Per-dimension toggle** (via `config.ts` DeepVerificationAgentConfig):
+```json
+{
+  "deepVerification": {
+    "security": true,
+    "performance": true,
+    "architecture": false,
+    "deps": true
+  }
+}
+```
+
+**Auto-tier in agent-loop**:
+- Intermediate steps → `standard` tier (fast enough, catches errors)
+- Final verification → `deep` tier (comprehensive)
 
 ### 1.2 Research → Plan → Execute
 
@@ -546,6 +596,50 @@ agentic_auto  →  (evaluation happens automatically)
 **Use case**: 5-dimensi real-time scoring (taskSuccess, errorRecovery, contextStability, multiAgent, skillReuse).
 Terintegrasi otomatis dengan `agentic_execute`, `agentic_delegate`, dan `agentic_nav`.
 
+### 5.5 Semantic LLM Cache (Gap #7)
+
+```
+agentic_plan → agentic_execute → (auto semantic cache) → agentic_verify
+```
+
+**Use case**: Reduce LLM cost & latency with TF-IDF + cosine similarity-based caching. Cache hit when semantically similar query was answered within TTL.
+
+**How it works**:
+1. User prompt → tokenize (Unicode-aware unigrams + bigrams)
+2. Compute TF-IDF vector vs all cached entries
+3. Cosine similarity ≥ threshold (default 0.7) + TTL not expired → cache HIT
+4. Returns cached LLM response without calling LLM
+
+**Pattern** (via LLMEngine API):
+```typescript
+// Enable in LLMEngine setup
+llm.enableSemanticCache({
+  maxEntries: 500,         // default
+  ttlMs: 300000,           // 5 min default
+  similarityThreshold: 0.7, // cosine similarity minimum
+  evictFraction: 0.2,      // evict 20% oldest when full
+})
+
+// Auto: every llm.call() checks semantic cache BEFORE exact-match cache
+const response = await llm.call({ systemPrompt, userPrompt })
+// If similar query cached → returns cached (finishReason: "cache-hit")
+
+// Manual stats
+const stats = llm.getSemanticCacheStats()
+// { size: 42, hits: 15, misses: 30, hitRate: 0.3333 }
+
+// Disable
+llm.disableSemanticCache()
+```
+
+**Similarity examples** (threshold 0.3):
+| Cached query | New query | Hit? |
+|---|---|---|
+| "implement user authentication with JWT" | "implement authentication using JWT tokens" | ✅ Yes |
+| "fix type error in TypeScript" | "what is the weather today" | ❌ No |
+
+**Integration order**: Semantic cache → Exact-match cache → LLM provider call
+
 ---
 
 ## 6. Error Recovery Patterns
@@ -875,14 +969,22 @@ agentic_auto (single call replaces all of the above)
 │                    CHAIN QUICK REFERENCE                 │
 ├─────────────────────────────────────────────────────────┤
 │ NEW FEATURE (single):                                   │
-│   plan → execute → verify → score → skill → pr          │
+│   plan → execute → verify(tier:deep) → score → skill → pr│
 │                                                         │
 │ NEW FEATURE (multi-agent):                              │
 │   pipeline(suggest) → pipeline(define) → pipeline(run)  │
-│     → verify → skill → pr                               │
+│     → verify(tier:deep) → skill → pr                    │
 │                                                         │
 │ BUG FIX:                                                │
-│   nav → plan → execute → reflect → execute → verify     │
+│   nav → plan → execute → reflect → execute →            │
+│     verify(tier:standard)                               │
+│                                                         │
+│ DEEP VERIFICATION (Gap #4):                             │
+│   verify(tier:deep) → security + perf + arch + deps     │
+│   verify(tier:fast) → compile only (rapid iteration)     │
+│                                                         │
+│ SEMANTIC CACHE (Gap #7):                                │
+│   llm.enableSemanticCache() → auto cache similar queries │
 │                                                         │
 │ CODE REVIEW:                                            │
 │   plan → guard → debate → clean → score → pr            │
