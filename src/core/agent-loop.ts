@@ -5,6 +5,7 @@ import { ErrorAnalyzer } from "./error-analyzer.js"
 import { DependencyTracker } from "../drift/dependency-tracker.js"
 import { LLMEngine } from "./llm.js"
 import { BudgetTracker } from "./budget-tracker.js"
+import type { Planner } from "./planner.js"
 
 export interface AgentLoopConfig {
   maxIterations: number
@@ -36,6 +37,8 @@ export class AgentLoop {
   private llm: LLMEngine
   private observers: LoopObserver[] = []
   private budgetTracker?: BudgetTracker
+  private planner?: Planner
+  private replannedSteps = new Set<string>()
 
   /** Rolling window for repetition detection */
   private callHistory: Array<{ stepId: string; ts: number; hash: string }> = []
@@ -56,6 +59,10 @@ export class AgentLoop {
 
   setBudgetTracker(tracker: BudgetTracker): void {
     this.budgetTracker = tracker
+  }
+
+  setPlanner(planner: Planner): void {
+    this.planner = planner
   }
 
   private detectLoop(callKey: string): boolean {
@@ -116,6 +123,9 @@ export class AgentLoop {
         )
 
         for (const r of results) {
+          if (r.replanned) {
+            continue
+          }
           if (r.filesModified.length > 0) {
             filesModifiedMap.set(r.stepId, r.filesModified)
           }
@@ -190,7 +200,7 @@ export class AgentLoop {
     projectDir: string,
     stepExecutor: (step: Subtask) => Promise<{ success: boolean; output: string; filesModified: string[]; error?: string }>,
     fixExecutor?: (fix: string) => Promise<boolean>,
-  ): Promise<Array<{ stepId: string; success: boolean; filesModified: string[] }>> {
+  ): Promise<Array<{ stepId: string; success: boolean; filesModified: string[]; replanned?: boolean }>> {
     if (batch.length <= 1) {
       const step = batch[0]
       const r = await this.executeStepWithRetry(
@@ -210,7 +220,7 @@ export class AgentLoop {
     )
     return settled.map((s, i) => {
       if (s.status === "fulfilled") return s.value
-      return { stepId: batch[i].id, success: false, filesModified: [] }
+      return { stepId: batch[i].id, success: false, filesModified: [], replanned: false }
     })
   }
 
@@ -225,14 +235,14 @@ export class AgentLoop {
     stepExecutor: (step: Subtask) => Promise<{ success: boolean; output: string; filesModified: string[]; error?: string }>,
     fixExecutor?: (fix: string) => Promise<boolean>,
     depth = 0,
-  ): Promise<{ stepId: string; success: boolean; filesModified: string[] }> {
+  ): Promise<{ stepId: string; success: boolean; filesModified: string[]; replanned?: boolean }> {
     let retryCount = 0
     let stepSuccess = false
     let stepOutput = ""
     let filesModified: string[] = []
+    let preservedFiles: string[] = []
 
     while (retryCount <= this.config.maxRetries) {
-      // Circuit breaker: check budget before each retry
       if (this.budgetTracker) {
         const budgetEvent = this.budgetTracker.check("session")
         if (budgetEvent) {
@@ -241,7 +251,6 @@ export class AgentLoop {
         }
       }
 
-      // Repetition detection: same step + same retry context = stuck loop
       if (this.detectLoop(`${step.id}:retry=${retryCount}`)) {
         stepOutput = `Infinite loop detected: step ${step.id} repeated ${this.MAX_IDENTICAL_CALLS}+ times in ${this.WINDOW_MS / 1000}s`
         break
@@ -281,6 +290,19 @@ export class AgentLoop {
             if (!repairResult) { retryCount++; break }
             continue
           }
+
+          if (step.verificationCriteria.length > 0 && verifier.hasLLM()) {
+            const criteriaResult = await verifier.verifyCriteria(
+              step.verificationCriteria,
+              step.description,
+              filesModified,
+              projectDir,
+            )
+            if (!criteriaResult.passed) {
+              stepOutput = `Criteria check: ${criteriaResult.output}`
+              this.observers.forEach(o => o.onStepComplete(step.id, true, stepOutput))
+            }
+          }
         }
 
         executor.recordResult(sessionId, {
@@ -304,15 +326,46 @@ export class AgentLoop {
       if (!repairResult) break
     }
 
+    if (
+      this.config.autoRetry &&
+      !this.replannedSteps.has(step.id) &&
+      this.planner &&
+      depth < 1
+    ) {
+      const errorText = stepOutput
+      const newSubtasks = this.tryReplan(step, errorText)
+      if (newSubtasks.length > 0) {
+        this.replannedSteps.add(step.id)
+        executor.replanStep(sessionId, step.id, newSubtasks)
+        return { stepId: step.id, success: false, filesModified, replanned: true }
+      }
+    }
+
     executor.recordResult(sessionId, {
       stepId: step.id,
       success: false,
       output: stepOutput,
-      filesModified: [],
+      filesModified: preservedFiles.length > 0 ? preservedFiles : [],
       error: stepOutput,
     })
 
-    return { stepId: step.id, success: false, filesModified }
+    return { stepId: step.id, success: false, filesModified: preservedFiles.length > 0 ? preservedFiles : filesModified }
+  }
+
+  private tryReplan(failedStep: Subtask, errorText: string): Subtask[] {
+    if (!this.planner) return []
+
+    const contextHint = errorText.length > 100
+      ? `${errorText.slice(0, 200)}`
+      : errorText
+
+    const replanGoal = `${failedStep.description} [replan: ${contextHint}]`
+    const { intent } = this.planner.decompose(replanGoal, [], undefined)
+    return intent.subtasks.map(s => ({
+      ...s,
+      dependsOn: failedStep.dependsOn,
+      verificationCriteria: s.verificationCriteria,
+    }))
   }
 
   private async attemptRepair(

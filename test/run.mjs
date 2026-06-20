@@ -2775,10 +2775,10 @@ assert(p4Out.includes("Goal") || p4Out.includes("Auto"), "output mentions goal o
   assert(bt5.elapsedMs < 100, "B1o elapsed ~0 saat pause")
   bt5.resumeApproval()
 
-  // Unknown model fallback
+  // Unknown model — $0 silent (SessionReader sync dari OpenCode nanti)
   const bt6 = new BT()
   bt6.recordTokens("custom-model/xyz", 1000, 500)
-  assert(bt6.totalCostUsd > 0, "B1p unknown model falls back to default")
+  assert(bt6.totalCostUsd === 0, "B1p unknown model → $0 silent, no warning")
   assert(true, "B1z BudgetTracker all unit tests passed")
 
   // ── agentic_budget tool tests (inside runAll) ──

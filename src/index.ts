@@ -2390,17 +2390,37 @@ const createEngine: Plugin = async (input, _options) => {
           if (args.action === "list") {
             ensureSessionLoaded()
             const prefs = sessionStore.getAllModelPreferences(context.sessionID)
-            if (prefs.length === 0) {
-              return { output: "No model preferences configured for this session. Use `action: \"set\"` to assign models to agent roles." }
-            }
             let output = "## 🎯 Session Model Preferences\n\n"
-            output += "| Role | Model |\n"
-            output += "|------|-------|\n"
-            output += prefs.map(p => `| **${p.role}** | \`${p.model}\` |`).join("\n")
-            const persisted = readPersistedPrefs()
-            const persistedCount = Object.keys(persisted).length
-            output += `\n\n${persistedCount > 0 ? `💾 ${persistedCount} preference(s) persisted to \`.agentic/models.json\`` : "Preferences are session-only (not yet persisted)"}`
-            output += "\n\nThese preferences override the default model selection during delegation."
+            if (prefs.length === 0) {
+              output += "No model preferences configured yet. Use `action: \"set\"` to assign models to agent roles.\n"
+            } else {
+              output += "| Role | Model |\n"
+              output += "|------|-------|\n"
+              output += prefs.map(p => `| **${p.role}** | \`${p.model}\` |`).join("\n")
+              const persisted = readPersistedPrefs()
+              const persistedCount = Object.keys(persisted).length
+              output += `\n\n${persistedCount > 0 ? `💾 ${persistedCount} preference(s) persisted to \`.agentic/models.json\`` : "Preferences are session-only (not yet persisted)"}`
+              output += "\n\nThese preferences override the default model selection during delegation."
+            }
+
+            // Also show available models from OpenCode
+            try {
+              const ocModels = await llmEngine.listOpenCodeModels()
+              if (ocModels.length > 0) {
+                output += `\n\n### 🧠 Available Models (from OpenCode)\n`
+                const byProvider = new Map<string, string[]>()
+                for (const m of ocModels) {
+                  const list = byProvider.get(m.providerName) ?? []
+                  list.push(`\`${m.id}\``)
+                  byProvider.set(m.providerName, list)
+                }
+                for (const [provider, models] of byProvider) {
+                  output += `- **${provider}**: ${models.join(", ")}\n`
+                }
+                output += `\nUse \`action:"set"\` to assign any of these to a role.`
+              }
+            } catch { /* silent */ }
+
             return { output }
           }
 
@@ -2840,6 +2860,23 @@ const createEngine: Plugin = async (input, _options) => {
 
           let output = traceSection || "### 📊 Execution Overview\n\nNo trace data available yet. Execute some steps first.\n"
           output += `\n### 🤖 Model Reliability\n${modelReliability}\n`
+
+          // List models yang tersedia di OpenCode SDK
+          try {
+            const ocModels = await llmEngine.listOpenCodeModels()
+            if (ocModels.length > 0) {
+              output += `\n### 🧠 Available Models (from OpenCode)\n`
+              const byProvider = new Map<string, string[]>()
+              for (const m of ocModels) {
+                const list = byProvider.get(m.providerName) ?? []
+                list.push(`\`${m.id}\``)
+                byProvider.set(m.providerName, list)
+              }
+              for (const [provider, models] of byProvider) {
+                output += `- **${provider}**: ${models.join(", ")}\n`
+              }
+            }
+          } catch { /* silent */ }
 
           // Cross-session pattern discovery
           const allEpisodes = episodicStore.getRecent(200)
@@ -4295,7 +4332,12 @@ const createEngine: Plugin = async (input, _options) => {
             .map(([p, c]) => `${p}:\n${c.slice(0, 100)}`).join("\n---\n")
           const pipelineId = orchestrator.getSuggestedPipeline(args.goal)
           const pipeline = orchestrator.getPipeline(pipelineId)
-          const usePipeline = thorough && pipeline && pipeline.stages.length >= 2 && activeSteps.length >= 2
+          // Hanya aktifkan pipeline untuk task yang benar-benar butuh multi-agent.
+          // Pipeline = 4-5 LLM calls sequential — overkill untuk task sederhana.
+          const hasComplexKeywords = /\b(feature|module|endpoint|api|pipeline|architecture|database|schema|multi[\s-]?step|complex)\b/i.test(args.goal)
+          const hasSimpleKeywords = /\b(fix|typo|comment|rename|change|update|bump|remove|delete|add\s+\w+\s+to)\b/i.test(args.goal)
+          const isSimpleOrTrivial = (args.goal.length < 100 && hasSimpleKeywords) || (!hasComplexKeywords && args.goal.length < 60) || activeSteps.length <= 1
+          const usePipeline = thorough && !isSimpleOrTrivial && pipeline && pipeline.stages.length >= 2 && activeSteps.length >= 2
 
           const allModified: string[] = []
           const completedSteps: string[] = []

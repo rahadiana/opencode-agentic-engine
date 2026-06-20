@@ -312,6 +312,32 @@ export class Executor {
     return [...files]
   }
 
+  replanStep(sessionId: string, stepId: string, newSubtasks: Subtask[]): number {
+    const state = this.states.get(sessionId)
+    if (!state) return 0
+    if (newSubtasks.length === 0) return 0
+
+    const idx = state.plan.intent.subtasks.findIndex(s => s.id === stepId)
+    if (idx !== -1) {
+      state.plan.intent.subtasks.splice(idx, 1)
+    }
+
+    state.completedSteps.delete(stepId)
+    state.failedSteps.delete(stepId)
+    state.stepStates.delete(stepId)
+
+    for (let i = 0; i < newSubtasks.length; i++) {
+      const ss = newSubtasks[i]
+      if (state.plan.intent.subtasks.some(s => s.id === ss.id)) {
+        ss.id = `${stepId}-replan-${i + 1}`
+      }
+      ss.dependsOn = ss.dependsOn.filter(d => d !== stepId)
+    }
+
+    state.plan.intent.subtasks.push(...newSubtasks)
+    return newSubtasks.length
+  }
+
   removeSession(sessionId: string): void {
     this.states.delete(sessionId)
   }

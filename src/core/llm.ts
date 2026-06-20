@@ -54,6 +54,7 @@ const DEFAULT_MODELS: Record<string, string> = {
 
 import type { ModelRegistry } from "./model-registry.js"
 import type { BudgetTracker } from "./budget-tracker.js"
+import { SessionReader } from "./session-reader.js"
 
 export class LLMEngine {
   private config: LLMConfig
@@ -66,6 +67,7 @@ export class LLMEngine {
     findSkills: (query: string) => Array<{ name: string; successRate: number }>
   }
   private budgetTracker?: BudgetTracker
+  private sessionReader: SessionReader
   private eventBus?: import("./event-bus.js").EventBus
   private responseCache = new Map<string, { response: LLMResponse; timestamp: number }>()
   private readonly CACHE_TTL = 30_000 // 30s cache for identical requests
@@ -81,6 +83,11 @@ export class LLMEngine {
       temperature: config.temperature ?? 0.3,
       variant: config.variant ?? process.env.OPENAI_VARIANT,
     }
+    this.sessionReader = new SessionReader()
+  }
+
+  setSessionReader(reader: SessionReader): void {
+    this.sessionReader = reader
   }
 
   setMemoryStores(stores: {
@@ -116,6 +123,7 @@ export class LLMEngine {
 
   setOpencodeClient(client: unknown): void {
     this.opencodeClient = client
+    this.sessionReader.setOpencodeClient(client)
     if (this.config.provider === "opencode" || !process.env.OPENAI_API_KEY) {
       this.config.provider = "opencode"
     }
@@ -123,6 +131,7 @@ export class LLMEngine {
 
   setSessionId(sessionId: string): void {
     this.pluginSessionId = sessionId
+    this.sessionReader.setSessionId(sessionId)
   }
 
   setModelRegistry(registry: ModelRegistry): void {
@@ -131,6 +140,7 @@ export class LLMEngine {
 
   setBudgetTracker(tracker: BudgetTracker): void {
     this.budgetTracker = tracker
+    this.sessionReader.setBudgetTracker(tracker)
   }
 
   setEventBus(bus: import("./event-bus.js").EventBus): void {
@@ -145,8 +155,39 @@ export class LLMEngine {
     Object.assign(this.config, config)
   }
 
+  /**
+   * Mendapatkan model dari config (sync, cepat).
+   * Default: "opencode/default"
+   */
   getCurrentModel(): string {
-    return this.config.model ?? "unknown"
+    return this.config.model ?? "opencode/default"
+  }
+
+  /**
+   * Mendapatkan model ASLI dari OpenCode session.
+   * Lebih akurat karena ini model beneran yang dipakai sama OpenCode.
+   * Fallback: this.getCurrentModel() kalau gagal baca dari session.
+   */
+  async getOpenCodeModel(): Promise<string> {
+    try {
+      const model = await this.sessionReader.getCurrentModel()
+      if (model) return model
+    } catch {
+      // silent fallback
+    }
+    return this.getCurrentModel()
+  }
+
+  /**
+   * List semua model yang tersedia di OpenCode.
+   * Returns array [{ id, providerID, providerName }] atau [] kalau gagal.
+   */
+  async listOpenCodeModels(): Promise<Array<{ id: string; providerID: string; providerName: string }>> {
+    try {
+      return await this.sessionReader.listModels()
+    } catch {
+      return []
+    }
   }
 
   private getCacheKey(req: LLMRequest): string {
@@ -227,6 +268,13 @@ export class LLMEngine {
 
     if (success && this.budgetTracker) {
       this.budgetTracker.recordTokens(this.getCurrentModel(), tInput, tOutput, tReasoning, tCacheRead, tCacheWrite)
+    }
+
+    // Sync session data (model + cost) dari OpenCode setelah LLM call sukses.
+    // Fire-and-forget — tidak blocking response.
+    if (success && this.pluginSessionId) {
+      this.sessionReader.invalidateCache()
+      this.sessionReader.syncToBudgetTracker().catch(() => {})
     }
 
     // Emit llm.response event (passive — for dashboard/trace observers)

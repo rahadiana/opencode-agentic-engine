@@ -3,4 +3,5 @@ dist/
 .agentic/
 logs/
 .env
+.omo/
 scripts/telegram.sh

@@ -151,10 +151,14 @@ export class AutoRetryManager {
       for (const m of matched) problematicFiles.add(m)
     }
 
-    // Fallback: kalau tidak detect file spesifik, rollback semua
     if (problematicFiles.size === 0) return [...allModified]
 
     return [...problematicFiles]
+  }
+
+  getPreservedFiles(analysis: ErrorAnalysis | null, allModified: string[], compileError: string): string[] {
+    const rollback = this.getFilesToRollback(analysis, allModified, compileError)
+    return allModified.filter(f => !rollback.includes(f))
   }
 
   /**

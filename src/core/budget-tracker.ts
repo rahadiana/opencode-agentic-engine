@@ -90,6 +90,9 @@ const DEFAULT_MODEL_PRICES: Record<string, ModelPriceEntry> = {
   "google/gemini-2.5-pro":       { input: 1.25,  output: 10.00,  cacheRead: 0.31,   cacheWrite: 2.38 },
   "opencode/deepseek-v4-flash-free": { input: 0, output: 0,      cacheRead: 0,       cacheWrite: 0 },
   "opencode/big-pickle":         { input: 0,     output: 0,      cacheRead: 0,       cacheWrite: 0 },
+  /** Catch-all untuk model yang tidak dikenal — harga 0 supaya tidak warning */
+  "opencode/default":            { input: 0,     output: 0,      cacheRead: 0,       cacheWrite: 0 },
+  "unknown":                     { input: 0,     output: 0,      cacheRead: 0,       cacheWrite: 0 },
 } as const
 
 /** Default limit values (digunakan saat limit tidak di-set) */
@@ -183,6 +186,34 @@ export class BudgetTracker {
     const price = this.lookupPrice(modelId)
     const costInMicroCents = Math.round(this.calculateCost(inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWriteTokens, price) * 1_000_000)
     entry.cost = (entry.cost * 1_000_000 + costInMicroCents) / 1_000_000
+  }
+
+  /**
+   * Sync data dari OpenCode session (lebih akurat daripada tracking sendiri).
+   * Dipanggil setelah setiap LLM call — memastikan model + cost selalu sinkron
+   * dengan source of truth (OpenCode-native tracking).
+   */
+  syncFromOpenCode(
+    modelId: string,
+    openCodeCost: number,
+    tokens?: { input?: number; output?: number; reasoning?: number; cache?: { read?: number; write?: number } },
+  ): void {
+    // 1. Sync model — pastikan entry ledger untuk model beneran (bukan "unknown" / "opencode/default")
+    const entry = this.getOrCreateModelEntry(modelId)
+
+    // 2. Kalau ada token breakdown dari OpenCode, pake itu (lebih akurat)
+    if (tokens) {
+      entry.inputTokens = Math.max(entry.inputTokens, tokens.input ?? 0)
+      entry.outputTokens = Math.max(entry.outputTokens, tokens.output ?? 0)
+      entry.reasoningTokens = Math.max(entry.reasoningTokens, tokens.reasoning ?? 0)
+      entry.cacheReadTokens = Math.max(entry.cacheReadTokens, tokens.cache?.read ?? 0)
+      entry.cacheWriteTokens = Math.max(entry.cacheWriteTokens, tokens.cache?.write ?? 0)
+    }
+
+    // 3. Cost dari OpenCode adalah source of truth — lebih akurat dari estimasi kita
+    if (openCodeCost > 0) {
+      entry.cost = Math.max(entry.cost, openCodeCost)
+    }
   }
 
   /** Catat completion satu subtask step */
@@ -352,12 +383,11 @@ export class BudgetTracker {
 
   private lookupPrice(modelId: string): ModelPriceEntry {
     const price = this.modelPrices[modelId]
-    if (!price) {
-      const fallback = this.modelPrices["openai/gpt-4o"] ?? { input: 2.5, output: 10, cacheRead: 0.3, cacheWrite: 0 }
-      console.warn(`[BudgetTracker] No price configured for model "${modelId}", using gpt-4o fallback`)
-      return fallback
-    }
-    return price
+    if (price) return price
+
+    // Model tidak dikenal (custom router name, unknown, dll) → $0 silent.
+    // OpenCode-native SessionReader akan sync cost real via syncFromOpenCode().
+    return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
   }
 
   private calculateCost(

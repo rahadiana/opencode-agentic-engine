@@ -127,12 +127,26 @@ const BUILTIN_LANGUAGES: LanguageConfig[] = [
 export class CodebaseNavigator {
   private index: ProjectIndex | null = null
   private languages: LanguageConfig[] = [...BUILTIN_LANGUAGES]
+  /** Cache untuk scan — hindari re-scan penuh dalam 30 detik */
+  private scanCache: { root: string; timestamp: number } | null = null
+  private readonly scanCacheTTL = 30_000 // 30 detik
   setLanguages(langs: LanguageConfig[]): void {
     this.languages = langs
     this.index = null
+    this.scanCache = null
+  }
+
+  /** Invalidasi cache scan — panggil jika file project berubah */
+  invalidateCache(): void {
+    this.scanCache = null
   }
 
   async scan(root: string): Promise<ProjectIndex> {
+    // Cache: jika root sama dan masih dalam TTL, balikkan index yang ada
+    if (this.index && this.scanCache && this.scanCache.root === root &&
+        Date.now() - this.scanCache.timestamp < this.scanCacheTTL) {
+      return this.index
+    }
     this.index = null
     const modules: ModuleInfo[] = []
 
@@ -152,6 +166,7 @@ export class CodebaseNavigator {
     }
 
     this.index = { root, modules, detectedLangs: detected, primaryLanguage: primary, hasTests, testDir, srcDir }
+    this.scanCache = { root, timestamp: Date.now() }
     return this.index
   }
 

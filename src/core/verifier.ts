@@ -29,7 +29,7 @@ export interface VerifierLanguageConfig {
 
 const LANGUAGE_CONFIGS: Record<SupportedLanguage, VerifierLanguageConfig> = {
   typescript: {
-    compileCmd: (_dir) => ({ bin: "npx", args: ["tsc", "--noEmit", "--pretty", "false"], timeout: 30000 }),
+    compileCmd: (_dir) => ({ bin: "npx", args: ["tsc", "--noEmit", "--pretty", "false", "--incremental"], timeout: 30000 }),
     testCmd: (_dir, pattern) => {
       const args = ["vitest", "run", "--reporter", "verbose"]
       if (pattern) args.push("--", pattern)
@@ -152,6 +152,49 @@ export class Verifier {
       }
     } catch {
       return { name: "semantic", passed: true, output: `Semantic verification: ${resp.content.slice(0, 500)}` }
+    }
+  }
+
+  async verifyCriteria(criteria: string[], intent: string, changedFiles: string[], projectDir: string): Promise<CheckResult> {
+    if (!this.llm || criteria.length === 0) {
+      return { name: "criteria", passed: true, output: "Criteria verification skipped (no LLM or no criteria)" }
+    }
+
+    const fileContents: Record<string, string> = {}
+    for (const f of changedFiles) {
+      const absPath = resolve(projectDir, f)
+      try {
+        fileContents[f] = await readFile(absPath, "utf-8")
+      } catch { /* skip */ }
+    }
+
+    const criteriaBlock = criteria.map((c, i) => `${i + 1}. ${c}`).join("\n")
+    const filesBlock = Object.entries(fileContents).map(([path, content]) =>
+      `### ${path}\n\`\`\`\n${content.slice(0, 2000)}\n\`\`\``
+    ).join("\n\n")
+
+    const domainName = this.domainRegistry?.getCurrentDomain() ?? "generic"
+    const resp = await this.llm.call({
+      systemPrompt: `You are a criteria verification assistant for the "${domainName}" domain. Given a list of verification criteria and the changed files, determine if EACH criterion is satisfied. Respond as JSON with keys: allPassed (boolean), results (array of {criterion, passed, reasoning}).`,
+      userPrompt: `## Intent\n${intent}\n\n## Verification Criteria\n${criteriaBlock}\n\n## Changed Files\n${filesBlock}\n\nEvaluate each criterion. Return JSON.`,
+      jsonMode: true,
+      temperature: 0.1,
+    })
+
+    try {
+      const parsed = JSON.parse(resp.content)
+      const results = Array.isArray(parsed.results) ? parsed.results : []
+      const allPassed = parsed.allPassed !== false
+      const details = results.map((r: { criterion: string; passed: boolean; reasoning?: string }) =>
+        `  ${r.passed ? "✅" : "❌"} ${r.criterion}${r.reasoning ? ` — ${r.reasoning}` : ""}`
+      ).join("\n")
+      return {
+        name: "criteria",
+        passed: allPassed,
+        output: `Criteria verification: ${allPassed ? "ALL PASS" : "SOME FAILED"}\n${details}`,
+      }
+    } catch {
+      return { name: "criteria", passed: true, output: `Criteria verification: ${resp.content.slice(0, 500)}` }
     }
   }
 
