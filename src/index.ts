@@ -4592,14 +4592,20 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
     // to config.agent without writing static .md files to disk.
     config: async (config) => {
       if (typeof config !== "object" || config === null) return
+      // Use broader type like oh-my-openagent does (config-handler.ts)
+      const cfg = config as Record<string, unknown>
       const agentDef: Record<string, unknown> = {
         description: "Agentic Engineering Agent — autonomous software engineering with planning, execution, and verification",
         mode: "all",
         prompt: `You are an autonomous software engineering agent.
 Your full instructions, tool list, and domain-specific rules are injected dynamically into every LLM call by the agentic-engine plugin.`,
       }
-      if (!config.agent) config.agent = {}
-      config.agent.agentic = agentDef
+      if (!cfg.agent) cfg.agent = {}
+      ;(cfg.agent as Record<string, unknown>).agentic = agentDef
+      // Set as default agent if user hasn't configured their own
+      if (!cfg.default_agent) {
+        cfg.default_agent = "agentic"
+      }
     },
 
     // ── Dynamic system prompt injection per LLM call ──
