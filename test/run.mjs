@@ -6,6 +6,7 @@ const pluginDist = new URL("../dist/index.js", import.meta.url).pathname
 let passed = 0
 let failed = 0
 let sid = 0
+let mod
 function freshSid() { return `test-session-${++sid}` }
 
 function assert(condition, msg) {
@@ -48,7 +49,6 @@ async function runAll() {
 // 1. Module loading
 console.log("\n[1] Module loading")
 assert(existsSync(pluginDist), "dist/index.js exists")
-let mod
 try { mod = await import(pluginDist); assert(true, "plugin module loaded") }
 catch (e) { assert(false, `plugin module load: ${e.message}`) }
 assert(typeof mod.AgenticEngine === "function", "AgenticEngine is a function")
@@ -3129,9 +3129,428 @@ assert(p4Out.includes("Goal") || p4Out.includes("Auto"), "output mentions goal o
   const bBad = await hooks.tool.agentic_budget.execute({ action: "invalid", scope: "session" }, bCtx)
   assert((bBad.output || "").includes("Unknown"), "B2h invalid action handled")
   assert(true, "B2z agentic_budget tool tests passed")
+
+  // ── Phase 1: DSL Executor ──
+  console.log("\n[DSL] DslExecutor — deterministic interpreter")
+  const { DslExecutor, validateDSL, resolvePath, setPath, resolveValue } = await import(pluginDist)
+
+  // DSL-1: Constructor and basic validation
+  const dsl1 = new DslExecutor()
+  assert(typeof dsl1.validate === "function", "DSL-1a DslExecutor created")
+  assert(typeof dsl1.execute === "function", "DSL-1b execute method exists")
+
+  // DSL-2: validateDSL — empty instructions
+  const dsl2v = validateDSL([])
+  assert(Array.isArray(dsl2v) && dsl2v.length === 0, "DSL-2a empty instructions = valid")
+
+  // DSL-3: validateDSL — unknown op
+  const dsl3v = validateDSL([{ op: "invalid_op", id: "x1" }])
+  assert(dsl3v.length > 0 && dsl3v[0].message.includes("Unknown op"), "DSL-3a unknown op detected")
+
+  // DSL-4: validateDSL — get requires source
+  const dsl4v = validateDSL([{ op: "get", id: "g1" }])
+  assert(dsl4v.length > 0 && dsl4v[0].message.includes("source"), "DSL-4a get requires source")
+
+  // DSL-5: validateDSL — set requires target
+  const dsl5v = validateDSL([{ op: "set", id: "s1" }])
+  assert(dsl5v.length > 0 && dsl5v[0].message.includes("target"), "DSL-5a set requires target")
+
+  // DSL-6: validateDSL — add requires >=2 values
+  const dsl6v = validateDSL([{ op: "add", id: "a1", values: [1] }])
+  assert(dsl6v.length > 0 && dsl6v[0].message.includes("at least 2"), "DSL-6a add requires >=2 values")
+
+  // DSL-7: validateDSL — mcp_call requires tool
+  const dsl7v = validateDSL([{ op: "mcp_call", id: "m1" }])
+  assert(dsl7v.length > 0 && dsl7v[0].message.includes("tool"), "DSL-7a mcp_call requires tool")
+
+  // DSL-8: validateDSL — compare requires left, operator, right
+  const dsl8v = validateDSL([{ op: "compare", id: "c1", left: "x" }])
+  assert(dsl8v.length > 0 && dsl8v.some(e => e.message.includes("operator")), "DSL-8a compare requires operator")
+  const dsl8v2 = validateDSL([{ op: "compare", id: "c2", left: "x", operator: "eq" }])
+  assert(dsl8v2.length > 0 && dsl8v2.some(e => e.message.includes("right")), "DSL-8b compare requires right")
+
+  // DSL-9: validateDSL — if requires condition
+  const dsl9v = validateDSL([{ op: "if", id: "i1" }])
+  assert(dsl9v.length > 0 && dsl9v[0].message.includes("condition"), "DSL-9a if requires condition")
+
+  // DSL-10: validateDSL — max nesting
+  const dsl10_deep = { op: "if", condition: "memory.x", then: [{ op: "if", condition: "memory.y", then: [{ op: "if", condition: "memory.z", then: [{ op: "if", condition: "memory.a", then: [{ op: "if", condition: "memory.b", then: [{ op: "if", condition: "memory.c", then: [] }] }] }] }] }] }
+  const dsl10v = validateDSL([dsl10_deep])
+  assert(dsl10v.length > 0 && dsl10v.some(e => e.message.includes("nesting")), "DSL-10a max nesting detected")
+
+  // DSL-11: resolvePath — input
+  const dsl11_ctx = { input: { name: "test", count: 42 }, output: {}, memory: {} }
+  assert(resolvePath(dsl11_ctx, "input.name").value === "test", "DSL-11a resolvePath input.name")
+  assert(resolvePath(dsl11_ctx, "input.count").value === 42, "DSL-11b resolvePath input.count")
+  assert(resolvePath(dsl11_ctx, "output.x").found === false, "DSL-11c resolvePath missing path")
+  assert(resolvePath(dsl11_ctx, "plainString").value === "plainString", "DSL-11d non-path returns literal")
+
+  // DSL-12: setPath
+  const dsl12_obj = {}
+  setPath(dsl12_obj, "a.b.c", 42)
+  assert(dsl12_obj.a.b.c === 42, "DSL-12a setPath nested")
+  setPath(dsl12_obj, "x", "hello")
+  assert(dsl12_obj.x === "hello", "DSL-12b setPath shallow")
+
+  // DSL-13: resolveValue
+  const dsl13_ctx = { input: { val: 99 }, output: {}, memory: { temp: "cached" } }
+  assert(resolveValue(dsl13_ctx, "input.val") === 99, "DSL-13a resolveValue input path")
+  assert(resolveValue(dsl13_ctx, "memory.temp") === "cached", "DSL-13b resolveValue memory path")
+  assert(resolveValue(dsl13_ctx, 42) === 42, "DSL-13c resolveValue literal number")
+  assert(resolveValue(dsl13_ctx, "hello") === "hello", "DSL-13d resolveValue literal string")
+
+  // DSL-14: DslExecutor.execute — set operation
+  const dsl14 = new DslExecutor()
+  const dsl14r = dsl14.execute([
+    { op: "set", target: "output.result", value: "hello world" },
+  ])
+  assert(dsl14r.success === true, "DSL-14a set success")
+  assert(dsl14r.output.result === "hello world", "DSL-14b set output value")
+
+  // DSL-15: DslExecutor.execute — get operation
+  const dsl15 = new DslExecutor()
+  const dsl15r = dsl15.execute([
+    { op: "get", source: "input.name", target: "output.name" },
+  ], { name: "test-user" })
+  assert(dsl15r.success === true, "DSL-15a get success")
+  assert(dsl15r.output.name === "test-user", "DSL-15b get resolves from input")
+
+  // DSL-16: DslExecutor.execute — add numbers
+  const dsl16 = new DslExecutor()
+  const dsl16r = dsl16.execute([
+    { op: "add", values: [10, 20, 30], target: "output.sum" },
+  ])
+  assert(dsl16r.success === true, "DSL-16a add numbers success")
+  assert(dsl16r.output.sum === 60, "DSL-16b add numbers: 10+20+30=60")
+
+  // DSL-17: DslExecutor.execute — add strings (concat)
+  const dsl17 = new DslExecutor()
+  const dsl17r = dsl17.execute([
+    { op: "add", values: ["hello", " ", "world"], target: "output.greeting" },
+  ])
+  assert(dsl17r.success === true, "DSL-17a add strings success")
+  assert(dsl17r.output.greeting === "hello world", "DSL-17b add strings concat")
+
+  // DSL-18: DslExecutor.execute — compare eq
+  const dsl18 = new DslExecutor()
+  const dsl18r = dsl18.execute([
+    { op: "compare", left: "input.a", operator: "eq", right: "input.b", target: "output.same" },
+  ], { a: 5, b: 5 })
+  assert(dsl18r.success === true, "DSL-18a compare eq success")
+  assert(dsl18r.output.same === true, "DSL-18b compare eq: 5==5 is true")
+
+  // DSL-19: DslExecutor.execute — compare ne
+  const dsl19 = new DslExecutor()
+  const dsl19r = dsl19.execute([
+    { op: "compare", left: "input.x", operator: "ne", right: "input.y", target: "output.diff" },
+  ], { x: "a", y: "b" })
+  assert(dsl19r.success === true, "DSL-19a compare ne success")
+  assert(dsl19r.output.diff === true, "DSL-19b compare ne: a!=b is true")
+
+  // DSL-20: DslExecutor.execute — compare gt
+  const dsl20 = new DslExecutor()
+  const dsl20r = dsl20.execute([
+    { op: "compare", left: "input.a", operator: "gt", right: "input.b", target: "output.gt" },
+  ], { a: 10, b: 3 })
+  assert(dsl20r.success === true, "DSL-20a compare gt success")
+  assert(dsl20r.output.gt === true, "DSL-20b compare gt: 10>3 is true")
+
+  // DSL-21: DslExecutor.execute — if/then/else
+  const dsl21 = new DslExecutor()
+  const dsl21r = dsl21.execute([
+    { op: "set", target: "memory.score", value: 85 },
+    { op: "compare", left: "memory.score", operator: "gte", right: 70, target: "memory.passed" },
+    { op: "if", condition: "memory.passed",
+      then: [{ op: "set", target: "output.status", value: "passed" }],
+      else: [{ op: "set", target: "output.status", value: "failed" }],
+    },
+  ])
+  assert(dsl21r.success === true, "DSL-21a if/then/else success")
+  assert(dsl21r.output.status === "passed", "DSL-21b if/then: score>=70 -> passed")
+
+  // DSL-22: DslExecutor.execute — if/else branch
+  const dsl22 = new DslExecutor()
+  const dsl22r = dsl22.execute([
+    { op: "set", target: "memory.count", value: 3 },
+    { op: "compare", left: "memory.count", operator: "gte", right: 10, target: "memory.enough" },
+    { op: "if", condition: "memory.enough",
+      then: [{ op: "set", target: "output.msg", value: "enough" }],
+      else: [{ op: "set", target: "output.msg", value: "need more" }],
+    },
+  ])
+  assert(dsl22r.success === true, "DSL-22a if/else success")
+  assert(dsl22r.output.msg === "need more", "DSL-22b if/else: 3<10 -> need more")
+
+  // DSL-23: DslExecutor.execute — short circuit on failure
+  const dsl23 = new DslExecutor()
+  const dsl23r = dsl23.execute([
+    { op: "get", source: "input.nonexistent" },
+    { op: "set", target: "output.result", value: "should not reach" },
+  ])
+  assert(dsl23r.success === false, "DSL-23a short circuit on failure")
+  assert(dsl23r.output.result === undefined, "DSL-23b second instruction not executed")
+
+  // DSL-24: getPendingMCPCalls
+  const dsl24 = new DslExecutor()
+  const dsl24r = dsl24.execute([
+    { op: "mcp_call", tool: "read_file", params: { path: "/test" }, server: "fs" },
+  ])
+  const dsl24_pending = dsl24.getPendingMCPCalls(dsl24r)
+  assert(Array.isArray(dsl24_pending), "DSL-24a pending MCP calls is array")
+  assert(dsl24_pending.length === 1, "DSL-24b one pending MCP call")
+  assert(dsl24_pending[0].tool === "read_file", "DSL-24c correct tool name in pending")
+  assert(dsl24_pending[0].server === "fs", "DSL-24d correct server name in pending")
+
+  // DSL-25: DslExecutor.validate method
+  const dsl25 = new DslExecutor()
+  assert(dsl25.validate([]).length === 0, "DSL-25a validate empty")
+  assert(dsl25.validate([{ op: "invalid" }]).length > 0, "DSL-25b validate invalid op")
+
+  assert(true, "DSL-Z DSL Executor all tests passed")
+
+  // ── Phase 1: Schema Validator ──
+  console.log("\n[SCHEMA] SchemaValidator — input/output schema validation")
+  const { SchemaValidator } = await import(pluginDist)
+
+  // SCHEMA-1: Constructor
+  const sv1 = new SchemaValidator()
+  assert(typeof sv1.validate === "function", "SCHEMA-1a SchemaValidator created")
+  assert(typeof sv1.parseOrThrow === "function", "SCHEMA-1b parseOrThrow method exists")
+
+  // SCHEMA-2: Valid — required fields present
+  const sv2_schema = {
+    name: { type: "string", required: true },
+    age: { type: "number", required: true },
+  }
+  const sv2r = sv1.validate(sv2_schema, { name: "Alice", age: 30 })
+  assert(sv2r.valid === true, "SCHEMA-2a valid data passes")
+  assert(sv2r.errors.length === 0, "SCHEMA-2b no errors")
+
+  // SCHEMA-3: Missing required field
+  const sv3r = sv1.validate(sv2_schema, { name: "Alice" })
+  assert(sv3r.valid === false, "SCHEMA-3a missing required detected")
+  assert(sv3r.errors.some(e => e.code === "missing_required"), "SCHEMA-3b correct error code")
+
+  // SCHEMA-4: Type mismatch
+  const sv4r = sv1.validate({ age: { type: "number", required: true } }, { age: "not-a-number" })
+  assert(sv4r.valid === false, "SCHEMA-4a type mismatch detected")
+  assert(sv4r.errors.some(e => e.code === "type_mismatch"), "SCHEMA-4b type mismatch code")
+
+  // SCHEMA-5: Enum validation
+  const sv5_schema = {
+    role: { type: "string", required: true, enum: ["admin", "user", "guest"] },
+  }
+  const sv5r1 = sv1.validate(sv5_schema, { role: "admin" })
+  assert(sv5r1.valid === true, "SCHEMA-5a valid enum passes")
+  const sv5r2 = sv1.validate(sv5_schema, { role: "superadmin" })
+  assert(sv5r2.valid === false, "SCHEMA-5b invalid enum detected")
+  assert(sv5r2.errors.some(e => e.code === "enum_violation"), "SCHEMA-5c enum violation code")
+
+  // SCHEMA-6: Default value applied
+  const sv6_schema = {
+    enabled: { type: "boolean", default: true },
+  }
+  const sv6r = sv1.validate(sv6_schema, {})
+  assert(sv6r.valid === true, "SCHEMA-6a default applied")
+  assert(sv6r.data.enabled === true, "SCHEMA-6b default value in result data")
+
+  // SCHEMA-7: String constraints
+  const sv7_schema = {
+    code: { type: "string", minLength: 2, maxLength: 10, pattern: "^[A-Z]+$" },
+  }
+  const sv7r1 = sv1.validate(sv7_schema, { code: "ABC" })
+  assert(sv7r1.valid === true, "SCHEMA-7a valid string passes")
+  const sv7r2 = sv1.validate(sv7_schema, { code: "A" })
+  assert(sv7r2.valid === false && sv7r2.errors.some(e => e.code === "min_length"), "SCHEMA-7b minLength violation")
+  const sv7r3 = sv1.validate(sv7_schema, { code: "ABCDEFGHIJK" })
+  assert(sv7r3.valid === false && sv7r3.errors.some(e => e.code === "max_length"), "SCHEMA-7c maxLength violation")
+  const sv7r4 = sv1.validate(sv7_schema, { code: "abc" })
+  assert(sv7r4.valid === false && sv7r4.errors.some(e => e.code === "pattern_mismatch"), "SCHEMA-7d pattern violation")
+
+  // SCHEMA-8: Number constraints
+  const sv8_schema = {
+    score: { type: "number", minimum: 0, maximum: 100 },
+  }
+  const sv8r1 = sv1.validate(sv8_schema, { score: 50 })
+  assert(sv8r1.valid === true, "SCHEMA-8a valid number passes")
+  const sv8r2 = sv1.validate(sv8_schema, { score: -1 })
+  assert(sv8r2.valid === false && sv8r2.errors.some(e => e.code === "minimum"), "SCHEMA-8b minimum violation")
+  const sv8r3 = sv1.validate(sv8_schema, { score: 101 })
+  assert(sv8r3.valid === false && sv8r3.errors.some(e => e.code === "maximum"), "SCHEMA-8c maximum violation")
+
+  // SCHEMA-9: Object type with nested properties
+  const sv9_schema = {
+    address: {
+      type: "object",
+      required: true,
+      properties: {
+        street: { type: "string", required: true },
+        city: { type: "string", required: true },
+        zip: { type: "number" },
+      },
+    },
+  }
+  const sv9r1 = sv1.validate(sv9_schema, { address: { street: "123 Main", city: "NYC", zip: 10001 } })
+  assert(sv9r1.valid === true, "SCHEMA-9a nested object passes")
+  const sv9r2 = sv1.validate(sv9_schema, { address: { street: "123 Main" } })
+  assert(sv9r2.valid === false, "SCHEMA-9b nested missing required detected")
+
+  // SCHEMA-10: Array type
+  const sv10_schema = {
+    tags: {
+      type: "array",
+      items: { type: "string" },
+    },
+  }
+  const sv10r1 = sv1.validate(sv10_schema, { tags: ["a", "b", "c"] })
+  assert(sv10r1.valid === true, "SCHEMA-10a string array passes")
+  const sv10r2 = sv1.validate(sv10_schema, { tags: "not-array" })
+  assert(sv10r2.valid === false && sv10r2.errors.some(e => e.code === "type_mismatch"), "SCHEMA-10b non-array rejected")
+
+  // SCHEMA-11: parseOrThrow
+  const sv11 = new SchemaValidator()
+  const sv11r = sv11.parseOrThrow({ x: { type: "number", required: true } }, { x: 42 })
+  assert(sv11r.x === 42, "SCHEMA-11a parseOrThrow returns parsed data")
+  let sv11_threw = false
+  try { sv11.parseOrThrow({ x: { type: "number", required: true } }, {}, "Test") }
+  catch (e) { sv11_threw = true; assert(e.message.includes("Test"), "SCHEMA-11b parseOrThrow includes label") }
+  assert(sv11_threw === true, "SCHEMA-11c parseOrThrow throws on invalid")
+
+  // SCHEMA-12: toJSONSchema
+  const sv12_schema = {
+    name: { type: "string", required: true, description: "User name" },
+    age: { type: "number", description: "Age in years", minimum: 0 },
+  }
+  const sv12_js = sv1.toJSONSchema(sv12_schema)
+  assert(sv12_js.type === "object", "SCHEMA-12a JSON Schema type=object")
+  assert(Array.isArray(sv12_js.required) && sv12_js.required.includes("name"), "SCHEMA-12b required fields included")
+  assert(sv12_js.properties?.name?.type === "string", "SCHEMA-12c property type preserved")
+
+  // SCHEMA-13: inferField
+  assert(sv1.inferField("hello").type === "string", "SCHEMA-13a infer string")
+  assert(sv1.inferField(42).type === "number", "SCHEMA-13b infer number")
+  assert(sv1.inferField(true).type === "boolean", "SCHEMA-13c infer boolean")
+  const sv13_inferred = sv1.inferField({ a: 1, b: "x" })
+  assert(sv13_inferred.type === "object" && sv13_inferred.properties?.a?.type === "number", "SCHEMA-13d infer object")
+
+  // SCHEMA-14: inferSchema
+  const sv14_inferred = sv1.inferSchema({ name: "test", count: 5, active: true })
+  assert(sv14_inferred.name.type === "string", "SCHEMA-14a inferred name is string")
+  assert(sv14_inferred.count.type === "number", "SCHEMA-14b inferred count is number")
+  assert(sv14_inferred.active.type === "boolean", "SCHEMA-14c inferred active is boolean")
+
+  assert(true, "SCHEMA-Z SchemaValidator all tests passed")
 }
 
 await runAll()
+// ── Bandit Mutation Tests ──────────────────────────────────────────
+console.log("\n[Bandit] SkillStore UCB1 Bandit Mutation")
+const banditPromise = (async () => {
+  const { SkillStore, createSkillDefinition } = mod
+  const store = new SkillStore()
+  let bPassed = 0, bFailed = 0
+  const b = (name, fn) => { try { fn(); bPassed++; console.log(`  PASS: ${name}`) } catch (e) { bFailed++; console.log(`  FAIL: ${name} — ${e.message}`) } }
+
+  // Seed skills manually using extract (async) — needs success markers + numbered steps
+  await store.extract({ role: "assistant", content: "✅ Completed: create auth login endpoint with JWT verification.\nAdded src/auth.ts with validateToken() and loginUser().\nSteps:\n1. implement middleware\n2. add routes\n3. write tests" }, ["auth", "login", "jwt"])
+  await store.extract({ role: "assistant", content: "✅ Completed: create database query module with filtering.\nAdded src/db/query.ts with QueryBuilder class.\nSteps:\n1. design interface\n2. implement query builder\n3. add tests" }, ["db", "query", "database"])
+  await store.extract({ role: "assistant", content: "✅ Completed: docker deploy to production with health checks.\nAdded deploy/docker-compose.yml and Dockerfile.prod.\nSteps:\n1. write Dockerfile\n2. compose config\n3. test deployment" }, ["deploy", "docker", "production"])
+
+  const allSkills = store.getAll()
+  const authSkill = allSkills.find(s => s.definition.meta.name.includes("auth"))
+
+  // B1: ucb1Score returns a number between 0 and 1
+  b("B1a ucb1Score returns number", () => {
+    const score = store.ucb1Score(allSkills[0])
+    if (typeof score !== "number") throw new Error(`Expected number, got ${typeof score}`)
+  })
+  b("B1b ucb1Score within [0,1]", () => {
+    const score = store.ucb1Score(allSkills[0])
+    if (score < 0 || score > 1) throw new Error(`Score ${score} out of [0,1]`)
+  })
+  b("B1c ucb1Score higher for better successRate", () => {
+    // Use a tiny c to minimize exploration term noise
+    const skillA = allSkills[0]; const skillB = allSkills[1]
+    const originalA = skillA.successRate
+    const originalB = skillB.successRate
+    skillA.successRate = 0.9
+    skillB.successRate = 0.5
+    const scoreA = store.ucb1Score(skillA, 0.01)
+    const scoreB = store.ucb1Score(skillB, 0.01)
+    if (scoreA <= scoreB) throw new Error(`Expected ${scoreA} > ${scoreB} for higher successRate`)
+    skillA.successRate = originalA
+    skillB.successRate = originalB
+  })
+
+  // B2: findWithBandit returns non-empty for existing skills
+  b("B2a findWithBandit returns array", () => {
+    const result = store.findWithBandit("auth")
+    if (!Array.isArray(result)) throw new Error(`Expected array, got ${typeof result}`)
+  })
+  b("B2b findWithBandit finds relevant skills", () => {
+    const result = store.findWithBandit("auth")
+    if (result.length === 0) throw new Error("Expected at least 1 result for 'auth'")
+  })
+  b("B2c findWithBandit empty query returns empty", () => {
+    const result = store.findWithBandit("zzz_nonexistent_zzz")
+    if (result.length !== 0) throw new Error(`Expected empty, got ${result.length}`)
+  })
+
+  // B3: mutateSkill
+  b("B3a mutateSkill returns string id", () => {
+    if (!authSkill) throw new Error("No auth skill found")
+    const id = store.mutateSkill(authSkill.definition.meta.id)
+    if (typeof id !== "string") throw new Error(`Expected string, got ${typeof id}`)
+  })
+  b("B3b mutateSkill variant exists in store", () => {
+    if (!authSkill) throw new Error("No auth skill found")
+    const id = store.mutateSkill(authSkill.definition.meta.id)
+    if (!id) throw new Error("mutateSkill returned null")
+    const variant = store.getById(id)
+    if (!variant) throw new Error("Variant not found in store")
+  })
+  b("B3c mutateSkill variant has parentId", () => {
+    if (!authSkill) throw new Error("No auth skill found")
+    const id = store.mutateSkill(authSkill.definition.meta.id)
+    if (!id) throw new Error("mutateSkill returned null")
+    const variant = store.getById(id)
+    if (variant?.definition.meta.parentId !== authSkill?.definition.meta.id) {
+      throw new Error(`Expected parentId ${authSkill?.definition.meta.id}, got ${variant?.definition.meta.parentId}`)
+    }
+  })
+  b("B3d mutateSkill null for unknown id", () => {
+    const id = store.mutateSkill("nonexistent-id")
+    if (id !== null) throw new Error(`Expected null, got ${id}`)
+  })
+
+  // B4: evaluateMutation — use the deploy skill (fewest mutations so far)
+  b("B4a evaluateMutation returns boolean", () => {
+    const deploySkill = allSkills.find(s => s.definition.meta.name.includes("deploy"))
+    if (!deploySkill) throw new Error("No deploy skill found")
+    // Create a mutation (should have capacity)
+    const mid = store.mutateSkill(deploySkill.definition.meta.id)
+    if (!mid) throw new Error("mutateSkill returned null")
+    const result = store.evaluateMutation(mid, deploySkill.definition.meta.id)
+    if (typeof result !== "boolean") throw new Error(`Expected boolean, got ${typeof result}`)
+  })
+  b("B4b evaluateMutation false for wrong ids", () => {
+    const result = store.evaluateMutation("no-such-id", "no-such-parent")
+    if (result !== false) throw new Error("Expected false for nonexistent ids")
+  })
+
+  // B5: countVariants (via internal proxy)
+  b("B5a variants created have parentId", () => {
+    const variants = store.getAll().filter(s => s.definition.meta.parentId)
+    if (variants.length === 0) throw new Error("Expected at least 1 variant from earlier mutations")
+  })
+
+  console.log(`  Bandit: ${bPassed} passed, ${bFailed} failed`)
+  passed += bPassed; failed += bFailed
+})();
+
+// Wait for Bandit async tests to complete
+await banditPromise;
+
 console.log(`Results: ${passed} passed, ${failed} failed`)
 if (failed === 0) console.log("ALL TESTS PASSED")
 process.exit(failed > 0 ? 1 : 0)

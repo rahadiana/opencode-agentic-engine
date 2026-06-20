@@ -6,6 +6,8 @@ export interface Episode {
   sessionId: string
   projectId?: string
   planGoal: string
+  /** Stored plan structure for reuse (array of subtask descriptions) */
+  plan?: string[]
   summary: string
   outcome: "success" | "partial" | "failed"
   decisions: string[]
@@ -13,6 +15,10 @@ export interface Episode {
   domain?: string
   timestamp: string
   tags: string[]
+  /** Reuse score with decay (0-1). 1 = fresh, decays over time. */
+  score: number
+  /** Usage count for pruning decisions */
+  usageCount: number
 }
 
 export interface EpisodeEnvelope {
@@ -75,12 +81,13 @@ export class EpisodicStore {
     }
   }
 
-  record(sessionId: string, planGoal: string, outcome: Episode["outcome"], decisions: string[], filesChanged?: string[], domain?: string, projectId?: string): Episode {
+  record(sessionId: string, planGoal: string, outcome: Episode["outcome"], decisions: string[], filesChanged?: string[], domain?: string, projectId?: string, plan?: string[]): Episode {
     const episode: Episode = {
       id: `ep-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       sessionId,
       projectId,
       planGoal,
+      plan,
       summary: `${outcome === "success" ? "Completed" : outcome === "partial" ? "Partially completed" : "Failed"}: ${planGoal}`,
       outcome,
       decisions,
@@ -88,6 +95,8 @@ export class EpisodicStore {
       domain,
       timestamp: new Date().toISOString(),
       tags: this.extractTags(planGoal, decisions),
+      score: 1.0,
+      usageCount: 0,
     }
 
     this.episodes.push(episode)
@@ -189,6 +198,114 @@ export class EpisodicStore {
       partial: this.episodes.filter(e => e.outcome === "partial").length,
       failed: this.episodes.filter(e => e.outcome === "failed").length,
     }
+  }
+
+  /**
+   * Search for reusable past episodes matching a new goal.
+   * Returns only successful episodes with similarity above the reuse threshold.
+   * Decay is applied to episode scores before searching.
+   */
+  searchForReuse(goal: string, threshold = 0.8, maxResults = 3): Episode[] {
+    this.applyDecay()
+    const q = goal.toLowerCase()
+    const qTokens = new Set(q.split(/\s+/).filter(t => t.length > 2))
+    if (qTokens.size === 0) return []
+
+    const scored = this.episodes
+      .filter(e => e.outcome === "success" && e.plan && e.plan.length > 0)
+      .map(e => {
+        const goalText = (e.planGoal + " " + e.tags.join(" ")).toLowerCase()
+        const goalTokens = new Set(goalText.split(/\s+/).filter(t => t.length > 2))
+        if (goalTokens.size === 0) return { episode: e, similarity: 0 }
+
+        let overlap = 0
+        for (const qt of qTokens) {
+          if (goalTokens.has(qt)) overlap++
+        }
+        // Jaccard-like similarity weighted by episode score
+        const union = new Set([...qTokens, ...goalTokens]).size
+        const jaccard = union > 0 ? overlap / union : 0
+        const similarity = jaccard * e.score
+        return { episode: e, similarity }
+      })
+      .filter(s => s.similarity >= threshold)
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, maxResults)
+      .map(s => s.episode)
+
+    return scored
+  }
+
+  /**
+   * Apply exponential time decay to all episode scores.
+   * score = score * exp(-0.03 * ageDays) — per plan comp 15
+   */
+  applyDecay(): void {
+    const now = Date.now()
+    for (const ep of this.episodes) {
+      const ageMs = now - new Date(ep.timestamp).getTime()
+      const ageDays = ageMs / 86400000
+      if (ageDays > 0) {
+        ep.score = ep.score * Math.exp(-0.03 * ageDays)
+      }
+    }
+  }
+
+  /**
+   * Prune episodes that have low score and low usage.
+   * Removes episodes with score < 0.3 AND usageCount < 2.
+   * Returns number of removed episodes.
+   */
+  prune(): number {
+    const before = this.episodes.length
+    this.episodes = this.episodes.filter(e =>
+      !(e.score < 0.3 && e.usageCount < 2)
+    )
+    return before - this.episodes.length
+  }
+
+  /**
+   * Increment usage count for an episode (tracked for pruning decisions).
+   */
+  incrementUsage(episodeId: string): boolean {
+    const ep = this.episodes.find(e => e.id === episodeId)
+    if (!ep) return false
+    ep.usageCount = (ep.usageCount || 0) + 1
+    return true
+  }
+
+  /**
+   * Adapt a past episode's plan to a new goal.
+   * Replaces goal-specific references while keeping the plan structure.
+   * This is a simple string substitution approach — the adapted plan
+   * serves as a template for the planner.
+   */
+  adaptPlan(episode: Episode, newGoal: string): string[] | null {
+    if (!episode.plan || episode.plan.length === 0) return null
+    // Extract key terms from old goal
+    const oldGoalLower = episode.planGoal.toLowerCase()
+    const oldTokens = new Set(oldGoalLower.split(/\s+/).filter(t => t.length > 3))
+    const newGoalLower = newGoal.toLowerCase()
+    const newTokens = new Set(newGoalLower.split(/\s+/).filter(t => t.length > 3))
+
+    // Find term mapping: longest common terms get replaced
+    const adapted = episode.plan.map(step => {
+      let result = step
+      for (const oldTerm of oldTokens) {
+        // Check if any new term partially overlaps
+        for (const newTerm of newTokens) {
+          // Replace domain-specific terms
+          const regex = new RegExp(oldTerm, "gi")
+          if (regex.test(result)) {
+            result = result.replace(regex, newTerm)
+            break
+          }
+        }
+      }
+      return result
+    })
+
+    return adapted
   }
 
   exportEpisode(id: string): EpisodeEnvelope | null {

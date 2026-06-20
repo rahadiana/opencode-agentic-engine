@@ -1,3 +1,9 @@
+import type { DslInstruction } from "../core/dsl-executor.js"
+import type { SchemaField } from "../core/skill-schema.js"
+
+export { type DslInstruction } from "../core/dsl-executor.js"
+export { type SchemaField } from "../core/skill-schema.js"
+
 export interface SkillMeta {
   format: "agentic-skill/v1"
   id: string
@@ -5,6 +11,8 @@ export interface SkillMeta {
   version: number
   author: "agent" | "human"
   agentRole?: string
+  /** ID of parent skill for version lineage (comp 10) */
+  parentId?: string
 }
 
 export interface SkillDefinition {
@@ -13,11 +21,23 @@ export interface SkillDefinition {
     pattern: string
     keywords: string[]
     context: string[]
+    /** Exact-match capability string for deterministic lookup (e.g. "auth.login", "db.migrate") */
+    capability?: string
   }
   workflow: {
     steps: SkillStep[]
     estimatedDuration: string
     parallelizable: boolean
+  }
+  /** Schema for skill inputs — validated at runtime by SchemaValidator */
+  input_schema?: Record<string, SchemaField>
+  /** Schema for skill outputs — validated after execution by SchemaValidator */
+  output_schema?: Record<string, SchemaField>
+  /** Deterministic DSL logic for this skill (alternative to workflow steps) */
+  logic?: {
+    instructions: DslInstruction[]
+    /** Optional MCP servers required by this skill's logic */
+    requires_mcp?: string[]
   }
   quality: {
     successRate: number
@@ -48,6 +68,12 @@ export function createSkillDefinition(
   steps: { action: string; description: string; tool?: string; expectedOutput: string; rollback?: string }[],
   triggerContext?: string[],
   author?: "agent" | "human",
+  extras?: {
+    input_schema?: Record<string, SchemaField>
+    output_schema?: Record<string, SchemaField>
+    logic?: { instructions: DslInstruction[]; requires_mcp?: string[] }
+    capability?: string
+  },
 ): SkillDefinition {
   const now = new Date().toISOString()
   return {
@@ -62,6 +88,7 @@ export function createSkillDefinition(
       pattern: triggerPattern,
       keywords: keywords.slice(0, 10),
       context: triggerContext ?? [],
+      ...(extras?.capability ? { capability: extras.capability } : {}),
     },
     workflow: {
       steps: steps.map((s, i) => ({
@@ -75,6 +102,9 @@ export function createSkillDefinition(
       estimatedDuration: `${steps.length * 2}m`,
       parallelizable: steps.some(s => s.tool === "agentic_parallel"),
     },
+    ...(extras?.input_schema ? { input_schema: extras.input_schema } : {}),
+    ...(extras?.output_schema ? { output_schema: extras.output_schema } : {}),
+    ...(extras?.logic ? { logic: extras.logic } : {}),
     quality: {
       successRate: 1.0,
       usageCount: 1,

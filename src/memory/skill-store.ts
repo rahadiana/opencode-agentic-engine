@@ -101,6 +101,16 @@ export class SkillStore {
 
     const keywords = this.extractKeywords(content)
     const inferredTools = this.inferTools(content)
+    const capability = this.inferCapability(name, keywords)
+
+    // Check if a skill with same capability exists (for versioning)
+    let parentId: string | undefined
+    if (capability) {
+      const existingWithCap = this.findByCapability(capability)
+      if (existingWithCap) {
+        parentId = existingWithCap.definition.meta.id
+      }
+    }
 
     const def = createSkillDefinition(
       name,
@@ -113,7 +123,14 @@ export class SkillStore {
         expectedOutput: `Step ${i + 1} completed`,
       })),
       contextTags.length > 0 ? contextTags : undefined,
+      "agent",
+      { capability },
     )
+
+    // Set parentId for version lineage
+    if (parentId) {
+      def.meta.parentId = parentId
+    }
 
     const record: SkillRecord = {
       definition: def,
@@ -127,28 +144,107 @@ export class SkillStore {
     return record
   }
 
+  /**
+   * Exact-match capability lookup (deterministic).
+   * Returns the skill with the exact capability string (best version by successRate), or null.
+   */
+  findByCapability(capability: string): SkillRecord | undefined {
+    const q = capability.toLowerCase().trim()
+    const matches = [...this.skills.values()].filter(
+      s => s.definition.trigger.capability?.toLowerCase().trim() === q
+    )
+    if (matches.length === 0) return undefined
+    // Return best version (highest successRate)
+    return matches.sort((a, b) => b.successRate - a.successRate)[0]
+  }
+
+  /**
+   * Find all versions of a skill by capability (version lineage).
+   * Returns all skills with the given capability, sorted by version descending.
+   */
+  findAllVersions(capability: string): SkillRecord[] {
+    const q = capability.toLowerCase().trim()
+    return [...this.skills.values()]
+      .filter(s => s.definition.trigger.capability?.toLowerCase().trim() === q)
+      .sort((a, b) => (b.definition.meta.version ?? 0) - (a.definition.meta.version ?? 0))
+  }
+
+  /**
+   * Infer capability from skill name and keywords.
+   * Converts common patterns to capability strings (e.g. "create user" → "user.create").
+   */
+  private inferCapability(name: string, keywords: string[]): string | undefined {
+    const lower = name.toLowerCase().trim()
+    // If name itself looks like a capability (contains "."), use it directly
+    if (lower.includes(".")) return lower
+    // Common verb-noun patterns
+    const verbPatterns = [
+      { regex: /^(create|add|make|build|generate)\s+(.+)/i, prefix: (v: string, n: string) => `${n.toLowerCase().replace(/\s+/g, ".")}.${v.toLowerCase()}` },
+      { regex: /^(get|find|search|fetch|retrieve|read)\s+(.+)/i, prefix: (v: string, n: string) => `${n.toLowerCase().replace(/\s+/g, ".")}.${v.toLowerCase()}` },
+      { regex: /^(update|edit|modify|change|set)\s+(.+)/i, prefix: (v: string, n: string) => `${n.toLowerCase().replace(/\s+/g, ".")}.${v.toLowerCase()}` },
+      { regex: /^(delete|remove|destroy|clear)\s+(.+)/i, prefix: (v: string, n: string) => `${n.toLowerCase().replace(/\s+/g, ".")}.${v.toLowerCase()}` },
+    ]
+    for (const pattern of verbPatterns) {
+      const match = lower.match(pattern.regex)
+      if (match) {
+        return pattern.prefix(match[1], match[2])
+      }
+    }
+    // Check keywords for known domain prefixes
+    for (const kw of keywords) {
+      const kwLower = kw.toLowerCase()
+      if (kwLower.includes("auth") || kwLower.includes("login") || kwLower.includes("user")) return "auth." + lower.replace(/\s+/g, "_")
+      if (kwLower.includes("db") || kwLower.includes("database") || kwLower.includes("migrate")) return "db." + lower.replace(/\s+/g, "_")
+      if (kwLower.includes("api") || kwLower.includes("endpoint") || kwLower.includes("route")) return "api." + lower.replace(/\s+/g, "_")
+      if (kwLower.includes("test") || kwLower.includes("spec") || kwLower.includes("assert")) return "test." + lower.replace(/\s+/g, "_")
+      if (kwLower.includes("deploy") || kwLower.includes("ci") || kwLower.includes("build")) return "deploy." + lower.replace(/\s+/g, "_")
+    }
+    return undefined
+  }
+
+  /**
+   * Calculate freshness score based on days since last use.
+   * Formula: exp(-0.05 * daysIdle)
+   * Returns 0.0-1.0, higher = more recently used.
+   */
+  private freshnessScore(lastUsed: string): number {
+    const daysSinceUse = (Date.now() - new Date(lastUsed).getTime()) / 86400000
+    return Math.exp(-0.05 * daysSinceUse)
+  }
+
+  /**
+   * Calculate combined score for ranking skills.
+   * Formula: (similarity * 0.6) + (score * 0.3) + (freshness * 0.1)
+   * All inputs normalized to 0.0-1.0 range.
+   */
+  private combinedScore(similarity: number, successRate: number, lastUsed: string): number {
+    const freshness = this.freshnessScore(lastUsed)
+    return (similarity * 0.6) + (successRate * 0.3) + (freshness * 0.1)
+  }
+
   find(query: string): SkillRecord[] {
     const q = SkillStore.normalize(query)
     const qTokens = new Set(q.split(/\s+/).filter(t => t.length > 2 && !STOP_WORDS.has(t)))
     if (qTokens.size === 0) {
-      // Fallback to original substring search if all query words are stop words
+      // Fallback to combined-score-based substring search if all query words are stop words
       return [...this.skills.values()]
         .filter(s =>
           s.definition.meta.name.toLowerCase().includes(q) ||
           s.definition.trigger.pattern.toLowerCase().includes(q) ||
           (s.definition.trigger.keywords ?? []).some(k => k.toLowerCase().includes(q))
         )
-        .sort((a, b) => b.successRate - a.successRate)
+        .map(s => ({ record: s, score: this.combinedScore(0.5, s.successRate, s.lastUsed) }))
+        .sort((a, b) => b.score - a.score)
         .slice(0, 5)
+        .map(s => s.record)
     }
 
-    // TF-IDF-like relevance scoring
     const scored = [...this.skills.values()].map(s => {
       const name = SkillStore.normalize(s.definition.meta.name)
       const pattern = SkillStore.normalize(s.definition.trigger.pattern)
       const keywords = (s.definition.trigger.keywords ?? []).map(k => k.toLowerCase())
 
-      let relevance = 0
+      let rawRelevance = 0
       const allText = [name, pattern, ...keywords].join(" ")
       const textTokens = new Set(allText.split(/\s+/).filter(t => t.length > 2 && !STOP_WORDS.has(t)))
 
@@ -156,30 +252,27 @@ export class SkillStore {
       let overlapCount = 0
       for (const qt of qTokens) {
         if (textTokens.has(qt)) overlapCount++
-        // Also check substring in name (higher weight)
-        if (name.includes(qt)) relevance += 3
-        if (pattern.includes(qt)) relevance += 2
+        if (name.includes(qt)) rawRelevance += 3
+        if (pattern.includes(qt)) rawRelevance += 2
         for (const kw of keywords) {
-          if (kw.includes(qt)) relevance += 1
+          if (kw.includes(qt)) rawRelevance += 1
         }
       }
       if (textTokens.size > 0) {
-        relevance += overlapCount / Math.max(textTokens.size, 1) * 5  // TF score
+        rawRelevance += overlapCount / Math.max(textTokens.size, 1) * 5
       }
 
-      // Only apply recency + success rate bonuses if there's some text match
-      const hasTextMatch = overlapCount > 0 || relevance > 0
-      if (hasTextMatch) {
-        const lastUsed = new Date(s.lastUsed).getTime()
-        const daysSinceUse = (Date.now() - lastUsed) / 86400000
-        if (daysSinceUse < 7) relevance += 2
-        relevance += s.successRate * 3
-      }
+      const hasTextMatch = overlapCount > 0 || rawRelevance > 0
+      if (!hasTextMatch) return { record: s, score: 0 }
 
-      return { record: s, relevance }
+      // Normalize similarity to 0.0-1.0 (rawRelevance max ~10-15 empirically)
+      const similarity = Math.min(1, rawRelevance / 12)
+      const score = this.combinedScore(similarity, s.successRate, s.lastUsed)
+
+      return { record: s, score }
     })
-      .filter(s => s.relevance > 0)
-      .sort((a, b) => b.relevance - a.relevance)
+      .filter(s => s.score > 0)
+      .sort((a, b) => b.score - a.score)
       .slice(0, 5)
       .map(s => s.record)
 
@@ -250,6 +343,86 @@ export class SkillStore {
       lastUsed: parsed.data.audit.lastUsed,
     })
     return true
+  }
+
+  /**
+   * Reinforcement learning: update skill score after each execution.
+   * Formula: newScore = (oldScore * 0.7) + (successRate * 0.3)
+   * This creates a weighted moving average that smooths volatility.
+   */
+  reinforce(skillId: string, latestSuccess: boolean): boolean {
+    const record = this.skills.get(skillId)
+    if (!record) return false
+
+    // Update sliding window
+    record.successWindow.push(latestSuccess)
+    if (record.successWindow.length > SUCCESS_WINDOW_SIZE) {
+      record.successWindow = record.successWindow.slice(-SUCCESS_WINDOW_SIZE)
+    }
+    const winSuccesses = record.successWindow.filter(Boolean).length
+    const currentSuccessRate = record.successWindow.length > 0
+      ? winSuccesses / record.successWindow.length
+      : 1.0
+
+    // Reinforcement formula: weighted moving average
+    const oldScore = record.successRate
+    record.successRate = (oldScore * 0.7) + (currentSuccessRate * 0.3)
+
+    record.usageCount++
+    record.lastUsed = new Date().toISOString()
+    record.definition.quality.successRate = record.successRate
+    record.definition.quality.usageCount = record.usageCount
+    record.definition.audit.lastUsed = record.lastUsed
+    record.definition.audit.lastModified = record.lastUsed
+    return true
+  }
+
+  /**
+   * Apply decay to all skills based on idle time.
+   * Formula: score *= exp(-0.05 * daysIdle)
+   * Skills unused for many days will have their score gradually decrease.
+   */
+  decayAll(): { decayed: number } {
+    const now = Date.now()
+    let decayed = 0
+
+    for (const [, record] of this.skills.entries()) {
+      const lastUsed = new Date(record.lastUsed).getTime()
+      const daysIdle = (now - lastUsed) / 86400000
+
+      if (daysIdle > 0) {
+        const decay = Math.exp(-0.05 * daysIdle)
+        const oldRate = record.successRate
+        record.successRate = Math.max(0.01, Math.min(1, oldRate * decay))
+        record.definition.quality.successRate = record.successRate
+        if (record.successRate < oldRate) decayed++
+      }
+    }
+
+    return { decayed }
+  }
+
+  /**
+   * Prune low-quality skills based on success rate and usage.
+   * Removes skills with (successRate < minScore AND usageCount < minUsage).
+   * Returns IDs of pruned skills.
+   */
+  prune(minScore = 0.3, minUsage = 3): string[] {
+    const pruned: string[] = []
+    for (const [id, record] of this.skills.entries()) {
+      if (record.successRate < minScore && record.usageCount < minUsage) {
+        this.skills.delete(id)
+        pruned.push(id)
+      }
+    }
+    return pruned
+  }
+
+  /**
+   * Get count of skills in store.
+   */
+  get size(): number {
+    return this.skills.size
   }
 
   private isExtractablePattern(content: string): boolean {
@@ -397,5 +570,151 @@ export class SkillStore {
     if (lower.includes("delegate")) tools.push("agentic_delegate")
     if (lower.includes("message")) tools.push("agentic_message")
     return [...new Set(tools)]
+  }
+
+  // ── Bandit Mutation ──────────────────────────────────────────────
+
+  private readonly BANDIT_C = 2.0
+  private readonly EXPLORATION_RATE = 0.2
+  private readonly MAX_MUTATIONS_PER_SKILL = 3
+  private readonly MAX_TOTAL_VARIANTS = 50
+
+  ucb1Score(record: SkillRecord, c = this.BANDIT_C): number {
+    const totalSelections = this.skills.size + 1
+    const usage = record.usageCount + 1
+    const exploitation = record.successRate
+    const exploration = c * Math.sqrt(Math.log(totalSelections) / usage)
+    return Math.min(1, exploitation + exploration)
+  }
+
+  findWithBandit(query: string): SkillRecord[] {
+    const baseResults = this.find(query)
+    if (baseResults.length === 0) return baseResults
+
+    if (Math.random() < this.EXPLORATION_RATE && baseResults.length > 1) {
+      const ucbRanked = baseResults
+        .map(s => ({ record: s, score: this.ucb1Score(s) }))
+        .sort((a, b) => b.score - a.score)
+      const pool = ucbRanked.slice(0, 3)
+      const totalScore = pool.reduce((sum, s) => sum + s.score, 0)
+      if (totalScore > 0) {
+        let rand = Math.random() * totalScore
+        for (const item of pool) {
+          rand -= item.score
+          if (rand <= 0) return [item.record]
+        }
+      }
+    }
+
+    return baseResults
+  }
+
+  private countVariants(): number {
+    let count = 0
+    for (const [, record] of this.skills) {
+      if (record.definition.meta.parentId) count++
+    }
+    return count
+  }
+
+  mutateSkill(skillId: string): string | null {
+    const parent = this.skills.get(skillId)
+    if (!parent) return null
+
+    const mutationCount = [...this.skills.values()]
+      .filter(s => s.definition.meta.parentId === skillId).length
+    if (mutationCount >= this.MAX_MUTATIONS_PER_SKILL) return null
+
+    if (this.countVariants() >= this.MAX_TOTAL_VARIANTS) return null
+
+    const parentDef = parent.definition
+    const steps = parentDef.workflow.steps
+
+    let variantSteps: SkillStep[]
+    if (steps.length <= 2) {
+      variantSteps = [...steps]
+    } else if (steps.length === 3) {
+      variantSteps = [
+        {
+          order: 1,
+          action: "execute",
+          description: `${steps[0].description}; ${steps[1].description}`,
+          expectedOutput: `Combined: ${steps[0].expectedOutput} and ${steps[1].expectedOutput}`,
+        },
+        { ...steps[2], order: 2 },
+      ]
+    } else {
+      variantSteps = [
+        {
+          order: 1,
+          action: "execute",
+          description: `${steps[0].description}; ${steps[1].description}`,
+          expectedOutput: `Combined: ${steps[0].expectedOutput} and ${steps[1].expectedOutput}`,
+        },
+        ...steps.slice(-2).map((s, i) => ({ ...s, order: i + 2 })),
+      ]
+    }
+
+    const now = new Date().toISOString()
+    const variantId = `variant-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+
+    const variantDef: SkillDefinition = {
+      ...parentDef,
+      meta: {
+        ...parentDef.meta,
+        id: variantId,
+        name: `${parentDef.meta.name} (variant)`,
+        version: (parentDef.meta.version || 1) + 1,
+        parentId: skillId,
+      },
+      workflow: {
+        ...parentDef.workflow,
+        steps: variantSteps,
+        estimatedDuration: `${variantSteps.length * 2}m`,
+      },
+      quality: {
+        successRate: parent.definition.quality?.successRate ?? parent.successRate,
+        usageCount: 0,
+        failureScenarios: [],
+      },
+      audit: {
+        createdAt: now,
+        lastUsed: now,
+        lastModified: now,
+        modifiedBy: "bandit-mutation",
+      },
+    }
+
+    const variantRecord: SkillRecord = {
+      definition: variantDef,
+      usageCount: 0,
+      successRate: parent.successRate * 0.9,
+      successWindow: parent.successWindow.length > 0
+        ? [parent.successWindow.filter(Boolean).length > parent.successWindow.length / 2]
+        : [true],
+      lastUsed: now,
+    }
+
+    this.skills.set(variantId, variantRecord)
+    return variantId
+  }
+
+  evaluateMutation(mutationId: string, parentId: string): boolean {
+    const mutation = this.skills.get(mutationId)
+    const parent = this.skills.get(parentId)
+    if (!mutation || !parent) return false
+
+    const mutationScore = this.ucb1Score(mutation)
+    const parentScore = this.ucb1Score(parent)
+
+    if (mutationScore > parentScore + 0.05) {
+      parent.successRate = Math.max(parent.successRate, mutation.successRate)
+      parent.definition.quality.successRate = parent.successRate
+      parent.definition.audit.lastModified = new Date().toISOString()
+      this.skills.delete(mutationId)
+      return true
+    }
+
+    return false
   }
 }

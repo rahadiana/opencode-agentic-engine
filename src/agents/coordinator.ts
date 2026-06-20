@@ -39,6 +39,33 @@ export interface AgentMessage {
 
 export type SharedMemoryListener = (entry: SharedMemoryEntry) => void
 
+export interface BlackboardSection {
+  name: string
+  description: string
+  entries: Map<string, SharedMemoryEntry>
+  history: BlackboardChange[]
+  subscribers: string[]
+  locked: boolean
+}
+
+export interface BlackboardChange {
+  key: string
+  value: string
+  writtenBy: string
+  timestamp: number
+  action: "write" | "delete" | "clear"
+}
+
+export interface BlackboardSnapshot {
+  timestamp: number
+  sections: Record<string, {
+    entries: Array<{ key: string; value: string; writtenBy: string; timestamp: number }>
+    description: string
+  }>
+}
+
+export type SectionSubscriptionCallback = (section: string, entry: SharedMemoryEntry) => void
+
 type ResolveLock = () => void
 
 export class AgentCoordinator {
@@ -54,10 +81,34 @@ export class AgentCoordinator {
   private locked = false
   private readonly maxMessagesPerRole = 500
   private readonly maxTasksPerSession = 200
+  private sections = new Map<string, BlackboardSection>()
+  private sectionCallbacks = new Map<string, SectionSubscriptionCallback[]>()
 
   constructor(skillStore?: SkillStore) {
     this.registry = new RoleRegistry()
     this.skillStore = skillStore
+    this.initDefaultSections()
+  }
+
+  private initDefaultSections(): void {
+    const defaultSections: Array<{ name: string; description: string }> = [
+      { name: "design", description: "Architecture design decisions and schemas" },
+      { name: "decisions", description: "Key architectural and technical decisions" },
+      { name: "issues", description: "Issues, blockers, and risks" },
+      { name: "progress", description: "Task completion progress and status" },
+      { name: "qa", description: "QA findings, test results, and review comments" },
+      { name: "requirements", description: "Feature requirements and acceptance criteria" },
+    ]
+    for (const s of defaultSections) {
+      this.sections.set(s.name, {
+        name: s.name,
+        description: s.description,
+        entries: new Map(),
+        history: [],
+        subscribers: [],
+        locked: false,
+      })
+    }
   }
 
   private async acquire(): Promise<void> {
@@ -340,5 +391,136 @@ export class AgentCoordinator {
     if (d.includes("coordinate") || d.includes("orchestrate") || d.includes("plan") || d.includes("overview")) return "coordinator"
     if (d.includes("pm") || d.includes("product") || d.includes("requirement") || d.includes("spec") || d.includes("acceptance")) return "pm"
     return "developer"
+  }
+
+  createSection(name: string, description: string): boolean {
+    if (this.sections.has(name)) return false
+    this.sections.set(name, {
+      name, description, entries: new Map(), history: [], subscribers: [], locked: false,
+    })
+    return true
+  }
+
+  deleteSection(name: string): boolean {
+    return this.sections.delete(name)
+  }
+
+  listSections(): BlackboardSection[] {
+    return [...this.sections.values()]
+  }
+
+  writeToSection(section: string, key: string, value: string, agentRole: string): SharedMemoryEntry | null {
+    const sec = this.sections.get(section)
+    if (!sec) return null
+    if (sec.locked) return null
+    const entry: SharedMemoryEntry = { key, value, writtenBy: agentRole, timestamp: Date.now() }
+    sec.entries.set(key, entry)
+    sec.history.push({ key, value, writtenBy: agentRole, timestamp: entry.timestamp, action: "write" })
+    const cbs = this.sectionCallbacks.get(section) ?? []
+    for (const cb of cbs) {
+      try { cb(section, entry) } catch { /* non-fatal */ }
+    }
+    return entry
+  }
+
+  readFromSection(section: string, key: string): SharedMemoryEntry | undefined {
+    return this.sections.get(section)?.entries.get(key)
+  }
+
+  searchSection(section: string, query: string): SharedMemoryEntry[] {
+    const sec = this.sections.get(section)
+    if (!sec) return []
+    const q = query.toLowerCase()
+    return [...sec.entries.values()].filter(e =>
+      e.key.toLowerCase().includes(q) || e.value.toLowerCase().includes(q)
+    )
+  }
+
+  deleteFromSection(section: string, key: string, agentRole: string): boolean {
+    const sec = this.sections.get(section)
+    if (!sec || sec.locked) return false
+    const deleted = sec.entries.delete(key)
+    if (deleted) {
+      sec.history.push({ key, value: "", writtenBy: agentRole, timestamp: Date.now(), action: "delete" })
+    }
+    return deleted
+  }
+
+  lockSection(section: string): boolean {
+    const sec = this.sections.get(section)
+    if (!sec) return false
+    sec.locked = true
+    return true
+  }
+
+  unlockSection(section: string): boolean {
+    const sec = this.sections.get(section)
+    if (!sec) return false
+    sec.locked = false
+    return true
+  }
+
+  isSectionLocked(section: string): boolean {
+    return this.sections.get(section)?.locked ?? false
+  }
+
+  subscribeToSection(section: string, callback: SectionSubscriptionCallback): boolean {
+    if (!this.sections.has(section)) return false
+    const cbs = this.sectionCallbacks.get(section) ?? []
+    cbs.push(callback)
+    this.sectionCallbacks.set(section, cbs)
+    return true
+  }
+
+  unsubscribeFromSection(section: string, callback: SectionSubscriptionCallback): boolean {
+    const cbs = this.sectionCallbacks.get(section)
+    if (!cbs) return false
+    const idx = cbs.indexOf(callback)
+    if (idx < 0) return false
+    cbs.splice(idx, 1)
+    return true
+  }
+
+  getSectionHistory(section: string): BlackboardChange[] {
+    return this.sections.get(section)?.history ?? []
+  }
+
+  clearSection(section: string, agentRole: string): boolean {
+    const sec = this.sections.get(section)
+    if (!sec || sec.locked) return false
+    const keys = [...sec.entries.keys()]
+    for (const key of keys) {
+      sec.history.push({ key, value: "", writtenBy: agentRole, timestamp: Date.now(), action: "clear" })
+    }
+    sec.entries.clear()
+    return true
+  }
+
+  getBlackboardSnapshot(): BlackboardSnapshot {
+    const sections: BlackboardSnapshot["sections"] = {}
+    for (const [name, sec] of this.sections) {
+      sections[name] = {
+        description: sec.description,
+        entries: [...sec.entries.values()].map(e => ({
+          key: e.key, value: e.value, writtenBy: e.writtenBy, timestamp: e.timestamp,
+        })),
+      }
+    }
+    return { timestamp: Date.now(), sections }
+  }
+
+  restoreBlackboardSnapshot(snapshot: BlackboardSnapshot): void {
+    for (const [name, data] of Object.entries(snapshot.sections)) {
+      let sec = this.sections.get(name)
+      if (!sec) {
+        sec = { name, description: data.description, entries: new Map(), history: [], subscribers: [], locked: false }
+        this.sections.set(name, sec)
+      }
+      sec.description = data.description
+      sec.entries.clear()
+      for (const e of data.entries) {
+        sec.entries.set(e.key, { key: e.key, value: e.value, writtenBy: e.writtenBy, timestamp: e.timestamp })
+      }
+    }
   }
 }

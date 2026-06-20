@@ -396,6 +396,7 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
     hallucinationGuard?: import("../drift/hallucination-guard.js").HallucinationGuard
     skillStore?: import("../memory/skill-store.js").SkillStore
     configLoader?: import("../core/config.js").ConfigLoader
+    schemaValidator?: import("../core/skill-schema.js").SchemaValidator
   }): Promise<{
     results: Map<string, { output: string; issues: string[]; validatedBy: string[] }>
     allFiles: string[]
@@ -586,6 +587,7 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
       skillStore: params.skillStore,
       configLoader: params.configLoader,
       eventBus: params.eventBus,
+      schemaValidator: params.schemaValidator,
     })
   }
 

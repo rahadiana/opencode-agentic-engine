@@ -13,6 +13,7 @@ import type { SkillStore } from "../memory/skill-store.js"
 import type { ConfigLoader } from "./config.js"
 import type { FileWrittenEvent } from "./event-taxonomy.js"
 import type { ConfidenceScorer, ConfidenceStore, ScoringSignals } from "./confidence-scorer.js"
+import type { SchemaValidator, SchemaValidationError } from "./skill-schema.js"
 
 type AgenticFilePayload = FileWrittenEvent["payload"]
 
@@ -119,6 +120,8 @@ export interface CompletionDeps {
   confidenceStore?: ConfidenceStore
   /** SkillStore — auto-extract jika ada, role=developer, dan filesModified non-kosong */
   skillStore?: SkillStore
+  /** SchemaValidator — validasi output schema jika skill yang diekstrak punya output_schema */
+  schemaValidator?: SchemaValidator
   configLoader?: ConfigLoader
   eventBus?: EventBus
 }
@@ -144,6 +147,10 @@ export interface CompletionResult {
   skillExtracted: boolean
   /** Confidence score for this step's output (Gap #2) */
   confidenceScore?: import("./confidence-scorer.js").ConfidenceScore
+  /** Schema validation result — non-blocking warning */
+  schemaValidation?: {
+    outputErrors: SchemaValidationError[]
+  }
 }
 
 /**
@@ -225,6 +232,38 @@ export async function recordCompletion(
             },
           })
         }
+
+        // 3b. Schema validation — jika skill punya output_schema
+        if (deps.schemaValidator && skill.definition.output_schema) {
+          try {
+            const parsedOutput = tryParseJSON(record.output)
+            if (parsedOutput) {
+              const svResult = deps.schemaValidator.validate(
+                skill.definition.output_schema,
+                parsedOutput,
+              )
+              if (!svResult.valid) {
+                const resultSchemaValidation = { outputErrors: svResult.errors }
+                if (deps.eventBus) {
+                  deps.eventBus.emit({
+                    type: "memory.skill.extracted",
+                    payload: {
+                      sessionID: record.sessionID,
+                      skillId: skill.definition.meta.id,
+                      name: skill.definition.meta.name,
+                      sourceStepId: record.stepId,
+                      successRate: skill.successRate,
+                    },
+                  })
+                }
+                // Return schema validation result
+                return { guardPassed, skillExtracted, confidenceScore: confidenceScore_, schemaValidation: resultSchemaValidation }
+              }
+            }
+          } catch {
+            // non-fatal — schema validation is advisory
+          }
+        }
       }
     } catch {
       // non-fatal
@@ -232,4 +271,28 @@ export async function recordCompletion(
   }
 
   return { guardPassed, skillExtracted, confidenceScore: confidenceScore_ }
+}
+
+/**
+ * Try to parse a string as JSON. Returns the parsed object or null.
+ */
+function tryParseJSON(text: string): Record<string, unknown> | null {
+  // Try direct JSON parse first
+  try {
+    const parsed = JSON.parse(text)
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed
+  } catch {
+    // fall through
+  }
+  // Try to find a JSON object in the text
+  const match = text.match(/\{[\s\S]*\}/)
+  if (match) {
+    try {
+      const parsed = JSON.parse(match[0])
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed
+    } catch {
+      return null
+    }
+  }
+  return null
 }
