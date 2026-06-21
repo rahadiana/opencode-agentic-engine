@@ -3306,6 +3306,79 @@ assert(p4Out.includes("Goal") || p4Out.includes("Auto"), "output mentions goal o
   assert(dsl25.validate([]).length === 0, "DSL-25a validate empty")
   assert(dsl25.validate([{ op: "invalid" }]).length > 0, "DSL-25b validate invalid op")
 
+  // DSL-26: Aggregator — sum (data passed as initial input)
+  const dsl26 = new DslExecutor()
+  const dsl26r = dsl26.execute([
+    { op: "sum", source: "input.nums", target: "output.total" },
+  ], { nums: [1, 2, 3, 4, 5] })
+  assert(dsl26r.success === true, "DSL-26a sum success")
+  assert(dsl26r.output.total === 15, "DSL-26b sum: 1+2+3+4+5=15")
+
+  // DSL-27: Aggregator — avg (data passed as initial input)
+  const dsl27 = new DslExecutor()
+  const dsl27r = dsl27.execute([
+    { op: "avg", source: "input.vals", target: "output.mean" },
+  ], { vals: [10, 20, 30] })
+  assert(dsl27r.success === true, "DSL-27a avg success")
+  assert(dsl27r.output.mean === 20, "DSL-27b avg: (10+20+30)/3=20")
+
+  // DSL-28: Aggregator — count (data passed as initial input)
+  const dsl28 = new DslExecutor()
+  const dsl28r = dsl28.execute([
+    { op: "count", source: "input.items", target: "output.len" },
+  ], { items: ["a", "b", "c", "d"] })
+  assert(dsl28r.success === true, "DSL-28a count success")
+  assert(dsl28r.output.len === 4, "DSL-28b count: ['a','b','c','d'].length=4")
+
+  // DSL-29: Aggregator — min (data passed as initial input)
+  const dsl29 = new DslExecutor()
+  const dsl29r = dsl29.execute([
+    { op: "min", source: "input.v", target: "output.minVal" },
+  ], { v: [7, 2, 9, 1, 5] })
+  assert(dsl29r.success === true, "DSL-29a min success")
+  assert(dsl29r.output.minVal === 1, "DSL-29b min: min of [7,2,9,1,5]=1")
+
+  // DSL-30: Aggregator — max (data passed as initial input)
+  const dsl30 = new DslExecutor()
+  const dsl30r = dsl30.execute([
+    { op: "max", source: "input.v", target: "output.maxVal" },
+  ], { v: [7, 2, 9, 1, 5] })
+  assert(dsl30r.success === true, "DSL-30a max success")
+  assert(dsl30r.output.maxVal === 9, "DSL-30b max: max of [7,2,9,1,5]=9")
+
+  // DSL-31: Aggregator — sum with memory source (set writes to memory, sum reads from memory)
+  const dsl31 = new DslExecutor()
+  const dsl31r = dsl31.execute([
+    { op: "set", target: "memory.data", value: [100, 200, 300] },
+    { op: "sum", source: "memory.data", target: "output.total" },
+  ])
+  assert(dsl31r.success === true, "DSL-31a sum from memory success")
+  assert(dsl31r.output.total === 600, "DSL-31b sum from memory: 100+200+300=600")
+
+  // DSL-32: Aggregator — empty array error (pass empty directly as input)
+  const dsl32 = new DslExecutor()
+  const dsl32r = dsl32.execute([
+    { op: "sum", source: "input.empty", target: "output.total" },
+  ], { empty: [] })
+  assert(dsl32r.success === false, "DSL-32a empty array sum fails")
+  assert(dsl32r.trace.steps.length > 0 && dsl32r.trace.steps[0].error && dsl32r.trace.steps[0].error.includes("No numeric values"), "DSL-32b correct error message in trace")
+
+  // DSL-33: Aggregator — validation: sum requires source
+  const dsl33v = validateDSL([{ op: "sum", id: "s1", target: "output.x" }])
+  assert(dsl33v.length > 0 && dsl33v[0].message.includes("source"), "DSL-33a sum requires source")
+
+  // DSL-34: Aggregator — validation: count requires target
+  const dsl34v = validateDSL([{ op: "count", id: "c1", source: "input.x" }])
+  assert(dsl34v.length > 0 && dsl34v.some(e => e.message.includes("target")), "DSL-34a count requires target")
+
+  // DSL-35: Aggregator — avg with single element (data passed as initial input)
+  const dsl35 = new DslExecutor()
+  const dsl35r = dsl35.execute([
+    { op: "avg", source: "input.single", target: "output.mean" },
+  ], { single: [42] })
+  assert(dsl35r.success === true, "DSL-35a avg single element success")
+  assert(dsl35r.output.mean === 42, "DSL-35b avg single: 42/1=42")
+
   assert(true, "DSL-Z DSL Executor all tests passed")
 
   // ── Phase 1: Schema Validator ──

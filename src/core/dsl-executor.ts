@@ -18,7 +18,7 @@ import type { MCPClient } from "./mcp-client.js"
 // ── Type Definitions ──────────────────────────────────────────────
 
 /** Supported DSL operation types */
-export type DslOp = "get" | "set" | "add" | "mcp_call" | "compare" | "if" | "call_skill" | "map" | "filter" | "reduce"
+export type DslOp = "get" | "set" | "add" | "mcp_call" | "compare" | "if" | "call_skill" | "map" | "filter" | "reduce" | "sum" | "avg" | "count" | "min" | "max"
 
 /** Comparison operators */
 export type CompareOp = "eq" | "ne" | "gt" | "gte" | "lt" | "lte"
@@ -125,6 +125,7 @@ export const MAX_CALL_DEPTH = 3
 /** Whitelist of allowed operation types */
 export const DSL_OP_WHITELIST: ReadonlySet<DslOp> = new Set([
   "get", "set", "add", "mcp_call", "compare", "if", "call_skill", "map", "filter", "reduce",
+  "sum", "avg", "count", "min", "max",
 ])
 
 // ── Module-level executor reference for depth tracking ──
@@ -333,6 +334,27 @@ export function validateDSL(instructions: DslInstruction[], nesting = 0): DslVal
         }
         if (instr.initial === undefined) {
           errors.push({ path: `${path}.initial`, message: "reduce requires an initial accumulator value", instructionId: instr.id })
+        }
+        break
+
+      case "sum":
+      case "avg":
+      case "min":
+      case "max":
+        if (!instr.source) {
+          errors.push({ path: `${path}.source`, message: `${instr.op} requires a source array path`, instructionId: instr.id })
+        }
+        if (!instr.target) {
+          errors.push({ path: `${path}.target`, message: `${instr.op} requires a target path to store result`, instructionId: instr.id })
+        }
+        break
+
+      case "count":
+        if (!instr.source) {
+          errors.push({ path: `${path}.source`, message: "count requires a source array path", instructionId: instr.id })
+        }
+        if (!instr.target) {
+          errors.push({ path: `${path}.target`, message: "count requires a target path to store result", instructionId: instr.id })
         }
         break
     }
@@ -624,6 +646,92 @@ function executeInstruction(
         return {
           instructionId: instr.id, op: instr.op, success: true, value: acc,
         }
+      }
+
+      case "sum": {
+        const arr = resolveArraySource(context, instr.source)
+        if (!arr) {
+          return { instructionId: instr.id, op: instr.op, success: false, error: `Source not found or not an array: ${instr.source}` }
+        }
+        const numbers = arr.map(v => typeof v === "number" ? v : Number(v)).filter(v => !isNaN(v))
+        if (numbers.length === 0) {
+          return { instructionId: instr.id, op: instr.op, success: false, error: "No numeric values in source array" }
+        }
+        const sum = numbers.reduce((a, b) => a + b, 0)
+        if (instr.target) {
+          const scope = instr.target.startsWith("memory.") ? context.memory : context.output
+          const path = instr.target.replace(/^(memory|output)\./, "")
+          setPath(scope, path, sum)
+        }
+        return { instructionId: instr.id, op: instr.op, success: true, value: sum }
+      }
+
+      case "avg": {
+        const arr = resolveArraySource(context, instr.source)
+        if (!arr) {
+          return { instructionId: instr.id, op: instr.op, success: false, error: `Source not found or not an array: ${instr.source}` }
+        }
+        const numbers = arr.map(v => typeof v === "number" ? v : Number(v)).filter(v => !isNaN(v))
+        if (numbers.length === 0) {
+          return { instructionId: instr.id, op: instr.op, success: false, error: "No numeric values in source array" }
+        }
+        const avg = numbers.reduce((a, b) => a + b, 0) / numbers.length
+        if (instr.target) {
+          const scope = instr.target.startsWith("memory.") ? context.memory : context.output
+          const path = instr.target.replace(/^(memory|output)\./, "")
+          setPath(scope, path, avg)
+        }
+        return { instructionId: instr.id, op: instr.op, success: true, value: avg }
+      }
+
+      case "count": {
+        const arr = resolveArraySource(context, instr.source)
+        if (!arr) {
+          return { instructionId: instr.id, op: instr.op, success: false, error: `Source not found or not an array: ${instr.source}` }
+        }
+        const count = arr.length
+        if (instr.target) {
+          const scope = instr.target.startsWith("memory.") ? context.memory : context.output
+          const path = instr.target.replace(/^(memory|output)\./, "")
+          setPath(scope, path, count)
+        }
+        return { instructionId: instr.id, op: instr.op, success: true, value: count }
+      }
+
+      case "min": {
+        const arr = resolveArraySource(context, instr.source)
+        if (!arr) {
+          return { instructionId: instr.id, op: instr.op, success: false, error: `Source not found or not an array: ${instr.source}` }
+        }
+        const numbers = arr.map(v => typeof v === "number" ? v : Number(v)).filter(v => !isNaN(v))
+        if (numbers.length === 0) {
+          return { instructionId: instr.id, op: instr.op, success: false, error: "No numeric values in source array" }
+        }
+        const min = Math.min(...numbers)
+        if (instr.target) {
+          const scope = instr.target.startsWith("memory.") ? context.memory : context.output
+          const path = instr.target.replace(/^(memory|output)\./, "")
+          setPath(scope, path, min)
+        }
+        return { instructionId: instr.id, op: instr.op, success: true, value: min }
+      }
+
+      case "max": {
+        const arr = resolveArraySource(context, instr.source)
+        if (!arr) {
+          return { instructionId: instr.id, op: instr.op, success: false, error: `Source not found or not an array: ${instr.source}` }
+        }
+        const numbers = arr.map(v => typeof v === "number" ? v : Number(v)).filter(v => !isNaN(v))
+        if (numbers.length === 0) {
+          return { instructionId: instr.id, op: instr.op, success: false, error: "No numeric values in source array" }
+        }
+        const max = Math.max(...numbers)
+        if (instr.target) {
+          const scope = instr.target.startsWith("memory.") ? context.memory : context.output
+          const path = instr.target.replace(/^(memory|output)\./, "")
+          setPath(scope, path, max)
+        }
+        return { instructionId: instr.id, op: instr.op, success: true, value: max }
       }
 
       default:
