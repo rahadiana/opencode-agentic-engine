@@ -64,6 +64,9 @@ import { ConfidenceScorer, ConfidenceStore, type ConfidenceScore } from "./core/
 import { codeIntentAnalyzer } from "./core/code-intent-analyzer.js"
 import { SchemaValidator } from "./core/skill-schema.js"
 import { DslExecutor } from "./core/dsl-executor.js"
+import { SkillImprover } from "./core/skill-improver.js"
+import { AttentionScheduler } from "./core/attention-scheduler.js"
+void AttentionScheduler // available via import for direct usage
 
 // ── Build-time version injected by esbuild define ──
 declare const __VERSION__: string
@@ -495,6 +498,10 @@ const confidenceStore = new ConfidenceStore()
     if (!skillRecord || !skillRecord.definition.logic?.instructions) return null
     return { instructions: skillRecord.definition.logic.instructions }
   })
+
+  // ── SkillImprover (Comparison 01: Self-Improvement Loop) ──
+  const skillImprover = new SkillImprover(skillStore, schemaValidator)
+  void skillImprover // available via import for direct usage
 
   // Load cross-session knowledge artifact
   try {
@@ -5199,7 +5206,7 @@ export { VectorStore } from "./memory/vector-store.js"
 export { Verifier } from "./core/verifier.js"
 export { ContinuousEvolution } from "./evolution/continuous-evolution.js"
 export { SelfEvolver } from "./evolution/self-evolver.js"
-export { AgentCoordinator } from "./agents/coordinator.js"
+export { AgentCoordinator, type AgentPhase, type BlackboardCycleResult } from "./agents/coordinator.js"
 export { Executor } from "./core/executor.js"
 export { PatternDiscovery } from "./drift/pattern-discovery.js"
 export { skillToTrainingExample, skillsToTrainingData, exportOpenAIJSONL, exportInstructionsJSON, trainingDatasetSummary } from "./memory/skill-training.js"
@@ -5220,4 +5227,7 @@ export { DslExecutor, validateDSL, resolvePath, setPath, resolveValue, type DslI
 export { SchemaValidator, type SchemaField, type SchemaFieldType, type SkillSchema, type SchemaValidationResult, type SchemaValidationError, type SchemaErrorCode } from "./core/skill-schema.js"
 export { CodeSandbox, CodeModuleRegistry, checkBannedTokens, sandboxExecute, runSandboxTests, type BannedToken, type BannedTokenIssue, type CodeModule, type SandboxExecutionResult, type SandboxTestCase, type SandboxTestResult, type CodeGenerationResult, type SandboxSchemaField, DEFAULT_BANNED_TOKENS } from "./core/code-sandbox.js"
 export { TreeSearchPlanner, defaultExpansion, scoreState, diversityBonus, scoreWithDiversity, DEFAULT_BEAM_WIDTH, DEFAULT_MAX_DEPTH, EARLY_STOP_THRESHOLD, DIVERSITY_WEIGHT, type PlanState, type TreeSearchResult, type TreeSearchConfig, type ExpansionFn } from "./core/planner-tree-search.js"
+export { Planner, type MacroPhase, type MicroStep, type HierarchicalPlan, type PhaseContextMapping, type PhaseErrorContext } from "./core/planner.js"
+export { SkillImprover, type SkillTestCase, type EvaluationScore, type ImprovementResult } from "./core/skill-improver.js"
+export { AttentionScheduler, MAX_SCHEDULER_CYCLES, type AgentScheduleConfig, type AgentScheduleState, type SharedState, type CycleResult, type SchedulerMetrics } from "./core/attention-scheduler.js"
 export { buildAgentPrompt, buildAgenticSystemInstructions, buildGenericAgentPrompt } from "./core/prompt-builder.js"

@@ -18,7 +18,7 @@ import type { MCPClient } from "./mcp-client.js"
 // ── Type Definitions ──────────────────────────────────────────────
 
 /** Supported DSL operation types */
-export type DslOp = "get" | "set" | "add" | "mcp_call" | "compare" | "if" | "call_skill" | "map" | "filter" | "reduce" | "sum" | "avg" | "count" | "min" | "max"
+export type DslOp = "get" | "set" | "add" | "mcp_call" | "compare" | "if" | "jump" | "call_skill" | "map" | "filter" | "reduce" | "sum" | "avg" | "count" | "min" | "max"
 
 /** Comparison operators */
 export type CompareOp = "eq" | "ne" | "gt" | "gte" | "lt" | "lte"
@@ -67,6 +67,8 @@ export interface DslInstruction {
   instructions?: DslInstruction[]
   /** Initial accumulator value for reduce operation */
   initial?: unknown
+  /** Target instruction index for jump operation (jump) */
+  to?: number
 }
 
 /** Execution context — sandboxed data environment */
@@ -122,9 +124,12 @@ export const MAX_DSL_NESTING = 5
 /** Max recursion depth for call_skill composition */
 export const MAX_CALL_DEPTH = 3
 
+/** Maximum total execution steps (anti infinite loop guard for jump/if) */
+export const MAX_EXECUTION_STEPS = 200
+
 /** Whitelist of allowed operation types */
 export const DSL_OP_WHITELIST: ReadonlySet<DslOp> = new Set([
-  "get", "set", "add", "mcp_call", "compare", "if", "call_skill", "map", "filter", "reduce",
+  "get", "set", "add", "mcp_call", "compare", "if", "jump", "call_skill", "map", "filter", "reduce",
   "sum", "avg", "count", "min", "max",
 ])
 
@@ -355,6 +360,14 @@ export function validateDSL(instructions: DslInstruction[], nesting = 0): DslVal
         }
         if (!instr.target) {
           errors.push({ path: `${path}.target`, message: "count requires a target path to store result", instructionId: instr.id })
+        }
+        break
+
+      case "jump":
+        if (instr.to === undefined) {
+          errors.push({ path: `${path}.to`, message: "jump requires a target instruction index (to)", instructionId: instr.id })
+        } else if (instr.to < 0 || instr.to >= instructions.length) {
+          errors.push({ path: `${path}.to`, message: `jump target index ${instr.to} is out of bounds (0-${instructions.length - 1})`, instructionId: instr.id })
         }
         break
     }
@@ -763,6 +776,10 @@ function executeInstruction(
         return { instructionId: instr.id, op: instr.op, success: true, value: max }
       }
 
+      case "jump":
+        // Handled at executeBlock level via IP modification
+        return { instructionId: instr.id, op: instr.op, success: true, value: instr.to }
+
       default:
         return { instructionId: instr.id, op: instr.op, success: false, error: `Unsupported op: ${instr.op}` }
     }
@@ -893,9 +910,38 @@ export class DslExecutor {
     context: DslContext,
     trace: DslStepResult[],
   ): void {
-    for (const instr of instructions) {
+    let ip = 0
+    let steps = 0
+    const maxSteps = MAX_EXECUTION_STEPS
+
+    while (ip >= 0 && ip < instructions.length) {
+      // Anti infinite loop guard
+      steps++
+      if (steps > maxSteps) {
+        trace.push({
+          op: "jump",
+          success: false,
+          error: `Execution steps exceeded (${maxSteps}) — possible infinite loop`,
+        })
+        return
+      }
+
+      const instr = instructions[ip]
+      const nextIp = ip + 1 // default: advance to next instruction
+
       if (instr.op === "if") {
         this.executeIf(instr, context, trace)
+      } else if (instr.op === "jump") {
+        // Jump to target index (unconditional)
+        const result = executeInstruction(instr, context)
+        trace.push(result)
+        if (result.success && typeof instr.to === "number") {
+          ip = instr.to // set IP to jump target
+          continue // skip the default ip = nextIp below
+        } else {
+          // jump failed or invalid target — stop
+          return
+        }
       } else {
         const result = executeInstruction(instr, context)
         trace.push(result)
@@ -904,6 +950,8 @@ export class DslExecutor {
           return
         }
       }
+
+      ip = nextIp
     }
   }
 

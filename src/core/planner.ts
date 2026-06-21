@@ -1,7 +1,7 @@
 import type { TaskIntent, Subtask } from "./intent-parser.js"
 import type { LLMEngine } from "./llm.js"
 import { DependencyGraph } from "./formal-model.js"
-import type { PlannerCritic, CriticResult } from "./planner-critic.js"
+import type { PlannerCritic, CriticResult, CriticScore } from "./planner-critic.js"
 
 export interface MacroPhase {
   id: string
@@ -11,6 +11,30 @@ export interface MacroPhase {
   dependsOn: string[]
   /** Expected outcome of this phase */
   outcome: string
+  /** Schema of expected outputs (for context passing to dependent phases) */
+  outputSchema?: Record<string, string>
+  /** Schema of expected inputs (from parent phases) */
+  inputSchema?: Record<string, string>
+}
+
+/**
+ * Context mapping between two phases.
+ * Describes how output fields from one phase map to input fields of another.
+ */
+export interface PhaseContextMapping {
+  /** Source phase ID */
+  fromPhaseId: string
+  /** Target phase ID */
+  toPhaseId: string
+  /** Field mappings: outputField → inputField */
+  mappings: Record<string, string>
+}
+
+/** Error context for phase retry */
+export interface PhaseErrorContext {
+  phaseId: string
+  error: string
+  failedStepIds: string[]
 }
 
 export interface MicroStep {
@@ -572,5 +596,181 @@ export class Planner {
     }
 
     return subtasks
+  }
+
+  // ── Context Passing (Gap #1: output → input antar phase) ──────
+
+  /**
+   * Compute context mappings between sequential phases.
+   * For each dependency relationship (phase A depends on phase B),
+   * maps declared outputSchema fields of B to inputSchema fields of A.
+   */
+  applyContextPassing(plan: HierarchicalPlan): PhaseContextMapping[] {
+    const mappings: PhaseContextMapping[] = []
+    const phaseMap = new Map(plan.phases.map(p => [p.id, p]))
+
+    for (const phase of plan.phases) {
+      if (!phase.inputSchema || Object.keys(phase.inputSchema).length === 0) continue
+
+      for (const depId of phase.dependsOn) {
+        const depPhase = phaseMap.get(depId)
+        if (!depPhase || !depPhase.outputSchema) continue
+
+        const fieldMappings: Record<string, string> = {}
+        const usedOutputs = new Set<string>()
+
+        // First pass: match by exact name
+        for (const [inField] of Object.entries(phase.inputSchema)) {
+          if (depPhase.outputSchema[inField]) {
+            fieldMappings[inField] = inField
+            usedOutputs.add(inField)
+          }
+        }
+
+        // Second pass: match remaining by type
+        const remainingInput = Object.entries(phase.inputSchema).filter(([k]) => !fieldMappings[k])
+        const remainingOutput = Object.entries(depPhase.outputSchema).filter(([k]) => !usedOutputs.has(k))
+        for (const [inField, inType] of remainingInput) {
+          for (const [outField, outType] of remainingOutput) {
+            if (inType === outType && !usedOutputs.has(outField)) {
+              fieldMappings[outField] = inField
+              usedOutputs.add(outField)
+              break
+            }
+          }
+        }
+
+        if (Object.keys(fieldMappings).length > 0) {
+          mappings.push({
+            fromPhaseId: depId,
+            toPhaseId: phase.id,
+            mappings: fieldMappings,
+          })
+        }
+      }
+    }
+
+    return mappings
+  }
+
+  // ── Per-subgoal Error Recovery (Gap #2: retryPhase) ──────────
+
+  /**
+   * Retry a failed phase by re-expanding it with error context.
+   * Returns a new set of micro-steps with adjusted descriptions
+   * that incorporate the failure information.
+   *
+   * @param plan — the hierarchical plan
+   * @param failedPhaseId — ID of the phase that failed
+   * @param errorContext — what went wrong (error message + failed step IDs)
+   * @param template — optional macro template for re-expansion
+   */
+  retryPhase(
+    plan: HierarchicalPlan,
+    failedPhaseId: string,
+    errorContext: PhaseErrorContext,
+    template?: MacroTemplate | null,
+  ): MicroStep[] {
+    const phase = plan.phases.find(p => p.id === failedPhaseId)
+    if (!phase) return []
+
+    // Include error context in the goal for re-expansion
+    const adjustedGoal = `${plan.goal} (retry after: ${errorContext.error})`
+    const newSteps = this.expandPhase(phase, adjustedGoal, template)
+
+    // Mark the new steps as retry steps
+    const retrySteps: MicroStep[] = newSteps.map((step, i) => ({
+      ...step,
+      id: `${step.id}-retry-${i}`,
+      description: `${step.description} [retry #${i + 1}: avoid "${errorContext.error}"]`,
+      verificationCriteria: [
+        ...step.verificationCriteria,
+        `Fixed error: ${errorContext.error}`,
+      ],
+    }))
+
+    // Replace phase micro-steps in plan
+    plan.micro.set(failedPhaseId, retrySteps)
+
+    return retrySteps
+  }
+
+  // ── Per-subgoal Critic Integration (Gap #3) ──────────────────
+
+  /**
+   * Critically evaluate a single phase's micro-steps.
+   * Returns issues and suggestions for this specific sub-goal.
+   *
+   * @param phase — the macro phase to evaluate
+   * @param microSteps — the micro-steps generated for this phase
+   * @param critic — optional PlannerCritic instance for LLM-based evaluation
+   */
+  criticizeSubgoal(
+    phase: MacroPhase,
+    microSteps: MicroStep[],
+    _critic?: PlannerCritic,
+  ): CriticScore {
+    const issues: string[] = []
+    const suggestions: string[] = []
+
+    // Structural validation (always available)
+    if (microSteps.length === 0) {
+      issues.push(`Phase "${phase.name}" has no micro-steps`)
+      suggestions.push("Expand the phase with at least one actionable step")
+    }
+    if (microSteps.length > 5) {
+      issues.push(`Phase "${phase.name}" has ${microSteps.length} steps (max 5 recommended)`)
+      suggestions.push("Consider splitting this phase into smaller sub-phases")
+    }
+
+    // Check step descriptions are concrete
+    const vagueWords = ["stuff", "things", "etc", "misc", "whatever", "todo"]
+    for (const step of microSteps) {
+      for (const word of vagueWords) {
+        if (step.description.toLowerCase().includes(word)) {
+          issues.push(`Step "${step.id}" contains vague word "${word}": "${step.description}"`)
+          suggestions.push(`Replace vague descriptions with concrete actions`)
+          break
+        }
+      }
+    }
+
+    // Check dependency completeness
+    const stepIds = new Set(microSteps.map(s => s.id))
+    for (const step of microSteps) {
+      for (const dep of step.dependsOn) {
+        if (!stepIds.has(dep)) {
+          issues.push(`Step "${step.id}" depends on unknown step "${dep}"`)
+          suggestions.push("Fix dependency references to valid step IDs")
+        }
+      }
+    }
+
+    // Check verification criteria
+    const stepsWithoutCriteria = microSteps.filter(s => !s.verificationCriteria || s.verificationCriteria.length === 0)
+    if (stepsWithoutCriteria.length > 0) {
+      issues.push(`${stepsWithoutCriteria.length} step(s) without verification criteria`)
+      suggestions.push("Add at least one verification criterion per step")
+    }
+
+    const score = this.computeSubgoalScore(issues, microSteps.length)
+
+    return { overall: score, issues, suggestions }
+  }
+
+  /**
+   * Compute a numeric score (0-1) for a subgoal based on issues found.
+   */
+  private computeSubgoalScore(issues: string[], stepCount: number): number {
+    let score = 1.0
+
+    // Deduct for issues
+    score -= issues.length * 0.15
+
+    // Penalty for too few or too many steps
+    if (stepCount === 0) score -= 0.5
+    if (stepCount > 5) score -= 0.2
+
+    return Math.max(0, Math.min(1, score))
   }
 }

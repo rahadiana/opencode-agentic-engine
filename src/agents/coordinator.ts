@@ -523,4 +523,280 @@ export class AgentCoordinator {
       }
     }
   }
+
+  // ── Phase Status System (Comp 17: Phase Lock) ──────────────────
+
+  /** Maximum blackboard agent cycles before forced stop */
+  private static readonly MAX_BLACKBOARD_CYCLES = 10
+
+  /** Current phase status of the blackboard-driven cycle */
+  private phaseStatus: AgentPhase = "idle"
+
+  /** How many cycles have run in the current blackboard session */
+  private cycleCount = 0
+
+  /** Callbacks invoked on phase status change */
+  private phaseListeners: Array<(phase: AgentPhase) => void> = []
+
+  /**
+   * Set the current phase status.
+   * Agents can only run when their phase matches the status.
+   */
+  setPhaseStatus(status: AgentPhase): void {
+    this.phaseStatus = status
+    for (const cb of this.phaseListeners) {
+      try { cb(status) } catch { /* non-fatal */ }
+    }
+  }
+
+  /**
+   * Get the current phase status.
+   */
+  getPhaseStatus(): AgentPhase {
+    return this.phaseStatus
+  }
+
+  /**
+   * Listen for phase status changes.
+   * Returns an unsubscribe function.
+   */
+  onPhaseChange(callback: (phase: AgentPhase) => void): () => void {
+    this.phaseListeners.push(callback)
+    return () => {
+      const idx = this.phaseListeners.indexOf(callback)
+      if (idx >= 0) this.phaseListeners.splice(idx, 1)
+    }
+  }
+
+  /**
+   * Check if an agent role can run in the current phase.
+   * Used as phase lock — prevents agents from running in wrong phase.
+   */
+  canAgentRunInPhase(role: string): boolean {
+    // Map agent roles to phases they're allowed in
+    switch (this.phaseStatus) {
+      case "planning":
+        return ["planner", "architect", "pm"].includes(role)
+      case "executing":
+        return ["executor", "developer", "builder"].includes(role)
+      case "critic":
+        return ["critic", "qa", "reviewer"].includes(role)
+      case "idle":
+        return false
+      default:
+        return true
+    }
+  }
+
+  /**
+   * Reset the cycle counter and phase status.
+   */
+  resetCycle(): void {
+    this.cycleCount = 0
+    this.phaseStatus = "idle"
+  }
+
+  /**
+   * Run one event-driven blackboard agent cycle:
+   * 1. Check MAX_CYCLES guard
+   * 2. Check phase lock (can agent run?)
+   * 3. Execute agent action
+   * 4. Notify phase listeners
+   * 5. Determine next phase
+   *
+   * Returns the cycle result including selected agent and next phase.
+   */
+  runBlackboardCycle(
+    eligibleRoles: string[],
+    agentSelector: (roles: string[], phase: AgentPhase) => string | null,
+    agentExecutor: (role: string, phase: AgentPhase) => string | null,
+  ): BlackboardCycleResult {
+    this.cycleCount++
+
+    // 1. MAX_CYCLES guard
+    if (this.cycleCount > AgentCoordinator.MAX_BLACKBOARD_CYCLES) {
+      return {
+        cycle: this.cycleCount,
+        selectedRole: null,
+        phase: this.phaseStatus,
+        result: null,
+        nextPhase: "idle",
+        maxCyclesReached: true,
+      }
+    }
+
+    // 2. Phase lock — filter roles that can run in current phase
+    const allowed = eligibleRoles.filter(r => this.canAgentRunInPhase(r))
+    if (allowed.length === 0) {
+      return {
+        cycle: this.cycleCount,
+        selectedRole: null,
+        phase: this.phaseStatus,
+        result: null,
+        nextPhase: "idle",
+        maxCyclesReached: false,
+      }
+    }
+
+    // 3. Select agent to run
+    const selectedRole = agentSelector(allowed, this.phaseStatus)
+    if (!selectedRole) {
+      return {
+        cycle: this.cycleCount,
+        selectedRole: null,
+        phase: this.phaseStatus,
+        result: null,
+        nextPhase: "idle",
+        maxCyclesReached: false,
+      }
+    }
+
+    // 4. Execute agent
+    const result = agentExecutor(selectedRole, this.phaseStatus)
+
+    // 5. Determine next phase (Planner → Executor → Critic → done or back to Planner)
+    const nextPhase = this.computeNextPhase(result)
+
+    // 6. Update status and notify
+    if (nextPhase !== this.phaseStatus) {
+      this.setPhaseStatus(nextPhase)
+    }
+
+    return {
+      cycle: this.cycleCount,
+      selectedRole,
+      phase: this.phaseStatus,
+      result,
+      nextPhase,
+      maxCyclesReached: false,
+    }
+  }
+
+  /**
+   * Run the full Planner → Executor → Critic loop automatically.
+   * Uses simple selectors: first eligible in each phase.
+   * Returns array of all cycle results.
+   */
+  runFullCritiqueLoop(
+    plannerRole: string,
+    executorRole: string,
+    criticRole: string,
+    executor: (role: string, phase: AgentPhase, input: string) => string,
+  ): BlackboardCycleResult[] {
+    const results: BlackboardCycleResult[] = []
+    this.resetCycle()
+
+    // Phase 1: Planning
+    this.setPhaseStatus("planning")
+    const planResult = this.runBlackboardCycle(
+      [plannerRole],
+      (roles) => roles[0],
+      (role) => executor(role, "planning", ""),
+    )
+    results.push(planResult)
+    const plan = planResult.result ?? ""
+
+    // Phase 2: Executing
+    this.setPhaseStatus("executing")
+    const execResult = this.runBlackboardCycle(
+      [executorRole],
+      (roles) => roles[0],
+      (role) => executor(role, "executing", plan),
+    )
+    results.push(execResult)
+    const executionOutput = execResult.result ?? ""
+
+    // Phase 3: Critic review
+    this.setPhaseStatus("critic")
+    const criticResult = this.runBlackboardCycle(
+      [criticRole],
+      (roles) => roles[0],
+      (role) => executor(role, "critic", executionOutput),
+    )
+    results.push(criticResult)
+    const critique = criticResult.result ?? ""
+
+    // Retry loop: if critic fails, go back to planning (up to MAX cycles total)
+    let retries = 0
+    const maxRetries = 3
+    while (this.cycleCount < AgentCoordinator.MAX_BLACKBOARD_CYCLES && retries < maxRetries) {
+      const needsRetry = this.shouldRetry(critique)
+      if (!needsRetry) break
+
+      retries++
+      // Back to planning
+      this.setPhaseStatus("planning")
+      const rePlanResult = this.runBlackboardCycle(
+        [plannerRole],
+        (roles) => roles[0],
+        (role) => executor(role, "planning", `Retry #${retries}: ${critique}`),
+      )
+      results.push(rePlanResult)
+
+      this.setPhaseStatus("executing")
+      const reExecResult = this.runBlackboardCycle(
+        [executorRole],
+        (roles) => roles[0],
+        (role) => executor(role, "executing", rePlanResult.result ?? ""),
+      )
+      results.push(reExecResult)
+
+      this.setPhaseStatus("critic")
+      const reCriticResult = this.runBlackboardCycle(
+        [criticRole],
+        (roles) => roles[0],
+        (role) => executor(role, "critic", reExecResult.result ?? ""),
+      )
+      results.push(reCriticResult)
+    }
+
+    // Done
+    this.setPhaseStatus("idle")
+
+    return results
+  }
+
+  /**
+   * Determine the next phase based on current phase and result.
+   */
+  private computeNextPhase(result: string | null): AgentPhase {
+    if (this.phaseStatus === "planning") return "executing"
+    if (this.phaseStatus === "executing") return "critic"
+    if (this.phaseStatus === "critic") {
+      // If result is empty/null, planning failed — go idle
+      if (!result) return "idle"
+      return "idle" // critic done — default to idle (retry handled separately)
+    }
+    return "idle"
+  }
+
+  /**
+   * Check if the critique indicates a retry is needed.
+   * Retry if the critic found issues (non-empty result starting with "fail" or "retry").
+   */
+  private shouldRetry(critique: string): boolean {
+    const lower = critique.toLowerCase().trim()
+    return lower.startsWith("fail") || lower.startsWith("retry") || lower.startsWith("reject")
+  }
+}
+
+// ── Phase Status Type (Comparison 16/17) ───────────────────────────
+
+/** Status of the blackboard-driven agent cycle */
+export type AgentPhase = "idle" | "planning" | "executing" | "critic"
+
+/** Result of a single blackboard agent cycle */
+export interface BlackboardCycleResult {
+  /** Cycle number */
+  cycle: number
+  /** Which agent role was selected to run (null if none eligible) */
+  selectedRole: string | null
+  /** Phase when this cycle ran */
+  phase: AgentPhase
+  /** Result of the agent execution */
+  result: string | null
+  /** Next phase to transition to */
+  nextPhase: AgentPhase
+  /** Whether MAX_CYCLES limit was reached */
+  maxCyclesReached: boolean
 }

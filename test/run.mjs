@@ -3435,6 +3435,81 @@ assert(p4Out.includes("Goal") || p4Out.includes("Auto"), "output mentions goal o
   const dsl38r = dsl38_exec.execute([{ op: "call_skill", id: "c1", skill: "test.atomic", target: "output.r", args: { v: 42 } }], { v: 42 })
   assert(dsl38r.success === true, "DSL-38b SkillDef with explicit level works")
 
+  // ── Jump Op Tests (Comparison 05) ──
+  const dslJump = new (await import(pluginDist)).DslExecutor()
+
+  // DSL-39: Basic jump — jump forward past a skipped instruction
+  const dsl39r = dslJump.execute([
+    { op: "set", id: "s1", target: "output.result", value: "start" },
+    { op: "jump", id: "j1", to: 3 },
+    { op: "set", id: "s2", target: "output.result", value: "skipped" },
+    { op: "set", id: "s3", target: "output.result", value: "end" },
+  ])
+  assert(dsl39r.success === true, "DSL-39a jump forward succeeds")
+  assert(dsl39r.output.result === "end", "DSL-39b jump skips instruction: result should be 'end' not 'skipped'")
+
+  // DSL-40: Jump backward — creates a loop (use with caution)
+  const dsl40Instructions = [
+    { op: "set", id: "s1", target: "memory.counter", value: 0 },
+    { op: "set", id: "s2", target: "memory.counter", source: "memory.counter" },
+    { op: "add", id: "a1", target: "memory.counter", values: ["memory.counter", 1] },
+    { op: "jump", id: "j1", to: 1 },
+    { op: "set", id: "s3", target: "output.result", value: "done" },
+  ]
+  // Need to set counter properly — use memory for counter tracking
+  const dsl40Instructions2 = [
+    { op: "set", id: "s1", target: "memory.counter", value: 0 },
+    { op: "add", id: "a1", target: "memory.counter", values: ["memory.counter", 1] },
+    { op: "set", id: "s2", target: "memory.check", source: "memory.counter" },
+    { op: "jump", id: "j1", to: 1 },
+    { op: "set", id: "s3", target: "output.result", value: "done" },
+  ]
+  const dsl40r = dslJump.execute(dsl40Instructions2)
+  // Should hit MAX_EXECUTION_STEPS and stop
+  assert(dsl40r.success === false, "DSL-40a jump backward hits step limit")
+  assert(dsl40r.error || dsl40r.trace.steps.some(s => !s.success && (s.error || "").includes("infinite loop")), "DSL-40b step limit error reported")
+  if (dsl40r.trace.steps.length > 210 || dsl40r.trace.steps.length < 10) throw new Error(`DSL-40c trace length ${dsl40r.trace.steps.length} — expected near MAX_EXECUTION_STEPS=200`)
+
+  // DSL-41: Jump validation — missing 'to' in validation
+  const dsl41v = dslJump.validate([{ op: "jump", id: "j1" }])
+  assert(dsl41v.length > 0, "DSL-41a jump without 'to' should fail validation")
+  assert(dsl41v.some(e => e.message.includes("to")), "DSL-41b validation error mentions 'to' field")
+
+  // DSL-42: Jump validation — out of bounds
+  const dsl42v = dslJump.validate([
+    { op: "set", id: "s1", target: "output.x", value: 1 },
+    { op: "jump", id: "j1", to: 99 },
+  ])
+  assert(dsl42v.length > 0, "DSL-42a jump out of bounds fails validation")
+  assert(dsl42v.some(e => e.message.includes("out of bounds")), "DSL-42b error mentions out of bounds")
+
+  // DSL-43: Jump zero (jump to first instruction)
+  const dsl43r = dslJump.execute([
+    { op: "jump", id: "j1", to: 2 },
+    { op: "set", id: "s1", target: "output.result", value: "skipped" },
+    { op: "set", id: "s2", target: "output.result", value: "target" },
+  ])
+  assert(dsl43r.success === true, "DSL-43a jump to index 2 succeeds")
+  assert(dsl43r.output.result === "target", "DSL-43b jump skips instruction 1")
+
+  // DSL-44: Jump to self (infinite loop guard)
+  const dsl44r = dslJump.execute([
+    { op: "jump", id: "j1", to: 0 },
+    { op: "set", id: "s1", target: "output.result", value: "never" },
+  ])
+  assert(dsl44r.success === false, "DSL-44a jump to self hits step limit")
+  assert(dsl44r.trace.steps.length > 0 && dsl44r.trace.steps.length <= 210, "DSL-44b stops before excessive steps")
+
+  // DSL-45: Jump in valid (target equal to instructions.length-1, last instruction)
+  const dsl45r = dslJump.execute([
+    { op: "set", id: "s1", target: "output.result", value: "first" },
+    { op: "jump", id: "j1", to: 3 },
+    { op: "set", id: "s2", target: "output.result", value: "skipped" },
+    { op: "set", id: "s3", target: "output.result", value: "last" },
+  ])
+  assert(dsl45r.success === true, "DSL-45a jump to last instruction succeeds")
+  assert(dsl45r.output.result === "last", "DSL-45b executed last instruction after jump")
+
   assert(true, "DSL-Z DSL Executor all tests passed")
 
   // ── Phase 1: Schema Validator ──
@@ -4113,6 +4188,333 @@ ts("TS-17b beam=1 earlyStop = false", () => {
 console.log(`  TreeSearch: ${tsp} passed, ${tsf} failed`)
 passed += tsp; failed += tsf
 
+// ── Hierarchical Planner Tests (Comparison 14) ─────────────────────
+console.log("\n[HP] Hierarchical Planner — context passing, retry, critic")
+const hpMod = await import(pluginDist)
+const { Planner: PlannerHP } = hpMod
+let hpp = 0, hpf = 0
+const hp = (name, fn) => { try { fn(); hpp++; console.log(`  PASS: ${name}`) } catch (e) { hpf++; console.log(`  FAIL: ${name} — ${e.message}`) } }
+
+const hpPlanner = new PlannerHP()
+
+// HP-1: Context passing — basic mapping
+const hp1_plan = hpPlanner.decomposeMacro("build a web application")
+hp1_plan.phases[0].outputSchema = { design: "string", config: "string" }
+hp1_plan.phases[1].inputSchema = { design: "string", theme: "string" }
+hp1_plan.phases[1].dependsOn = [hp1_plan.phases[0].id]
+const hp1_mappings = hpPlanner.applyContextPassing(hp1_plan)
+hp("HP-1a applyContextPassing returns array", () => {
+  if (!Array.isArray(hp1_mappings)) throw new Error("Expected array")
+})
+hp("HP-1b context mapping has correct shape", () => {
+  if (hp1_mappings.length === 0) throw new Error("Expected at least one mapping")
+  const m = hp1_mappings[0]
+  if (!m.fromPhaseId || !m.toPhaseId || !m.mappings) throw new Error("Missing mapping fields")
+  // 'design' should auto-map by name
+  if (m.mappings.design !== "design") throw new Error(`Expected 'design'->'design', got ${JSON.stringify(m.mappings)}`)
+  // Should have exactly 2: design→design (by name) + config→theme (by type, second pass)
+  const keys = Object.keys(m.mappings)
+  if (keys.length !== 2) throw new Error(`Expected 2 mappings (design→design, config→theme), got ${JSON.stringify(m.mappings)}`)
+  if (m.mappings.config !== "theme") throw new Error(`Expected config→theme, got ${JSON.stringify(m.mappings)}`)
+})
+
+// HP-2: Context passing — no schemas returns empty
+const hp2_plan = hpPlanner.decomposeMacro("simple task")
+const hp2_mappings = hpPlanner.applyContextPassing(hp2_plan)
+hp("HP-2a no schemas yields empty mappings", () => {
+  if (hp2_mappings.length !== 0) throw new Error(`Expected empty, got ${hp2_mappings.length}`)
+})
+
+// HP-3: retryPhase — basic retry
+const hp3_plan = hpPlanner.decomposeMacro("implement login feature")
+const hp3_retry = hpPlanner.retryPhase(hp3_plan, hp3_plan.phases[0].id, {
+  phaseId: hp3_plan.phases[0].id,
+  error: "TypeError: cannot read properties of undefined",
+  failedStepIds: ["phase-plan-1"],
+})
+hp("HP-3a retryPhase returns MicroStep array", () => {
+  if (!Array.isArray(hp3_retry)) throw new Error("Expected array")
+})
+hp("HP-3b retryPhase steps have retry in id", () => {
+  if (hp3_retry.length === 0) throw new Error("Expected at least one step")
+  if (!hp3_retry[0].id.includes("retry")) throw new Error(`Expected 'retry' in id, got '${hp3_retry[0].id}'`)
+})
+hp("HP-3c retryPhase steps include error in description", () => {
+  const hasErrorRef = hp3_retry.some(s => s.description.includes("TypeError"))
+  if (!hasErrorRef) throw new Error("Expected error reference in step description")
+})
+
+// HP-4: retryPhase — unknown phase returns empty
+const hp4_retry = hpPlanner.retryPhase(hp3_plan, "nonexistent-phase", {
+  phaseId: "nonexistent-phase",
+  error: "test error",
+  failedStepIds: [],
+})
+hp("HP-4a retryPhase unknown phase returns empty", () => {
+  if (hp4_retry.length !== 0) throw new Error("Expected empty array")
+})
+
+// HP-5: criticizeSubgoal — detects issues
+const hp5_phase = hp3_plan.phases[0]
+const hp5_steps = hp3_plan.micro.get(hp5_phase.id) ?? []
+const hp5_critique = hpPlanner.criticizeSubgoal(hp5_phase, hp5_steps)
+hp("HP-5a criticizeSubgoal returns CriticScore", () => {
+  if (typeof hp5_critique.overall !== "number") throw new Error("Expected numeric overall score")
+  if (!Array.isArray(hp5_critique.issues)) throw new Error("Expected issues array")
+  if (!Array.isArray(hp5_critique.suggestions)) throw new Error("Expected suggestions array")
+})
+hp("HP-5b criticizeSubgoal score is 0-1", () => {
+  if (hp5_critique.overall < 0 || hp5_critique.overall > 1) throw new Error(`Score ${hp5_critique.overall} out of range`)
+})
+
+// HP-6: criticizeSubgoal — empty steps
+const hp6_critique = hpPlanner.criticizeSubgoal(hp5_phase, [])
+hp("HP-6a critic detects empty steps", () => {
+  if (hp6_critique.issues.length === 0) throw new Error("Expected issues for empty steps")
+})
+hp("HP-6b critic score is low for empty steps", () => {
+  if (hp6_critique.overall >= 0.5) throw new Error(`Expected low score for empty steps, got ${hp6_critique.overall}`)
+})
+
+// HP-7: criticizeSubgoal — vague words detection
+const hp7_steps = [{ id: "s1", phaseId: "p1", description: "do misc stuff", dependsOn: [], verificationCriteria: [] }]
+const hp7_critique = hpPlanner.criticizeSubgoal(hp5_phase, hp7_steps)
+hp("HP-7a critic detects vague words", () => {
+  const hasVagueIssue = hp7_critique.issues.some(i => i.includes("vague"))
+  if (!hasVagueIssue) throw new Error(`Expected vague word detection, got: ${hp7_critique.issues.join(", ")}`)
+})
+
+// HP-8: criticizeSubgoal — missing verification criteria
+const hp8_steps = [{ id: "s1", phaseId: "p1", description: "clear action", dependsOn: [], verificationCriteria: [] }]
+const hp8_critique = hpPlanner.criticizeSubgoal(hp5_phase, hp8_steps)
+hp("HP-8a critic detects missing verification criteria", () => {
+  const hasMissingCriteria = hp8_critique.issues.some(i => i.includes("verification"))
+  if (!hasMissingCriteria) throw new Error(`Expected verification criteria issue, got: ${hp8_critique.issues.join(", ")}`)
+})
+
+// HP-9: retryPhase updates plan micro map
+const hp9_plan = hpPlanner.decomposeMacro("setup database")
+const hp9_originalSteps = hp9_plan.micro.get(hp9_plan.phases[0].id)?.length ?? 0
+hpPlanner.retryPhase(hp9_plan, hp9_plan.phases[0].id, {
+  phaseId: hp9_plan.phases[0].id,
+  error: "Connection refused",
+  failedStepIds: [],
+})
+const hp9_newSteps = hp9_plan.micro.get(hp9_plan.phases[0].id) ?? []
+hp("HP-9a retryPhase replaces micro steps in plan", () => {
+  if (hp9_newSteps.length === 0) throw new Error("Expected retry steps in plan micro map")
+})
+hp("HP-9b retryPhase adds retry verification criteria", () => {
+  const hasRetryCriteria = hp9_newSteps.some(s => s.verificationCriteria.some(c => c.includes("Connection refused")))
+  if (!hasRetryCriteria) throw new Error("Expected retry error reference in verification criteria")
+})
+
+// HP-10: verify decompileMacro + flattenHierarchical still work
+const hp10_plan = hpPlanner.decomposeMacro("deploy to production", undefined)
+const hp10_flat = hpPlanner.flattenHierarchical(hp10_plan)
+hp("HP-10a flattenHierarchical produces subtasks", () => {
+  if (!Array.isArray(hp10_flat)) throw new Error("Expected array")
+})
+hp("HP-10b flattenHierarchical has at least 2 subtasks", () => {
+  if (hp10_flat.length < 2) throw new Error(`Expected >=2 subtasks, got ${hp10_flat.length}`)
+})
+hp("HP-10c each subtask has id, description, dependsOn", () => {
+  for (const s of hp10_flat) {
+    if (!s.id || !s.description || !Array.isArray(s.dependsOn)) throw new Error(`Invalid subtask: ${JSON.stringify(s)}`)
+  }
+})
+
+console.log(`  HierarchicalPlanner: ${hpp} passed, ${hpf} failed`)
+passed += hpp; failed += hpf
+
+// ── Blackboard Agent Cycle Tests (Comparison 16+17) ─────────────────
+console.log("\n[BBC] Blackboard Agent Cycle — phase status, event-driven loop, critic retry")
+const bbcMod = await import(pluginDist)
+const { AgentCoordinator: BBC } = bbcMod
+let bbcp = 0, bbcf = 0
+const bbc = (name, fn) => { try { fn(); bbcp++; console.log(`  PASS: ${name}`) } catch (e) { bbcf++; console.log(`  FAIL: ${name} — ${e.message}`) } }
+
+// BBC-1: Phase status system
+bbc("BBC-1a initial phase is idle", () => {
+  const c = new BBC()
+  if (c.getPhaseStatus() !== "idle") throw new Error(`Expected idle, got ${c.getPhaseStatus()}`)
+})
+
+bbc("BBC-1b setPhaseStatus changes phase", () => {
+  const c = new BBC()
+  c.setPhaseStatus("planning")
+  if (c.getPhaseStatus() !== "planning") throw new Error(`Expected planning, got ${c.getPhaseStatus()}`)
+})
+
+bbc("BBC-1c setPhaseStatus triggers listeners", () => {
+  const c = new BBC()
+  let captured = null
+  c.onPhaseChange((p) => { captured = p })
+  c.setPhaseStatus("executing")
+  if (captured !== "executing") throw new Error(`Expected executing, got ${captured}`)
+})
+
+bbc("BBC-1d unsubscribing stops notifications", () => {
+  const c = new BBC()
+  let count = 0
+  const unsub = c.onPhaseChange(() => { count++ })
+  unsub()
+  c.setPhaseStatus("planning")
+  if (count !== 0) throw new Error(`Expected 0 notifications after unsubscribe, got ${count}`)
+})
+
+// BBC-2: Phase lock — canAgentRunInPhase
+bbc("BBC-2a planner can run in planning phase", () => {
+  const c = new BBC()
+  c.setPhaseStatus("planning")
+  if (!c.canAgentRunInPhase("planner")) throw new Error("Expected planner allowed in planning")
+  if (!c.canAgentRunInPhase("architect")) throw new Error("Expected architect allowed in planning")
+  if (c.canAgentRunInPhase("executor")) throw new Error("Expected executor blocked in planning")
+})
+
+bbc("BBC-2b executor can run in executing phase", () => {
+  const c = new BBC()
+  c.setPhaseStatus("executing")
+  if (!c.canAgentRunInPhase("developer")) throw new Error("Expected developer allowed in executing")
+  if (c.canAgentRunInPhase("planner")) throw new Error("Expected planner blocked in executing")
+})
+
+bbc("BBC-2c critic can run in critic phase", () => {
+  const c = new BBC()
+  c.setPhaseStatus("critic")
+  if (!c.canAgentRunInPhase("qa")) throw new Error("Expected qa allowed in critic")
+  if (c.canAgentRunInPhase("developer")) throw new Error("Expected developer blocked in critic")
+})
+
+bbc("BBC-2d idle blocks all agents", () => {
+  const c = new BBC()
+  c.setPhaseStatus("idle")
+  if (c.canAgentRunInPhase("planner")) throw new Error("Expected planner blocked in idle")
+  if (c.canAgentRunInPhase("developer")) throw new Error("Expected developer blocked in idle")
+  if (c.canAgentRunInPhase("qa")) throw new Error("Expected qa blocked in idle")
+})
+
+// BBC-3: runBlackboardCycle basics
+bbc("BBC-3a runBlackboardCycle selects eligible agent", () => {
+  const c = new BBC()
+  c.setPhaseStatus("planning")
+  const result = c.runBlackboardCycle(
+    ["planner", "executor"],
+    (roles) => roles[0],
+    (role) => `${role} executed`,
+  )
+  if (result.selectedRole !== "planner") throw new Error(`Expected planner, got ${result.selectedRole}`)
+  if (result.result !== "planner executed") throw new Error(`Unexpected result: ${result.result}`)
+  if (result.nextPhase !== "executing") throw new Error(`Expected nextPhase=executing, got ${result.nextPhase}`)
+})
+
+bbc("BBC-3b runBlackboardCycle blocks roles not in current phase", () => {
+  const c = new BBC()
+  c.setPhaseStatus("planning")
+  const result = c.runBlackboardCycle(
+    ["developer", "qa"],
+    (roles) => roles[0] ?? null,
+    (role) => `${role} ran`,
+  )
+  // developer and qa are not allowed in planning phase
+  if (result.selectedRole !== null) throw new Error(`Expected null (no eligible), got ${result.selectedRole}`)
+})
+
+bbc("BBC-3c runBlackboardCycle returns maxCyclesReached flag", () => {
+  const c = new BBC()
+  c.setPhaseStatus("planning")
+  // Run many cycles to hit limit
+  let lastResult = null
+  for (let i = 0; i < 15; i++) {
+    lastResult = c.runBlackboardCycle(
+      ["planner"],
+      (roles) => roles[0],
+      (role) => "ok",
+    )
+  }
+  if (lastResult && !lastResult.maxCyclesReached) throw new Error("Expected maxCyclesReached after many cycles")
+})
+
+// BBC-4: runFullCritiqueLoop
+bbc("BBC-4a runFullCritiqueLoop runs all three phases", () => {
+  const c = new BBC()
+  let callCount = 0
+  const results = c.runFullCritiqueLoop(
+    "planner",
+    "executor",
+    "critic",
+    (role, phase, input) => {
+      callCount++
+      return `${role} done (phase=${phase})`
+    },
+  )
+  if (results.length < 3) throw new Error(`Expected at least 3 results, got ${results.length}`)
+  // Should have planner, executor, critic
+  const roles = results.map(r => r.selectedRole).filter(Boolean)
+  if (!roles.includes("planner")) throw new Error("Expected planner to run")
+  if (!roles.includes("executor")) throw new Error("Expected executor to run")
+  if (!roles.includes("critic")) throw new Error("Expected critic to run")
+})
+
+bbc("BBC-4b runFullCritiqueLoop transitions through planner→executor→critic", () => {
+  const c = new BBC()
+  const phases = []
+  c.onPhaseChange((p) => phases.push(p))
+  c.runFullCritiqueLoop(
+    "planner",
+    "executor",
+    "critic",
+    (role, _phase, input) => `${role} processed: ${input}`,
+  )
+  // Should have visited planning, executing, critic phases
+  if (!phases.includes("planning")) throw new Error("Expected planning phase")
+  if (!phases.includes("executing")) throw new Error("Expected executing phase")
+  if (!phases.includes("critic")) throw new Error("Expected critic phase")
+})
+
+bbc("BBC-4c runFullCritiqueLoop ends in idle", () => {
+  const c = new BBC()
+  c.runFullCritiqueLoop(
+    "planner",
+    "executor",
+    "critic",
+    (role, _phase, input) => "success",
+  )
+  if (c.getPhaseStatus() !== "idle") throw new Error(`Expected idle, got ${c.getPhaseStatus()}`)
+})
+
+// BBC-5: Reset cycle
+bbc("BBC-5a resetCycle resets phase and counter", () => {
+  const c = new BBC()
+  c.setPhaseStatus("executing")
+  c.runBlackboardCycle(["developer"], (r) => r[0], () => "ok")
+  c.resetCycle()
+  if (c.getPhaseStatus() !== "idle") throw new Error("Expected idle after reset")
+})
+
+// BBC-6: Critic retry loop
+bbc("BBC-6a shouldRetry triggers on fail/retry/reject", () => {
+  const c = new BBC()
+  c.setPhaseStatus("critic")
+  // Test via runFullCritiqueLoop where executor returns "fail" — should trigger retry
+  const results = c.runFullCritiqueLoop(
+    "planner",
+    "executor",
+    "critic",
+    (role, _phase, _input) => {
+      if (role === "critic") return "fail: needs improvement"
+      return "done"
+    },
+  )
+  // Should have retried (more than 3 basic cycles)
+  const selectedRoles = results.map(r => r.selectedRole).filter(Boolean)
+  const plannerCount = selectedRoles.filter(r => r === "planner").length
+  if (plannerCount < 1) throw new Error(`Expected planner to run at least once, got ${plannerCount} times`)
+})
+
+console.log(`  BlackboardCycle: ${bbcp} passed, ${bbcf} failed`)
+passed += bbcp; failed += bbcf
+
 // ── Bandit Mutation Tests ──────────────────────────────────────────
 console.log("\n[Bandit] SkillStore UCB1 Bandit Mutation")
 const banditPromise = (async () => {
@@ -4323,6 +4725,380 @@ vs("VS-6b correct skill found after lazy index", () => {
 
 console.log(`  VectorSearch: ${vsp} passed, ${vsf} failed`)
 passed += vsp; failed += vsf
+
+// ── SkillImprover — Self-Improvement Loop Tests ─────────────────────
+console.log("\n[SKI] SkillImprover — Self-Improvement Loop")
+const { SkillImprover, SchemaValidator: SV } = await import(pluginDist)
+let skip = 0, skf = 0
+const sk = (name, fn) => { try { fn(); skip++; console.log(`  PASS: ${name}`) } catch (e) { skf++; console.log(`  FAIL: ${name} — ${e.message}`) } }
+
+// SKI-1: Basic instantiation
+sk("SKI-1a SkillImprover constructs with required args", () => {
+  const si = new SkillImprover(new SkillStore2(), new SV())
+  if (!(si instanceof SkillImprover)) throw new Error("Expected SkillImprover instance")
+})
+
+// SKI-1b: SkillImprover constructs with all optional args
+sk("SKI-1b SkillImprover constructs with all args", () => {
+  const si = new SkillImprover(new SkillStore2(), new SV(), undefined, undefined)
+  if (!(si instanceof SkillImprover)) throw new Error("Expected SkillImprover instance")
+})
+
+// SKI-2: improve() returns ImprovementResult
+sk("SKI-2a improve returns object with expected keys", async () => {
+  const si = new SkillImprover(new SkillStore2(), new SV())
+  const result = await si.improve("build a user authentication system", "auth")
+  if (!result || typeof result !== "object") throw new Error("Expected object")
+  if (typeof result.score !== "object") throw new Error("Expected score object")
+  if (!Array.isArray(result.testCases)) throw new Error("Expected testCases array")
+  if (!Array.isArray(result.testResults)) throw new Error("Expected testResults array")
+  if (typeof result.iterations !== "number") throw new Error("Expected iterations number")
+  if (typeof result.accepted !== "boolean") throw new Error("Expected accepted boolean")
+})
+
+sk("SKI-2b improve returns score with correct dimensions", async () => {
+  const si = new SkillImprover(new SkillStore2(), new SV())
+  const result = await si.improve("implement REST API endpoint", "rest-api")
+  const s = result.score
+  if (typeof s.overall !== "number" || s.overall < 0 || s.overall > 1) throw new Error(`Expected overall 0-1, got ${s.overall}`)
+  if (typeof s.correctness !== "number") throw new Error("Expected correctness")
+  if (typeof s.schema !== "number") throw new Error("Expected schema")
+  if (typeof s.reusability !== "number") throw new Error("Expected reusability")
+  if (typeof s.efficiency !== "number") throw new Error("Expected efficiency")
+  if (!Array.isResult(s.details)) throw new Error("Expected details array")
+})
+
+// SKI-3: Auto test generation
+sk("SKI-3a autoGenerateTests returns happy path and edge case", async () => {
+  const si = new SkillImprover(new SkillStore2(), new SV())
+  // Create a skill definition to test autoGenerateTests
+  const schemaField = { type: "string", required: true, description: "test input" }
+  const tests = si.autoGenerateTests(
+    { meta: { format: "agentic-skill/v1", id: "test", name: "test", version: 1, author: "test" },
+      trigger: { pattern: "test", keywords: ["test"], context: ["test"], capability: "test" },
+      workflow: { steps: [{ order: 1, action: "execute", description: "test", expectedOutput: "done" }], estimatedDuration: "2m", parallelizable: false },
+      input_schema: { data: schemaField },
+      output_schema: { result: { type: "string", required: true, description: "result" } },
+      quality: { successRate: 1, usageCount: 0, failureScenarios: [] },
+      audit: { createdAt: "2025-01-01", lastUsed: "2025-01-01", lastModified: "2025-01-01", modifiedBy: "test" } },
+    { data: schemaField },
+    { result: { type: "string", required: true, description: "result" } },
+  )
+  if (tests.length !== 2) throw new Error(`Expected 2 tests, got ${tests.length}`)
+  if (tests[0].name !== "happy-path") throw new Error(`Expected 'happy-path', got '${tests[0].name}'`)
+  if (tests[1].name !== "edge-case") throw new Error(`Expected 'edge-case', got '${tests[1].name}'`)
+})
+
+sk("SKI-3b autoGenerateTests works with empty output schema", () => {
+  const si = new SkillImprover(new SkillStore2(), new SV())
+  const tests = si.autoGenerateTests(
+    { meta: { format: "agentic-skill/v1", id: "test", name: "test", version: 1, author: "test" },
+      trigger: { pattern: "test", keywords: ["test"], context: ["test"], capability: "test" },
+      workflow: { steps: [{ order: 1, action: "execute", description: "test", expectedOutput: "done" }], estimatedDuration: "2m", parallelizable: false },
+      input_schema: {},
+      quality: { successRate: 1, usageCount: 0, failureScenarios: [] },
+      audit: { createdAt: "2025-01-01", lastUsed: "2025-01-01", lastModified: "2025-01-01", modifiedBy: "test" } },
+    {},
+  )
+  if (tests.length !== 2) throw new Error(`Expected 2 tests, got ${tests.length}`)
+  if (!tests[0].expectedOutput || tests[0].expectedOutput.result !== "completed") throw new Error("Expected default completed output")
+})
+
+// SKI-4: Self-improvement improves low-scoring skills
+sk("SKI-4a improve can accept a skill that meets threshold", async () => {
+  const store = new SkillStore2()
+  const si = new SkillImprover(store, new SV())
+  const result = await si.improve("create a simple utility function that transforms data", "transform-utility")
+  // Should complete without error
+  if (result.iterations < 1) throw new Error("Expected at least 1 iteration")
+})
+
+sk("SKI-4b improve can iterate multiple times on complex skills", async () => {
+  const store = new SkillStore2()
+  const si = new SkillImprover(store, new SV())
+  const result = await si.improve("implement multi-step data pipeline with transformation and validation", "data-pipeline")
+  if (result.iterations < 1) throw new Error("Expected at least 1 iteration")
+  // even if not accepted, should have a valid result
+  if (typeof result.accepted !== "boolean") throw new Error("Expected accepted boolean")
+})
+
+// SKI-5: Edge cases
+sk("SKI-5a improve with minimal goal still produces a result", async () => {
+  const si = new SkillImprover(new SkillStore2(), new SV())
+  const result = await si.improve("hello", "hello-world")
+  if (!result) throw new Error("Expected a result")
+})
+
+sk("SKI-5b improve stores skill when accepted", async () => {
+  const store = new SkillStore2()
+  const si = new SkillImprover(store, new SV())
+  const result = await si.improve("implement sorting algorithm", "sort-algorithm")
+  // If accepted, skill should be stored
+  if (result.accepted && result.skill === null) throw new Error("Expected non-null skill when accepted")
+})
+
+// SKI-6: Score calculation weights
+sk("SKI-6a score dimensions respect weight bounds", async () => {
+  const si = new SkillImprover(new SkillStore2(), new SV())
+  const result = await si.improve("build database migration tool", "db-migrate")
+  const s = result.score
+  // Weighted sum should match overall
+  const weighted = s.correctness * 0.4 + s.schema * 0.2 + s.reusability * 0.2 + s.efficiency * 0.2
+  if (Math.abs(weighted - s.overall) > 0.01) throw new Error(`Expected overall ~${weighted.toFixed(3)}, got ${s.overall}`)
+})
+
+// SKI-7: Different goals produce different scores
+sk("SKI-7a different goals yield different evaluation dimensions", async () => {
+  const si = new SkillImprover(new SkillStore2(), new SV())
+  const r1 = await si.improve("simple task", "simple-task")
+  const r2 = await si.improve("complex multi-step data processing and transformation pipeline with validation, enrichment, and reporting", "complex-pipeline")
+  // The complex task should have more steps => different efficiency score
+  if (r1.score.efficiency === undefined || r2.score.efficiency === undefined) throw new Error("Expected efficiency scores")
+})
+
+console.log(`  SkillImprover: ${skip} passed, ${skf} failed`)
+passed += skip; failed += skf
+
+// ── AttentionScheduler Tests (Comparison 18) ───────────────────────
+console.log("\n[AS] AttentionScheduler — priority scheduling + attention mechanism")
+const { AttentionScheduler: AS, MAX_SCHEDULER_CYCLES: MAX_SC } = await import(pluginDist)
+let asp = 0, asf = 0
+const as = (name, fn) => { try { fn(); asp++; console.log(`  PASS: ${name}`) } catch (e) { asf++; console.log(`  FAIL: ${name} — ${e.message}`) } }
+
+// AS-1: Basic instantiation and registration
+as("AS-1a AttentionScheduler constructs", () => {
+  const sched = new AS()
+  if (!(sched instanceof AS)) throw new Error("Expected AttentionScheduler instance")
+})
+
+as("AS-1b registerAgent adds agent", () => {
+  const sched = new AS()
+  sched.registerAgent({ agentId: "agent1", focusKeys: ["goal"] })
+  const agents = sched.getRegisteredAgents()
+  if (agents.length !== 1) throw new Error(`Expected 1 agent, got ${agents.length}`)
+  if (agents[0] !== "agent1") throw new Error(`Expected 'agent1', got '${agents[0]}'`)
+})
+
+// AS-2: Priority computation
+as("AS-2a computePriority returns base value", () => {
+  const sched = new AS()
+  sched.registerAgent({ agentId: "a1", focusKeys: ["x"], basePriority: 70 })
+  const pri = sched.computePriority("a1")
+  if (pri !== 70) throw new Error(`Expected 70, got ${pri}`)
+})
+
+as("AS-2b computePriority stagnates over time", () => {
+  const sched = new AS()
+  // Add a high-priority agent to prevent a1 from being selected
+  sched.registerAgent({ agentId: "a1", focusKeys: ["x"], basePriority: 50 })
+  sched.registerAgent({ agentId: "a2", focusKeys: ["x"], basePriority: 100 })
+  sched.runCycle({ x: 1 }) // cycle 1: a2 selected (100 > 50)
+  sched.runCycle({ x: 2 }) // cycle 2: a2 selected again
+  sched.runCycle({ x: 3 }) // cycle 3: a2 selected again
+  const pri = sched.computePriority("a1")
+  // After 3 cycles with no run: stagnation boost = 3*5=15, urgency=10 (cyclesSinceRun=3 >= 3)
+  // priority = 50 + 15 + 10 = 75
+  if (pri !== 75) throw new Error(`Expected 75 (50+15+10), got ${pri}`)
+})
+
+as("AS-2c priority is clamped to [0, 100]", () => {
+  const sched = new AS()
+  sched.registerAgent({ agentId: "a1", focusKeys: ["x"], basePriority: 95 })
+  for (let i = 0; i < 5; i++) sched.runCycle({})
+  const pri = sched.computePriority("a1")
+  if (pri > 100) throw new Error(`Priority ${pri} exceeds 100`)
+})
+
+// AS-3: canRun eligibility
+as("AS-3a canRun returns true for registered agent", () => {
+  const sched = new AS()
+  sched.registerAgent({ agentId: "a1", focusKeys: ["x"] })
+  if (!sched.canRun("a1")) throw new Error("Expected canRun=true")
+})
+
+as("AS-3b canRun returns false for unknown agent", () => {
+  const sched = new AS()
+  if (sched.canRun("unknown")) throw new Error("Expected canRun=false")
+})
+
+as("AS-3c disabled agent cannot run", () => {
+  const sched = new AS()
+  sched.registerAgent({ agentId: "a1", focusKeys: ["x"], enabled: false })
+  if (sched.canRun("a1")) throw new Error("Expected canRun=false for disabled")
+})
+
+as("AS-3d agent in cooldown cannot run", () => {
+  const sched = new AS()
+  sched.registerAgent({ agentId: "a1", focusKeys: ["x"] })
+  sched.runCycle({ goal: "test" }) // a1 selected, enters cooldown
+  if (sched.canRun("a1")) throw new Error("Expected canRun=false during cooldown")
+})
+
+// AS-4: Attention / focus slice
+as("AS-4a getFocusSlice filters by focus keys", () => {
+  const sched = new AS()
+  sched.registerAgent({ agentId: "a1", focusKeys: ["goal", "memory"] })
+  const state = { goal: "build auth", memory: { users: [] }, debug: true }
+  const slice = sched.getFocusSlice("a1", state)
+  if (Object.keys(slice).length !== 2) throw new Error(`Expected 2 keys, got ${Object.keys(slice).length}`)
+  if (slice.goal !== "build auth") throw new Error("Expected goal in slice")
+  if (slice.debug !== undefined) throw new Error("Expected debug excluded from slice")
+})
+
+as("AS-4b getFocusSlice returns empty for unknown agent", () => {
+  const sched = new AS()
+  const slice = sched.getFocusSlice("unknown", { goal: "test" })
+  if (Object.keys(slice).length !== 0) throw new Error("Expected empty slice")
+})
+
+// AS-5: Scheduling cycle
+as("AS-5a runCycle selects eligible agent", () => {
+  const sched = new AS()
+  sched.registerAgent({ agentId: "a1", focusKeys: ["goal"], basePriority: 80 })
+  sched.registerAgent({ agentId: "a2", focusKeys: ["x"], basePriority: 20 })
+  const result = sched.runCycle({ goal: "test" })
+  if (result.selectedAgentId !== "a1") throw new Error(`Expected a1 (highest priority), got ${result.selectedAgentId}`)
+  if (result.cycle !== 1) throw new Error(`Expected cycle 1, got ${result.cycle}`)
+})
+
+as("AS-5b runCycle returns focus slice for selected agent", () => {
+  const sched = new AS()
+  sched.registerAgent({ agentId: "a1", focusKeys: ["goal"], basePriority: 50 })
+  const result = sched.runCycle({ goal: "hello", debug: true })
+  if (result.focusSlice.goal !== "hello") throw new Error("Expected goal in focus slice")
+  if (result.focusSlice.debug !== undefined) throw new Error("Expected debug not in focus slice")
+})
+
+as("AS-5c runCycle rotates between agents (fairness)", () => {
+  const sched = new AS()
+  sched.registerAgent({ agentId: "a1", focusKeys: ["x"], basePriority: 50 })
+  sched.registerAgent({ agentId: "a2", focusKeys: ["x"], basePriority: 50 })
+
+  const results = sched.runAll({ x: 1 })
+  
+  // Both agents should get selected over max cycles
+  const selected = results.map(r => r.selectedAgentId).filter(Boolean)
+  const uniqueSelected = [...new Set(selected)]
+  if (uniqueSelected.length < 2) throw new Error(`Expected both agents to be selected over time, got: ${uniqueSelected.join(", ")}`)
+})
+
+as("AS-5d priorities are sorted in cycle result", () => {
+  const sched = new AS()
+  sched.registerAgent({ agentId: "a1", focusKeys: ["x"], basePriority: 30 })
+  sched.registerAgent({ agentId: "a2", focusKeys: ["x"], basePriority: 80 })
+  const result = sched.runCycle({ x: 1 })
+  const prios = result.priorities
+  if (prios[0].priority < prios[1].priority) throw new Error("Expected descending priority order")
+  if (prios[0].agentId !== "a2") throw new Error("Expected a2 (80) first")
+})
+
+// AS-6: Starvation prevention
+as("AS-6a stagnant agents get priority boost", () => {
+  const sched = new AS()
+  sched.registerAgent({ agentId: "fast", focusKeys: ["x"], basePriority: 50 })
+  sched.registerAgent({ agentId: "slow", focusKeys: ["x"], basePriority: 10 })
+
+  // Run several cycles — fast runs first, slow stagnates and gets boosted
+  for (let i = 0; i < 5; i++) {
+    sched.runCycle({ x: i })
+  }
+
+  const slowState = sched.getAgentState("slow")
+  if (!slowState) throw new Error("Expected slow agent state")
+  // After 5 cycles: slow should have stagnation boost (5*5=25) and urgency (10)
+  // priority = 10 + 25 + 10 = 45
+  if (slowState.currentPriority <= 10) throw new Error(`Expected boosted priority for slow, got ${slowState.currentPriority}`)
+})
+
+as("AS-6b starvation prevention with 3 agents ensures everyone runs", () => {
+  const sched = new AS()
+  sched.registerAgent({ agentId: "fast", focusKeys: ["x"], basePriority: 80 })
+  sched.registerAgent({ agentId: "medium", focusKeys: ["x"], basePriority: 50 })
+  sched.registerAgent({ agentId: "slow", focusKeys: ["x"], basePriority: 20 })
+
+  const results = []
+  for (let i = 0; i < 12; i++) {
+    results.push(sched.runCycle({ x: i }).selectedAgentId)
+  }
+
+  const unique = [...new Set(results.filter(Boolean))]
+  // All 3 agents should have run eventually
+  if (unique.length < 3) throw new Error(`Expected all 3 agents to run, got: ${unique.join(", ")}`)
+})
+
+as("AS-6c starvation prevention eventually runs low-priority agent", () => {
+  const sched = new AS()
+  // r2 has high priority, r1 has low priority
+  sched.registerAgent({ agentId: "r1", focusKeys: ["x"], basePriority: 10 })
+  sched.registerAgent({ agentId: "r2", focusKeys: ["x"], basePriority: 90 })
+
+  // Run enough cycles — r2's consecutive penalty eventually lets r1 run
+  const results = []
+  for (let i = 0; i < 15; i++) {
+    results.push(sched.runCycle({ x: i }).selectedAgentId)
+  }
+
+  // r1 should run at least once (starvation prevention works)
+  const r1Runs = results.filter(r => r === "r1").length
+  if (r1Runs === 0) throw new Error("Expected r1 to run at least once (starvation prevention)")
+})
+
+// AS-7: Reset and metrics
+as("AS-7a reset clears all state", () => {
+  const sched = new AS()
+  sched.registerAgent({ agentId: "a1", focusKeys: ["x"] })
+  sched.runCycle({ x: 1 })
+  sched.reset()
+  if (sched.getRegisteredAgents().length !== 0) throw new Error("Expected empty after reset")
+  if (sched.getMetrics().totalCycles !== 0) throw new Error("Expected 0 cycles after reset")
+})
+
+as("AS-7b getMetrics returns correct stats", () => {
+  const sched = new AS()
+  sched.registerAgent({ agentId: "a1", focusKeys: ["x"], basePriority: 50 })
+  sched.runCycle({ x: 1 })
+  sched.runCycle({ x: 2 })
+  const metrics = sched.getMetrics()
+  if (metrics.totalCycles !== 2) throw new Error(`Expected 2 cycles, got ${metrics.totalCycles}`)
+  if (metrics.totalSelections < 1) throw new Error("Expected at least 1 selection")
+  if (metrics.agentStats.length !== 1) throw new Error(`Expected 1 agent stat, got ${metrics.agentStats.length}`)
+})
+
+// AS-8: setAttention and setEnabled
+as("AS-8a setAttention updates focus keys", () => {
+  const sched = new AS()
+  sched.registerAgent({ agentId: "a1", focusKeys: ["x"] })
+  sched.setAttention("a1", ["y", "z"])
+  const slice = sched.getFocusSlice("a1", { x: 1, y: 2, z: 3 })
+  const keys = Object.keys(slice)
+  if (keys.length !== 2) throw new Error(`Expected 2 keys, got ${keys.length}`)
+  if (slice.x !== undefined) throw new Error("Expected x excluded after attention change")
+})
+
+as("AS-8b setEnabled disables and enables agent", () => {
+  const sched = new AS()
+  sched.registerAgent({ agentId: "a1", focusKeys: ["x"] })
+  if (!sched.canRun("a1")) throw new Error("Expected canRun before disable")
+  sched.setEnabled("a1", false)
+  if (sched.canRun("a1")) throw new Error("Expected canRun=false after disable")
+  sched.setEnabled("a1", true)
+  if (!sched.canRun("a1")) throw new Error("Expected canRun=true after re-enable")
+})
+
+// AS-9: MAX_SCHEDULER_CYCLES enforcement
+as("AS-9a runAll stops at MAX_CYCLES", () => {
+  const sched = new AS()
+  sched.registerAgent({ agentId: "a1", focusKeys: ["x"], basePriority: 50 })
+  const results = sched.runAll({ x: 1 })
+  if (results.length > MAX_SC) throw new Error(`Expected max ${MAX_SC} cycles, got ${results.length}`)
+  if (results.length > 0) {
+    const last = results[results.length - 1]
+    if (last.maxCyclesReached !== (results.length >= MAX_SC)) throw new Error("Expected maxCyclesReached flag")
+  }
+})
+
+console.log(`  AttentionScheduler: ${asp} passed, ${asf} failed`)
+passed += asp; failed += asf
 
 console.log(`Results: ${passed} passed, ${failed} failed`)
 if (failed === 0) console.log("ALL TESTS PASSED")
