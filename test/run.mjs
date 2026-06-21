@@ -5100,6 +5100,577 @@ as("AS-9a runAll stops at MAX_CYCLES", () => {
 console.log(`  AttentionScheduler: ${asp} passed, ${asf} failed`)
 passed += asp; failed += asf
 
+// ── World Model + Belief State Tests ─────────────────────────────────
+console.log("\n[WM] WorldModel — entities, relations, belief state")
+const WorldModel = mod.WorldModel
+let wmp = 0, wmf = 0
+const wm = (name, fn) => { try { fn(); wmp++; console.log(`  PASS: ${name}`) } catch (e) { wmf++; console.log(`  FAIL: ${name} — ${e.message}`) } }
+
+wm("WM-1a WorldModel constructs with defaults", () => {
+  const w = new WorldModel()
+  const stats = w.getStats()
+  if (stats.entities !== 0) throw new Error(`Expected 0 entities, got ${stats.entities}`)
+  if (stats.beliefs !== 0) throw new Error(`Expected 0 beliefs, got ${stats.beliefs}`)
+})
+
+wm("WM-1b WorldModel constructs with custom config", () => {
+  const w = new WorldModel({ beliefDecayFactor: 0.95, reliabilityThreshold: 0.8, maxEntities: 10 })
+  if (typeof w.addEntity !== "function") throw new Error("addEntity missing")
+})
+
+wm("WM-2a addEntity creates entity", () => {
+  const w = new WorldModel()
+  const e = w.addEntity("file", "src/utils.ts", { lines: 100 })
+  if (!e.id.startsWith("ent_")) throw new Error(`Unexpected id: ${e.id}`)
+  if (e.type !== "file") throw new Error(`Expected type file, got ${e.type}`)
+  if (e.name !== "src/utils.ts") throw new Error(`Unexpected name: ${e.name}`)
+  if (e.properties.lines !== 100) throw new Error(`Expected lines=100, got ${e.properties.lines}`)
+})
+
+wm("WM-2b addEntity deduplicates by type+name", () => {
+  const w = new WorldModel()
+  const e1 = w.addEntity("file", "src/utils.ts", { lines: 100 })
+  const e2 = w.addEntity("file", "src/utils.ts", { lines: 200 })
+  if (e1.id !== e2.id) throw new Error("Expected same entity id for duplicate type+name")
+})
+
+wm("WM-2c getEntity returns correct entity", () => {
+  const w = new WorldModel()
+  const e = w.addEntity("service", "auth")
+  const found = w.getEntity(e.id)
+  if (!found) throw new Error("Entity not found")
+  if (found.name !== "auth") throw new Error(`Expected auth, got ${found.name}`)
+})
+
+wm("WM-2d findEntities filters by type", () => {
+  const w = new WorldModel()
+  w.addEntity("file", "a.ts")
+  w.addEntity("file", "b.ts")
+  w.addEntity("service", "auth")
+  const files = w.findEntities("file")
+  if (files.length !== 2) throw new Error(`Expected 2 files, got ${files.length}`)
+})
+
+wm("WM-2e removeEntity removes entity and its relations", () => {
+  const w = new WorldModel()
+  const e = w.addEntity("file", "x.ts")
+  w.addRelation(e.id, "other-id", "imports")
+  const removed = w.removeEntity(e.id)
+  if (!removed) throw new Error("Entity not removed")
+  if (w.getEntityRelations(e.id).length !== 0) throw new Error("Relations not cleaned up")
+})
+
+wm("WM-3a addRelation creates relation", () => {
+  const w = new WorldModel()
+  const r = w.addRelation("e1", "e2", "imports", { path: "./utils" })
+  if (!r.id.startsWith("rel_")) throw new Error(`Unexpected id: ${r.id}`)
+  if (r.source !== "e1") throw new Error(`Expected source e1, got ${r.source}`)
+  if (r.target !== "e2") throw new Error(`Expected target e2, got ${r.target}`)
+  if (r.properties.path !== "./utils") throw new Error(`Unexpected path: ${r.properties.path}`)
+})
+
+wm("WM-3b findRelations filters by type", () => {
+  const w = new WorldModel()
+  w.addRelation("a", "b", "imports")
+  w.addRelation("b", "c", "imports")
+  w.addRelation("a", "c", "extends")
+  const imports = w.findRelations("imports")
+  if (imports.length !== 2) throw new Error(`Expected 2 imports, got ${imports.length}`)
+})
+
+wm("WM-4a observe creates new belief", () => {
+  const w = new WorldModel()
+  const result = w.observe("api_status", "API is healthy", 0.9, "health_check")
+  if (result.changed !== true) throw new Error("Expected changed=true for new belief")
+  if (result.previousConfidence !== 0) throw new Error(`Expected 0, got ${result.previousConfidence}`)
+  if (result.newConfidence !== 0.9) throw new Error(`Expected 0.9, got ${result.newConfidence}`)
+})
+
+wm("WM-4b observe updates existing belief confidence", () => {
+  const w = new WorldModel({ autoDecay: false })
+  w.observe("api_status", "API is healthy", 0.9, "health_check")
+  const result = w.observe("api_status", "API is healthy", 0.95, "health_check")
+  if (result.changed !== true) throw new Error("Expected changed=true for update")
+  // confidence = 0.9*0.7 + 0.95*0.3 = 0.915 (no decay interfering)
+  const expected = 0.9 * 0.7 + 0.95 * 0.3
+  if (Math.abs(result.newConfidence - expected) > 0.01) throw new Error(`Expected ~${expected}, got ${result.newConfidence}`)
+})
+
+wm("WM-4c observe with contradictory evidence reduces confidence", () => {
+  const w = new WorldModel({ conflictPenalty: 0.5 })
+  w.observe("api_status", "API is healthy", 0.9, "check_1")
+  const result = w.observe("api_status", "API is down", 0.2, "check_2")
+  // confidence should be halved due to conflict
+  const expected = 0.9 * 0.7 * 0.5  // after first update (weighted) then conflict
+  // Actually: first observe sets confidence=0.9
+  // Second observe: evidence.supports=false (fact differs), so confidence = existing*0.7 * 0.5
+  // Wait, the formula is: if !supports, newConfidence = existing.confidence * conflictPenalty
+  // But before that, existing.confidence was already updated by the weighted average? No, in the code:
+  // existing.confidence after first observe is 0.9
+  // In second observe, evidence.supports = (fact === existing.fact) => false (API is healthy vs API is down)
+  // So newConfidence = existing.confidence * conflictPenalty = 0.9 * 0.5 = 0.45
+  if (Math.abs(result.newConfidence - 0.45) > 0.01) throw new Error(`Expected 0.45, got ${result.newConfidence}`)
+})
+
+wm("WM-4d getBelief returns correct belief", () => {
+  const w = new WorldModel()
+  w.observe("db_ready", "Database connected", 0.8, "startup", "system_status")
+  const b = w.getBelief("db_ready")
+  if (!b) throw new Error("Belief not found")
+  if (b.fact !== "Database connected") throw new Error(`Wrong fact: ${b.fact}`)
+  if (b.category !== "system_status") throw new Error(`Wrong category: ${b.category}`)
+})
+
+wm("WM-4e isReliable returns true for high confidence", () => {
+  const w = new WorldModel({ reliabilityThreshold: 0.7 })
+  w.observe("key", "fact", 0.9, "test")
+  if (!w.isReliable("key")) throw new Error("Expected reliable for confidence 0.9")
+})
+
+wm("WM-4f isReliable returns false for low confidence", () => {
+  const w = new WorldModel({ reliabilityThreshold: 0.7 })
+  w.observe("key", "fact", 0.3, "test")
+  if (w.isReliable("key")) throw new Error("Expected unreliable for confidence 0.3")
+})
+
+wm("WM-4g getBeliefsByCategory returns correct beliefs", () => {
+  const w = new WorldModel()
+  w.observe("k1", "f1", 0.8, "src1", "system")
+  w.observe("k2", "f2", 0.9, "src2", "system")
+  w.observe("k3", "f3", 0.7, "src3", "user")
+  const system = w.getBeliefsByCategory("system")
+  if (system.length !== 2) throw new Error(`Expected 2 system beliefs, got ${system.length}`)
+})
+
+wm("WM-4h getUncertainBeliefs returns low confidence beliefs", () => {
+  const w = new WorldModel({ reliabilityThreshold: 0.7 })
+  w.observe("k1", "f1", 0.9, "src")
+  w.observe("k2", "f2", 0.3, "src")
+  w.observe("k3", "f3", 0.5, "src")
+  const uncertain = w.getUncertainBeliefs()
+  if (uncertain.length !== 2) throw new Error(`Expected 2 uncertain, got ${uncertain.length}`)
+})
+
+wm("WM-5a belief decay reduces confidence", () => {
+  const w = new WorldModel({ beliefDecayFactor: 0.5, autoDecay: false })
+  w.observe("key", "fact", 1.0, "test")
+  w.applyDecay()
+  const b = w.getBelief("key")
+  if (!b || Math.abs(b.confidence - 0.5) > 0.01) throw new Error(`Expected 0.5, got ${b?.confidence}`)
+})
+
+wm("WM-5b autoDecay applies on observe", () => {
+  const w = new WorldModel({ beliefDecayFactor: 0.5, autoDecay: true })
+  w.observe("k1", "f1", 1.0, "src")
+  w.observe("k2", "f2", 1.0, "src")  // this triggers auto-decay
+  const b1 = w.getBelief("k1")
+  if (!b1 || Math.abs(b1.confidence - 0.5) > 0.01) throw new Error(`Expected 0.5, got ${b1.confidence}`)
+})
+
+wm("WM-6a snapshot captures state", () => {
+  const w = new WorldModel()
+  w.addEntity("file", "main.ts")
+  w.observe("key", "fact", 0.8, "src")
+  const snap = w.snapshot()
+  if (snap.entities.length !== 1) throw new Error(`Expected 1 entity, got ${snap.entities.length}`)
+  if (snap.beliefs.length !== 1) throw new Error(`Expected 1 belief, got ${snap.beliefs.length}`)
+})
+
+wm("WM-6b restore restores state", () => {
+  const w = new WorldModel()
+  w.addEntity("file", "main.ts")
+  w.observe("key", "fact", 0.8, "src")
+  const snap = w.snapshot()
+  const w2 = new WorldModel()
+  w2.restore(snap)
+  if (w2.getAllEntities().length !== 1) throw new Error("Entities not restored")
+  if (w2.getBelief("key")?.fact !== "fact") throw new Error("Belief not restored")
+})
+
+wm("WM-7a getStats returns correct counts", () => {
+  const w = new WorldModel()
+  w.addEntity("file", "a.ts")
+  w.addEntity("file", "b.ts")
+  w.observe("k1", "f1", 0.8, "src")
+  const stats = w.getStats()
+  if (stats.entities !== 2) throw new Error(`Expected 2 entities, got ${stats.entities}`)
+  if (stats.beliefs !== 1) throw new Error(`Expected 1 belief, got ${stats.beliefs}`)
+})
+
+wm("WM-8a clear removes all state", () => {
+  const w = new WorldModel()
+  w.addEntity("file", "a.ts")
+  w.observe("k1", "f1", 0.8, "src")
+  w.clear()
+  const stats = w.getStats()
+  if (stats.entities !== 0) throw new Error("Entities not cleared")
+  if (stats.beliefs !== 0) throw new Error("Beliefs not cleared")
+})
+
+wm("WM-9a removeBelief removes belief", () => {
+  const w = new WorldModel()
+  w.observe("key", "fact", 0.8, "src")
+  if (!w.removeBelief("key")) throw new Error("removeBelief returned false")
+  if (w.getBelief("key")) throw new Error("Belief still exists after remove")
+})
+
+wm("WM-9b removeBelief returns false for non-existent", () => {
+  const w = new WorldModel()
+  if (w.removeBelief("nonexistent")) throw new Error("Expected false for non-existent belief")
+})
+
+console.log(`  WorldModel: ${wmp} passed, ${wmf} failed`)
+passed += wmp; failed += wmf
+
+// ── Simulation Engine Tests (Comparison 20) ───────────────────────────
+console.log("\n[SE] SimulationEngine — pre-execution simulation + imagination")
+const { SimulationEngine: SimEngine, ...seMod } = await import(pluginDist)
+let sep = 0, sef = 0
+const se = (name, fn) => { try { fn(); sep++; console.log(`  PASS: ${name}`) } catch (e) { sef++; console.log(`  FAIL: ${name} — ${e.message}`) } }
+
+se("SE-1a SimulationEngine constructs with defaults", () => {
+  const sim = new SimEngine()
+  const stats = sim.getStats()
+  if (stats.simulationsRun !== 0) throw new Error(`Expected 0 simulations, got ${stats.simulationsRun}`)
+})
+
+se("SE-1b SimulationEngine constructs with custom config", () => {
+  const sim = new SimEngine({ maxTokenWarning: 50000, minRecommendThreshold: 0.7 })
+  if (typeof sim.simulate !== "function") throw new Error("simulate method missing")
+})
+
+se("SE-2a simulate returns result with correct shape", () => {
+  const sim = new SimEngine()
+  const result = sim.simulate({
+    planId: "plan-1",
+    goal: "Add login feature",
+    steps: [
+      { stepId: "s1", description: "Create login form", complexity: 3, predictedSuccess: 0.9, estimatedTokens: 2000, dependsOn: [] },
+      { stepId: "s2", description: "Add validation", complexity: 4, predictedSuccess: 0.85, estimatedTokens: 3000, dependsOn: ["s1"] },
+    ],
+  })
+  if (result.planId !== "plan-1") throw new Error(`Wrong planId: ${result.planId}`)
+  if (typeof result.score !== "number") throw new Error("score should be number")
+  if (result.score < 0 || result.score > 1) throw new Error(`Score out of range: ${result.score}`)
+  if (result.stepResults.length !== 2) throw new Error(`Expected 2 step results, got ${result.stepResults.length}`)
+})
+
+se("SE-2b simulate computes score correctly", () => {
+  const sim = new SimEngine({
+    completenessWeight: 0.4,
+    successWeight: 0.4,
+    efficiencyWeight: 0.2,
+    maxTokenWarning: 100000,
+  })
+  const result = sim.simulate({
+    planId: "p1",
+    goal: "test",
+    steps: [
+      { stepId: "s1", description: "Step 1", complexity: 1, predictedSuccess: 1.0, estimatedTokens: 1000, dependsOn: [] },
+    ],
+  })
+  // completeness = 1/1 = 1, success = 1.0, efficiency = 1-(5000/100000) = 0.99
+  // score = 1*0.4 + 1.0*0.4 + 0.99*0.2 = 0.4 + 0.4 + 0.198 = 0.998
+  if (result.score < 0.9) throw new Error(`Expected high score, got ${result.score}`)
+  if (result.recommended !== true) throw new Error("Expected recommended=true for high-scoring plan")
+})
+
+se("SE-2c simulate detects blocked steps", () => {
+  const sim = new SimEngine()
+  const result = sim.simulate({
+    planId: "p1",
+    goal: "test",
+    steps: [
+      { stepId: "s1", description: "S1", complexity: 2, predictedSuccess: 0.9, estimatedTokens: 1000, dependsOn: ["nonexistent"] },
+    ],
+  })
+  if (result.stepResults[0].blocked !== true) throw new Error("Expected step to be blocked")
+  if (result.stepResults[0].blockedBy.length === 0) throw new Error("Expected blockedBy to list unknown dep")
+})
+
+se("SE-3a imagine returns results sorted by score", () => {
+  const sim = new SimEngine()
+  const results = sim.imagine([
+    {
+      planId: "good",
+      goal: "test",
+      steps: [
+        { stepId: "s1", description: "Simple step", complexity: 1, predictedSuccess: 0.95, estimatedTokens: 500, dependsOn: [] },
+      ],
+    },
+    {
+      planId: "bad",
+      goal: "test",
+      steps: [
+        { stepId: "s1", description: "Complex step", complexity: 9, predictedSuccess: 0.2, estimatedTokens: 50000, dependsOn: [] },
+      ],
+    },
+  ])
+  if (results.length !== 2) throw new Error(`Expected 2 results, got ${results.length}`)
+  // "good" should be first (higher score)
+  if (results[0].planId !== "good") throw new Error(`Expected 'good' first, got ${results[0].planId}`)
+  if (results[0].score <= results[1].score) throw new Error("Expected 'good' score > 'bad' score")
+})
+
+se("SE-3b getBestPlan returns the best recommendable plan", () => {
+  const sim = new SimEngine({ minRecommendThreshold: 0.1 })
+  const best = sim.getBestPlan([
+    {
+      planId: "a",
+      goal: "test",
+      steps: [{ stepId: "s1", description: "Step", complexity: 1, predictedSuccess: 0.9, estimatedTokens: 100, dependsOn: [] }],
+    },
+    {
+      planId: "b",
+      goal: "test",
+      steps: [{ stepId: "s1", description: "Step", complexity: 8, predictedSuccess: 0.3, estimatedTokens: 50000, dependsOn: [] }],
+    },
+  ])
+  if (!best) throw new Error("Expected a best plan")
+  if (best.planId !== "a") throw new Error(`Expected plan 'a', got ${best.planId}`)
+})
+
+se("SE-3c getBestPlan returns null when no plan meets threshold", () => {
+  const sim = new SimEngine({ minRecommendThreshold: 0.999 })
+  const best = sim.getBestPlan([
+    {
+      planId: "a",
+      goal: "test",
+      steps: [
+        { stepId: "s1", description: "Hard step", complexity: 9, predictedSuccess: 0.1, estimatedTokens: 99000, dependsOn: ["s2"] },
+        { stepId: "s2", description: "Missing dep", complexity: 9, predictedSuccess: 0.1, estimatedTokens: 99000, dependsOn: ["nonexistent"] },
+      ],
+    },
+  ])
+  if (best !== null) throw new Error("Expected null when no plan meets threshold. Got score that passed threshold.")
+})
+
+se("SE-4a simulation cache returns cached result", () => {
+  const sim = new SimEngine()
+  const input = {
+    planId: "p1",
+    goal: "test",
+    steps: [{ stepId: "s1", description: "S1", complexity: 1, predictedSuccess: 0.9, estimatedTokens: 100, dependsOn: [] }],
+  }
+  const r1 = sim.simulate(input)
+  const r2 = sim.simulate(input)
+  if (r1.timestamp !== r2.timestamp) throw new Error("Expected cached result (same timestamp)")
+})
+
+se("SE-4b clearCache clears cache", () => {
+  const sim = new SimEngine()
+  const input = {
+    planId: "p1",
+    goal: "test",
+    steps: [{ stepId: "s1", description: "S1", complexity: 1, predictedSuccess: 0.9, estimatedTokens: 100, dependsOn: [] }],
+  }
+  sim.simulate(input)
+  sim.clearCache()
+  if (sim.getStats().cacheSize !== 0) throw new Error("Cache not cleared")
+})
+
+se("SE-5a simulate warns on circular dependencies", () => {
+  const sim = new SimEngine()
+  const result = sim.simulate({
+    planId: "p1",
+    goal: "test",
+    steps: [
+      { stepId: "a", description: "A", complexity: 1, predictedSuccess: 0.9, estimatedTokens: 100, dependsOn: ["b"] },
+      { stepId: "b", description: "B", complexity: 1, predictedSuccess: 0.9, estimatedTokens: 100, dependsOn: ["a"] },
+    ],
+  })
+  if (result.warnings.length === 0) throw new Error("Expected circular dependency warning")
+  if (!result.warnings.some(w => w.includes("Circular"))) throw new Error("Warning should mention circular")
+})
+
+se("SE-5b simulate warns on high token usage", () => {
+  const sim = new SimEngine({ maxTokenWarning: 1000 })
+  const result = sim.simulate({
+    planId: "p1",
+    goal: "test",
+    steps: [
+      { stepId: "s1", description: "Big step", complexity: 1, predictedSuccess: 0.9, estimatedTokens: 5000, dependsOn: [] },
+    ],
+  })
+  if (result.warnings.length === 0) throw new Error("Expected token warning")
+})
+
+se("SE-6a getStats returns correct counts", () => {
+  const sim = new SimEngine()
+  sim.simulate({
+    planId: "p1", goal: "test",
+    steps: [{ stepId: "s1", description: "S1", complexity: 1, predictedSuccess: 0.9, estimatedTokens: 100, dependsOn: [] }],
+  })
+  const stats = sim.getStats()
+  if (stats.simulationsRun !== 1) throw new Error(`Expected 1 simulation, got ${stats.simulationsRun}`)
+})
+
+console.log(`  SimulationEngine: ${sep} passed, ${sef} failed`)
+passed += sep; failed += sef
+
+// ── MetaReasoner Tests (Comparison 22) ────────────────────────────────
+console.log("\n[MR] MetaReasoner — strategy adaptation + meta-reasoning")
+const { MetaReasoner: MR, createDefaultStrategy: cds } = await import(pluginDist)
+let mrp = 0, mrf = 0
+const mr = (name, fn) => { try { fn(); mrp++; console.log(`  PASS: ${name}`) } catch (e) { mrf++; console.log(`  FAIL: ${name} — ${e.message}`) } }
+
+mr("MR-1a MetaReasoner constructs with default strategy", () => {
+  const m = new MR()
+  const config = m.getCurrentConfig()
+  if (!config.id) throw new Error("Expected config with id")
+  if (config.params.length !== 5) throw new Error(`Expected 5 params, got ${config.params.length}`)
+})
+
+mr("MR-1b MetaReasoner constructs with custom config", () => {
+  const custom = cds("aggressive")
+  const expParam = custom.params.find(p => p.name === "exploration_rate")
+  if (expParam) expParam.value = 0.8
+  const m = new MR(custom)
+  if (m.getParam("exploration_rate") !== 0.8) throw new Error("Expected exploration_rate=0.8")
+})
+
+mr("MR-1c MetaReasoner version starts at 1", () => {
+  const m = new MR()
+  if (m.getCurrentVersion() !== 1) throw new Error(`Expected version 1, got ${m.getCurrentVersion()}`)
+})
+
+mr("MR-2a recordExecution updates performance", () => {
+  const m = new MR()
+  m.recordExecution({ taskId: "t1", success: true, retries: 0, timestamp: Date.now() })
+  m.recordExecution({ taskId: "t2", success: true, retries: 1, timestamp: Date.now() })
+  const perf = m.getCurrentPerformance()
+  if (perf.totalRuns !== 2) throw new Error(`Expected 2 runs, got ${perf.totalRuns}`)
+  if (perf.successRate !== 1.0) throw new Error(`Expected 1.0, got ${perf.successRate}`)
+})
+
+mr("MR-2b getCurrentPerformance computes correct stats", () => {
+  const m = new MR()
+  m.recordExecution({ taskId: "t1", success: true, retries: 0, criticScore: 0.9, timestamp: Date.now() })
+  m.recordExecution({ taskId: "t2", success: false, retries: 3, criticScore: 0.4, timestamp: Date.now() })
+  m.recordExecution({ taskId: "t3", success: true, retries: 1, criticScore: 0.8, timestamp: Date.now() })
+  const perf = m.getCurrentPerformance()
+  if (perf.totalRuns !== 3) throw new Error(`Expected 3, got ${perf.totalRuns}`)
+  if (Math.abs(perf.successRate - 2/3) > 0.01) throw new Error(`Expected ~0.667, got ${perf.successRate}`)
+  if (Math.abs(perf.avgRetries - 4/3) > 0.01) throw new Error(`Expected ~1.333, got ${perf.avgRetries}`)
+  if (Math.abs(perf.avgCriticScore - (0.9+0.4+0.8)/3) > 0.01) throw new Error(`Unexpected avg critic: ${perf.avgCriticScore}`)
+})
+
+mr("MR-3a adapt does nothing with insufficient data", () => {
+  const m = new MR(undefined, { minRunsBeforeAdapt: 10 })
+  m.recordExecution({ taskId: "t1", success: true, retries: 0, timestamp: Date.now() })
+  const result = m.adapt()
+  if (result.adapted !== false) throw new Error("Expected no adaptation with insufficient data")
+  if (result.warnings.length === 0) throw new Error("Expected warning about insufficient data")
+})
+
+mr("MR-3b adapt increases exploration on low success rate", () => {
+  const m = new MR(undefined, { minSuccessRate: 0.6, adaptationInterval: 1, minRunsBeforeAdapt: 1, windowSize: 10 })
+  const initialExp = m.getParam("exploration_rate")
+  // Record 5 failures
+  for (let i = 0; i < 5; i++) {
+    m.recordExecution({ taskId: `fail-${i}`, success: false, retries: 3, timestamp: Date.now() })
+  }
+  const result = m.adapt()
+  if (!result.adapted) throw new Error(`Expected adaptation for low success rate, changes: ${JSON.stringify(result.changes)}`)
+  const newExp = m.getParam("exploration_rate")
+  if (typeof newExp !== "number" || newExp <= (initialExp ?? 0)) throw new Error(`Expected exploration to increase, was ${initialExp}, now ${newExp}`)
+})
+
+mr("MR-3c adapt changes beam_width on high retries", () => {
+  const m = new MR(undefined, { maxRetriesThreshold: 1, adaptationInterval: 1, minRunsBeforeAdapt: 1, windowSize: 10 })
+  const initialBeam = m.getParam("beam_width")
+  // Record runs with many retries
+  for (let i = 0; i < 3; i++) {
+    m.recordExecution({ taskId: `r-${i}`, success: true, retries: 5, timestamp: Date.now() })
+  }
+  const result = m.adapt()
+  const newBeam = m.getParam("beam_width")
+  if (typeof newBeam !== "number" || newBeam <= (initialBeam ?? 0)) throw new Error(`Expected beam_width to increase, was ${initialBeam}, now ${newBeam}`)
+})
+
+mr("MR-4a rollback restores previous strategy", () => {
+  const m = new MR(undefined, { minSuccessRate: 0.99, adaptationInterval: 1, minRunsBeforeAdapt: 1, windowSize: 10 })
+  // First version
+  const v1Params = JSON.stringify(m.getCurrentConfig().params.map(p => ({ name: p.name, value: p.value })))
+  // Record failures to trigger adaptation
+  for (let i = 0; i < 5; i++) {
+    m.recordExecution({ taskId: `f-${i}`, success: false, retries: 3, timestamp: Date.now() })
+  }
+  m.adapt()
+  const v2Params = JSON.stringify(m.getCurrentConfig().params.map(p => ({ name: p.name, value: p.value })))
+  if (v2Params === v1Params) throw new Error("Expected params to change after adaptation")
+  // Rollback to v1
+  m.rollback(1)
+  const rolledBack = JSON.stringify(m.getCurrentConfig().params.map(p => ({ name: p.name, value: p.value })))
+  if (rolledBack !== v1Params) throw new Error("Expected params to match v1 after rollback")
+})
+
+mr("MR-4b rollback returns warning when no previous version", () => {
+  const m = new MR()
+  const result = m.rollback(99)
+  if (result.rolledBack !== false) throw new Error("Expected rollback to fail for non-existent version")
+  if (result.warnings.length === 0) throw new Error("Expected warning for missing version")
+})
+
+mr("MR-5a getVersionHistory returns version list", () => {
+  const m = new MR()
+  const history = m.getVersionHistory()
+  if (history.length !== 1) throw new Error(`Expected 1 version, got ${history.length}`)
+  if (history[0].version !== 1) throw new Error(`Expected version 1, got ${history[0].version}`)
+})
+
+mr("MR-5b getAdaptationStats returns correct stats", () => {
+  const m = new MR()
+  m.recordExecution({ taskId: "t1", success: true, retries: 0, timestamp: Date.now() })
+  const stats = m.getAdaptationStats()
+  if (stats.adaptationCount !== 0) throw new Error(`Expected 0 adaptations, got ${stats.adaptationCount}`)
+})
+
+mr("MR-6a setParam updates param value", () => {
+  const m = new MR()
+  if (!m.setParam("beam_width", 7)) throw new Error("setParam returned false")
+  if (m.getParam("beam_width") !== 7) throw new Error(`Expected 7, got ${m.getParam("beam_width")}`)
+})
+
+mr("MR-6b setParam clamps to bounds", () => {
+  const m = new MR()
+  m.setParam("exploration_rate", 999)
+  if ((m.getParam("exploration_rate") ?? 0) > 1) throw new Error("Expected clamped to max 1")
+  m.setParam("exploration_rate", -999)
+  if ((m.getParam("exploration_rate") ?? -1) < 0) throw new Error("Expected clamped to min 0")
+})
+
+mr("MR-6c setParam returns false for unknown param", () => {
+  const m = new MR()
+  if (m.setParam("nonexistent", 5)) throw new Error("Expected false for unknown param")
+})
+
+mr("MR-7a createDefaultStrategy creates valid config", () => {
+  const config = cds("test-strat")
+  if (!config.id) throw new Error("Expected config with id")
+  if (config.label !== "test-strat") throw new Error(`Wrong label: ${config.label}`)
+  const rate = config.params.find(p => p.name === "exploration_rate")
+  if (!rate) throw new Error("Missing exploration_rate param")
+  if (typeof rate.value !== "number") throw new Error("Expected numeric value")
+})
+
+mr("MR-8a window trims to configured size", () => {
+  const m = new MR(undefined, { windowSize: 3 })
+  for (let i = 0; i < 10; i++) {
+    m.recordExecution({ taskId: `t${i}`, success: true, retries: 0, timestamp: Date.now() })
+  }
+  if (m.getPerformanceHistory().length !== 3) throw new Error(`Expected 3 records, got ${m.getPerformanceHistory().length}`)
+})
+
+mr("MR-8b getCurrentPerformance returns zeros for empty history", () => {
+  const m = new MR()
+  const perf = m.getCurrentPerformance()
+  if (perf.successRate !== 0) throw new Error("Expected 0 success rate for empty")
+})
+
+console.log(`  MetaReasoner: ${mrp} passed, ${mrf} failed`)
+passed += mrp; failed += mrf
+
 console.log(`Results: ${passed} passed, ${failed} failed`)
 if (failed === 0) console.log("ALL TESTS PASSED")
 process.exit(failed > 0 ? 1 : 0)

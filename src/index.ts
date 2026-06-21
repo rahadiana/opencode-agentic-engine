@@ -67,6 +67,12 @@ import { DslExecutor } from "./core/dsl-executor.js"
 import { SkillImprover } from "./core/skill-improver.js"
 import { AttentionScheduler } from "./core/attention-scheduler.js"
 void AttentionScheduler // available via import for direct usage
+import { WorldModel } from "./core/world-model.js"
+void WorldModel // available via import for direct usage
+import { SimulationEngine } from "./core/simulation-engine.js"
+void SimulationEngine // available via import for direct usage
+import { MetaReasoner } from "./core/meta-reasoner.js"
+void MetaReasoner // available via import for direct usage
 
 // ── Build-time version injected by esbuild define ──
 declare const __VERSION__: string
@@ -5230,4 +5236,7 @@ export { TreeSearchPlanner, defaultExpansion, scoreState, diversityBonus, scoreW
 export { Planner, type MacroPhase, type MicroStep, type HierarchicalPlan, type PhaseContextMapping, type PhaseErrorContext } from "./core/planner.js"
 export { SkillImprover, type SkillTestCase, type EvaluationScore, type ImprovementResult } from "./core/skill-improver.js"
 export { AttentionScheduler, MAX_SCHEDULER_CYCLES, type AgentScheduleConfig, type AgentScheduleState, type SharedState, type CycleResult, type SchedulerMetrics } from "./core/attention-scheduler.js"
+export { WorldModel, type WorldSnapshot, type Belief, type Entity, type Relation, type WorldModelConfig, type BeliefEvidence, type BeliefUpdateResult } from "./core/world-model.js"
+export { SimulationEngine, type SimulationInput, type SimulationResult, type SimulatedStep, type SimulatedStepResult, type SimulationConfig } from "./core/simulation-engine.js"
+export { MetaReasoner, createDefaultStrategy, type StrategyConfig, type StrategyParam, type PerformanceRecord, type StrategyVersion, type AdaptationResult, type MetaReasonerConfig } from "./core/meta-reasoner.js"
 export { buildAgentPrompt, buildAgenticSystemInstructions, buildGenericAgentPrompt } from "./core/prompt-builder.js"
