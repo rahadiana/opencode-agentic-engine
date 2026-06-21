@@ -1,6 +1,7 @@
 import { type SkillDefinition, type SkillStep, type SkillMeta, createSkillDefinition, inspectSkill, serializeSkill, deserializeSkill } from "./skill-format.js"
 import { createMemoryEnvelope, parseMemoryEnvelope } from "./schema-version.js"
 import { STOP_WORDS } from "./stopwords.js"
+import type { VectorStore, TfIdfDoc } from "./vector-store.js"
 
 export { type SkillDefinition, type SkillStep, type SkillMeta, inspectSkill, serializeSkill, deserializeSkill, createSkillDefinition }
 
@@ -607,6 +608,80 @@ export class SkillStore {
     }
 
     return baseResults
+  }
+
+  /** Tracks which skill IDs have been indexed into the VectorStore */
+  private vectorIndexed = new Set<string>()
+
+  /**
+   * Find skills using vector similarity search with capability-aware re-ranking.
+   *
+   * Re-ranking formula: `(vectorSim * 0.7) + (skillSuccessRate * 0.3)`
+   * If no results meet the threshold, falls back to keyword-based find().
+   *
+   * Skills are lazily indexed into the vector store on first call.
+   */
+  findWithVectors(query: string, vectorStore: VectorStore, threshold = 0.75): SkillRecord[] {
+    // ── Lazy index all skills not yet in vector store ──
+    for (const [id, record] of this.skills) {
+      if (this.vectorIndexed.has(id)) continue
+      const def = record.definition
+      const doc: TfIdfDoc = {
+        id,
+        category: "skill",
+        title: def.meta.name,
+        content: [
+          def.workflow.steps.map(s => s.description).join(". "),
+          def.workflow.steps.map(s => s.expectedOutput).join(". "),
+          def.workflow.steps.map(s => s.action).join(" "),
+          def.trigger.pattern,
+          ...(def.trigger.keywords ?? []),
+        ].join(" "),
+        keywords: [
+          def.meta.name,
+          ...(def.trigger.keywords ?? []),
+        ].filter(Boolean),
+        metadata: { skillId: id },
+      }
+      vectorStore.index(doc)
+      this.vectorIndexed.add(id)
+    }
+
+    // ── Vector search ──
+    const vectorResults = vectorStore.searchAll(query, 10)
+    if (vectorResults.length === 0) return this.find(query)
+
+    // ── Re-rank with formula: (sim * 0.7) + (skillScore * 0.3) ──
+    const ranked: Array<{ record: SkillRecord; score: number }> = []
+
+    for (const vr of vectorResults) {
+      const skillId = vr.doc.metadata?.skillId as string | undefined
+      if (!skillId) continue
+      const record = this.skills.get(skillId)
+      if (!record) continue
+
+      // Normalize vector similarity to 0-1 range (TF-IDF scores vary)
+      const rawSim = vr.score
+      const normalizedSim = Math.min(1, rawSim / 10)
+
+      // Re-ranking formula from Comparison 09
+      const rerankScore = (normalizedSim * 0.7) + (record.successRate * 0.3)
+
+      ranked.push({ record, score: rerankScore })
+    }
+
+    if (ranked.length === 0) return this.find(query)
+
+    // Sort by re-ranked score descending
+    ranked.sort((a, b) => b.score - a.score)
+
+    // Threshold: if best score >= threshold → return vector results
+    if (ranked[0].score >= threshold) {
+      return ranked.slice(0, 5).map(r => r.record)
+    }
+
+    // Below threshold: fallback to keyword search
+    return this.find(query)
   }
 
   private countVariants(): number {

@@ -526,15 +526,44 @@ function executeInstruction(
           }
           // Execute skill instructions recursively using the same context
           const childTrace: DslStepResult[] = []
+
+          // Merge call_skill args into context input before execution
+          if (instr.args && typeof instr.args === "object") {
+            Object.assign(context.input, instr.args)
+          }
+
+          // Output normalization: snapshot output BEFORE skill execution,
+          // then compute delta AFTER to produce { result: ... } envelope
+          const beforeKeys = new Set(Object.keys(context.output))
           exec.executeBlock(skillDef.instructions, context, childTrace)
           const allSuccess = childTrace.every(s => s.success)
+
+          // Auto-detect skill level based on whether instructions contain call_skill
+          const hasCallSkill = (skillDef.instructions ?? []).some(i =>
+            i.op === "call_skill" ||
+            (i.then && i.then.some(t => t.op === "call_skill")) ||
+            (i.else && i.else.some(e => e.op === "call_skill")),
+          )
+          skillDef.level = hasCallSkill ? "composite" : "atomic"
+
           if (instr.target) {
             const scope = instr.target.startsWith("memory.") ? context.memory
               : instr.target.startsWith("output.") ? context.output
               : null
             if (scope) {
               const path = instr.target.replace(/^(memory|output)\./, "")
-              setPath(scope, path, allSuccess ? "done" : "failed")
+
+              // Normalized output: { result: <delta of what this skill produced> }
+              const delta: Record<string, unknown> = {}
+              for (const key of Object.keys(context.output)) {
+                if (!beforeKeys.has(key)) {
+                  delta[key] = context.output[key]
+                }
+              }
+              const normalizedOutput = {
+                result: Object.keys(delta).length > 0 ? delta : context.output,
+              }
+              setPath(scope, path, allSuccess ? normalizedOutput : { result: "failed" })
             }
           }
           _callDepth--
@@ -542,7 +571,7 @@ function executeInstruction(
             instructionId: instr.id,
             op: instr.op,
             success: allSuccess,
-            value: { skill: instr.skill, steps: childTrace.length },
+            value: { skill: instr.skill, steps: childTrace.length, level: skillDef.level },
           }
         } finally {
           _callDepth--
@@ -747,6 +776,17 @@ function executeInstruction(
   }
 }
 
+// ── Skill Definition for call_skill ─────────────────────────────────
+
+/**
+ * Skill definition returned by the skill resolver for call_skill operations.
+ * Includes optional level for atomic vs composite distinction.
+ */
+export interface SkillDef {
+  instructions: DslInstruction[]
+  level?: "atomic" | "composite"
+}
+
 // ── DslExecutor Class ─────────────────────────────────────────────
 
 /**
@@ -756,7 +796,7 @@ function executeInstruction(
  */
 export class DslExecutor {
   private mcpClient: MCPClient | null = null
-  private skillResolver: ((capability: string) => { instructions: DslInstruction[] } | null) | null = null
+  private skillResolver: ((capability: string) => SkillDef | null) | null = null
 
   /** Set MCP client for mcp_call operations */
   setMCPClient(client: MCPClient): void {
@@ -772,12 +812,12 @@ export class DslExecutor {
    * Set skill resolver for call_skill operations.
    * The resolver takes a capability string and returns the skill's DSL instructions, or null if not found.
    */
-  setSkillResolver(resolver: (capability: string) => { instructions: DslInstruction[] } | null): void {
+  setSkillResolver(resolver: (capability: string) => SkillDef | null): void {
     this.skillResolver = resolver
   }
 
   /** Get current skill resolver */
-  getSkillResolver(): ((capability: string) => { instructions: DslInstruction[] } | null) | null {
+  getSkillResolver(): ((capability: string) => SkillDef | null) | null {
     return this.skillResolver
   }
 
