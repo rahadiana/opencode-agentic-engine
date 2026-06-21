@@ -68,11 +68,8 @@ import { SkillImprover } from "./core/skill-improver.js"
 import { AttentionScheduler } from "./core/attention-scheduler.js"
 void AttentionScheduler // available via import for direct usage
 import { WorldModel } from "./core/world-model.js"
-void WorldModel // available via import for direct usage
-import { SimulationEngine } from "./core/simulation-engine.js"
-void SimulationEngine // available via import for direct usage
+import { SimulationEngine, type SimulatedStep } from "./core/simulation-engine.js"
 import { MetaReasoner } from "./core/meta-reasoner.js"
-void MetaReasoner // available via import for direct usage
 
 // ── Build-time version injected by esbuild define ──
 declare const __VERSION__: string
@@ -508,6 +505,13 @@ const confidenceStore = new ConfidenceStore()
   // ── SkillImprover (Comparison 01: Self-Improvement Loop) ──
   const skillImprover = new SkillImprover(skillStore, schemaValidator)
   void skillImprover // available via import for direct usage
+
+  // ── WorldModel (Comparison 19: Belief State) ──
+  const worldModel = new WorldModel()
+  // ── SimulationEngine (Comparison 20: Internal Simulation) ──
+  const simulationEngine = new SimulationEngine()
+  // ── MetaReasoner (Comparison 22: Meta-Reasoning Strategy) ──
+  const metaReasoner = new MetaReasoner()
 
   // Load cross-session knowledge artifact
   try {
@@ -953,6 +957,38 @@ const confidenceStore = new ConfidenceStore()
               planOutput += `  ... and ${codeIntentMap.files.length - 3} more files\n`
             }
             planOutput += `\n*Intent analysis provides program-aware grounding for implementation. Use this context with \`agentic_execute\` for better code generation.*`
+          }
+
+          // Simulation dry-run (Comparison 20: Internal Simulation)
+          if (plan.intent.subtasks.length > 0) {
+            try {
+              const simulatedSteps: SimulatedStep[] = plan.intent.subtasks.map(s => ({
+                stepId: s.id,
+                description: s.description,
+                complexity: Math.min(10, Math.max(1, Math.ceil(s.description.length / 50))),
+                predictedSuccess: 0.7,
+                estimatedTokens: 2000,
+                dependsOn: s.dependsOn ?? [],
+              }))
+              const simResult = simulationEngine.simulate({
+                planId: `plan_${Date.now()}`,
+                steps: simulatedSteps,
+                goal: args.goal,
+              })
+              if (simResult.warnings.length > 0 || !simResult.recommended) {
+                planOutput += `\n\n### 🎯 Simulation Preview\n`
+                planOutput += `**Score:** ${(simResult.score * 100).toFixed(0)}% | **Recommended:** ${simResult.recommended ? '✅ Yes' : '❌ No'}\n`
+                planOutput += `**Overall success rate:** ${(simResult.overallSuccessRate * 100).toFixed(0)}%\n`
+                if (simResult.warnings.length > 0) {
+                  planOutput += `**Warnings:**\n`
+                  for (const w of simResult.warnings) {
+                    planOutput += `- ⚠️ ${w}\n`
+                  }
+                }
+              }
+            } catch {
+              // Non-fatal — simulation is advisory
+            }
           }
 
           return {
@@ -1675,6 +1711,27 @@ const confidenceStore = new ConfidenceStore()
             const lowConf = confidenceStore.getLowConfidence()
             if (lowConf.length > 0) {
               output += `\n⚠️ **${lowConf.length} step(s) below threshold** — review recommended\n`
+            }
+            output += "\n"
+          }
+
+          // World Model Beliefs (Comparison 19)
+          const wmStats = worldModel.getStats()
+          if (wmStats.beliefs > 0) {
+            output += `\n### 🧠 World Model Beliefs\n`
+            output += `**Entities:** ${wmStats.entities} | **Relations:** ${wmStats.relations} | **Beliefs:** ${wmStats.beliefs} | **Cycles:** ${wmStats.cycles}\n`
+            const uncertain = worldModel.getUncertainBeliefs()
+            if (uncertain.length > 0) {
+              output += `⚠️ **${uncertain.length} low-confidence belief(s)** — may be stale\n`
+            }
+            const topBeliefs = worldModel.getAllBeliefs()
+              .sort((a, b) => b.confidence - a.confidence)
+              .slice(0, 5)
+            if (topBeliefs.length > 0) {
+              output += `\n**Top beliefs:**\n`
+              for (const b of topBeliefs) {
+                output += `- \`${b.key}\`: ${(b.confidence * 100).toFixed(0)}% — ${b.fact.slice(0, 80)} (${b.category})\n`
+              }
             }
             output += "\n"
           }
@@ -3403,6 +3460,17 @@ const confidenceStore = new ConfidenceStore()
               selfEvolver.feedStepStates(allStepStates)
               selfEvolver.feedTraces(traces)
 
+              // Feed execution data to MetaReasoner (Comparison 22)
+              for (const state of allStepStates) {
+                metaReasoner.recordExecution({
+                  taskId: state.stepId,
+                  success: state.success,
+                  retries: 0,
+                  timestamp: Date.now(),
+                })
+              }
+              const metaAdaptation = metaReasoner.adapt()
+
               const report = selfEvolver.evolve()
 
               // Auto-apply role suggestions
@@ -3598,6 +3666,28 @@ const confidenceStore = new ConfidenceStore()
                     out += ")\n"
                   }
                 }
+              }
+
+              // Meta-Reasoning Strategy Adaptation (Comparison 22)
+              const metaStats = metaReasoner.getAdaptationStats()
+              if (metaStats.totalRuns > 0) {
+                out += `\n### 🧠 Meta-Reasoning Adaptation\n`
+                out += `**Strategy:** \`${metaReasoner.getCurrentConfig().label}\` (v${metaReasoner.getCurrentVersion()})\n`
+                out += `**Runs analyzed:** ${metaStats.totalRuns} | **Adaptations made:** ${metaStats.adaptationCount}\n`
+                if (metaAdaptation.adapted) {
+                  out += `\n**Params adapted this cycle:**\n`
+                  for (const change of metaAdaptation.changes) {
+                    out += `- \`${change.name}\`: ${change.from} → ${change.to} (${change.reason})\n`
+                  }
+                }
+                if (metaAdaptation.rolledBack) {
+                  out += `\n⚠️ **Rolled back** to previous strategy version\n`
+                  for (const w of metaAdaptation.warnings) {
+                    out += `- ${w}\n`
+                  }
+                }
+                const metaPerf = metaReasoner.getCurrentPerformance()
+                out += `\n**Current performance:** ${(metaPerf.successRate * 100).toFixed(0)}% success rate, ${metaPerf.avgRetries.toFixed(1)} avg retries\n`
               }
 
               return { output: out }
@@ -5023,8 +5113,6 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
 
         // ── Tool selection ──
         const { selected } = toolRouter.selectTools(routingCtx)
-        const toolListText = toolRouter.buildToolList(selected)
-        const alwaysExposeHint = toolRouter.buildAlwaysExposeHint()
 
         // Build filtered TOOL_REGISTRY from selected tools
         const filteredRegistry: ToolEntry[] = selected.map(t => ({ name: t.name, description: t.description }))
@@ -5032,15 +5120,12 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
 
         if (hasTools) {
           // Build prompt WITH auto-injected knowledge context
-          injection = buildAgenticSystemInstructions(pack, filteredRegistry, {
+          // Pass FULL TOOL_REGISTRY for "Available Tools" + selected subset for "Selected Tools"
+          injection = buildAgenticSystemInstructions(pack, TOOL_REGISTRY, {
             isRouted: true,
+            selectedTools: filteredRegistry,
             knowledgeEntries: knowledgeEntries.length > 0 ? knowledgeEntries : undefined,
           })
-
-          // Append concise tool list + always-expose hint (ONE listing, not duplicated)
-          injection += `\n\n### Selected Tools for This Task (${selected.length} of ${TOOL_REGISTRY.length})\n\n`
-          injection += toolListText
-          injection += alwaysExposeHint
         } else {
           // Fallback: show all domain-appropriate tools
           injection = buildAgenticSystemInstructions(pack, TOOL_REGISTRY, {

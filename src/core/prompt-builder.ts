@@ -10,6 +10,12 @@ export interface ToolListConfig {
   isRouted?: boolean
   /** Optional knowledge entries to auto-inject into <knowledge-context> section */
   knowledgeEntries?: KnowledgeEntry[]
+  /**
+   * ToolRouter-selected subset (only used when isRouted=true).
+   * When provided, ALL domain tools still show in "Available Tools" section,
+   * and this subset shows in a separate "Selected Tools for This Task" section.
+   */
+  selectedTools?: ToolEntry[]
 }
 
 const CORE_TOOLS = ["agentic_plan", "agentic_execute", "agentic_verify", "agentic_reflect", "agentic_status"]
@@ -95,16 +101,24 @@ export function buildGenericAgentPrompt(allTools: ToolEntry[]): string {
 function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolListConfig): PromptTemplate {
   const domainName = domain.name
 
-  const relevantToolNames = domain.tools ?? allTools.map(t => t.name)
-  const relevantTools = allTools.filter(t => relevantToolNames.includes(t.name))
+  // `allTools` should be the FULL tool registry (all domain tools).
+  // `selectedTools` are ToolRouter's dynamic subset (shown in separate section when routed).
+  const selectedTools = config?.selectedTools
   const isRouted = config?.isRouted ?? false
+  const domainToolNames = domain.tools ?? allTools.map(t => t.name)
 
-  const hasMemory = relevantTools.some(t => MEMORY_TOOLS.includes(t.name))
-  const hasDebate = relevantTools.some(t => t.name === "agentic_debate")
-  const hasRouter = relevantTools.some(t => t.name === "agentic_router")
-  const hasRag = relevantTools.some(t => t.name === "agentic_rag")
-  const hasAuto = relevantTools.some(t => t.name === "agentic_auto")
-  const hasNav = relevantTools.some(t => t.name === "agentic_nav")
+  // Available = all domain tools (always the full set)
+  const availableTools = allTools.filter(t => domainToolNames.includes(t.name))
+
+  // Selected = routed subset (falls back to availableTools when not routed)
+  const activeTools = isRouted && selectedTools ? selectedTools : availableTools
+
+  const hasMemory = activeTools.some(t => MEMORY_TOOLS.includes(t.name))
+  const hasDebate = activeTools.some(t => t.name === "agentic_debate")
+  const hasRouter = activeTools.some(t => t.name === "agentic_router")
+  const hasRag = activeTools.some(t => t.name === "agentic_rag")
+  const hasAuto = activeTools.some(t => t.name === "agentic_auto")
+  const hasNav = activeTools.some(t => t.name === "agentic_nav")
 
   const t = new PromptTemplate()
   t.title(`Agentic ${domainName === "code" ? "Engineering" : domainName === "generic" ? "Assistant" : domainName} Agent`)
@@ -123,12 +137,12 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolL
   // Tool listing header (concise)
   if (isRouted) {
     t.identity(
-      `The following agentic tools have been **selected for your task**. ` +
+      `The following **${activeTools.length} agentic tools** have been **selected for your task** (from ${availableTools.length} total). ` +
       `Built-in tools (\`read\`, \`edit\`, \`bash\`, \`grep\`, \`webfetch\`, \`write\`) are always available.`,
     )
   } else {
     t.identity(
-      `You have access to **${relevantTools.length} specialized agentic_* tools**. ` +
+      `You have access to **${availableTools.length} specialized agentic_* tools**. ` +
       `Built-in tools (\`read\`, \`edit\`, \`bash\`, \`grep\`, \`webfetch\`, \`write\`) are always available.`,
     )
   }
@@ -178,6 +192,26 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolL
     workflow += `\n\n**Quick path**: \`agentic_auto\` does plan+execute+verify+retry in one call for simple tasks.`
   }
   t.instructions(workflow)
+
+  // ── Tool list (so LLM knows exact tool names & descriptions) ──
+  if (availableTools.length > 0) {
+    let toolList = `### Available Tools (${availableTools.length})\n\n`
+    for (const tool of availableTools) {
+      const cleanDesc = tool.description.length > 150
+        ? tool.description.slice(0, 147) + "..."
+        : tool.description
+      toolList += `- **${tool.name}**: ${cleanDesc}\n`
+    }
+    t.instructions(toolList)
+  }
+
+  // When routed, append concise "Selected Tools" section (no duplicate descriptions)
+  if (isRouted && selectedTools && selectedTools.length > 0) {
+    let selList = `### Selected Tools for This Task (${selectedTools.length} of ${availableTools.length})\n\n`
+    selList += selectedTools.map(t => `- **${t.name}**`).join("\n")
+    selList += "\n\n(Full tool descriptions above. These are the most relevant for your current task.)\n"
+    t.instructions(selList)
+  }
 
   // ═══════════════════════════════════════════════════════════
   // FOOTER — <guardrails> : constraints & closing rules

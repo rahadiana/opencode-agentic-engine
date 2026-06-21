@@ -63,32 +63,32 @@ const TOOL_ANTI_KEYWORDS: Record<string, string[]> = {
 
 // ── Default enhanced metadata for all agentic tools ────────────────
 const DEFAULT_METAS: Record<string, Partial<ToolMeta>> = {
-  agentic_plan: { keywords: ["plan", "decompose", "break-down", "step", "subtask", "template"], category: "core" },
-  agentic_execute: { keywords: ["execute", "run", "do", "implement", "step-result", "record", "complete"], category: "core" },
-  agentic_reflect: { keywords: ["error", "fail", "debug", "analyze", "diagnose", "retry", "recover"], category: "analysis" },
-  agentic_verify: { keywords: ["verify", "test", "compile", "lint", "validate", "check", "ci"], category: "core" },
-  agentic_status: { keywords: ["status", "progress", "dashboard", "blocked", "health", "summary"], category: "core" },
-  agentic_nav: { keywords: ["search", "find", "file", "codebase", "scan", "explore", "lookup", "nav"], category: "core" },
-  agentic_context: { keywords: ["compress", "context", "token", "summary", "condense"], category: "memory" },
-  agentic_snapshot: { keywords: ["checkpoint", "snapshot", "save", "restore", "rollback", "backup"], category: "core" },
+  agentic_plan: { keywords: ["plan", "decompose", "break-down", "step", "subtask", "template", "rencana", "langkah", "tahap"], category: "core" },
+  agentic_execute: { keywords: ["execute", "run", "do", "implement", "step-result", "record", "complete", "jalankan", "buat", "tulis"], category: "core" },
+  agentic_reflect: { keywords: ["error", "fail", "debug", "analyze", "diagnose", "retry", "recover", "gagal", "salah", "error"], category: "analysis" },
+  agentic_verify: { keywords: ["verify", "test", "compile", "lint", "validate", "check", "ci", "verifikasi", "tes", "cek"], category: "core" },
+  agentic_status: { keywords: ["status", "progress", "dashboard", "blocked", "health", "summary", "progres", "sejauh"], category: "core" },
+  agentic_nav: { keywords: ["search", "find", "file", "codebase", "scan", "explore", "lookup", "nav", "cari", "file"], category: "core" },
+  agentic_context: { keywords: ["compress", "context", "token", "summary", "condense", "ringkas", "kompres"], category: "memory" },
+  agentic_snapshot: { keywords: ["checkpoint", "snapshot", "save", "restore", "rollback", "backup", "simpan", "kembali"], category: "core" },
   agentic_pr: { keywords: ["pull-request", "pr", "github", "merge", "commit", "git", "description"], category: "core" },
-  agentic_score: { keywords: ["debt", "quality", "score", "coupling", "maintainability", "tech-debt"], category: "analysis" },
+  agentic_score: { keywords: ["debt", "quality", "score", "coupling", "maintainability", "tech-debt", "skor", "kualitas"], category: "analysis" },
   agentic_model: { keywords: ["model", "llm", "config", "provider", "gpt", "claude"], category: "meta" },
-  agentic_delegate: { keywords: ["delegate", "assign", "agent", "role", "architect", "developer", "qa"], category: "coordination" },
-  agentic_pipeline: { keywords: ["pipeline", "workflow", "chain", "stage", "pm", "architect"], category: "coordination" },
-  agentic_message: { keywords: ["message", "inbox", "conversation", "review", "ask", "notify"], category: "coordination" },
-  agentic_parallel: { keywords: ["parallel", "concurrent", "race", "dependency", "simultaneous"], category: "coordination" },
-  agentic_skill: { keywords: ["skill", "extract", "learn", "pattern", "template", "reuse"], category: "memory" },
-  agentic_episodes: { keywords: ["episode", "history", "past", "session", "memory", "recall"], category: "memory" },
-  agentic_dashboard: { keywords: ["dashboard", "timeline", "anomaly", "stats", "trace", "observability"], category: "meta" },
-  agentic_guard: { keywords: ["hallucination", "verify", "truth", "claim", "check", "audit"], category: "analysis" },
-  agentic_evolve: { keywords: ["evolve", "evolusi", "self-improve", "upgrade", "inspect", "register"], category: "meta" },
-  agentic_auto: { keywords: ["auto", "autonomous", "loop", "one-shot", "automatic", "end-to-end"], category: "core" },
-  agentic_debate: { keywords: ["debate", "discuss", "argue", "analysis", "critic", "review-loop"], category: "analysis" },
-  agentic_router: { keywords: ["classify", "route", "intent", "categorize", "direct"], category: "blueprint" },
-  agentic_clean: { keywords: ["clean", "strip", "format", "reformat", "remove-artifact"], category: "blueprint" },
-  agentic_rag: { keywords: ["rag", "search", "knowledge", "store", "retrieve", "index"], category: "memory" },
-  agentic_mcp: { keywords: ["mcp", "external", "connect", "server", "api", "tool-call"], category: "blueprint" },
+  agentic_delegate: { keywords: ["delegate", "assign", "agent", "role", "architect", "developer", "qa", "delegasi", "tugaskan"], category: "coordination" },
+  agentic_pipeline: { keywords: ["pipeline", "workflow", "chain", "stage", "pm", "architect", "alur"], category: "coordination" },
+  agentic_message: { keywords: ["message", "inbox", "conversation", "review", "ask", "notify", "pesan", "kirim"], category: "coordination" },
+  agentic_parallel: { keywords: ["parallel", "concurrent", "race", "dependency", "simultaneous", "paralel", "bersamaan"], category: "coordination" },
+  agentic_skill: { keywords: ["skill", "extract", "learn", "pattern", "template", "reuse", "pola", "kemampuan"], category: "memory" },
+  agentic_episodes: { keywords: ["episode", "history", "past", "session", "memory", "recall", "riwayat", "sebelumnya"], category: "memory" },
+  agentic_dashboard: { keywords: ["dashboard", "timeline", "anomaly", "stats", "trace", "observability", "statistik"], category: "meta" },
+  agentic_guard: { keywords: ["hallucination", "verify", "truth", "claim", "check", "audit", "halusinasi"], category: "analysis" },
+  agentic_evolve: { keywords: ["evolve", "evolusi", "self-improve", "upgrade", "inspect", "register", "tingkatkan"], category: "meta" },
+  agentic_auto: { keywords: ["auto", "autonomous", "loop", "one-shot", "automatic", "end-to-end", "otomatis"], category: "core" },
+  agentic_debate: { keywords: ["debate", "discuss", "argue", "analysis", "critic", "review-loop", "debat", "bahas"], category: "analysis" },
+  agentic_router: { keywords: ["classify", "route", "intent", "categorize", "direct", "klasifikasi"], category: "blueprint" },
+  agentic_clean: { keywords: ["clean", "strip", "format", "reformat", "remove-artifact", "bersihkan"], category: "blueprint" },
+  agentic_rag: { keywords: ["rag", "search", "knowledge", "store", "retrieve", "index", "cari", "pengetahuan", "ingat", "memori", "lama", "sejarah"], category: "memory" },
+  agentic_mcp: { keywords: ["mcp", "external", "connect", "server", "api", "tool-call", "eksternal"], category: "blueprint" },
   agentic_finetune: { keywords: ["finetune", "fine-tune", "training", "dataset", "openai", "model"], category: "blueprint" },
 }
 
@@ -150,15 +150,15 @@ function colocationBonus(tool: ToolMeta, recentTools: string[]): number {
 function inferTaskType(input: string): string[] {
   const lower = input.toLowerCase()
   const types: string[] = []
-  if (/plan|decompose|break.*down|subtask/i.test(lower)) types.push("plan")
-  if (/implement|create|write|build|add.*feature|fix.*bug/i.test(lower)) types.push("implement")
+  if (/plan|decompose|break.*down|subtask|rencana|langkah/i.test(lower)) types.push("plan")
+  if (/implement|create|write|build|add.*feature|fix.*bug|buat|tulis|bikin/i.test(lower)) types.push("implement")
   if (/search|find|where|lookup|locate|cari/i.test(lower)) types.push("search")
-  if (/debug|error|fail|bug|issue|troubleshoot/i.test(lower)) types.push("debug")
-  if (/test|verify|check|validate|audit/i.test(lower)) types.push("verify")
-  if (/delegate|assign|send|role|agent\b/i.test(lower)) types.push("delegate")
-  if (/refactor|clean|improve|optimize|restructure/i.test(lower)) types.push("refactor")
-  if (/memory|recall|skill*|learn|before|history/i.test(lower)) types.push("memory")
-  if (/evolve|upgrade|self.*improv|register/i.test(lower)) types.push("evolve")
+  if (/debug|error|fail|bug|issue|troubleshoot|gagal|salah/i.test(lower)) types.push("debug")
+  if (/test|verify|check|validate|audit|tes|cek/i.test(lower)) types.push("verify")
+  if (/delegate|assign|send|role|agent\b|tugas|kirim/i.test(lower)) types.push("delegate")
+  if (/refactor|clean|improve|optimize|restructure|ubah|perbaiki|rapikan/i.test(lower)) types.push("refactor")
+  if (/memory|recall|skill|learn|before|history|ingat|lama|sejarah|sebelumnya/i.test(lower)) types.push("memory")
+  if (/evolve|upgrade|self.*improv|register|tingkatkan|evolusi/i.test(lower)) types.push("evolve")
   if (/deploy|release|publish|ci|cd/i.test(lower)) types.push("deploy")
   return types
 }
