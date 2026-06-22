@@ -2700,15 +2700,8 @@ const confidenceStore = new ConfidenceStore()
           // ── Persistence helpers (new nested format) ──
           const modelsPath = join(projectDir, ".agentic", "models.json")
 
-          // Built-in default preferences (fallback when no project .agentic/models.json)
-          const BUILTIN_DEFAULTS: PersistedPrefs = {
-            categories: {
-              quick: "9router/FlashCombo",
-              "unspecified-low": "9router/FlashCombo",
-              "unspecified-high": "9router/StrongReason",
-              deep: "9router/StrongReason",
-            },
-          }
+          // Built-in default preferences (kosong — fallback ke engine default model)
+          const BUILTIN_DEFAULTS: PersistedPrefs = {}
 
           interface PersistedPrefs {
             [key: string]: unknown

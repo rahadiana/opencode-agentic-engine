@@ -1539,11 +1539,10 @@ assert(typeof hooks.tool.agentic_model === "object", "agentic_model tool registe
 assert(typeof hooks.tool.agentic_model.execute === "function", "agentic_model has execute")
 assert(typeof hooks.tool.agentic_model.args.action === "object", "agentic_model has action arg")
 
-// List shows plugin defaults (category prefs from plugin's .agentic/models.json)
+// List empty
 const listEmpty = await hooks.tool.agentic_model.execute({ action: "list" }, modelCtx)
 const listEmptyOut = typeof listEmpty === "string" ? listEmpty : listEmpty.output
-// Plugin defaults include categories: quick, unspecified-low, unspecified-high, deep
-assert(listEmptyOut.includes("Per-Category") || listEmptyOut.includes("No model preferences"), "list shows categories from plugin defaults")
+assert(listEmptyOut.includes("No model preferences"), "list shows empty when no preferences set")
 
 // Set preference
 const setResult = await hooks.tool.agentic_model.execute({ action: "set", role: "architect", model: "gpt-4o" }, modelCtx)
@@ -1600,11 +1599,10 @@ const clearAllRes = await hooks.tool.agentic_model.execute({ action: "clear" }, 
 const clearAllOut = typeof clearAllRes === "string" ? clearAllRes : clearAllRes.output
 assert(clearAllOut.includes("Cleared all"), "clear all removes all preferences")
 
-// After clear all, list shows plugin defaults reloaded
+// After clear all, list shows empty
 const listAfterClear = await hooks.tool.agentic_model.execute({ action: "list" }, modelCtx)
 const listAfterClearOut = typeof listAfterClear === "string" ? listAfterClear : listAfterClear.output
-// Plugin defaults reload from .agentic/models.json after clear
-assert(listAfterClearOut.includes("Per-Category") || listAfterClearOut.includes("No model preferences"), "list shows categories after clear from plugin defaults")
+assert(listAfterClearOut.includes("No model preferences"), "list shows empty after clear all")
 
 assert(true, "agentic_model session model preference tests passed")
 
