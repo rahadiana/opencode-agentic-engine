@@ -1,0 +1,41 @@
+{
+  "$schema": "v1",
+  "embedding": null,
+  "memory": {
+    "enabled": true,
+    "mode": "lightweight",
+    "maxEntries": 1000,
+    "compressThreshold": 500,
+    "forgetAfterDays": 30,
+    "stopWordsLanguages": [
+      "ind",
+      "eng"
+    ],
+    "search": {
+      "keywordWeight": 0.3,
+      "vectorWeight": 0.7
+    }
+  },
+  "agent": {
+    "maxDelegationDepth": 3,
+    "autoSkillExtract": true,
+    "defaultRole": "developer",
+    "requireSemanticCheck": false,
+    "autoHallucinationCheck": true,
+    "blockOnHallucination": false,
+    "hallucinationThreshold": 0.3,
+    "hardBlockReliability": 0.2,
+    "softBlockReliability": 0.4,
+    "minSampleSize": 5,
+    "deepVerification": {
+      "security": true,
+      "performance": true,
+      "architecture": true,
+      "deps": true
+    }
+  },
+  "storage": {
+    "traceRetentionDays": 7,
+    "skillMaxCount": 200
+  }
+}
