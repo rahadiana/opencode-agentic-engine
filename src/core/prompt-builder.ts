@@ -205,13 +205,9 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolL
     t.instructions(toolList)
   }
 
-  // When routed, append concise "Selected Tools" section (no duplicate descriptions)
-  if (isRouted && selectedTools && selectedTools.length > 0) {
-    let selList = `### Selected Tools for This Task (${selectedTools.length} of ${availableTools.length})\n\n`
-    selList += selectedTools.map(t => `- **${t.name}**`).join("\n")
-    selList += "\n\n(Full tool descriptions above. These are the most relevant for your current task.)\n"
-    t.instructions(selList)
-  }
+  // NOTE: Selected Tools section removed per user feedback (2026-06-22).
+  // LLM modern cukup lihat 29 tools + deskripsi — mereka bisa milih sendiri.
+  // ToolRouter masih digunakan untuk dashboard/statistik, bukan untuk filter tools.
 
   // ═══════════════════════════════════════════════════════════
   // FOOTER — <guardrails> : constraints & closing rules

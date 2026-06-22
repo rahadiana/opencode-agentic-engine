@@ -59,7 +59,7 @@ import { MultiIndexRAG } from "./memory/multi-index-rag.js"
 import { MCPClient } from "./core/mcp-client.js"
 import { buildAgenticSystemInstructions, type ToolEntry } from "./core/prompt-builder.js"
 import { type KnowledgeEntry } from "./core/prompt-template.js"
-import { ToolRouter, type RoutingContext } from "./core/tool-router.js"
+import { ToolRouter } from "./core/tool-router.js"
 import { ConfidenceScorer, ConfidenceStore, type ConfidenceScore } from "./core/confidence-scorer.js"
 import { codeIntentAnalyzer } from "./core/code-intent-analyzer.js"
 import { SchemaValidator } from "./core/skill-schema.js"
@@ -5219,16 +5219,8 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
           injection = buildSubAgentInjection(subAgent.role, subAgent.tools)
           transformOk = true
         } else {
-          // Full prompt for parent agent — use ToolRouter to select relevant subset
+          // Full prompt for parent agent — all 29 tools shown, LLM picks which to use
           const pack = currentInjectDomain ?? domainRegistry.getCurrentPack() ?? genericDomain
-
-          // Build routing context from recent tool calls and system text
-          const routingCtx: RoutingContext = {
-            taskInput: systemText.slice(-2000),  // last 2k chars of system prompt
-            recentTools: recentToolCalls,
-            domain: pack.name,
-            isSubAgent: false,
-          }
 
           // ── KNOWLEDGE-FIRST: Auto-inject RAG results ──
           let knowledgeEntries: KnowledgeEntry[] = []
@@ -5268,22 +5260,11 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
             console.error("[Agentic] RAG search failed:", e instanceof Error ? e.message : e)
           }
 
-          // ── Tool selection ──
-          const { selected } = toolRouter.selectTools(routingCtx)
-          const filteredRegistry: ToolEntry[] = selected.map(t => ({ name: t.name, description: t.description }))
-          const hasTools = filteredRegistry.length > 0
-
-          if (hasTools) {
-            injection = buildAgenticSystemInstructions(pack, TOOL_REGISTRY, {
-              isRouted: true,
-              selectedTools: filteredRegistry,
-              knowledgeEntries: knowledgeEntries.length > 0 ? knowledgeEntries : undefined,
-            })
-          } else {
-            injection = buildAgenticSystemInstructions(pack, TOOL_REGISTRY, {
-              knowledgeEntries: knowledgeEntries.length > 0 ? knowledgeEntries : undefined,
-            })
-          }
+          // ── Tool selection: kirim SEMUA tools — LLM modern pinter milih sendiri ──
+          injection = buildAgenticSystemInstructions(pack, TOOL_REGISTRY, {
+            isRouted: false,  // no subset — LLM decides which tool fits
+            knowledgeEntries: knowledgeEntries.length > 0 ? knowledgeEntries : undefined,
+          })
 
           // ── Gap #3: Code Intent Injection ──
           try {
