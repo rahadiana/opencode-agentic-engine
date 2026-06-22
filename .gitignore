@@ -1,6 +1,9 @@
 node_modules/
 dist/
-.agentic/
+.agentic/*.json
+.agentic/store/
+.agentic/*.jsonl
+!.agentic/models.json
 logs/
 .env
 .omo/
