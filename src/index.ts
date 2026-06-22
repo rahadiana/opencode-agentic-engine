@@ -2411,6 +2411,7 @@ const confidenceStore = new ConfidenceStore()
           const pendingMessages = coordinator.getMessages(role, true)
 
           // ── Actual Agent Execution via Isolated AgentRuntime ──
+          const sessionModelPref = sessionStore.getModelPreference(context.sessionID, role)
           const agentCtx = {
             systemPrompt: agent.prompt ?? `You are a ${role} in a software engineering team.`,
             sessionId: context.sessionID,
@@ -2419,6 +2420,7 @@ const confidenceStore = new ConfidenceStore()
             pipelineContext: pipelineContext || undefined,
             pendingMessages: pendingMessages.length > 0 ? pendingMessages.map(m => ({ from: m.from, payload: m.payload })) : undefined,
             sharedMemory: coordinator.getAllSharedMemory().map(e => ({ key: e.key, value: e.value, writtenBy: e.writtenBy })),
+            modelPreference: sessionModelPref || undefined,
           }
           const agentResultObj = await agentRuntime.execute(agentCtx)
           const agentResult = agentResultObj.success ? agentResultObj.output : ""
@@ -2445,7 +2447,6 @@ const confidenceStore = new ConfidenceStore()
           output += `**Agent Prompt:**\n\`\`\`\n${(agent.prompt ?? "No prompt available").slice(0, 400)}\n\`\`\`\n\n`
 
           // Model suggestion — check session preference first, then fall through
-          const sessionModelPref = sessionStore.getModelPreference(context.sessionID, role)
           let suggestedModel: string
           let modelLabel: string
 

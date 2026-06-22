@@ -1,0 +1,32 @@
+# Sesi Summary — 2026-06-22
+
+## Yang Dilakukan
+
+### 1. Dokumentasi AGENTS.md — 3 Section Baru
+- **File Config** (`.agentic/config.json`): Schema lengkap + contoh + file terkait
+- **Tools Detail** (29 tools): Input, output, description per tool, dikelompokkan per Stage (I-V + Blueprint)
+- **Model Resolution**: Priority, format string, cara pakai `agentic_model`, persistence, alur delegasi, tracking reliability
+
+### 2. Anchored Summary (file ini)
+
+## Fakta Penting
+
+### Model Resolution Architecture
+- `callOpenCode()` ONLY routes through OpenCode SDK (no direct HTTP calls)
+- `detectProvider()` always returns "opencode"
+- `LLMRequest` punya field `model?: string`
+- `parseModelForSDK()` helper: parse "providerID/modelID" → `{ providerID, modelID }`
+- Jika format tanpa "/" → providerID = "opencode" (auto-resolve)
+- Jika model tidak di-set → SDK body.model tidak dikirim → OpenCode pakai session default
+
+### Agent Runtime
+- `AgentContext` punya `modelPreference?: string`
+- `agentRuntime.execute()` → `engine.updateConfig({ model })` sebelum call
+- `agentic_delegate` membaca `sessionStore.getModelPreference()` dan apply ke agentCtx
+
+### Files Changed (sesi ini)
+- `AGENTS.md` — added 3 documentation sections
+- `.opencode/summary.txt` — dibuat pertama kali
+
+### Inspirasi
+- oh-my-openagent / omo: 6-level model resolution (task -> project -> role -> user default -> provider default -> system default)

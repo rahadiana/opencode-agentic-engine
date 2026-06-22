@@ -105,39 +105,225 @@ src/
     └── trace-logger.ts        # JSONL trace writer (buffered, auto-flush, dedup guard)
 ```
 
-## 29 Tools
+## File Config (`.agentic/config.json`)
 
-| Tool | Stage | Description |
-|---|---|---|
-| agentic_plan | I | Plan + auto-decompose (LLM-first) |
-| agentic_execute | I | Execute step + auto-verify + checkpoint |
-| agentic_reflect | I | Error analysis + propagation tracing |
-| agentic_verify | I | Compile + test + Gap #4: multi-dimensional verification (security, perf, architecture, deps) with 3-tier system (fast/standard/deep) |
-| agentic_status | I | Dashboard + blocked steps |
-| agentic_nav | II | Codebase scan + file search |
-| agentic_context | II | Context view + compress |
-| agentic_snapshot | II | Save/list execution checkpoints |
-| agentic_pr | II | Generate PR + description |
-| agentic_score | II | Tech debt analysis |
-| agentic_model | II | Configure per-role LLM model preferences per session |
-| agentic_model_reset | II | Reset model statistics to recover from degraded performance |
-| agentic_budget | II | Set/view/reset resource budget limits (tokens, steps, time, cost) |
-| agentic_delegate | III | Assign to architect/developer/qa/coordinator — pipeline-aware with cross-validation |
-| agentic_pipeline | III | Define and run multi-agent workflow pipelines (PM→Arch→Dev→QA) |
-| agentic_message | III | Inter-agent messaging: send, inbox, conversation, review requests |
-| agentic_parallel | III | Dependency-based concurrency |
-| agentic_skill | III | Extract/find/list reusable skills |
-| agentic_episodes | III | Cross-session memory search |
-| agentic_dashboard | III | Timeline + stats + anomaly detection + model reliability |
-| agentic_guard | III | Hallucination detection |
-| agentic_evolve | IV | Inspect + extend the agent system |
-| agentic_auto | V | Fully autonomous loop: plan → execute → verify → retry in one call |
-| agentic_debate | Blueprint | Executor ↔ Critic AI debate for analysis |
-| agentic_router | Blueprint | Intent classification + routing |
-| agentic_clean | Blueprint | Strip debate artifacts + format output |
-| agentic_rag | Blueprint | Multi-index RAG with category segregation |
-| agentic_mcp | Blueprint | MCP client for external tools/APIs |
-| agentic_finetune | III | End-to-end fine-tuning pipeline: prepare, upload, create/monitor jobs |
+Konfigurasi plugin disimpan di `.agentic/config.json` (per project). Auto-created dengan default saat plugin pertama kali di-load.
+
+### Schema
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `$schema` | `string` | `"v1"` | Version schema |
+| `embedding` | `object\|null` | `null` | Embedding config (`model`, `endpoint`, `apiKey`) |
+| `memory.enabled` | `boolean` | `true` | Aktifkan cross-session memory |
+| `memory.mode` | `"lightweight"\|"full"` | `"lightweight"` | Mode memory (full = pakai embedding) |
+| `memory.maxEntries` | `number` | `1000` | Max memory entries |
+| `memory.forgetAfterDays` | `number` | `30` | Hapus memory setelah N hari |
+| `memory.search.keywordWeight` | `number` | `0.3` | Bobot keyword search |
+| `memory.search.vectorWeight` | `number` | `0.7` | Bobot vector search |
+| `agent.maxDelegationDepth` | `number` | `3` | Max depth delegasi agent |
+| `agent.autoSkillExtract` | `boolean` | `true` | Auto-extract skill dari task sukses |
+| `agent.autoHallucinationCheck` | `boolean` | `true` | Auto-cek hallucination tiap execute |
+| `agent.hallucinationThreshold` | `number` | `0.3` | Threshold hallucination score |
+| `agent.hardBlockReliability` | `number` | `0.2` | Reliability threshold untuk hard block |
+| `agent.softBlockReliability` | `number` | `0.4` | Reliability threshold untuk soft block |
+| `agent.deepVerification` | `object` | `{ security, perf, arch, deps: true }` | Toggle per-dimensi deep verify |
+| `storage.traceRetentionDays` | `number` | `7` | Retensi trace file |
+| `storage.skillMaxCount` | `number` | `200` | Max skills tersimpan |
+
+### Contoh
+
+```json
+{
+  "$schema": "v1",
+  "memory": {
+    "enabled": true,
+    "mode": "lightweight",
+    "maxEntries": 500,
+    "forgetAfterDays": 14
+  },
+  "agent": {
+    "maxDelegationDepth": 5,
+    "autoHallucinationCheck": true,
+    "hallucinationThreshold": 0.4
+  }
+}
+```
+
+### File Terkait
+
+| File | Lokasi | Deskripsi |
+|------|--------|-----------|
+| `.agentic/config.json` | Per project | Konfigurasi plugin |
+| `.agentic/models.json` | Per project | Model preferences per role (via `agentic_model`) |
+| `~/.config/opencode/models-stats.json` | Global | Statistics model (reliability, hallucination) |
+
+## Tools Detail
+
+### Agentic Tools (29)
+
+Semua tool menggunakan prefix `agentic_`. Dikelompokkan berdasarkan Stage:
+
+#### Stage I — Foundation
+
+| Tool | Input | Output | Description |
+|------|-------|--------|-------------|
+| `agentic_plan` | `goal`, `constraints?`, `relevantFiles?` | `{ steps }` | Auto-decompose goal ke subtasks. 13 template rules + LLM fallback. Cycle detection via Kahn's algorithm. |
+| `agentic_execute` | `stepId`, `success`, `output`, `filesModified?` | `{ autoVerified }` | Tandai step selesai + auto-verify compile + auto-hallucination check + skill extraction. |
+| `agentic_reflect` | `stepId`, `errorDetails?`, `attemptedFix?` | `{ category, propagation, fix }` | Analisis error: import/type/compile/test/runtime + lacak propagasi ke step lain. |
+| `agentic_verify` | `stepId?`, `tier?` (fast/standard/deep) | `{ checks, passed }` | Multi-dimensi: compile + lint + test + security + perf + arch + deps. 3-tier system. |
+| `agentic_status` | — | `{ progress, blocked, health }` | Dashboard eksekusi: progress bar, dependency graph, retry history, file changes. |
+
+#### Stage II — Intelligence
+
+| Tool | Input | Output | Description |
+|------|-------|--------|-------------|
+| `agentic_nav` | `query`, `maxResults?` | `{ files, summary }` | Scan codebase, cari file relevan per keyword. Multi-language (TS/JS/Python/Go/Rust/PHP). |
+| `agentic_context` | `action` (view/compress) | `{ size, compressed? }` | View/compress context window. Preserve key decisions + file changes + invariants. |
+| `agentic_snapshot` | `action` (save/list/restore), `label?` | `{ snapshots }` | Checkpoint execution state. Save sebelum risky refactoring, restore jika gagal. |
+| `agentic_pr` | `action` (generate/create), `title?` | `{ prBody, url? }` | Generate PR description dari plan + step results. Create via `gh` CLI. |
+| `agentic_score` | `files?` | `{ score, breakdown }` | Tech debt analysis: coupling, file size, scope, code patterns. |
+| `agentic_model` | `action` (set/get/list/clear), `role`, `model` | `{ output }` | **Set per-role model preference.** Disimpan ke `.agentic/models.json`. Model dikirim ke OpenCode SDK saat delegasi. |
+| `agentic_model_reset` | `action` (reset/reset-stale/reset-all), `model?` | `{ stats }` | Reset statistics model (reliability, hallucination). Pull emergency jika model degraded. |
+| `agentic_budget` | `action` (set/get/status/reset), limits | `{ limits, usage }` | Circuit breaker: batasi token/steps/time/cost. Per-scope (session/task). |
+
+#### Stage III — Orchestration
+
+| Tool | Input | Output | Description |
+|------|-------|--------|-------------|
+| `agentic_delegate` | `taskId`, `description`, `role?`, `pipelineRunId?` | `{ result, modelUsed }` | Assign task ke specialist agent (architect/developer/qa/coordinator). Pipeline-aware + cross-validation. **Model preference otomatis diterapkan.** |
+| `agentic_pipeline` | `action` (define/list/run/status), stages | `{ stages, status }` | Multi-agent workflow pipeline. PM → Architect → Developer → QA. Cross-validation antar stage. |
+| `agentic_message` | `action` (send/inbox/conversation/mark-read) | `{ messages }` | Inter-agent messaging. Review requests, approvals, revision requests. |
+| `agentic_parallel` | `action` (analyze/execute) | `{ phases, conflicts }` | Dependency-based concurrency. Conflict detection (same file). Kahn's algorithm phasing. |
+| `agentic_skill` | `action` (extract/find/list), `query` | `{ skills }` | Reusable skills: extract dari task sukses, search, list. Self-describing format. |
+| `agentic_episodes` | `action` (search/recent/stats), `query` | `{ episodes }` | Cross-session memory search. Cari task serupa dari session sebelumnya. |
+| `agentic_dashboard` | — | `{ timeline, stats, anomalies }` | Observability: timeline, tool usage, anomaly detection, model reliability. |
+| `agentic_guard` | `stepId` | `{ claims, verified }` | Re-check hallucination untuk file/fungsi/import claims. Auto-run di execute. |
+| `agentic_finetune` | `action` (prepare/upload/create-job/status) | `{ job, status }` | Fine-tuning pipeline: convert skills → training data → upload OpenAI → monitor job. |
+
+#### Stage IV — Evolution
+
+| Tool | Input | Output | Description |
+|------|-------|--------|-------------|
+| `agentic_evolve` | `action` (inspect/register-role/export-skill/evolve) | `{ system }` | Self-evolution: inspect system, custom roles, manage prompts, export training data. |
+
+#### Stage V — Autonomous
+
+| Tool | Input | Output | Description |
+|------|-------|--------|-------------|
+| `agentic_auto` | `goal`, `constraints?`, `thorough?`, `maxSteps?` | `{ result }` | One-call autonomous loop: plan → execute → verify → retry. Memory + skills + guard + tech-debt. |
+
+#### Blueprint (Prototype)
+
+| Tool | Input | Output | Description |
+|------|-------|--------|-------------|
+| `agentic_debate` | `task`, `context?`, `maxRounds?`, `format?` | `{ result }` | Executor ↔ Critic multi-round debate. Loop detection (output identik). |
+| `agentic_router` | `input`, `categories?` | `{ category, confidence }` | Intent classifier. Keyword-based (fast) + LLM fallback. Route ke RAG index. |
+| `agentic_clean` | `text`, `format`, `schema?` | `{ cleaned, validJson }` | Strip debate artifacts + reformat. Regex first → LLM enhancement. |
+| `agentic_rag` | `action` (search/store/stats), `query` | `{ results }` | Multi-index RAG dengan category segregation. TF-IDF + vector hybrid search. |
+| `agentic_mcp` | `action` (connect/list/call/disconnect) | `{ tools, result }` | MCP client. Connect ke external servers (stdio/HTTP). Discover + call tools. |
+
+## Model Resolution
+
+Sistem model preference memungkinkan setiap agent role menggunakan model LLM yang berbeda. Model dikirim ke **OpenCode SDK** — plugin tidak pernah call API external langsung.
+
+### Priority (Tinggi ke Rendah)
+
+```
+1. agentic_model set role=X model="providerID/modelID"
+     ↓ Disimpan di session + .agentic/models.json
+     ↓ Diterapkan ke engine via updateConfig()
+     ↓
+2. Tidak ada preference
+     ↓ SDK body.model TIDAK dikirim
+     ↓ OpenCode pakai model session yang aktif
+```
+
+| Priority | Kondisi | Dikirim ke SDK | OpenCode pakai |
+|----------|---------|---------------|----------------|
+| **1 (override)** | `agentic_model set` dipanggil | `{ providerID, modelID }` | Model yang ditentukan |
+| **2 (default)** | Tidak ada preference | (tidak dikirim) | Current session model |
+
+### Format Model String
+
+| Format | Contoh | providerID | modelID |
+|--------|--------|------------|---------|
+| `"providerID/modelID"` | `"deepseek/deepseek-chat"` | `deepseek` | `deepseek-chat` |
+| `"providerID/modelID"` | `"anthropic/claude-sonnet-4-6"` | `anthropic` | `claude-sonnet-4-6` |
+| `"modelID"` (tanpa prefix) | `"gpt-4o"` | `"opencode"` (auto-resolve) | `gpt-4o` |
+
+### Cara Pakai
+
+```bash
+# Set model untuk role developer
+agentic_model action="set" role="developer" model="deepseek/deepseek-chat"
+# Output: ✅ Model preference set: developer → deepseek/deepseek-chat
+
+# Lihat semua preferences
+agentic_model action="list"
+# Output: | Role       | Model                    |
+#         |------------|--------------------------|
+#         | developer  | deepseek/deepseek-chat   |
+#         | architect  | anthropic/claude-opus-4-7|
+
+# Cek preference satu role
+agentic_model action="get" role="developer"
+# Output: developer → deepseek/deepseek-chat 💾 (persisted)
+
+# Hapus preference (kembali ke default)
+agentic_model action="clear" role="developer"
+
+# Reset statistics model yang degraded
+agentic_model_reset action="reset" model="deepseek-chat"
+```
+
+### File Persistence
+
+Preference disimpan di `.agentic/models.json`:
+
+```json
+{
+  "developer": "deepseek/deepseek-chat",
+  "architect": "anthropic/claude-sonnet-4-6"
+}
+```
+
+Statistics model (reliability, hallucination, latency) disimpan di `~/.config/opencode/models-stats.json` (global, cross-project).
+
+### Alur Delegasi dengan Model
+
+```
+agentic_model set role=developer model="deepseek/deepseek-chat"
+    ↓
+agentic_delegate role=developer taskId="..." description="..."
+    ↓ sessionStore.getModelPreference(sessionID, "developer") → "deepseek/deepseek-chat"
+    ↓ agentCtx.modelPreference = "deepseek/deepseek-chat"
+    ↓
+agentRuntime.execute(agentCtx)
+    ↓ engine.updateConfig({ model: "deepseek/deepseek-chat" })
+    ↓
+engine.call(req)
+    ↓ callOpenCode(req)
+    ↓ parseModelForSDK() → { providerID: "deepseek", modelID: "deepseek-chat" }
+    ↓
+OpenCode SDK session.prompt({ body: { model: {...}, parts: [...] } })
+    ↓
+OpenCode → panggil DeepSeek API dengan model deepseek-chat ✅
+```
+
+### Tracking Reliability
+
+Plugin otomatis track reliabilitas setiap model:
+
+```
+agentic_dashboard
+  → Model Reliability:
+    ✅ deepseek-chat — reliability: 85%, hallucinations: 3%, calls: 120
+    ⚠️ gpt-4o — reliability: 62%, hallucinations: 8%, calls: 45
+    ❌ claude-sonnet — reliability: 0%, hallucinations: 0%, calls: 5 (quarantined)
+```
+
+Model dengan `consecutiveFailures >= 5` atau `hallucinationRate > 0.5` otomatis di-quarantine.
 
 ## Conventions
 

@@ -11,6 +11,9 @@ export interface AgentContext {
   pipelineContext?: string
   pendingMessages?: Array<{ from: string; payload: string }>
   sharedMemory?: Array<{ key: string; value: string; writtenBy: string }>
+  /** Per-role model preference (e.g. "deepseek-chat", "openai/gpt-4o").
+   *  Applied to the engine before executing the LLM call. */
+  modelPreference?: string
 }
 
 export interface AgentResult {
@@ -92,6 +95,12 @@ export class AgentRuntime {
    */
   async execute(ctx: AgentContext): Promise<AgentResult> {
     const engine = this.getEngine(ctx.sessionId, ctx.role)
+
+    // Apply per-role model preference if set
+    if (ctx.modelPreference) {
+      engine.updateConfig({ model: ctx.modelPreference })
+    }
+
     const roleDef = this.roleRegistry.getBuiltIn(ctx.role as AgentRole)
       ?? this.roleRegistry.getCustom(ctx.role)
 

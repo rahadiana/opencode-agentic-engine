@@ -31,6 +31,11 @@ export interface LLMRequest {
   sourceTaskId?: string
   /** Source context untuk event llm.response — terisi jika dari pipeline multi-stage */
   sourcePipelineRunId?: string
+  /** Per-call model override. If set, overrides engine's default model for this request. */
+  model?: {
+    providerID: string
+    modelID: string
+  }
 }
 
 export interface LLMResponse {
@@ -560,8 +565,9 @@ export class LLMEngine {
   }
 
   private detectProvider(): LLMConfig["provider"] {
-    if (process.env.OPENAI_API_KEY || process.env.OPENAI_BASE_URL) return "openai"
-    if (process.env.ANTHROPIC_API_KEY) return "anthropic"
+    // Always prefer OpenCode SDK if running as a plugin.
+    // Direct API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY) are only used
+    // when the plugin is NOT running inside OpenCode (e.g. standalone tests).
     return "opencode"
   }
 
@@ -570,8 +576,9 @@ export class LLMEngine {
     const baseUrl = this.config.baseURL ?? process.env.OPENAI_BASE_URL
     if (!apiKey && !baseUrl) return this.fallbackResponse(req)
 
+    const modelName = req.model?.modelID ?? this.config.model ?? DEFAULT_MODELS.openai
     const body: Record<string, unknown> = {
-      model: this.config.model ?? DEFAULT_MODELS.openai,
+      model: modelName,
       messages: [
         { role: "system", content: req.systemPrompt },
         { role: "user", content: req.userPrompt },
@@ -599,8 +606,9 @@ export class LLMEngine {
     const apiKey = this.config.apiKey ?? process.env.ANTHROPIC_API_KEY
     if (!apiKey) return this.fallbackResponse(req)
 
+    const modelName = req.model?.modelID ?? this.config.model ?? DEFAULT_MODELS.anthropic
     const body = {
-      model: this.config.model ?? DEFAULT_MODELS.anthropic,
+      model: modelName,
       max_tokens: req.maxTokens ?? this.config.maxTokens,
       temperature: req.temperature ?? this.config.temperature,
       system: req.systemPrompt + (req.jsonMode ? "\nYou MUST return valid JSON only." : ""),
@@ -630,64 +638,87 @@ export class LLMEngine {
     }
   }
 
+  /**
+   * Parse model string into providerID + modelID for OpenCode SDK.
+   * Format: "providerID/modelID" (e.g. "deepseek/deepseek-chat", "anthropic/claude-sonnet-4")
+   * If no "/", uses "opencode" as default providerID (OpenCode will auto-resolve).
+   */
+  private parseModelForSDK(modelStr?: string): { providerID: string; modelID: string } | undefined {
+    const raw = modelStr ?? this.config.model
+    if (!raw) return undefined
+
+    const parts = raw.split("/")
+    if (parts.length >= 2) {
+      return { providerID: parts[0], modelID: parts.slice(1).join("/") }
+    }
+    // No provider prefix — OpenCode auto-resolves from model name
+    return {
+      providerID: "opencode",
+      modelID: raw,
+    }
+  }
+
+  /**
+   * Call LLM through OpenCode SDK only.
+   * Never calls external APIs directly — OpenCode handles provider routing.
+   */
   private async callOpenCode(req: LLMRequest): Promise<LLMResponse> {
-    // Try direct HTTP call first if we have credentials for any provider
-    const openaiKey = this.config.apiKey ?? process.env.OPENAI_API_KEY
-    const openaiBaseUrl = this.config.baseURL ?? process.env.OPENAI_BASE_URL
-    const anthropicKey = process.env.ANTHROPIC_API_KEY
-    if (openaiKey || openaiBaseUrl) {
-      return this.callOpenAI(req)
-    }
-    if (anthropicKey) {
-      return this.callAnthropic(req)
+    if (!this.opencodeClient || !this.pluginSessionId) {
+      return this.fallbackResponse(req)
     }
 
-    // Fall back to OpenCode SDK client (noReply must be false to get a response)
-    if (this.opencodeClient && this.pluginSessionId) {
-      try {
-        const client = this.opencodeClient as {
-          session: {
-            prompt: (opts: {
-              body: { system?: string; noReply?: boolean; parts: Array<{ type: string; text: string }> }
-              path: { id: string }
-            }) => Promise<{ data?: { parts?: Array<{ type: string; text?: string }> }; parts?: Array<{ type: string; text?: string }> }>
-          }
-        }
-
-        // Add timeout to prevent hanging
-        const timeoutMs = 120_000
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-
-        const result = await Promise.race([
-          client.session.prompt({
+    try {
+      const client = this.opencodeClient as {
+        session: {
+          prompt: (opts: {
             body: {
-              system: req.jsonMode
-                ? `${req.systemPrompt}\n\nRespond with ONLY valid JSON. No markdown, no explanation.`
-                : req.systemPrompt,
-              noReply: false,
-              parts: [{ type: "text", text: req.userPrompt }],
-            },
-            path: { id: this.pluginSessionId },
-          }),
-          new Promise<never>((_, reject) => {
-            controller.signal.addEventListener("abort", () => {
-              reject(new Error(`OpenCode call timed out after ${timeoutMs}ms`))
-            })
-          }),
-        ])
-        clearTimeout(timeoutId)
-
-        const parts = result.data?.parts ?? result.parts ?? []
-        const textPart = parts.find((p: { type: string; text?: string }) => p.type === "text")
-        const text = textPart?.text ?? ""
-
-        if (text.trim()) {
-          return { content: text.trim(), finishReason: "stop" }
+              system?: string
+              noReply?: boolean
+              model?: { providerID: string; modelID: string }
+              parts: Array<{ type: string; text: string }>
+            }
+            path: { id: string }
+          }) => Promise<{ data?: { parts?: Array<{ type: string; text?: string }> }; parts?: Array<{ type: string; text?: string }> }>
         }
-      } catch (error) {
-        logParseError('callOpenCode', error);
       }
+
+      // Determine model for SDK: prefer per-request override, then engine config
+      const sdkModel = req.model ?? this.parseModelForSDK()
+
+      // Add timeout to prevent hanging
+      const timeoutMs = 120_000
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+      const result = await Promise.race([
+        client.session.prompt({
+          body: {
+            system: req.jsonMode
+              ? `${req.systemPrompt}\n\nRespond with ONLY valid JSON. No markdown, no explanation.`
+              : req.systemPrompt,
+            noReply: false,
+            ...(sdkModel ? { model: sdkModel } : {}),
+            parts: [{ type: "text", text: req.userPrompt }],
+          },
+          path: { id: this.pluginSessionId },
+        }),
+        new Promise<never>((_, reject) => {
+          controller.signal.addEventListener("abort", () => {
+            reject(new Error(`OpenCode call timed out after ${timeoutMs}ms`))
+          })
+        }),
+      ])
+      clearTimeout(timeoutId)
+
+      const parts = result.data?.parts ?? result.parts ?? []
+      const textPart = parts.find((p: { type: string; text?: string }) => p.type === "text")
+      const text = textPart?.text ?? ""
+
+      if (text.trim()) {
+        return { content: text.trim(), finishReason: "stop" }
+      }
+    } catch (error) {
+      logParseError('callOpenCode', error);
     }
 
     return this.fallbackResponse(req)
@@ -771,7 +802,7 @@ export class LLMEngine {
     if (req.jsonMode) {
       return { content: `{"status":"no_llm","data":null}`, finishReason: "no_llm" }
     }
-    return { content: `[NO_LLM] No LLM configured. Set OPENAI_API_KEY (OpenAI/compatible), ANTHROPIC_API_KEY (Claude), or OPENAI_BASE_URL (local LLM), or run within OpenCode for native LLM access.`, finishReason: "no_llm" }
+    return { content: `[NO_LLM] No LLM available. Run within OpenCode for native LLM access, or configure an API key.`, finishReason: "no_llm" }
   }
 }
 
