@@ -570,6 +570,232 @@ async function suite13() {
 }
 
 // ════════════════════════════════════════════════════════════════════
+// SUITE 15: agentic_snapshot — Real Snapshot Operations
+// ════════════════════════════════════════════════════════════════════
+
+async function suite15() {
+  suite("agentic_snapshot — Real Snapshot Operations")
+
+  // Save a snapshot
+  const saveResult = await runTool("agentic_snapshot", {
+    action: "save",
+    label: "test-snapshot-1",
+  }, "snap-session")
+  ok(typeof saveResult.output === "string" && saveResult.output.length > 20,
+    "snapshot save returns output")
+  ok(saveResult.output.includes("Snapshot") || saveResult.output.includes("snapshot") || saveResult.output.includes("Saved"),
+    "snapshot save confirms creation")
+
+  // List snapshots
+  const listResult = await runTool("agentic_snapshot", { action: "list" }, "snap-session")
+  ok(typeof listResult.output === "string" && listResult.output.length > 10,
+    "snapshot list returns output")
+  ok(listResult.output.includes("test-snapshot-1") || listResult.output.includes("Snapshot"),
+    "snapshot list shows saved label")
+
+  // Restore snapshot
+  const restoreResult = await runTool("agentic_snapshot", {
+    action: "restore",
+    label: "test-snapshot-1",
+  }, "snap-session")
+  ok(typeof restoreResult.output === "string" && restoreResult.output.length > 20,
+    "snapshot restore returns output")
+  ok(restoreResult.output.includes("Restored") || restoreResult.output.includes("restored") ||
+     restoreResult.output.includes("Snapshot"),
+    "snapshot restore confirms restoration")
+}
+
+// ════════════════════════════════════════════════════════════════════
+// SUITE 16: agentic_model_reset — Real Model Reset
+// ════════════════════════════════════════════════════════════════════
+
+async function suite16() {
+  suite("agentic_model_reset — Real Model Reset")
+
+  // Reset-all (safe — only resets in-memory stats)
+  const resetResult = await runTool("agentic_model_reset", {
+    action: "reset-all",
+  }, "reset-session")
+  ok(typeof resetResult.output === "string" && resetResult.output.length > 10,
+    "model_reset reset-all returns output")
+
+  // Reset with specific model name
+  const resetModelResult = await runTool("agentic_model_reset", {
+    action: "reset",
+    model: "gpt-4o",
+  }, "reset-session")
+  ok(typeof resetModelResult.output === "string" && resetModelResult.output.length > 10,
+    "model_reset specific model returns output")
+
+  // Reset-stale
+  const staleResult = await runTool("agentic_model_reset", {
+    action: "reset-stale",
+    staleDays: 1,
+  }, "reset-session")
+  ok(typeof staleResult.output === "string" && staleResult.output.length > 10,
+    "model_reset reset-stale returns output")
+
+  // Invalid action
+  const invalidResult = await runTool("agentic_model_reset", {
+    action: "invalid-action",
+  }, "reset-session")
+  ok(typeof invalidResult.output === "string" && invalidResult.output.length > 0,
+    "model_reset invalid action returns output")
+}
+
+// ════════════════════════════════════════════════════════════════════
+// SUITE 17: agentic_budget — Real Budget Operations
+// ════════════════════════════════════════════════════════════════════
+
+async function suite17() {
+  suite("agentic_budget — Real Budget Operations")
+
+  // Set budget limits
+  const setResult = await runTool("agentic_budget", {
+    action: "set",
+    scope: "session",
+    maxTokens: 100000,
+    maxSteps: 20,
+    onExceeded: "warn",
+  }, "budget-session")
+  ok(typeof setResult.output === "string" && setResult.output.length > 10,
+    "budget set returns output")
+  ok(setResult.output.includes("maxTokens") || setResult.output.includes("Budget") ||
+     setResult.output.includes("100000"),
+    "budget set confirms limits")
+
+  // Get current limits
+  const getResult = await runTool("agentic_budget", { action: "get" }, "budget-session")
+  ok(typeof getResult.output === "string" && getResult.output.length > 10,
+    "budget get returns output")
+
+  // Status
+  const statusResult = await runTool("agentic_budget", { action: "status" }, "budget-session")
+  ok(typeof statusResult.output === "string" && statusResult.output.length > 10,
+    "budget status returns output")
+  ok(statusResult.output.includes("Budget") || statusResult.output.includes("tokens") ||
+     statusResult.output.includes("steps"),
+    "budget status shows usage info")
+
+  // Reset
+  const resetResult = await runTool("agentic_budget", { action: "reset" }, "budget-session")
+  ok(typeof resetResult.output === "string" && resetResult.output.length > 10,
+    "budget reset returns output")
+}
+
+// ════════════════════════════════════════════════════════════════════
+// SUITE 18: agentic_pipeline — Real Pipeline Operations
+// ════════════════════════════════════════════════════════════════════
+
+async function suite18() {
+  suite("agentic_pipeline — Real Pipeline Operations")
+
+  // Define a pipeline
+  const defineResult = await runTool("agentic_pipeline", {
+    action: "define",
+    pipelineId: "test-e2e-pipeline",
+    name: "E2E Test Pipeline",
+    stages: [
+      { role: "pm", description: "Define test requirements" },
+      { role: "developer", description: "Implement test code" },
+      { role: "qa", description: "Verify test results" },
+    ],
+  }, "pipe-session")
+  ok(typeof defineResult.output === "string" && defineResult.output.length > 20,
+    "pipeline define returns output")
+  ok(defineResult.output.includes("Pipeline") || defineResult.output.includes("pipeline") ||
+     defineResult.output.includes("Defined"),
+    "pipeline define confirms creation")
+
+  // List pipelines
+  const listResult = await runTool("agentic_pipeline", { action: "list" }, "pipe-session")
+  ok(typeof listResult.output === "string" && listResult.output.length > 10,
+    "pipeline list returns output")
+
+  // Suggest pipeline
+  const suggestResult = await runTool("agentic_pipeline", {
+    action: "suggest",
+    description: "Add API key authentication to the app",
+  }, "pipe-session")
+  ok(typeof suggestResult.output === "string" && suggestResult.output.length > 10,
+    "pipeline suggest returns output")
+}
+
+// ════════════════════════════════════════════════════════════════════
+// SUITE 19: agentic_message — Real Messaging Operations
+// ════════════════════════════════════════════════════════════════════
+
+async function suite19() {
+  suite("agentic_message — Real Messaging Operations")
+
+  // Send a message
+  const sendResult = await runTool("agentic_message", {
+    action: "send",
+    to: "developer",
+    taskId: "test-task-msg",
+    message: "Please review the auth implementation",
+    type: "review_request",
+  }, "msg-session")
+  ok(typeof sendResult.output === "string" && sendResult.output.length > 10,
+    "message send returns output")
+
+  // Check inbox
+  const inboxResult = await runTool("agentic_message", { action: "inbox" }, "msg-session")
+  ok(typeof inboxResult.output === "string" && inboxResult.output.length > 10,
+    "message inbox returns output")
+
+  // View conversation
+  const convResult = await runTool("agentic_message", {
+    action: "conversation",
+    taskId: "test-task-msg",
+  }, "msg-session")
+  ok(typeof convResult.output === "string" && convResult.output.length > 10,
+    "message conversation returns output")
+
+  // Mark as read
+  const readResult = await runTool("agentic_message", {
+    action: "mark-read",
+    messageId: "msg-1",
+  }, "msg-session")
+  ok(typeof readResult.output === "string" && readResult.output.length > 0,
+    "message mark-read returns output")
+}
+
+// ════════════════════════════════════════════════════════════════════
+// SUITE 20: agentic_finetune — Real Finetune Operations
+// ════════════════════════════════════════════════════════════════════
+
+async function suite20() {
+  suite("agentic_finetune — Real Finetune Operations")
+
+  // Prepare dataset (no API key needed — just format conversion)
+  const prepResult = await runTool("agentic_finetune", {
+    action: "prepare",
+    source: "skills",
+    format: "openai",
+    minQuality: 0.5,
+  }, "ft-session")
+  ok(typeof prepResult.output === "string" && prepResult.output.length > 10,
+    "finetune prepare returns output")
+
+  // Unknown action returns error
+  const badResult = await runTool("agentic_finetune", {
+    action: "nonexistent",
+  }, "ft-session")
+  ok(typeof badResult.output === "string" && badResult.output.length > 0,
+    "finetune unknown action handled")
+
+  // Prepare with instructions format
+  const prepInstrResult = await runTool("agentic_finetune", {
+    action: "prepare",
+    source: "skills",
+    format: "instructions",
+  }, "ft-session")
+  ok(typeof prepInstrResult.output === "string" && prepInstrResult.output.length > 10,
+    "finetune prepare instructions format works")
+}
+
+// ════════════════════════════════════════════════════════════════════
 // SUITE 14: Real Cross-Tool Pipeline
 // ════════════════════════════════════════════════════════════════════
 
@@ -648,6 +874,12 @@ async function main() {
     await suite12()  // Prompt injection
     await suite13()  // ToolRouter Indonesian
     await suite14()  // Cross-tool pipeline
+    await suite15()  // agentic_snapshot
+    await suite16()  // agentic_model_reset
+    await suite17()  // agentic_budget
+    await suite18()  // agentic_pipeline
+    await suite19()  // agentic_message
+    await suite20()  // agentic_finetune
   } finally {
     if (_hooks && typeof _hooks.dispose === "function") {
       await _hooks.dispose()
