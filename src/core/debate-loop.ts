@@ -9,6 +9,12 @@ export interface DebateConfig {
   maxRounds?: number
   /** Output format: "markdown" or "json" (default: "json") */
   format?: "markdown" | "json"
+  /** Model override untuk Executor (default: resolved via tool context) */
+  executorModel?: { providerID: string; modelID: string }
+  /** Model override untuk Critic (default: resolved via tool context) */
+  criticModel?: { providerID: string; modelID: string }
+  /** Model override untuk Cleaner (default: resolved via tool context) */
+  cleanerModel?: { providerID: string; modelID: string }
 }
 
 export interface DebateRound {
@@ -111,6 +117,8 @@ export class DebateLoop {
             temperature: 0.2,
             maxTokens: 4096,
             bypassCache: round > 1,
+            model: config.executorModel,
+            toolName: 'debate-executor',
           }),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error("LLM call timed out after 60000ms")), 60_000)
@@ -150,6 +158,8 @@ export class DebateLoop {
           temperature: 0.2,
           maxTokens: 2048,
           bypassCache: round > 1, // Skip cache for revision rounds
+          model: config.criticModel,
+          toolName: 'debate-critic',
         })
         review = criticResp.content
 
@@ -192,6 +202,8 @@ export class DebateLoop {
         userPrompt: `Format: ${format}\n\nTask: ${config.task}\n\nFinal analysis to clean:\n\n${currentDraft}\n\nOutput the cleaned version in ${format} format.`,
         temperature: 0.1,
         maxTokens: 4096,
+        model: config.cleanerModel,
+        toolName: 'debate-cleaner',
       })
       finalOutput = cleanResp.content
     } catch (error) {

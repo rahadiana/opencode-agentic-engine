@@ -15,7 +15,10 @@
     "agentic_verify": "",
     "agentic_finetune": "",
     "agentic_parallel": "",
-    "agentic_auto": ""
+    "agentic_auto": "",
+    "debate-executor": "",
+    "debate-critic": "",
+    "debate-cleaner": ""
   },
 
   "categories": {

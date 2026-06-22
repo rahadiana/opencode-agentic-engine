@@ -3943,6 +3943,11 @@ const confidenceStore = new ConfidenceStore()
           llmEngine.setToolContext('agentic_debate')
           const startTime = Date.now()
 
+          // Model per-role di-resolve otomatis via toolName di debate-loop.ts:
+          //   debate-executor → unspecified-high
+          //   debate-critic   → deep
+          //   debate-cleaner  → quick
+          // Bisa di-override via: agentic_model set tool=debate-executor model="..."
           const maxRounds = Math.min(args.maxRounds ?? 3, 5)
           const result = await debateLoop.execute({
             task: args.task,

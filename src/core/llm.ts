@@ -79,6 +79,10 @@ export const TOOL_COMPLEXITY: Record<string, string> = {
   // Unspecified-high — butuh model cukup kuat
   agentic_debate: 'unspecified-high',
   agentic_plan: 'unspecified-high',
+  // Debate sub-roles — bisa di-override peran via agentic_model set tool=debate-{executor,critic,cleaner}
+  'debate-executor': 'unspecified-high',
+  'debate-critic': 'deep',
+  'debate-cleaner': 'quick',
   // Deep — paling berat, butuh reasoning maksimal
   agentic_verify: 'deep',
   agentic_finetune: 'deep',
@@ -301,6 +305,9 @@ export class LLMEngine {
     }
     // Priority 3: engine default (already handled by parseModelForSDK fallback in callOpenCode)
 
+    // Simpan model override sebelum call — dipake buat fallback tracking
+    const explicitModel = req.model ? { ...req.model } : undefined
+
     if (!req.bypassCache && this.semanticCache) {
       const query = `${req.systemPrompt}${req.userPrompt}`
       const semanticHit = this.semanticCache.get(query)
@@ -351,6 +358,33 @@ export class LLMEngine {
       logParseError('LLM call', error);
       response = { content: "LLM call threw an exception", finishReason: "error" }
       success = false
+    }
+
+    // ── Fallback: kalo model override gagal, retry 1x pake session default ──
+    if (!success && explicitModel) {
+      // Catat failure buat model override (biar masuk karantina kalo sering error)
+      const failedModel = `${explicitModel.providerID}/${explicitModel.modelID}`
+      this.modelRegistry?.recordCall(failedModel, false, Date.now() - startTime)
+
+      // Hapus model override, retry pake default
+      delete req.model
+      try {
+        switch (this.config.provider) {
+          case "openai": response = await this.callOpenAI(req); break
+          case "anthropic": response = await this.callAnthropic(req); break
+          case "local": response = await this.callLocal(req); break
+          case "opencode": response = await this.callOpenCode(req); break
+          default:
+            if (this.opencodeClient) response = await this.callOpenCode(req)
+            else response = await this.callOpenAI(req)
+        }
+        success = !response.content.startsWith("LLM error") && !response.content.startsWith("[NO_LLM]") && !response.content.startsWith("LLM call failed")
+      } catch (fallbackError) {
+        logParseError('LLM fallback call', fallbackError);
+        response = { content: "LLM call threw an exception", finishReason: "error" }
+        success = false
+      }
+      // Hasil fallback dicatat otomatis oleh recordCall() di baris 396 (req.model udah undefined → pake getCurrentModel())
     }
 
     // Cache successful responses (bounded to prevent memory leak)
