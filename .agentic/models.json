@@ -1,17 +1,19 @@
 {
   "$schema": "v1",
-  "description": "Model preferences per project. Kosongkan field untuk fallback ke session default.",
+  "description": "Model preferences per tool/category/role. Kosongkan untuk fallback ke tier → session default.",
 
   "tools": {
-    "agentic_plan": "",
+    "agentic_nav": "",
+    "agentic_clean": "",
+    "agentic_pr": "",
+    "agentic_router": "",
+    "agentic_context": "",
     "agentic_execute": "",
     "agentic_reflect": "",
-    "agentic_verify": "",
-    "agentic_context": "",
-    "agentic_pr": "",
     "agentic_debate": "",
-    "agentic_robot": "",
-    "agentic_clean": "",
+    "agentic_plan": "",
+    "agentic_verify": "",
+    "agentic_finetune": "",
     "agentic_parallel": "",
     "agentic_auto": ""
   },
