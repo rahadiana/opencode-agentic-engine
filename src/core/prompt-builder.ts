@@ -20,6 +20,7 @@ export interface ToolListConfig {
 
 const CORE_TOOLS = ["agentic_plan", "agentic_execute", "agentic_verify", "agentic_reflect", "agentic_status"]
 const MEMORY_TOOLS = ["agentic_skill", "agentic_episodes", "agentic_context"]
+const DB_TOOLS = ["agentic_db"]
 const META_TOOLS = ["agentic_model", "agentic_dashboard", "agentic_evolve"]
 
 /**
@@ -57,6 +58,7 @@ export function buildGenericAgentPrompt(allTools: ToolEntry[]): string {
   const genericTools = allTools.filter(t =>
     CORE_TOOLS.includes(t.name) ||
     MEMORY_TOOLS.includes(t.name) ||
+    DB_TOOLS.includes(t.name) ||
     META_TOOLS.includes(t.name) ||
     t.name === "agentic_auto" ||
     t.name === "agentic_nav" ||
@@ -119,6 +121,7 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolL
   const hasRag = activeTools.some(t => t.name === "agentic_rag")
   const hasAuto = activeTools.some(t => t.name === "agentic_auto")
   const hasNav = activeTools.some(t => t.name === "agentic_nav")
+  const hasDb = activeTools.some(t => DB_TOOLS.includes(t.name))
 
   const t = new PromptTemplate()
   t.title(`Agentic ${domainName === "code" ? "Engineering" : domainName === "generic" ? "Assistant" : domainName} Agent`)
@@ -188,6 +191,9 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolL
   workflow += `2. **Plan** — \`agentic_plan\` to decompose the goal into ordered steps\n`
   workflow += `3. **Implement** — Execute each step with \`agentic_execute\`. For complex sub-tasks, use \`agentic_delegate\` to assign to specialist agents.\n`
   workflow += `4. **Verify** — \`agentic_verify\` for final compile+lint+test+security check. Check progress with \`agentic_status\`.`
+  if (hasDb) {
+    workflow += `\n\n**Data query**: \`agentic_db\` (SQLite) untuk filter terstruktur (WHERE, ORDER BY). \`agentic_rag\` (TF-IDF) untuk semantic search bebas. Jangan campur aduk — pilih sesuai kebutuhan data.`
+  }
   if (hasAuto) {
     workflow += `\n\n**Quick path**: \`agentic_auto\` does plan+execute+verify+retry in one call for simple tasks.`
   }
@@ -222,6 +228,7 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolL
   ]
   if (hasDebate) guardrailItems.push("For deep analysis: use \`agentic_debate\` (executor ↔ critic)")
   if (hasRouter && hasRag) guardrailItems.push("For knowledge queries: \`agentic_router\` then \`agentic_rag\`")
+  if (hasDb) guardrailItems.push("Gunakan \`agentic_db\` untuk query data terstruktur (filter WHERE, GROUP BY, COUNT). Gunakan \`agentic_rag\` untuk semantic search bebas (TF-IDF).")
   let rules = guardrailItems.map((item, i) => `${i + 1}. ${item}`).join("\n")
   t.guardrails(rules)
 

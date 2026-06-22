@@ -17,7 +17,7 @@ const ctx = await esbuild.context({
   treeShaking: true,
   keepNames: true,
   legalComments: "external",
-  external: ["@opencode-ai/plugin"],
+  external: ["@opencode-ai/plugin", "better-sqlite3"],
   define: {
     __VERSION__: JSON.stringify(version),
   },

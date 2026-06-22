@@ -110,32 +110,50 @@ export class MultiIndexRAG {
     return this.embedder ? `hybrid (TF-IDF + vector @ ${this.config.vectorWeight})` : "TF-IDF"
   }
 
+  /** Callback for persisting entries to disk */
+  private onPersist?: (data: ReturnType<typeof this.exportAll>) => void
+  /** Suppress persist notifications during batch seeding */
+  private suppressPersist = false
+
   setPersistenceCallback(cb: (entry: IndexEntry) => void): void {
     this.onIndex = cb
   }
 
   /**
-   * Add or sync categories dynamically.
+   * Set a callback that fires whenever data is stored, so it can be persisted to disk.
+   * The callback receives the full export of all RAG data.
    */
-  addCategory(category: string): void {
-    if (!this.indices.has(category)) {
-      this.indices.set(category, { episodes: [], skills: [] })
-    }
-  }
-
-  syncCategories(categories: string[]): void {
-    const newIndices = new Map(this.indices)
-    for (const cat of categories) {
-      if (!newIndices.has(cat)) {
-        newIndices.set(cat, { episodes: [], skills: [] })
-      }
-    }
-    this.indices = newIndices
+  setPersistCallback(cb: (data: ReturnType<typeof this.exportAll>) => void): void {
+    this.onPersist = cb
   }
 
   /**
-   * Store an episode in a category index.
-   * Also indexes into TF-IDF VectorStore and optionally computes embedding.
+   * Batch mode: suppress individual persist notifications.
+   * Call with `true` before batch seeding, then call `flush()` at the end.
+   */
+  setBatchMode(batch: boolean): void {
+    this.suppressPersist = batch
+  }
+
+  /**
+   * Flush (trigger persist) and exit batch mode.
+   */
+  flushPersist(): void {
+    this.suppressPersist = false
+    this.onPersist?.(this.exportAll())
+  }
+
+  /**
+   * Notify persistence callback after a store operation.
+   */
+  private notifyPersist(): void {
+    if (!this.suppressPersist) {
+      this.onPersist?.(this.exportAll())
+    }
+  }
+
+  /**
+   * Index an episode in a category — overridden to trigger persistence.
    */
   indexEpisode(category: string, episode: Episode): void {
     const index = this.indices.get(category)
@@ -166,11 +184,12 @@ export class MultiIndexRAG {
       keywords: episode.tags,
       title: episode.planGoal,
     })
+
+    this.notifyPersist()
   }
 
   /**
-   * Store a skill in a category index.
-   * Also indexes into TF-IDF VectorStore.
+   * Index a skill in a category — overridden to trigger persistence.
    */
   indexSkill(category: string, skill: SkillRecord): void {
     const index = this.indices.get(category)
@@ -179,12 +198,10 @@ export class MultiIndexRAG {
     }
     const targetIndex = this.indices.get(category)!
 
-    // Check for duplicate before adding
     if (!targetIndex.skills.some(s => s.definition.meta.id === skill.definition.meta.id)) {
       targetIndex.skills.push(skill)
     }
 
-    // Index into TF-IDF vector store (idempotent — re-indexing replaces old entry)
     this.vectorStore.index({
       id: `sk-${skill.definition.meta.id}`,
       category,
@@ -197,10 +214,31 @@ export class MultiIndexRAG {
     this.onIndex?.({
       category,
       skill,
-      timestamp: skill.lastUsed,
+      timestamp: skill.definition.audit.createdAt,
       keywords: skill.definition.trigger.keywords ?? [],
       title: skill.definition.meta.name,
     })
+
+    this.notifyPersist()
+  }
+
+  /**
+   * Add or sync categories dynamically.
+   */
+  addCategory(category: string): void {
+    if (!this.indices.has(category)) {
+      this.indices.set(category, { episodes: [], skills: [] })
+    }
+  }
+
+  syncCategories(categories: string[]): void {
+    const newIndices = new Map(this.indices)
+    for (const cat of categories) {
+      if (!newIndices.has(cat)) {
+        newIndices.set(cat, { episodes: [], skills: [] })
+      }
+    }
+    this.indices = newIndices
   }
 
   /**
@@ -503,6 +541,44 @@ export class MultiIndexRAG {
     }
 
     return best
+  }
+
+  /**
+   * List all entries across all categories (no search query needed).
+   * Returns a flat array of all episodes and skills organized by category.
+   */
+  listAll(category?: string): { category: string; entries: IndexEntry[] }[] {
+    const result: { category: string; entries: IndexEntry[] }[] = []
+
+    for (const [cat, index] of this.indices) {
+      if (category && cat !== category) continue
+
+      const entries: IndexEntry[] = []
+
+      for (const ep of index.episodes) {
+        entries.push({
+          category: cat,
+          episode: ep,
+          timestamp: ep.timestamp,
+          keywords: ep.tags,
+          title: ep.planGoal,
+        })
+      }
+
+      for (const sk of index.skills) {
+        entries.push({
+          category: cat,
+          skill: sk,
+          timestamp: sk.definition.audit.createdAt,
+          keywords: sk.definition.trigger.keywords ?? [],
+          title: sk.definition.meta.name,
+        })
+      }
+
+      result.push({ category: cat, entries })
+    }
+
+    return result
   }
 
   /**

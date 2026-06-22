@@ -444,8 +444,8 @@ Intent classifier / router. Keyword-based routing (cepat, tanpa LLM) dengan fall
 | `getCategories` | — | `RouteCategory[]` | Dapatkan categories |
 | `setLLM` | `(llm)` | `void` | Set LLM engine |
 | `hasLLM` | — | `boolean` | Cek LLM tersedia |
-| `keywordRoute` | `(input)` | `RouteMatch \| null` | Routing cepat keyword-based |
-| `route` | `(input)` | `Promise<RouteMatch>` | Routing dengan LLM fallback |
+| `route` | `(input)` | `Promise<RouteMatch>` | Routing dengan LLM sebagai primary classifier |
+| `extractKeywords` | `(input)` | `{keywords, category}` | Ekstrak keyword untuk RAG search |
 | `createCategory` | `(id, name, keywords, description, tools?)` | `RouteCategory` | Buat custom category |
 
 ---

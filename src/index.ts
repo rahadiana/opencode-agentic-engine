@@ -45,6 +45,7 @@ import { ContinuousEvolution } from "./evolution/continuous-evolution.js"
 import { LLMEngine } from "./core/llm.js"
 import { AgentLoop } from "./core/agent-loop.js"
 import { PersistenceLayer } from "./memory/persistence.js"
+import { SQLitePersistence } from "./memory/sqlite-persistence.js"
 import { ModelRegistry } from "./core/model-registry.js"
 import { ConfigLoader } from "./core/config.js"
 import { BudgetTracker } from "./core/budget-tracker.js"
@@ -216,6 +217,7 @@ const createEngine: Plugin = async (input, _options) => {
     { name: "agentic_rag", description: "Store, search, and retrieve knowledge across category-segregated indexes. Use with agentic_router for scoped search. Key: `action` (search/store/stats/categories), `query`." },
     { name: "agentic_mcp", description: "Connect to external servers (DB, APIs) via stdio/HTTP to call remote tools. Use when task needs real-world data (weather, DB, API). Key: `action` (connect/list/call/disconnect)." },
     { name: "agentic_finetune", description: "End-to-end pipeline: prepare training data from skills → upload to OpenAI → create/monitor jobs. Use to fine-tune models from agent experience. Key: `action` (prepare/save/upload/create-job/status)." },
+    { name: "agentic_db", description: "SQLite database backend untuk persistence — query, save, load, stats. Lebih cepat dari file JSON. Support structured queries dengan WHERE, JOIN, GROUP BY." },
   ]
 
   // ── Sub-agent detection (dynamic via RoleRegistry + fallback signatures) ──
@@ -446,6 +448,8 @@ const confidenceStore = new ConfidenceStore()
   })
   new AgentLoop(llmEngine, { maxIterations: 10, autoRetry: true, maxRetries: 2, verifyAfterEach: false })
   const persistence = new PersistenceLayer(worktree)
+  // SQLite backend — lebih cepat dari file JSON, support structured queries
+  const sqliteDB = new SQLitePersistence()
   // Build RAG config from config file
   const ragConfig: import("./memory/multi-index-rag.js").RAGConfig = {
     keywordWeight: config.memory.search.keywordWeight,
@@ -453,6 +457,16 @@ const confidenceStore = new ConfidenceStore()
     embedding: config.embedding, // null = TF-IDF only
   }
   const multiIndexRAG = new MultiIndexRAG(undefined, ragConfig)
+
+  // Load persisted RAG data from disk (global, unscoped — shared across all projects)
+  const savedRAG = persistence.loadAll("rag")
+  for (const item of savedRAG) {
+    multiIndexRAG.importAll(item.data as any)
+  }
+  // Auto-persist RAG every time data is stored (via indexEpisode/indexSkill)
+  multiIndexRAG.setPersistCallback((data) => {
+    persistence.save("rag", "global", data)
+  })
 
   const debateLoop = new DebateLoop(llmEngine)
   const routerAgent = new RouterAgent(llmEngine)
@@ -491,6 +505,40 @@ const confidenceStore = new ConfidenceStore()
   for (const sk of savedSkills) {
     skillStore.importFromEnvelope(JSON.stringify(createMemoryEnvelope(sk.data, "skill")))
   }
+
+  // Seed RAG from persisted episodes + skills so it's not empty on fresh sessions
+  multiIndexRAG.setBatchMode(true)  // suppress individual persist calls
+  for (const ep of savedEpisodes) {
+    const cat = multiIndexRAG.autoCategory(ep.data.planGoal + " " + (ep.data as any).summary || "")
+    const epData = ep.data as any
+    multiIndexRAG.indexEpisode(cat, {
+      id: epData.sessionId,
+      sessionId: epData.sessionId,
+      planGoal: epData.planGoal,
+      summary: epData.summary || "",
+      outcome: (epData.outcome || "partial") as "success" | "partial" | "failed",
+      decisions: epData.decisions || [],
+      filesChanged: epData.filesChanged || [],
+      timestamp: epData.timestamp,
+      tags: epData.tags || [],
+      projectId: epData.projectId,
+      score: 0.5,
+      usageCount: 0,
+    })
+  }
+  for (const sk of savedSkills) {
+    const skData = sk.data as any
+    const cat = multiIndexRAG.autoCategory(skData.meta?.name || skData.definition?.meta?.name || "" + " " + skData.trigger?.pattern || skData.definition?.trigger?.pattern || "")
+    const skillRecord: import("./memory/skill-store.js").SkillRecord = {
+      definition: skData.definition || skData,
+      usageCount: skData.usageCount ?? 0,
+      successRate: skData.successRate ?? 0.5,
+      successWindow: skData.successWindow ?? [],
+      lastUsed: skData.lastUsed || skData.audit?.lastUsed || new Date().toISOString(),
+    }
+    multiIndexRAG.indexSkill(cat, skillRecord)
+  }
+  multiIndexRAG.flushPersist()  // persist once after all seeding
 
   // ── SchemaValidator + DslExecutor (Phase 2) ──
   const schemaValidator = new SchemaValidator()
@@ -3587,6 +3635,8 @@ const confidenceStore = new ConfidenceStore()
                 prompt: args.prompt,
                 tools: args.tools ?? ["read", "edit", "write", "bash"],
               })
+              // Auto-save evolution trend after role registration
+              persistence.save("evolution", "trend", continuousEvolution.toJSON(), projectId)
               return { output: `Custom role "${args.name}" registered as \`${roleId}\`. Available via \`agentic_delegate role=${roleId}\`.` }
             }
 
@@ -3904,6 +3954,9 @@ const confidenceStore = new ConfidenceStore()
                 out += `\n**Current performance:** ${(metaPerf.successRate * 100).toFixed(0)}% success rate, ${metaPerf.avgRetries.toFixed(1)} avg retries\n`
               }
 
+              // Auto-save evolution trend after evolve run
+              persistence.save("evolution", "trend", continuousEvolution.toJSON(), projectId)
+              persistence.save("evaluation", "live", liveEvaluator.toJSON(), projectId)
               return { output: out }
             }
 
@@ -4088,7 +4141,7 @@ const confidenceStore = new ConfidenceStore()
           const confidenceBar = "█".repeat(Math.round(route.confidence * 10)) + "░".repeat(10 - Math.round(route.confidence * 10))
 
           return {
-            output: `## 🧭 Route Result\n\n**Input:** ${args.input}\n**Intent:** ${route.intent}\n**Category:** ${route.category}\n**Confidence:** ${(route.confidence * 100).toFixed(0)}% ${confidenceBar}\n**Method:** ${route.usedLlm ? "LLM + Keywords" : "Keywords only"} (fast)\n**RAG Index:** ${route.suggestedRagIndex}\n**Reasoning:** ${route.reasoning}\n\n> 💡 Use \`agentic_episodes search "${route.suggestedRagIndex}: ${args.input}"\` to find relevant past sessions in this category.`,
+            output: `## 🧭 Route Result\n\n**Input:** ${args.input}\n**Intent:** ${route.intent}\n**Category:** ${route.category}\n**Confidence:** ${(route.confidence * 100).toFixed(0)}% ${confidenceBar}\n**Method:** ${route.usedLlm ? "LLM Classification" : "Keyword Fallback"}\n**RAG Index:** ${route.suggestedRagIndex}\n**Reasoning:** ${route.reasoning}\n\n> 💡 Use \`agentic_episodes search "${route.suggestedRagIndex}: ${args.input}"\` to find relevant past sessions in this category.`,
             metadata: { route },
           }
         },
@@ -4135,7 +4188,7 @@ const confidenceStore = new ConfidenceStore()
       agentic_rag: tool({
         description: "Multi-index RAG: search or store knowledge in category-segregated indices. Prevents cross-category context pollution. Use with agentic_router to scope searches to relevant domains.",
         args: {
-          action: tool.schema.enum(["search", "store", "stats", "categories"]).describe("Action: search across categories, store new data, view stats, or list categories"),
+          action: tool.schema.enum(["search", "store", "stats", "categories", "list"]).describe("Action: search across categories, store new data, view stats, list categories, or list all entries"),
           query: tool.schema.string().optional().describe("Search query (required for search/stats)"),
           category: tool.schema.string().optional().describe("Category to search within (omit for all)"),
           title: tool.schema.string().optional().describe("Title for stored entry"),
@@ -4199,6 +4252,46 @@ const confidenceStore = new ConfidenceStore()
                   output: lines.join("\n"),
                   metadata: { searchResults: allResults },
                 }
+              }
+            }
+
+            case "list": {
+              const listCat = args.category
+              const allEntries = multiIndexRAG.listAll(listCat)
+              const totalCount = allEntries.reduce((s, c) => s + c.entries.length, 0)
+
+              if (totalCount === 0) {
+                return {
+                  output: `## 📋 RAG Entries\n\nNo entries found${listCat ? ` in category "${listCat}"` : ""}.`,
+                  metadata: { listResult: allEntries },
+                }
+              }
+
+              const lines = [
+                `## 📋 RAG Entries`,
+                `**Total:** ${totalCount} entries across ${allEntries.length} categories`,
+                ``,
+              ]
+
+              for (const { category, entries } of allEntries) {
+                const episodeCount = entries.filter(e => e.episode).length
+                const skillCount = entries.filter(e => e.skill).length
+                lines.push(`### ${category} (${entries.length} — ${episodeCount} episodes, ${skillCount} skills)`)
+
+                const showCount = Math.min(entries.length, 30)
+                for (const entry of entries.slice(0, showCount)) {
+                  const type = entry.episode ? "📖" : "🔧"
+                  const ts = (entry.timestamp || "").slice(0, 10)
+                  lines.push(`  ${type} [${ts}] **${entry.title}**`)
+                }
+                if (entries.length > showCount) {
+                  lines.push(`  *...and ${entries.length - showCount} more*`)
+                }
+              }
+
+              return {
+                output: lines.join("\n"),
+                metadata: { listResult: allEntries },
               }
             }
 
@@ -4826,6 +4919,194 @@ const confidenceStore = new ConfidenceStore()
 
             default:
               return { output: "Unknown action. Available: prepare, save, upload, create-job, status, list, cancel, full-pipeline, full-pipeline-wait" }
+          }
+        },
+      }),
+
+      // ── SQLite Database — persistence backend ──
+      agentic_db: tool({
+        description: "SQLite database backend. Query, save, load, list, stats. Structured queries support WHERE, JOIN, GROUP BY.",
+        args: {
+          action: tool.schema.enum(["query", "save", "load", "list", "stats", "tables", "migrate"]).describe("Action: query (raw SQL), save (key-value), load (by key), list (all keys), stats, tables (list tables), migrate (JSON→SQLite)"),
+          sql: tool.schema.string().optional().describe("SQL query (for action=query)"),
+          namespace: tool.schema.string().optional().describe("Namespace (for save/load/list)"),
+          key: tool.schema.string().optional().describe("Key (for save/load)"),
+          scope: tool.schema.string().optional().describe("Scope/projectId (optional)"),
+          data: tool.schema.string().optional().describe("JSON data string (for action=save)"),
+          params: tool.schema.string().optional().describe("JSON array of query parameters (for action=query)"),
+        },
+        async execute(args: Record<string, unknown>, _ctx: any) {
+          const action = args.action as string
+
+          switch (action) {
+            case "query": {
+              const sql = args.sql as string
+              if (!sql) return { output: "Error: 'sql' parameter is required for query action." }
+              try {
+                const params = args.params ? JSON.parse(args.params as string) : undefined
+                const rows = sqliteDB.query(sql, params)
+                const preview = JSON.stringify(rows.slice(0, 20), null, 2)
+                const total = rows.length
+                return {
+                  output: [
+                    `## 📊 SQLite Query Result`,
+                    `**SQL:** \`${sql}\``,
+                    `**Rows:** ${total}${total > 20 ? " (showing first 20)" : ""}`,
+                    ``,
+                    "```json",
+                    preview,
+                    "```",
+                  ].join("\n"),
+                  metadata: { rows: total, data: rows.slice(0, 50) },
+                }
+              } catch (err: any) {
+                return { output: `❌ Query failed: ${err.message}` }
+              }
+            }
+
+            case "save": {
+              const namespace = args.namespace as string
+              const key = args.key as string
+              const dataStr = args.data as string
+              if (!namespace || !key || !dataStr) {
+                return { output: "Error: 'namespace', 'key', and 'data' parameters are required." }
+              }
+              try {
+                const data = JSON.parse(dataStr)
+                const scope = args.scope as string | undefined
+                sqliteDB.save(namespace, key, data, scope)
+                return { output: `✅ Saved \`${namespace}:${key}\`${scope ? ` (scope: ${scope})` : ""}` }
+              } catch (err: any) {
+                return { output: `❌ Save failed: ${err.message}` }
+              }
+            }
+
+            case "load": {
+              const namespace = args.namespace as string
+              const key = args.key as string
+              if (!namespace || !key) {
+                return { output: "Error: 'namespace' and 'key' parameters are required." }
+              }
+              const scope = args.scope as string | undefined
+              const data = sqliteDB.load(namespace, key, scope)
+              if (data === null) {
+                return { output: `Not found: \`${namespace}:${key}\`${scope ? ` (scope: ${scope})` : ""}` }
+              }
+              return {
+                output: [
+                  `## Loaded: \`${namespace}:${key}\``,
+                  ``,
+                  "```json",
+                  JSON.stringify(data, null, 2),
+                  "```",
+                ].join("\n"),
+                metadata: { data },
+              }
+            }
+
+            case "list": {
+              const namespace = args.namespace as string
+              if (!namespace) return { output: "Error: 'namespace' parameter is required." }
+              const scope = args.scope as string | undefined
+              const keys = sqliteDB.listKeys(namespace, scope)
+              if (keys.length === 0) {
+                return { output: `No entries in namespace \`${namespace}\`${scope ? ` (scope: ${scope})` : ""}` }
+              }
+              return {
+                output: [
+                  `## 📋 Keys in \`${namespace}\`${scope ? ` (scope: ${scope})` : ""}`,
+                  `**Total:** ${keys.length}`,
+                  ``,
+                  ...keys.map(k => `  - \`${k}\``),
+                ].join("\n"),
+                metadata: { keys },
+              }
+            }
+
+            case "tables": {
+              const rows = sqliteDB.query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name") as Array<{ name: string }>
+              const counts = sqliteDB.query("SELECT 'store' as name, COUNT(*) as cnt FROM store") as Array<{ name: string; cnt: number }>
+              return {
+                output: [
+                  `## 📋 SQLite Tables`,
+                  `**Database:** ${sqliteDB.stats().dbPath}`,
+                  ``,
+                  "| Table | Rows |",
+                  "|-------|------|",
+                  ...rows.map(r => {
+                    const cnt = counts.find(c => c.name === r.name)?.cnt ?? 0
+                    return `| \`${r.name}\` | ${cnt} |`
+                  }),
+                  ``,
+                  `**File size:** ${(sqliteDB.stats().fileSize / 1024).toFixed(1)} KB`,
+                ].join("\n"),
+              }
+            }
+
+            case "stats": {
+              const stats = sqliteDB.stats()
+              return {
+                output: [
+                  `## 📊 SQLite Database Stats`,
+                  `**Path:** ${stats.dbPath}`,
+                  `**File size:** ${(stats.fileSize / 1024).toFixed(1)} KB`,
+                  ``,
+                  `| Namespace | Scopes | Keys |`,
+                  `|-----------|--------|------|`,
+                  ...stats.namespaces.map(n =>
+                    `| \`${n.namespace}\` | ${n.scopes} | ${n.keys} |`
+                  ),
+                ].join("\n"),
+                metadata: stats,
+              }
+            }
+
+            case "migrate": {
+              // Migrate all data from JSON files to SQLite (one-time operation)
+              const migrated: string[] = []
+              const skipped: string[] = []
+              const namespaces = ["rag", "episodes", "skills", "models", "prompts", "evolution", "evaluation"]
+
+              for (const ns of namespaces) {
+                try {
+                  const items = persistence.loadAll(ns)
+                  if (items.length === 0) {
+                    skipped.push(`${ns} (empty)`)
+                    continue
+                  }
+                  for (const item of items) {
+                    // Detect scope from key pattern
+                    if (ns === "episodes" && item.key.includes("-")) {
+                      // episodes have scope from projectId
+                      const loaded = persistence.load(ns, item.key)
+                      if (loaded) sqliteDB.save(ns, item.key, loaded)
+                    } else {
+                      sqliteDB.save(ns, item.key, item.data)
+                    }
+                  }
+                  migrated.push(`${ns} (${items.length} items)`)
+                } catch (err: any) {
+                  skipped.push(`${ns} (error: ${err.message})`)
+                }
+              }
+
+              return {
+                output: [
+                  `## 🔄 Migration: JSON → SQLite`,
+                  ``,
+                  `**Migrated:**`,
+                  ...migrated.map(m => `  ✅ ${m}`),
+                  ``,
+                  `**Skipped:**`,
+                  ...skipped.map(s => `  ⏭️ ${s}`),
+                  ``,
+                  `**SQLite DB:** ${sqliteDB.stats().dbPath}`,
+                ].join("\n"),
+              }
+            }
+
+            default:
+              return { output: "Unknown action. Available: query, save, load, list, stats, tables, migrate" }
           }
         },
       }),
