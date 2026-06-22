@@ -283,7 +283,8 @@ const createEngine: Plugin = async (input, _options) => {
 
   // ── Agent identity ──
   // Agent registration is done programmatically via the `config` hook
-  // (see return hooks below), which sets config.agent.agentic.
+  // (see return hooks below), which sets config.mode.agentic (appears in
+  // agent switcher) and config.agent.agentic (available as subagent).
   // ALL dynamic instructions (tools, CRITICAL RULES, domain context)
   // are injected per-LLM-call via `experimental.chat.system.transform` hook.
   // This avoids file I/O latency, stale prompts, and corrupt-agent errors.
@@ -449,7 +450,13 @@ const confidenceStore = new ConfidenceStore()
   new AgentLoop(llmEngine, { maxIterations: 10, autoRetry: true, maxRetries: 2, verifyAfterEach: false })
   const persistence = new PersistenceLayer(worktree)
   // SQLite backend — lebih cepat dari file JSON, support structured queries
-  const sqliteDB = new SQLitePersistence()
+  // Graceful fallback: jika better-sqlite3 (Node) atau bun:sqlite (Bun) gak available
+  let sqliteDB: SQLitePersistence | null = null
+  try {
+    sqliteDB = new SQLitePersistence()
+  } catch (e) {
+    console.log("[Agentic] SQLite not available — agentic_db tool disabled:", (e as Error).message)
+  }
   // Build RAG config from config file
   const ragConfig: import("./memory/multi-index-rag.js").RAGConfig = {
     keywordWeight: config.memory.search.keywordWeight,
@@ -4938,6 +4945,11 @@ const confidenceStore = new ConfidenceStore()
         async execute(args: Record<string, unknown>, _ctx: any) {
           const action = args.action as string
 
+          // Jika SQLite tidak tersedia (Bun tanpa better-sqlite3, dll)
+          if (!sqliteDB) {
+            return { output: "❌ SQLite database not available. Install better-sqlite3 (Node) or run in Bun for built-in SQLite support.\n\nFallback: use file-based persistence via agentic_rag and agentic_skill (data saved to .agentic/store/)." }
+          }
+
           switch (action) {
             case "query": {
               const sql = args.sql as string
@@ -5518,19 +5530,39 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
     },
 
     // ── Config hook: register agent programmatically ──
-    // Replaces the old writeStaticAgentFile() approach.
     // OpenCode's config hook lets plugins add agent definitions directly
-    // to config.agent without writing static .md files to disk.
+    // to config.agent. Set mode: "primary" or "all" to appear in agent switcher.
     config: async (config) => {
       if (typeof config !== "object" || config === null) return
-      // Use broader type like oh-my-openagent does (config-handler.ts)
       const cfg = config as Record<string, unknown>
       const agentDef: Record<string, unknown> = {
         description: "Agentic Engineering Agent — autonomous software engineering with planning, execution, and verification",
-        mode: "all",
+        mode: "primary",
+        hidden: false,
+        color: "accent",
+        permission: {
+          read: "allow",
+          edit: "allow",
+          write: "allow",
+          bash: "allow",
+          glob: "allow",
+          grep: "allow",
+          webfetch: "allow",
+          websearch: "allow",
+          task: "allow",
+          todowrite: "allow",
+          lsp: "allow",
+          skill: "allow",
+          external_directory: "allow",
+          doom_loop: "allow",
+          question: "allow",
+        },
         prompt: `You are an autonomous software engineering agent.
 Your full instructions, tool list, and domain-specific rules are injected dynamically into every LLM call by the agentic-engine plugin.`,
       }
+      // Add to config.agent — the standard way to register agents.
+      // mode: "primary" makes it appear in the agent switcher.
+      // mode: "all" also works (primary + subagent).
       if (!cfg.agent) cfg.agent = {}
       ;(cfg.agent as Record<string, unknown>).agentic = agentDef
       // Set as default agent if user hasn't configured their own

@@ -1,5 +1,3 @@
-import { execFileSync } from "node:child_process"
-
 // Error logging helper for silent catch blocks
 function logParseError(context: string, error: unknown): void {
   if (process.env.DEBUG_LLM_PARSING) {
@@ -7,14 +5,19 @@ function logParseError(context: string, error: unknown): void {
   }
 }
 
+/**
+ * LLMConfig — minimal: hanya token & temperature settings.
+ *
+ * 🔴 CRITICAL: Model TIDAK bisa di-set dari sini.
+ * Semua LLM calls lewat OpenCode SDK — SDK yang menentukan model.
+ * Plugin gak pernah ngatur model secara langsung.
+ * Model override hanya via agentic_model (per-tool/per-category).
+ */
 export interface LLMConfig {
-  provider: "openai" | "anthropic" | "local" | "opencode"
-  apiKey?: string
-  baseURL?: string
-  model?: string
+  /** Maximum tokens for completion */
   maxTokens?: number
+  /** Temperature (0.0-1.0) */
   temperature?: number
-  variant?: string
 }
 
 export interface LLMRequest {
@@ -50,13 +53,6 @@ export interface LLMResponse {
     cacheWriteTokens?: number
   }
   finishReason?: string
-}
-
-const DEFAULT_MODELS: Record<string, string> = {
-  openai: "gpt-4o",
-  anthropic: "claude-3-5-sonnet-20240620",
-  local: "codellama",
-  opencode: "opencode-default",
 }
 
 /**
@@ -115,13 +111,8 @@ export class LLMEngine {
 
   constructor(config: Partial<LLMConfig> = {}) {
     this.config = {
-      provider: config.provider ?? this.detectProvider(),
-      apiKey: config.apiKey ?? process.env.OPENAI_API_KEY,
-      baseURL: config.baseURL ?? process.env.OPENAI_BASE_URL,
-      model: config.model ?? process.env.OPENAI_MODEL,
       maxTokens: config.maxTokens ?? 4096,
       temperature: config.temperature ?? 0.3,
-      variant: config.variant ?? process.env.OPENAI_VARIANT,
     }
     this.sessionReader = new SessionReader()
   }
@@ -164,9 +155,6 @@ export class LLMEngine {
   setOpencodeClient(client: unknown): void {
     this.opencodeClient = client
     this.sessionReader.setOpencodeClient(client)
-    if (this.config.provider === "opencode" || !process.env.OPENAI_API_KEY) {
-      this.config.provider = "opencode"
-    }
   }
 
   setSessionId(sessionId: string): void {
@@ -196,11 +184,12 @@ export class LLMEngine {
   }
 
   /**
-   * Mendapatkan model dari config (sync, cepat).
-   * Default: "opencode/default"
+   * Nama model untuk display/tracking.
+   * Model ASLI cuma diketahui OpenCode SDK — ini cuma label aja.
+   * Untuk model real, pake getOpenCodeModel() yang async.
    */
   getCurrentModel(): string {
-    return this.config.model ?? "opencode/default"
+    return "opencode/default"
   }
 
   /** Enable Gap #7 semantic cache with optional config */
@@ -274,7 +263,7 @@ export class LLMEngine {
       hash = ((hash << 5) - hash) + chr
       hash |= 0
     }
-    return `${this.config.provider}:${this.config.model}:${hash}`
+    return `opencode:${hash}`
   }
 
   async call(req: LLMRequest): Promise<LLMResponse> {
@@ -303,11 +292,12 @@ export class LLMEngine {
         }
       }
     }
-    // Priority 3: engine default (already handled by parseModelForSDK fallback in callOpenCode)
+    // Priority 3: NO fallback — kalo gak ada override, SDK pake session default
 
     // Simpan model override sebelum call — dipake buat fallback tracking
     const explicitModel = req.model ? { ...req.model } : undefined
 
+    // ── Gap #7: Semantic cache lookup ──
     if (!req.bypassCache && this.semanticCache) {
       const query = `${req.systemPrompt}${req.userPrompt}`
       const semanticHit = this.semanticCache.get(query)
@@ -326,7 +316,7 @@ export class LLMEngine {
       }
     }
 
-    // Check cache for identical requests (TTL: 30s) — skip if bypassCache is set
+    // Check exact-match cache (TTL: 30s)
     const cacheKey = this.getCacheKey(req)
     if (!req.bypassCache) {
       const cached = this.responseCache.get(cacheKey)
@@ -335,24 +325,9 @@ export class LLMEngine {
       }
     }
 
+    // ── ONLY call via OpenCode SDK — NO external API calls ──
     try {
-      switch (this.config.provider) {
-        case "openai":
-          response = await this.callOpenAI(req)
-          break
-        case "anthropic":
-          response = await this.callAnthropic(req)
-          break
-        case "local":
-          response = await this.callLocal(req)
-          break
-        case "opencode":
-          response = await this.callOpenCode(req)
-          break
-        default:
-          if (this.opencodeClient) response = await this.callOpenCode(req)
-          else response = await this.callOpenAI(req)
-      }
+      response = await this.callOpenCode(req)
       success = !response.content.startsWith("LLM error") && !response.content.startsWith("[NO_LLM]") && !response.content.startsWith("LLM call failed")
     } catch (error) {
       logParseError('LLM call', error);
@@ -362,35 +337,24 @@ export class LLMEngine {
 
     // ── Fallback: kalo model override gagal, retry 1x pake session default ──
     if (!success && explicitModel) {
-      // Catat failure buat model override (biar masuk karantina kalo sering error)
       const failedModel = `${explicitModel.providerID}/${explicitModel.modelID}`
       this.modelRegistry?.recordCall(failedModel, false, Date.now() - startTime)
 
-      // Hapus model override, retry pake default
       delete req.model
       try {
-        switch (this.config.provider) {
-          case "openai": response = await this.callOpenAI(req); break
-          case "anthropic": response = await this.callAnthropic(req); break
-          case "local": response = await this.callLocal(req); break
-          case "opencode": response = await this.callOpenCode(req); break
-          default:
-            if (this.opencodeClient) response = await this.callOpenCode(req)
-            else response = await this.callOpenAI(req)
-        }
+        response = await this.callOpenCode(req)
         success = !response.content.startsWith("LLM error") && !response.content.startsWith("[NO_LLM]") && !response.content.startsWith("LLM call failed")
       } catch (fallbackError) {
         logParseError('LLM fallback call', fallbackError);
         response = { content: "LLM call threw an exception", finishReason: "error" }
         success = false
       }
-      // Hasil fallback dicatat otomatis oleh recordCall() di baris 396 (req.model udah undefined → pake getCurrentModel())
     }
 
-    // Cache successful responses (bounded to prevent memory leak)
+    // Cache successful responses
     if (success) {
       this.responseCache.set(cacheKey, { response, timestamp: Date.now() })
-      // Gap #7: Also cache in semantic cache for similar-query lookups
+      // Gap #7: Also cache in semantic cache
       if (this.semanticCache) {
         const query = `${req.systemPrompt}${req.userPrompt}`
         this.semanticCache.set(query, {
@@ -408,18 +372,17 @@ export class LLMEngine {
       if (this.responseCache.size > this.CACHE_MAX_ENTRIES) {
         const oldest = [...this.responseCache.entries()]
           .sort(([, a], [, b]) => a.timestamp - b.timestamp)
-          .slice(0, Math.floor(this.CACHE_MAX_ENTRIES * 0.2)) // remove oldest 20%
+          .slice(0, Math.floor(this.CACHE_MAX_ENTRIES * 0.2))
         for (const [k] of oldest) this.responseCache.delete(k)
       }
     }
 
     const latency = Date.now() - startTime
-    
-    // Use the effective model (resolved via tool→category→default) for tracking
+
+    // Track model reliability
     const effectiveModel = req.model
       ? `${req.model.providerID}/${req.model.modelID}`
       : this.getCurrentModel()
-    
     const taskType = this.sessionStore && this.pluginSessionId
       ? this.sessionStore.getOrCreate(this.pluginSessionId).currentTaskType
       : undefined
@@ -431,21 +394,18 @@ export class LLMEngine {
     const tReasoning = response.usage?.reasoningTokens ?? 0
     const tCacheRead = response.usage?.cacheReadTokens ?? 0
     const tCacheWrite = response.usage?.cacheWriteTokens ?? 0
-
     if (success && this.budgetTracker) {
       this.budgetTracker.recordTokens(effectiveModel, tInput, tOutput, tReasoning, tCacheRead, tCacheWrite)
     }
 
-    // Sync session data (model + cost) dari OpenCode setelah LLM call sukses.
-    // Fire-and-forget — tidak blocking response.
+    // Sync session data from OpenCode after successful call
     if (success && this.pluginSessionId) {
       this.sessionReader.invalidateCache()
       this.sessionReader.syncToBudgetTracker().catch(() => {})
     }
 
-    // Emit llm.response event (passive — for dashboard/trace observers)
+    // Emit llm.response event
     if (this.eventBus) {
-      // Approximate cost using gpt-4o defaults (matching BudgetTracker fallback)
       const cost = (tInput * 2.5 + tOutput * 10 + tReasoning * 10 + tCacheRead * 0.3 + tCacheWrite * 2.5) / 1_000_000
       this.eventBus.emit({
         type: "llm.response",
@@ -669,103 +629,29 @@ export class LLMEngine {
     }
   }
 
-  private detectProvider(): LLMConfig["provider"] {
-    // Always prefer OpenCode SDK if running as a plugin.
-    // Direct API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY) are only used
-    // when the plugin is NOT running inside OpenCode (e.g. standalone tests).
-    return "opencode"
-  }
-
-  private async callOpenAI(req: LLMRequest): Promise<LLMResponse> {
-    const apiKey = this.config.apiKey ?? process.env.OPENAI_API_KEY ?? ""
-    const baseUrl = this.config.baseURL ?? process.env.OPENAI_BASE_URL
-    if (!apiKey && !baseUrl) return this.fallbackResponse(req)
-
-    const modelName = req.model?.modelID ?? this.config.model ?? DEFAULT_MODELS.openai
-    const body: Record<string, unknown> = {
-      model: modelName,
-      messages: [
-        { role: "system", content: req.systemPrompt },
-        { role: "user", content: req.userPrompt },
-      ],
-      max_tokens: req.maxTokens ?? this.config.maxTokens,
-      temperature: req.temperature ?? this.config.temperature,
-    }
-
-    if (this.config.variant) {
-      body.variant = this.config.variant
-    }
-
-    if (req.jsonMode) {
-      body.response_format = { type: "json_object" }
-    }
-
-    return this.httpCall(
-      this.config.baseURL ?? "https://api.openai.com/v1/chat/completions",
-      apiKey,
-      body,
-    )
-  }
-
-  private async callAnthropic(req: LLMRequest): Promise<LLMResponse> {
-    const apiKey = this.config.apiKey ?? process.env.ANTHROPIC_API_KEY
-    if (!apiKey) return this.fallbackResponse(req)
-
-    const modelName = req.model?.modelID ?? this.config.model ?? DEFAULT_MODELS.anthropic
-    const body = {
-      model: modelName,
-      max_tokens: req.maxTokens ?? this.config.maxTokens,
-      temperature: req.temperature ?? this.config.temperature,
-      system: req.systemPrompt + (req.jsonMode ? "\nYou MUST return valid JSON only." : ""),
-      messages: [{ role: "user", content: req.userPrompt }],
-    }
-
-    return this.httpCall(
-      "https://api.anthropic.com/v1/messages",
-      apiKey,
-      body,
-      { "anthropic-version": "2023-06-01" },
-    )
-  }
-
-  private async callLocal(req: LLMRequest): Promise<LLMResponse> {
-    try {
-      const prompt = req.systemPrompt + "\n\n" + req.userPrompt
-      const output = execFileSync("ollama", ["run", this.config.model ?? "codellama", prompt], {
-        encoding: "utf-8",
-        timeout: 60000,
-        stdio: ["ignore", "pipe", "pipe"],
-      })
-      return { content: output.trim() }
-    } catch (error) {
-      logParseError('callLocal ollama', error);
-      return this.fallbackResponse(req)
-    }
-  }
-
   /**
    * Parse model string into providerID + modelID for OpenCode SDK.
    * Format: "providerID/modelID" (e.g. "deepseek/deepseek-chat", "anthropic/claude-sonnet-4")
    * If no "/", uses "opencode" as default providerID (OpenCode will auto-resolve).
+   *
+   * 🔴 Kalo dipanggil TANPA argumen (fallback), return undefined →
+   *    SDK gak dikirim model → OpenCode pake session default.
+   *    Plugin gak punya default model sendiri — SEMUA dari OpenCode.
    */
   private parseModelForSDK(modelStr?: string): { providerID: string; modelID: string } | undefined {
-    const raw = modelStr ?? this.config.model
-    if (!raw) return undefined
-
-    const parts = raw.split("/")
+    if (!modelStr) return undefined // ← NO fallback — SDK determines model
+    const parts = modelStr.split("/")
     if (parts.length >= 2) {
       return { providerID: parts[0], modelID: parts.slice(1).join("/") }
     }
-    // No provider prefix — OpenCode auto-resolves from model name
-    return {
-      providerID: "opencode",
-      modelID: raw,
-    }
+    return { providerID: "opencode", modelID: modelStr }
   }
 
   /**
-   * Call LLM through OpenCode SDK only.
-   * Never calls external APIs directly — OpenCode handles provider routing.
+   * 🔴 THE ONLY LLM CALL PATH.
+   *
+   * Every LLM call goes through OpenCode SDK — NO direct external API calls.
+   * If OpenCode is not available, returns [NO_LLM] fallback.
    */
   private async callOpenCode(req: LLMRequest): Promise<LLMResponse> {
     if (!this.opencodeClient || !this.pluginSessionId) {
@@ -787,10 +673,10 @@ export class LLMEngine {
         }
       }
 
-      // Determine model for SDK: prefer per-request override, then engine config
+      // Model: per-request override → undefined (SDK default).
+      // Plugin gak punya default model — SEMUA dari OpenCode SDK.
       const sdkModel = req.model ?? this.parseModelForSDK()
 
-      // Add timeout to prevent hanging
       const timeoutMs = 120_000
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
@@ -829,85 +715,15 @@ export class LLMEngine {
     return this.fallbackResponse(req)
   }
 
-  private async httpCall(url: string, apiKey: string, body: unknown, extraHeaders: Record<string, string> = {}): Promise<LLMResponse> {
-    try {
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-        ...extraHeaders,
-      }
-
-      const controller = new AbortController()
-      const signal = AbortSignal.timeout(60000)
-      signal.addEventListener("abort", () => controller.abort())
-
-      const resp = await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-        signal,
-      })
-
-      let data: Record<string, unknown>
-      const text = await resp.text()
-      try {
-        data = JSON.parse(text)
-      } catch {
-        return { content: text.slice(0, 4096) || "LLM returned non-JSON response" }
-      }
-
-      const d = data as Record<string, any>
-      if (d.error) {
-        return { content: `LLM error: ${d.error.message ?? JSON.stringify(d.error)}` }
-      }
-
-      if (d.content) {
-        return {
-          content: typeof d.content === "string" ? d.content : d.content[0]?.text ?? JSON.stringify(d.content),
-          usage: d.usage ? {
-            promptTokens: d.usage.input_tokens ?? 0,
-            completionTokens: d.usage.output_tokens ?? 0,
-            reasoningTokens: d.usage.reasoning_tokens ?? d.usage.reasoning ?? 0,
-            cacheReadTokens: d.usage.cache_read_input_tokens ?? d.usage.cache?.read ?? 0,
-            cacheWriteTokens: d.usage.cache_creation_input_tokens ?? d.usage.cache?.write ?? 0,
-          } : undefined,
-          finishReason: d.stop_reason,
-        }
-      }
-
-      if (!d.choices || !Array.isArray(d.choices) || d.choices.length === 0) {
-        return { content: JSON.stringify(data), finishReason: "empty_choices" }
-      }
-
-      const choice = d.choices[0]
-      if (choice) {
-        return {
-          content: choice.message?.content ?? JSON.stringify(choice),
-          usage: d.usage ? {
-            promptTokens: d.usage.prompt_tokens ?? d.usage.input_tokens ?? 0,
-            completionTokens: d.usage.completion_tokens ?? d.usage.output_tokens ?? 0,
-            reasoningTokens: d.usage.reasoning_tokens ?? 0,
-            cacheReadTokens: d.usage.cache_read_input_tokens ?? d.usage.cache?.read ?? 0,
-            cacheWriteTokens: d.usage.cache_creation_input_tokens ?? d.usage.cache?.write ?? 0,
-          } : undefined,
-          finishReason: choice.finish_reason,
-        }
-      }
-
-      return { content: JSON.stringify(data) }
-    } catch (e) {
-      if ((e as Error).name === "AbortError") {
-        return { content: "LLM call timed out after 60s", finishReason: "timeout" }
-      }
-      return { content: `LLM call failed: ${(e as Error).message}` }
-    }
-  }
-
+  /**
+   * Fallback response when LLM is unavailable (not running inside OpenCode,
+   * or SDK call failed).
+   */
   private fallbackResponse(req: LLMRequest): LLMResponse {
     if (req.jsonMode) {
       return { content: `{"status":"no_llm","data":null}`, finishReason: "no_llm" }
     }
-    return { content: `[NO_LLM] No LLM available. Run within OpenCode for native LLM access, or configure an API key.`, finishReason: "no_llm" }
+    return { content: `[NO_LLM] No LLM available. Run within OpenCode for native LLM access. Plugin does NOT call external APIs directly.`, finishReason: "no_llm" }
   }
 }
 

@@ -1,23 +1,20 @@
 /**
  * SQLitePersistence — backend SQLite untuk persistence layer.
  *
- * Menggantikan file JSON dengan better-sqlite3.
- * Satu database untuk semua namespace (rag, episodes, skills, models, dll).
+ * Support dual driver:
+ *  - better-sqlite3 (Node.js via native addon)
+ *  - bun:sqlite (Bun built-in)
  *
- * Keunggulan:
- *  - Query terstruktur (WHERE, JOIN, ORDER BY)
- *  - Update in-place (gak perlu baca-tulis ulang seluruh file)
- *  - Atomic transaction via better-sqlite3
- *  - Index untuk lookup cepet
- *  - WAL mode untuk concurrent read
+ * Dipilih otomatis: better-sqlite3 priority #1, bun:sqlite fallback.
+ * Jika keduanya unavailable, constructor throw — caller wajib catch.
  *
  * Schema:
  * ```sql
  * CREATE TABLE store (
- *   namespace  TEXT NOT NULL,     -- 'rag', 'episodes', 'skills', 'models', ...
- *   scope      TEXT DEFAULT '',   -- projectId atau '' untuk global
- *   key        TEXT NOT NULL,     -- unique key dalam namespace
- *   data       TEXT NOT NULL,     -- JSON string
+ *   namespace  TEXT NOT NULL,
+ *   scope      TEXT DEFAULT '',
+ *   key        TEXT NOT NULL,
+ *   data       TEXT NOT NULL,
  *   updated_at TEXT NOT NULL,
  *   created_at TEXT NOT NULL,
  *   PRIMARY KEY (namespace, scope, key)
@@ -25,7 +22,6 @@
  * ```
  */
 
-import Database from "better-sqlite3"
 import type { PersistentState } from "./persistence.js"
 import { resolve } from "node:path"
 import { homedir } from "node:os"
@@ -48,8 +44,13 @@ const DEFAULT_CONFIG: SQLiteConfig = {
   autoMigrate: true,
 }
 
+/** Unified interface for both sqlite drivers */
+type Db = any
+type DriverType = "better-sqlite3" | "bun:sqlite"
+
 export class SQLitePersistence {
-  private db: Database.Database
+  private _driver: DriverType | null = null
+  private db: Db = null
   private dbPath: string
 
   constructor(config?: SQLiteConfig) {
@@ -62,29 +63,110 @@ export class SQLitePersistence {
       mkdirSync(dir, { recursive: true })
     }
 
-    this.db = new Database(this.dbPath)
+    // Init database — sync, throws if no driver available
+    this._initDbSync(cfg)
+  }
 
-    // WAL mode: faster reads, concurrent readers
-    if (cfg.wal) {
-      this.db.pragma("journal_mode = WAL")
+  // ── driver initialization ──
+
+  private _initDbSync(cfg: SQLiteConfig): void {
+    // Try better-sqlite3 (Node.js)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const mod = require("better-sqlite3")
+      const Database = mod.default || mod
+      this.db = new Database(this.dbPath)
+      this._driver = "better-sqlite3"
+
+      if (cfg.wal) {
+        this.db.pragma("journal_mode = WAL")
+      }
+      this.db.pragma(`cache_size = -${cfg.cacheSize}`)
+      this.db.pragma("wal_autocheckpoint = 1000")
+
+      if (cfg.autoMigrate) this._migrate()
+      return
+    } catch {
+      // better-sqlite3 not available, try bun:sqlite
     }
 
-    // Cache size
-    this.db.pragma(`cache_size = -${cfg.cacheSize}`)
+    // Try bun:sqlite (Bun)
+    try {
+      // bun:sqlite is a built-in module, no need to install
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { Database } = require("bun:sqlite")
+      this.db = new Database(this.dbPath)
+      this._driver = "bun:sqlite"
 
-    // Enable WAL auto-checkpoint
-    this.db.pragma("wal_autocheckpoint = 1000")
+      if (cfg.wal) {
+        this.db.run("PRAGMA journal_mode = WAL")
+      }
+      this.db.run(`PRAGMA cache_size = -${cfg.cacheSize}`)
+      this.db.run("PRAGMA wal_autocheckpoint = 1000")
 
-    if (cfg.autoMigrate) {
-      this.migrate()
+      if (cfg.autoMigrate) this._migrate()
+      return
+    } catch {
+      // bun:sqlite not available either
+    }
+
+    throw new Error(
+      "No SQLite driver available. Install better-sqlite3 (Node) " +
+      "or run in Bun (bun:sqlite built-in)."
+    )
+  }
+
+  // ── internal helpers ──
+
+  private _exec(sql: string): void {
+    if (this._driver === "bun:sqlite") {
+      this.db.exec(sql)
+    } else {
+      this.db.exec(sql)
     }
   }
+
+  private _prepare(sql: string): any {
+    if (this._driver === "bun:sqlite") {
+      return this.db.query(sql)
+    }
+    return this.db.prepare(sql)
+  }
+
+  private _run(stmt: any, ...params: any[]): { changes: number } {
+    if (this._driver === "bun:sqlite") {
+      return this.db.run(stmt.source, ...params) as { changes: number }
+    }
+    return stmt.run(...params) as { changes: number }
+  }
+
+  private _all(stmt: any, ...params: any[]): any[] {
+    if (params.length > 0) {
+      if (this._driver === "bun:sqlite") {
+        return stmt.all(...params) as any[]
+      }
+      return stmt.all(...params) as any[]
+    }
+    return stmt.all() as any[]
+  }
+
+  private _get(stmt: any, ...params: any[]): any {
+    if (params.length > 0) {
+      if (this._driver === "bun:sqlite") {
+        return stmt.get(...params)
+      }
+      return stmt.get(...params)
+    }
+    return stmt.get()
+  }
+
+  // ── public API ──
 
   /**
    * Auto-create table jika belum ada.
    */
-  private migrate(): void {
-    this.db.exec(`
+  private _migrate(): void {
+    this._exec(`
       CREATE TABLE IF NOT EXISTS store (
         namespace  TEXT NOT NULL,
         scope      TEXT DEFAULT '',
@@ -104,14 +186,15 @@ export class SQLitePersistence {
    */
   save<T>(namespace: string, key: string, data: T, scope?: string): void {
     const now = new Date().toISOString()
-    const stmt = this.db.prepare(`
+    const stmt = this._prepare(`
       INSERT OR REPLACE INTO store (namespace, scope, key, data, updated_at, created_at)
       VALUES (?, ?, ?, ?, ?,
         COALESCE((SELECT created_at FROM store WHERE namespace = ? AND scope = ? AND key = ?), ?)
       )
     `)
     const sc = scope ?? ""
-    stmt.run(
+    this._run(
+      stmt,
       namespace, sc, key,
       JSON.stringify(data),
       now,
@@ -121,13 +204,14 @@ export class SQLitePersistence {
   }
 
   /**
-   * Load data by key. Sama kayak PersistenceLayer.load().
+   * Load data by key.
    */
   load<T>(namespace: string, key: string, scope?: string): T | null {
     const sc = scope ?? ""
-    const row = this.db.prepare(
+    const stmt = this._prepare(
       "SELECT data FROM store WHERE namespace = ? AND scope = ? AND key = ?"
-    ).get(namespace, sc, key) as { data: string } | undefined
+    )
+    const row = this._get(stmt, namespace, sc, key) as { data: string } | undefined
 
     if (!row) return null
     try {
@@ -139,27 +223,26 @@ export class SQLitePersistence {
 
   /**
    * Load ALL entries dalam suatu namespace/scope.
-   * Sama kayak PersistenceLayer.loadAll().
-   * Scope = undefined → ambil global (scope='') + semua scoped
+   * Scope = undefined → ambil global (scope='')
    */
   loadAll<T>(namespace: string, scope?: string): PersistentState<T>[] {
     let rows: Array<{ key: string; data: string; updated_at: string }>
 
     if (scope !== undefined) {
-      // Scoped: ambil spesifik scope
-      rows = this.db.prepare(
+      const stmt = this._prepare(
         "SELECT key, data, updated_at FROM store WHERE namespace = ? AND scope = ? ORDER BY key"
-      ).all(namespace, scope) as Array<{ key: string; data: string; updated_at: string }>
+      )
+      rows = this._all(stmt, namespace, scope)
     } else {
-      // Unscoped: ambil global (scope='') — mirip file-based look在不 scope
-      rows = this.db.prepare(
+      const stmt = this._prepare(
         "SELECT key, data, updated_at FROM store WHERE namespace = ? AND scope = '' ORDER BY key"
-      ).all(namespace) as Array<{ key: string; data: string; updated_at: string }>
+      )
+      rows = this._all(stmt, namespace)
     }
 
     return rows.map(row => ({
       key: row.key,
-      data: this.safeParse(row.data),
+      data: this._safeParse(row.data),
       updatedAt: row.updated_at,
     }))
   }
@@ -169,9 +252,10 @@ export class SQLitePersistence {
    */
   delete(namespace: string, key: string, scope?: string): boolean {
     const sc = scope ?? ""
-    const result = this.db.prepare(
+    const stmt = this._prepare(
       "DELETE FROM store WHERE namespace = ? AND scope = ? AND key = ?"
-    ).run(namespace, sc, key)
+    )
+    const result = this._run(stmt, namespace, sc, key)
     return result.changes > 0
   }
 
@@ -180,20 +264,21 @@ export class SQLitePersistence {
    */
   listKeys(namespace: string, scope?: string): string[] {
     const sc = scope ?? ""
-    const rows = this.db.prepare(
+    const stmt = this._prepare(
       "SELECT key FROM store WHERE namespace = ? AND scope = ? ORDER BY key"
-    ).all(namespace, sc) as Array<{ key: string }>
+    )
+    const rows = this._all(stmt, namespace, sc) as Array<{ key: string }>
     return rows.map(r => r.key)
   }
 
   /**
    * List semua scope prefixes yang ada dalam suatu namespace.
-   * Contoh: untuk namespace 'episodes', return ['project-myapp', 'project-other']
    */
   listScopes(namespace: string): string[] {
-    const rows = this.db.prepare(
+    const stmt = this._prepare(
       "SELECT DISTINCT scope FROM store WHERE namespace = ? AND scope != '' ORDER BY scope"
-    ).all(namespace) as Array<{ scope: string }>
+    )
+    const rows = this._all(stmt, namespace) as Array<{ scope: string }>
     return rows.map(r => r.scope)
   }
 
@@ -202,45 +287,42 @@ export class SQLitePersistence {
    */
   clearNamespace(namespace: string, scope?: string): number {
     if (scope !== undefined) {
-      const result = this.db.prepare(
+      const stmt = this._prepare(
         "DELETE FROM store WHERE namespace = ? AND scope = ?"
-      ).run(namespace, scope)
+      )
+      const result = this._run(stmt, namespace, scope)
       return result.changes
     }
-    const result = this.db.prepare(
+    const stmt = this._prepare(
       "DELETE FROM store WHERE namespace = ?"
-    ).run(namespace)
+    )
+    const result = this._run(stmt, namespace)
     return result.changes
   }
 
   /**
-   * Query mentah — untuk structured queries yang gak bisa pake API standar.
-   *
-   * Contoh:
-   *   // Cari semua episode dengan outcome 'success'
-   *   sqlite.query("SELECT * FROM store WHERE namespace = 'episodes' AND data LIKE '%success%'")
-   *
-   *   // Hitung per namespace
-   *   sqlite.query("SELECT namespace, COUNT(*) as cnt FROM store GROUP BY namespace")
+   * Raw query — untuk structured queries.
    */
   query<T = any>(sql: string, params?: any[]): T[] {
-    if (params) {
-      return this.db.prepare(sql).all(...params) as T[]
+    const stmt = this._prepare(sql)
+    if (params && params.length > 0) {
+      return this._all(stmt, ...params) as T[]
     }
-    return this.db.prepare(sql).all() as T[]
+    return this._all(stmt) as T[]
   }
 
   /**
    * Dapatkan statistik database.
    */
   stats(): { namespaces: Array<{ namespace: string; scopes: number; keys: number }>; fileSize: number; dbPath: string } {
-    const rows = this.db.prepare(
+    const stmt = this._prepare(
       "SELECT namespace, COUNT(DISTINCT scope) as scopes, COUNT(*) as keys FROM store GROUP BY namespace ORDER BY namespace"
-    ).all() as Array<{ namespace: string; scopes: number; keys: number }>
+    )
+    const rows = this._all(stmt) as Array<{ namespace: string; scopes: number; keys: number }>
 
     let fileSize = 0
     try {
-      const fs = require("node:fs")
+      const fs = require("node:fs") as typeof import("node:fs")
       fileSize = fs.statSync(this.dbPath).size
     } catch { /* ignore */ }
 
@@ -255,10 +337,16 @@ export class SQLitePersistence {
    * Tutup koneksi database.
    */
   close(): void {
-    this.db.close()
+    if (this.db) {
+      this.db.close()
+    }
   }
 
-  private safeParse(data: string): any {
+  get driver(): DriverType | null {
+    return this._driver
+  }
+
+  private _safeParse(data: string): any {
     try {
       return JSON.parse(data)
     } catch {

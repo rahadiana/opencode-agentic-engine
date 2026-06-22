@@ -96,11 +96,6 @@ export class AgentRuntime {
   async execute(ctx: AgentContext): Promise<AgentResult> {
     const engine = this.getEngine(ctx.sessionId, ctx.role)
 
-    // Apply per-role model preference if set
-    if (ctx.modelPreference) {
-      engine.updateConfig({ model: ctx.modelPreference })
-    }
-
     const roleDef = this.roleRegistry.getBuiltIn(ctx.role as AgentRole)
       ?? this.roleRegistry.getCustom(ctx.role)
 
@@ -123,6 +118,15 @@ export class AgentRuntime {
       promptParts.push(`\n\n## Shared Memory\n${ctx.sharedMemory.map(m => `[${m.key}] (by ${m.writtenBy}): ${m.value.slice(0, 200)}`).join("\n")}`)
     }
 
+    // Parse model preference string → { providerID, modelID } untuk dikirim ke SDK
+    let modelOverride: { providerID: string; modelID: string } | undefined
+    if (ctx.modelPreference) {
+      const parts = ctx.modelPreference.split("/")
+      modelOverride = parts.length >= 2
+        ? { providerID: parts[0], modelID: parts.slice(1).join("/") }
+        : { providerID: "opencode", modelID: ctx.modelPreference }
+    }
+
     try {
       const resp = await Promise.race([
         engine.call({
@@ -130,6 +134,7 @@ export class AgentRuntime {
           userPrompt: ctx.taskDescription,
           temperature: 0.3,
           maxTokens: 4096,
+          model: modelOverride, // ← dikirim ke SDK langsung, bukan via config
         }),
         new Promise<LLMResponse>((_, reject) =>
           setTimeout(() => reject(new Error("LLM timeout after 120s")), 120_000)
@@ -139,7 +144,7 @@ export class AgentRuntime {
       if (output.startsWith("LLM error") || output.startsWith("[NO_LLM]")) {
         return { output, success: false, error: output }
       }
-      return { output, success: true, modelUsed: engine.getCurrentModel() }
+      return { output, success: true, modelUsed: modelOverride ? `${modelOverride.providerID}/${modelOverride.modelID}` : "opencode/default" }
     } catch (e) {
       const err = e as Error
       const msg = err.message

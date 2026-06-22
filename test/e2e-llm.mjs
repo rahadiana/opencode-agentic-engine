@@ -1,7 +1,11 @@
-// test/e2e-llm.mjs — Real LLM E2E test
+// test/e2e-llm.mjs — Real LLM E2E test (via OpenCode SDK only)
 // Tests core LLM-dependent features: auto-decompose, delegation, auto-loop
-// Auto-detects LLM: defaults to OpenCode Free (https://opencode.ai/zen/v1) — no API key needed
-// Set LLM_OFF=true to skip (mock mode)
+//
+// 🔴 CRITICAL: Plugin does NOT call external LLM APIs directly.
+// ALL LLM calls go through OpenCode SDK. If not running inside OpenCode,
+// LLM calls return [NO_LLM] fallback — tests adjust expectations accordingly.
+//
+// Set LLM_OFF=true to force mock mode.
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs"
 import { resolve, dirname, join } from "node:path"
@@ -12,41 +16,10 @@ const PLUGIN_DIST = resolve(__dirname, "..", "dist", "index.js")
 const WORKTREE = "/tmp/e2e-llm-worktree"
 
 // ── LLM Detection ──
-// Auto-default: OpenCode Free (https://opencode.ai/zen/v1) — no auth needed
-const OPENCODE_FREE_BASE = "https://opencode.ai/zen/v1"
-const OPENCODE_FREE_MODEL = "mimo-v2.5-free"
-const HAS_OPENAI_KEY = !!(process.env.OPENAI_API_KEY || process.env.OPENAI_BASE_URL)
-const HAS_ANTHROPIC_KEY = !!process.env.ANTHROPIC_API_KEY
+// Default: OpenCode Free (https://opencode.ai/zen/v1) — no auth needed.
+// Plugin routes all LLM calls through OpenCode SDK only.
 const LLM_OFF = process.env.LLM_OFF === "true"
-const HAS_ANY_KEY = HAS_OPENAI_KEY || HAS_ANTHROPIC_KEY
-
-// If no explicit LLM config, use OpenCode Free as default
-if (!LLM_OFF && !process.env.OPENAI_BASE_URL && !process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
-  process.env.OPENAI_BASE_URL = OPENCODE_FREE_BASE
-  if (!process.env.OPENAI_MODEL) process.env.OPENAI_MODEL = OPENCODE_FREE_MODEL
-  if (!process.env.OPENAI_VARIANT) process.env.OPENAI_VARIANT = "max"
-}
-
-// Check opencode.json for local endpoint config (only if no env var set)
-let opencodeConfig = null
-const opencodeJsonPaths = [
-  join(process.env.HOME || "/root", ".config", "opencode", "opencode.json"),
-  join(process.env.HOME || "/root", ".opencode.json"),
-  join(process.cwd(), "opencode.json"),
-  join(process.cwd(), "opencode.jsonc"),
-]
-for (const p of opencodeJsonPaths) {
-  try {
-    const raw = readFileSync(p, "utf-8")
-    const parsed = JSON.parse(raw)
-    if (parsed.opencode?.baseUrl) {
-      opencodeConfig = parsed.opencode
-      break
-    }
-  } catch { /* not found or invalid JSON */ }
-}
-
-const CAN_USE_LLM = !LLM_OFF && (HAS_ANY_KEY || opencodeConfig !== null || true) // default: OpenCode Free
+const CAN_USE_LLM = !LLM_OFF
 
 let passed = 0
 let failed = 0
@@ -65,16 +38,8 @@ function ctx(sessionID) {
 }
 
 function getClient() {
-  if (opencodeConfig) {
-    // If opencode config found with baseUrl, set env vars so LLMEngine uses direct HTTP
-    if (opencodeConfig.baseUrl && !process.env.OPENAI_BASE_URL) {
-      process.env.OPENAI_BASE_URL = opencodeConfig.baseUrl.replace(/\/chat\/completions$/, "")
-    }
-    if (!process.env.OPENAI_API_KEY) {
-      process.env.OPENAI_API_KEY = "sk-noop" // dummy key for local endpoints
-    }
-  }
-
+  // Plugin needs an opencode client. When running standalone (not in OpenCode),
+  // LLM calls will return [NO_LLM] — that's expected.
   return {}
 }
 
@@ -100,15 +65,10 @@ async function setupWorktree() {
 
 async function main() {
   if (!CAN_USE_LLM) {
-    console.log("\n⚠️  No LLM available. Skipping real LLM E2E test.")
-    console.log("   Auto-detection tried: OpenCode Free → no response")
-    console.log("   To force mock mode, set LLM_OFF=true")
-    console.log("   To use a different LLM, set one of these env vars:")
-    console.log("     • OPENAI_API_KEY     — OpenAI / any OpenAI-compatible provider")
-    console.log("     • ANTHROPIC_API_KEY  — Anthropic Claude")
-    console.log("     • OPENAI_BASE_URL    — Local LLM (Ollama, vLLM, Together, Groq, etc.)")
-    console.log("   Default (no env): OpenCode Free (https://opencode.ai/zen/v1) — no API key needed\n")
-    console.log("E2E LLM TEST: SKIPPED (no LLM)")
+    console.log("\n⚠️  LLM_OFF=true — skipping real LLM E2E test.")
+    console.log("   Plugin uses OpenCode SDK for ALL LLM calls (no direct external API).")
+    console.log("   Run inside OpenCode for native LLM access.\n")
+    console.log("E2E LLM TEST: SKIPPED (LLM_OFF)")
     return { passed: 0, failed: 0, skipped: true }
   }
 

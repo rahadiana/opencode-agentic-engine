@@ -1,21 +1,44 @@
 {
   "$schema": "v1",
-  "description": "Model preferences per tool/category/role. Kosongkan untuk fallback ke tier → session default.",
+  "description": "Model preferences per tool/category/role. Kosongkan untuk fallback ke tier → session default. Lihat kompleksitas tiap tool di comment.",
 
   "tools": {
     "agentic_nav": "",
-    "agentic_clean": "",
-    "agentic_pr": "",
+    "agentic_skill": "",
+    "agentic_episodes": "",
     "agentic_router": "",
+    "agentic_rag": "",
+    "agentic_db": "",
     "agentic_context": "",
-    "agentic_execute": "",
-    "agentic_reflect": "",
-    "agentic_debate": "",
+
     "agentic_plan": "",
-    "agentic_verify": "",
-    "agentic_finetune": "",
     "agentic_parallel": "",
+    "agentic_pipeline": "",
+
+    "agentic_execute": "",
+    "agentic_delegate": "",
+    "agentic_snapshot": "",
+    "agentic_status": "",
     "agentic_auto": "",
+
+    "agentic_verify": "",
+    "agentic_reflect": "",
+    "agentic_guard": "",
+    "agentic_score": "",
+    "agentic_debate": "",
+
+    "agentic_evolve": "",
+    "agentic_finetune": "",
+    "agentic_dashboard": "",
+    "agentic_model": "",
+    "agentic_model_reset": "",
+
+    "agentic_pr": "",
+    "agentic_clean": "",
+    "agentic_message": "",
+    "agentic_mcp": "",
+    "agentic_budget": "",
+
     "debate-executor": "",
     "debate-critic": "",
     "debate-cleaner": ""
@@ -26,5 +49,11 @@
     "unspecified-low": "",
     "unspecified-high": "",
     "deep": ""
-  }
+  },
+
+  "developer": "",
+  "architect": "",
+  "qa": "",
+  "pm": "",
+  "coordinator": ""
 }
