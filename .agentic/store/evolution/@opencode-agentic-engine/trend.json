@@ -1,0 +1,18 @@
+{
+  "key": "trend",
+  "data": {
+    "results": [
+      {
+        "stepId": "phase-1-research",
+        "success": true,
+        "output": "Fase research dimulai: fetch loop-engineering patterns + tools, dan scan ulang kodebase kita untuk data terbaru",
+        "sessionId": "ses_110d5afe5ffeMyrtsLXbZ5W6Vd",
+        "timestamp": 1782129322672
+      }
+    ],
+    "evolveCount": 0,
+    "windowSize": 30,
+    "lastEvolveSession": null
+  },
+  "updatedAt": "2026-06-22T17:07:27.095Z"
+}

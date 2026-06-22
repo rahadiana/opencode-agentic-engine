@@ -1,0 +1,31 @@
+{
+  "key": "registry",
+  "data": {
+    "opencode/default": {
+      "model": "opencode/default",
+      "totalCalls": 6,
+      "successCalls": 2,
+      "failedCalls": 4,
+      "hallucinationCount": 0,
+      "avgLatencyMs": 43881.166666666664,
+      "lastUsed": 1782129600198,
+      "consecutiveFailures": 0,
+      "consecutiveSuccesses": 2,
+      "quarantineUntil": 0,
+      "byTaskType": {
+        "coding": {
+          "totalCalls": 4,
+          "successCalls": 2,
+          "failedCalls": 2,
+          "hallucinationCount": 0,
+          "avgLatencyMs": 65817.5,
+          "lastUsed": 1782129600198,
+          "consecutiveFailures": 0,
+          "consecutiveSuccesses": 0,
+          "quarantineUntil": 0
+        }
+      }
+    }
+  },
+  "updatedAt": "2026-06-22T17:07:27.094Z"
+}
