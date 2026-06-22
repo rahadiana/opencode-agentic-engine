@@ -2725,20 +2725,21 @@ const confidenceStore = new ConfidenceStore()
             return BUILTIN_DEFAULTS
           }
 
-          /** Apply prefs to session store */
+          /** Apply prefs to session store (skip empty/undefined/description values) */
+          const META_KEYS = new Set(['tools', 'categories', '$schema', 'description'])
           function applyPrefsToSession(prefs: PersistedPrefs): void {
             const sid = context.sessionID
-            // Load role prefs (flat keys, excluding 'tools' and 'categories')
+            // Load role prefs (flat keys, excluding meta keys like 'tools', 'categories', 'description')
             for (const [key, val] of Object.entries(prefs)) {
-              if (key === 'tools' || key === 'categories' || key === '$schema') continue
-              if (typeof val === 'string') {
+              if (META_KEYS.has(key)) continue
+              if (typeof val === 'string' && val.length > 0) {
                 sessionStore.setModelPreference(sid, key, val)
               }
             }
             // Load tool prefs
             if (prefs.tools) {
               for (const [tool, model] of Object.entries(prefs.tools)) {
-                if (typeof model === 'string') {
+                if (typeof model === 'string' && model.length > 0) {
                   sessionStore.setToolPreference(sid, tool, model)
                 }
               }
@@ -2746,7 +2747,7 @@ const confidenceStore = new ConfidenceStore()
             // Load category prefs
             if (prefs.categories) {
               for (const [cat, model] of Object.entries(prefs.categories)) {
-                if (typeof model === 'string') {
+                if (typeof model === 'string' && model.length > 0) {
                   sessionStore.setCategoryPreference(sid, cat, model)
                 }
               }

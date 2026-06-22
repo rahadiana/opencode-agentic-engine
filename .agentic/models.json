@@ -1,5 +1,25 @@
 {
   "$schema": "v1",
-  "tools": {},
-  "categories": {}
+  "description": "Model preferences per project. Kosongkan field untuk fallback ke session default.",
+
+  "tools": {
+    "agentic_plan": "",
+    "agentic_execute": "",
+    "agentic_reflect": "",
+    "agentic_verify": "",
+    "agentic_context": "",
+    "agentic_pr": "",
+    "agentic_debate": "",
+    "agentic_robot": "",
+    "agentic_clean": "",
+    "agentic_parallel": "",
+    "agentic_auto": ""
+  },
+
+  "categories": {
+    "quick": "",
+    "unspecified-low": "",
+    "unspecified-high": "",
+    "deep": ""
+  }
 }
