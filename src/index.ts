@@ -461,6 +461,7 @@ const confidenceStore = new ConfidenceStore()
   const toolRouter = new ToolRouter()
   toolRouter.setDescriptions(TOOL_REGISTRY)
   const recentToolCalls: string[] = []  // last 20 tool calls for routing context
+  const diagnosticStore = new Map<string, { errors: number; lastOk: number; lastError: string }>()
 
   contextCompressor.setLLM(llmEngine)
   verifier.detectLanguage(worktree)
@@ -5205,130 +5206,146 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
     //   LLM = reasoning engine, BUKAN knowledge base.
     //   Semua pengetahuan HARUS dari RAG / web / arXiv.
     "experimental.chat.system.transform": async (_input: { sessionID?: string; model: unknown }, output: { system: string[] }) => {
-      const systemText = output.system.join("\n")
-      const subAgent = detectSubAgentRole(systemText)
+      let transformOk = false
+      try {
+        const systemText = output.system.join("\n")
+        const subAgent = detectSubAgentRole(systemText)
 
-      let injection: string
-      let hasHighConfidenceKnowledge = false
+        let injection: string
+        let hasHighConfidenceKnowledge = false
 
-      if (subAgent) {
-        // Role-aware minimal injection
-        injection = buildSubAgentInjection(subAgent.role, subAgent.tools)
-      } else {
-        // Full prompt for parent agent — use ToolRouter to select relevant subset
-        const pack = currentInjectDomain ?? domainRegistry.getCurrentPack() ?? genericDomain
-
-        // Build routing context from recent tool calls and system text
-        const routingCtx: RoutingContext = {
-          taskInput: systemText.slice(-2000),  // last 2k chars of system prompt
-          recentTools: recentToolCalls,
-          domain: pack.name,
-          isSubAgent: false,
-        }
-
-        // ── KNOWLEDGE-FIRST: Auto-inject RAG results ──
-        // Extract keywords from USER CONVERSATION (bukan system prompt text!)
-        // Pakai sessionID untuk ambil percakapan dari SessionStore
-        let knowledgeEntries: KnowledgeEntry[] = []
-        let queryForRag = ""
-
-        try {
-          // 1. Ambil user message terakhir dari session store
-          const sessionId = _input.sessionID
-          if (sessionId) {
-            const turns = sessionStore.getContext(sessionId, 3)
-            const userTurns = turns.filter(t => t.role === "user")
-            if (userTurns.length > 0) {
-              queryForRag = userTurns[userTurns.length - 1].content
-            }
-          }
-
-          // 2. Fallback: gunakan system text jika tidak ada user messages
-          if (!queryForRag) {
-            queryForRag = systemText.slice(-2000)
-          }
-
-          // 3. Extract keywords dari pesan user, search RAG
-          const { keywords, category } = routerAgent.extractKeywords(queryForRag)
-          if (keywords.length > 0) {
-            const ragResult = await multiIndexRAG.searchWithConfidence(keywords.join(" "), [category], 5)
-            if (!ragResult.isEmpty) {
-              knowledgeEntries = ragResult.entries
-                .map(entry => ({
-                  source: entry.title,
-                  confidence: entry.confidence ?? 0,
-                  content: entry.episode?.summary ?? entry.skill?.definition.trigger.pattern ?? "",
-                  category: entry.category,
-                }))
-                .filter(e => e.content.length > 0)
-
-              hasHighConfidenceKnowledge = knowledgeEntries.some(e => e.confidence >= 0.6)
-            }
-          }
-        } catch (e) {
-          // Non-critical: RAG failure shouldn't break the prompt
-          console.error("[Knowledge-First] RAG search failed:", e instanceof Error ? e.message : e)
-        }
-
-        // ── Tool selection ──
-        const { selected } = toolRouter.selectTools(routingCtx)
-
-        // Build filtered TOOL_REGISTRY from selected tools
-        const filteredRegistry: ToolEntry[] = selected.map(t => ({ name: t.name, description: t.description }))
-        const hasTools = filteredRegistry.length > 0
-
-        if (hasTools) {
-          // Build prompt WITH auto-injected knowledge context
-          // Pass FULL TOOL_REGISTRY for "Available Tools" + selected subset for "Selected Tools"
-          injection = buildAgenticSystemInstructions(pack, TOOL_REGISTRY, {
-            isRouted: true,
-            selectedTools: filteredRegistry,
-            knowledgeEntries: knowledgeEntries.length > 0 ? knowledgeEntries : undefined,
-          })
+        if (subAgent) {
+          // Role-aware minimal injection
+          injection = buildSubAgentInjection(subAgent.role, subAgent.tools)
+          transformOk = true
         } else {
-          // Fallback: show all domain-appropriate tools
-          injection = buildAgenticSystemInstructions(pack, TOOL_REGISTRY, {
-            knowledgeEntries: knowledgeEntries.length > 0 ? knowledgeEntries : undefined,
-          })
-        }
+          // Full prompt for parent agent — use ToolRouter to select relevant subset
+          const pack = currentInjectDomain ?? domainRegistry.getCurrentPack() ?? genericDomain
 
-        // ── Gap #3: Code Intent Injection ──
-        try {
-          const sessionId = _input.sessionID
-          if (sessionId) {
-            const session = sessionStore.getOrCreate(sessionId)
-            if (session.codeIntentMap && session.codeIntentMap.files.length > 0) {
-              const compactSummary = codeIntentAnalyzer.getCompactSummary(session.codeIntentMap, 4)
-              if (compactSummary) {
-                injection += `\n\n---\n### 🔍 Code Analysis Context (Intent Inference)\n`
-                injection += `The following intent analysis was derived from code structure (function names, signatures, dependencies):\n\n`
-                injection += compactSummary
-                injection += `\n\nUse this context to understand what each function is intended to do before generating code.\n`
-                injection += `⚠️ This is REFERENCE DATA — function names may not reflect actual implementation.\n`
-                injection += `---`
+          // Build routing context from recent tool calls and system text
+          const routingCtx: RoutingContext = {
+            taskInput: systemText.slice(-2000),  // last 2k chars of system prompt
+            recentTools: recentToolCalls,
+            domain: pack.name,
+            isSubAgent: false,
+          }
+
+          // ── KNOWLEDGE-FIRST: Auto-inject RAG results ──
+          let knowledgeEntries: KnowledgeEntry[] = []
+          let queryForRag = ""
+
+          try {
+            const sessionId = _input.sessionID
+            if (sessionId) {
+              const turns = sessionStore.getContext(sessionId, 3)
+              const userTurns = turns.filter(t => t.role === "user")
+              if (userTurns.length > 0) {
+                queryForRag = userTurns[userTurns.length - 1].content
               }
             }
+
+            if (!queryForRag) {
+              queryForRag = systemText.slice(-2000)
+            }
+
+            const { keywords, category } = routerAgent.extractKeywords(queryForRag)
+            if (keywords.length > 0) {
+              const ragResult = await multiIndexRAG.searchWithConfidence(keywords.join(" "), [category], 5)
+              if (!ragResult.isEmpty) {
+                knowledgeEntries = ragResult.entries
+                  .map(entry => ({
+                    source: entry.title,
+                    confidence: entry.confidence ?? 0,
+                    content: entry.episode?.summary ?? entry.skill?.definition.trigger.pattern ?? "",
+                    category: entry.category,
+                  }))
+                  .filter(e => e.content.length > 0)
+
+                hasHighConfidenceKnowledge = knowledgeEntries.some(e => e.confidence >= 0.6)
+              }
+            }
+          } catch (e) {
+            console.error("[Agentic] RAG search failed:", e instanceof Error ? e.message : e)
           }
-        } catch {
-          // Non-fatal: intent injection shouldn't break the prompt
+
+          // ── Tool selection ──
+          const { selected } = toolRouter.selectTools(routingCtx)
+          const filteredRegistry: ToolEntry[] = selected.map(t => ({ name: t.name, description: t.description }))
+          const hasTools = filteredRegistry.length > 0
+
+          if (hasTools) {
+            injection = buildAgenticSystemInstructions(pack, TOOL_REGISTRY, {
+              isRouted: true,
+              selectedTools: filteredRegistry,
+              knowledgeEntries: knowledgeEntries.length > 0 ? knowledgeEntries : undefined,
+            })
+          } else {
+            injection = buildAgenticSystemInstructions(pack, TOOL_REGISTRY, {
+              knowledgeEntries: knowledgeEntries.length > 0 ? knowledgeEntries : undefined,
+            })
+          }
+
+          // ── Gap #3: Code Intent Injection ──
+          try {
+            const sessionId = _input.sessionID
+            if (sessionId) {
+              const session = sessionStore.getOrCreate(sessionId)
+              if (session.codeIntentMap && session.codeIntentMap.files.length > 0) {
+                const compactSummary = codeIntentAnalyzer.getCompactSummary(session.codeIntentMap, 4)
+                if (compactSummary) {
+                  injection += `\n\n---\n### 🔍 Code Analysis Context (Intent Inference)\n`
+                  injection += `The following intent analysis was derived from code structure (function names, signatures, dependencies):\n\n`
+                  injection += compactSummary
+                  injection += `\n\nUse this context to understand what each function is intended to do before generating code.\n`
+                  injection += `⚠️ This is REFERENCE DATA — function names may not reflect actual implementation.\n`
+                  injection += `---`
+                }
+              }
+            }
+          } catch { /* non-fatal */ }
+
+          // ── Mandatory research flow ──
+          if (!hasHighConfidenceKnowledge) {
+            injection += `\n\n---\n`
+            injection += `⚠️ **MANDATORY RESEARCH REQUIRED**\n\n`
+            injection += `No high-confidence knowledge was found. ` +
+              `Use \`webfetch\` to research before implementing. ` +
+              `Cite sources (URLs) for every claim.`
+          }
+
+          transformOk = true
         }
 
-        // ── Mandatory research flow ──
-        // If no high-confidence knowledge, append mandatory webfetch instruction
-        if (!hasHighConfidenceKnowledge) {
-          injection += `\n\n---\n`
-          injection += `⚠️ **MANDATORY RESEARCH REQUIRED**\n\n`
-          injection += `No high-confidence knowledge was found. ` +
-            `Use \`webfetch\` to research before implementing. ` +
-            `Cite sources (URLs) for every claim.`
+        if (output.system.length > 0) {
+          output.system[output.system.length - 1] += "\n\n" + injection
+        } else {
+          output.system.push(injection)
+        }
+      } catch (e) {
+        // GLOBAL FALLBACK: jika transform gagal total, inject tool list minimum
+        console.error("[Agentic] system.transform ERROR — injecting fallback:", e instanceof Error ? e.message : e)
+        const fallbackTools = TOOL_REGISTRY.map(t => `- **${t.name}**: ${t.description.slice(0, 100)}`).join("\n")
+        const fallback = `\n\n## Agentic Tools\n\nYou have access to these tools. Use them with their \`agentic_\` prefix.\n\n### Tool List (${TOOL_REGISTRY.length})\n${fallbackTools}\n\nBuilt-in tools: \`read\`, \`edit\`, \`bash\`, \`grep\`, \`webfetch\`, \`write\`.`
+        if (output.system.length > 0) {
+          output.system[output.system.length - 1] += "\n\n" + fallback
+        } else {
+          output.system.push(fallback)
         }
       }
 
-      if (output.system.length > 0) {
-        output.system[output.system.length - 1] += "\n\n" + injection
-      } else {
-        output.system.push(injection)
-      }
+      // Track injection status for diagnostic
+      try {
+        const sid = _input.sessionID || "unknown"
+        const diag = diagnosticStore.get(sid) || { errors: 0, lastOk: 0, lastError: "" }
+        if (transformOk) {
+          diag.lastOk = Date.now()
+          diag.lastError = ""
+        } else {
+          diag.errors++
+          diag.lastError = "transform completed but injection may be incomplete"
+        }
+        diagnosticStore.set(sid, diag)
+      } catch { /* non-critical */ }
     },
 
     "tool.execute.after": async (toolInput: { tool: string; args: Record<string, unknown>; sessionID: string; callID: string }, _output: { title: string; output: string; metadata: unknown }) => {
