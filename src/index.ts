@@ -2700,6 +2700,16 @@ const confidenceStore = new ConfidenceStore()
           // ── Persistence helpers (new nested format) ──
           const modelsPath = join(projectDir, ".agentic", "models.json")
 
+          // Built-in default preferences (fallback when no project .agentic/models.json)
+          const BUILTIN_DEFAULTS: PersistedPrefs = {
+            categories: {
+              quick: "9router/FlashCombo",
+              "unspecified-low": "9router/FlashCombo",
+              "unspecified-high": "9router/StrongReason",
+              deep: "9router/StrongReason",
+            },
+          }
+
           interface PersistedPrefs {
             [key: string]: unknown
             tools?: Record<string, string>
@@ -2707,7 +2717,8 @@ const confidenceStore = new ConfidenceStore()
             $schema?: string
           }
 
-          function readPersistedPrefs(): PersistedPrefs {
+          /** Read project .agentic/models.json */
+          function readProjectPrefs(): PersistedPrefs {
             try {
               if (existsSync(modelsPath)) {
                 return JSON.parse(readFileSync(modelsPath, "utf-8"))
@@ -2716,7 +2727,40 @@ const confidenceStore = new ConfidenceStore()
             return {}
           }
 
-          function writePersistedPrefs(prefs: PersistedPrefs): void {
+          /** Plugin's built-in default preferences */
+          function readPluginDefaults(): PersistedPrefs {
+            return BUILTIN_DEFAULTS
+          }
+
+          /** Apply prefs to session store */
+          function applyPrefsToSession(prefs: PersistedPrefs): void {
+            const sid = context.sessionID
+            // Load role prefs (flat keys, excluding 'tools' and 'categories')
+            for (const [key, val] of Object.entries(prefs)) {
+              if (key === 'tools' || key === 'categories' || key === '$schema') continue
+              if (typeof val === 'string') {
+                sessionStore.setModelPreference(sid, key, val)
+              }
+            }
+            // Load tool prefs
+            if (prefs.tools) {
+              for (const [tool, model] of Object.entries(prefs.tools)) {
+                if (typeof model === 'string') {
+                  sessionStore.setToolPreference(sid, tool, model)
+                }
+              }
+            }
+            // Load category prefs
+            if (prefs.categories) {
+              for (const [cat, model] of Object.entries(prefs.categories)) {
+                if (typeof model === 'string') {
+                  sessionStore.setCategoryPreference(sid, cat, model)
+                }
+              }
+            }
+          }
+
+          function writeProjectPrefs(prefs: PersistedPrefs): void {
             try {
               const dir = dirname(modelsPath)
               mkdirSync(dir, { recursive: true })
@@ -2724,34 +2768,16 @@ const confidenceStore = new ConfidenceStore()
             } catch { /* non-fatal */ }
           }
 
-          // On first access, load persisted prefs into session (all types)
+          // On first access, load: plugin defaults → project overrides
           function ensureSessionLoaded(): void {
             const existing = sessionStore.getAllModelPreferences(context.sessionID)
             if (existing.length === 0) {
-              const persisted = readPersistedPrefs()
-              // Load role prefs (flat keys, excluding 'tools' and 'categories')
-              for (const [key, val] of Object.entries(persisted)) {
-                if (key === 'tools' || key === 'categories' || key === '$schema') continue
-                if (typeof val === 'string') {
-                  sessionStore.setModelPreference(context.sessionID, key, val)
-                }
-              }
-              // Load tool prefs
-              if (persisted.tools) {
-                for (const [tool, model] of Object.entries(persisted.tools)) {
-                  if (typeof model === 'string') {
-                    sessionStore.setToolPreference(context.sessionID, tool, model)
-                  }
-                }
-              }
-              // Load category prefs
-              if (persisted.categories) {
-                for (const [cat, model] of Object.entries(persisted.categories)) {
-                  if (typeof model === 'string') {
-                    sessionStore.setCategoryPreference(context.sessionID, cat, model)
-                  }
-                }
-              }
+              // 1. Plugin defaults (lower priority)
+              const defaults = readPluginDefaults()
+              applyPrefsToSession(defaults)
+              // 2. Project overrides (higher priority — overwrites same keys)
+              const overrides = readProjectPrefs()
+              applyPrefsToSession(overrides)
             }
           }
 
@@ -2779,11 +2805,23 @@ const confidenceStore = new ConfidenceStore()
                 output += "### 📊 Per-Category\n| Category | Model |\n|----------|-------|\n"
                 output += catPrefs.map(p => `| **${p.category}** | \`${p.model}\` |`).join("\n") + "\n\n"
               }
-              const persisted = readPersistedPrefs()
-              const totalCount = Object.keys(persisted).filter(k => k !== 'tools' && k !== 'categories' && k !== '$schema').length +
-                (persisted.tools ? Object.keys(persisted.tools).length : 0) +
-                (persisted.categories ? Object.keys(persisted.categories).length : 0)
-              output += totalCount > 0 ? `💾 ${totalCount} preference(s) persisted to \`.agentic/models.json\`` : "Preferences are session-only (not yet persisted)"
+              const projectPrefs = readProjectPrefs()
+              const pluginPrefs = readPluginDefaults()
+              const projCount = Object.keys(projectPrefs).filter(k => k !== 'tools' && k !== 'categories' && k !== '$schema').length +
+                (projectPrefs.tools ? Object.keys(projectPrefs.tools).length : 0) +
+                (projectPrefs.categories ? Object.keys(projectPrefs.categories).length : 0)
+              const pluginCount = Object.keys(pluginPrefs).filter(k => k !== 'tools' && k !== 'categories' && k !== '$schema').length +
+                (pluginPrefs.tools ? Object.keys(pluginPrefs.tools).length : 0) +
+                (pluginPrefs.categories ? Object.keys(pluginPrefs.categories).length : 0)
+              if (projCount > 0) {
+                output += `💾 ${projCount} preference(s) in project \`.agentic/models.json\`\n`
+              }
+              if (pluginCount > 0) {
+                output += `📦 ${pluginCount} default preference(s) from plugin defaults\n`
+              }
+              if (projCount === 0 && pluginCount === 0) {
+                output += "Preferences are session-only (not yet persisted)"
+              }
               output += "\n\n**Resolution priority:** per-tool override → category fallback → engine default"
             }
 
@@ -2820,10 +2858,10 @@ const confidenceStore = new ConfidenceStore()
               const toolLower = args.tool.toLowerCase()
               sessionStore.setToolPreference(context.sessionID, toolLower, args.model)
               // Persist
-              const persisted = readPersistedPrefs()
+              const persisted = readProjectPrefs()
               if (!persisted.tools) persisted.tools = {}
               persisted.tools[toolLower] = args.model
-              writePersistedPrefs(persisted)
+              writeProjectPrefs(persisted)
               return { output: `✅ Tool model preference set: **${toolLower}** → \`${args.model}\`\nAll LLM calls from \`${toolLower}\` will use this model.\n💾 Persisted to \`.agentic/models.json\`` }
             }
 
@@ -2831,10 +2869,10 @@ const confidenceStore = new ConfidenceStore()
               const catLower = args.category.toLowerCase()
               sessionStore.setCategoryPreference(context.sessionID, catLower, args.model)
               // Persist
-              const persisted = readPersistedPrefs()
+              const persisted = readProjectPrefs()
               if (!persisted.categories) persisted.categories = {}
               persisted.categories[catLower] = args.model
-              writePersistedPrefs(persisted)
+              writeProjectPrefs(persisted)
               return { output: `✅ Category model preference set: **${catLower}** → \`${args.model}\`\nAll tools in this category will use this model.\n💾 Persisted to \`.agentic/models.json\`` }
             }
 
@@ -2843,9 +2881,9 @@ const confidenceStore = new ConfidenceStore()
               sessionStore.setModelPreference(context.sessionID, roleLower, args.model)
               modelRegistry.registerAlias(roleLower, [args.model])
               // Persist
-              const persisted = readPersistedPrefs()
+              const persisted = readProjectPrefs()
               persisted[roleLower] = args.model
-              writePersistedPrefs(persisted)
+              writeProjectPrefs(persisted)
               return { output: `✅ Role model preference set: **${roleLower}** → \`${args.model}\`\nThis model will be used when delegating to the ${roleLower} role.\n💾 Persisted to \`.agentic/models.json\`` }
             }
 
@@ -2861,7 +2899,7 @@ const confidenceStore = new ConfidenceStore()
             if (args.tool) {
               const model = sessionStore.getToolPreference(context.sessionID, args.tool)
               if (!model) return { output: `No model preference set for tool "${args.tool}". Uses category fallback or default.` }
-              const persisted = readPersistedPrefs()
+              const persisted = readProjectPrefs()
               const isPersisted = persisted.tools?.[args.tool.toLowerCase()] === model
               return { output: `**${args.tool}** → \`${model}\`${isPersisted ? " 💾 (persisted)" : ""}` }
             }
@@ -2869,7 +2907,7 @@ const confidenceStore = new ConfidenceStore()
             if (args.category) {
               const model = sessionStore.getCategoryPreference(context.sessionID, args.category)
               if (!model) return { output: `No model preference set for category "${args.category}". Uses engine default.` }
-              const persisted = readPersistedPrefs()
+              const persisted = readProjectPrefs()
               const isPersisted = persisted.categories?.[args.category.toLowerCase()] === model
               return { output: `**${args.category}** → \`${model}\`${isPersisted ? " 💾 (persisted)" : ""}` }
             }
@@ -2877,7 +2915,7 @@ const confidenceStore = new ConfidenceStore()
             if (args.role) {
               const model = sessionStore.getModelPreference(context.sessionID, args.role)
               if (!model) return { output: `No model preference set for role "${args.role}". Delegation will use default model selection.` }
-              const persisted = readPersistedPrefs()
+              const persisted = readProjectPrefs()
               const isPersisted = persisted[args.role] === model
               return { output: `**${args.role}** → \`${model}\`${isPersisted ? " 💾 (persisted)" : ""}` }
             }
@@ -2888,25 +2926,25 @@ const confidenceStore = new ConfidenceStore()
           if (args.action === "clear") {
             if (args.tool) {
               sessionStore.clearToolPreference(context.sessionID, args.tool)
-              const persisted = readPersistedPrefs()
+              const persisted = readProjectPrefs()
               if (persisted.tools) delete persisted.tools[args.tool.toLowerCase()]
-              writePersistedPrefs(persisted)
+              writeProjectPrefs(persisted)
               return { output: `Cleared model preference for tool "${args.tool}".` }
             }
 
             if (args.category) {
               sessionStore.clearCategoryPreference(context.sessionID, args.category)
-              const persisted = readPersistedPrefs()
+              const persisted = readProjectPrefs()
               if (persisted.categories) delete persisted.categories[args.category.toLowerCase()]
-              writePersistedPrefs(persisted)
+              writeProjectPrefs(persisted)
               return { output: `Cleared model preference for category "${args.category}".` }
             }
 
             if (args.role) {
               sessionStore.clearModelPreference(context.sessionID, args.role)
-              const persisted = readPersistedPrefs()
+              const persisted = readProjectPrefs()
               delete persisted[args.role]
-              writePersistedPrefs(persisted)
+              writeProjectPrefs(persisted)
               return { output: `Cleared model preference for role "${args.role}".` }
             }
 
@@ -2915,7 +2953,7 @@ const confidenceStore = new ConfidenceStore()
             sessionStore.clearModelPreference(sid)
             sessionStore.clearToolPreference(sid)
             sessionStore.clearCategoryPreference(sid)
-            writePersistedPrefs({})
+            writeProjectPrefs({})
             return { output: "Cleared all model preferences (roles, tools, and categories) for this session." }
           }
 
