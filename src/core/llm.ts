@@ -184,12 +184,13 @@ export class LLMEngine {
   }
 
   /**
-   * Nama model untuk display/tracking.
+   * Nama model untuk display fallback.
    * Model ASLI cuma diketahui OpenCode SDK — ini cuma label aja.
    * Untuk model real, pake getOpenCodeModel() yang async.
+   * Kalau gak tau model asli, return undefined — jangan rekam statistik palsu.
    */
-  getCurrentModel(): string {
-    return "opencode/default"
+  getCurrentModel(): string | undefined {
+    return undefined
   }
 
   /** Enable Gap #7 semantic cache with optional config */
@@ -240,7 +241,7 @@ export class LLMEngine {
     } catch {
       // silent fallback
     }
-    return this.getCurrentModel()
+    return this.getCurrentModel() ?? "unknown"
   }
 
   /**
@@ -379,14 +380,31 @@ export class LLMEngine {
 
     const latency = Date.now() - startTime
 
-    // Track model reliability
-    const effectiveModel = req.model
-      ? `${req.model.providerID}/${req.model.modelID}`
-      : this.getCurrentModel()
+    // ── Resolve model untuk tracking ──
+    // Priority 1: explicit model dari req.model (set by caller / tool override / category)
+    // Priority 2: auto-resolve — ambil model ASLI dari OpenCode SDK setelah LLM call
+    let effectiveModel: string | undefined
+    if (req.model) {
+      effectiveModel = `${req.model.providerID}/${req.model.modelID}`
+    } else if (success && this.sessionReader) {
+      // Auto-resolve: coba ambil model beneran dari SDK (invalidate cache dulu biar fresh)
+      try {
+        this.sessionReader.invalidateCache()
+        const sdkModel = await this.getOpenCodeModel()
+        if (sdkModel && sdkModel !== "unknown" && sdkModel !== "opencode/unknown") {
+          effectiveModel = sdkModel
+        }
+      } catch {
+        // silent — leave undefined, skip tracking (same as before)
+      }
+    }
+
     const taskType = this.sessionStore && this.pluginSessionId
       ? this.sessionStore.getOrCreate(this.pluginSessionId).currentTaskType
       : undefined
-    this.modelRegistry?.recordCall(effectiveModel, success, latency, taskType)
+    if (effectiveModel) {
+      this.modelRegistry?.recordCall(effectiveModel, success, latency, taskType)
+    }
 
     // Feed token usage to BudgetTracker
     const tInput = response.usage?.promptTokens ?? 0
@@ -395,12 +413,11 @@ export class LLMEngine {
     const tCacheRead = response.usage?.cacheReadTokens ?? 0
     const tCacheWrite = response.usage?.cacheWriteTokens ?? 0
     if (success && this.budgetTracker) {
-      this.budgetTracker.recordTokens(effectiveModel, tInput, tOutput, tReasoning, tCacheRead, tCacheWrite)
+      this.budgetTracker.recordTokens(effectiveModel ?? "unknown", tInput, tOutput, tReasoning, tCacheRead, tCacheWrite)
     }
 
     // Sync session data from OpenCode after successful call
     if (success && this.pluginSessionId) {
-      this.sessionReader.invalidateCache()
       this.sessionReader.syncToBudgetTracker().catch(() => {})
     }
 

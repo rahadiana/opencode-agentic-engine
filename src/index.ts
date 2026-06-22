@@ -3049,11 +3049,10 @@ const confidenceStore = new ConfidenceStore()
             if (!args.model) return { output: "Provide a `model` name to reset (e.g. 'gpt-4o')." }
             
             const beforeScore = modelRegistry.getScore(args.model)
-            modelRegistry.resetModel(args.model)
-            const afterScore = modelRegistry.getScore(args.model)
+            const deleted = modelRegistry.deleteModel(args.model)
             
             return { 
-              output: `✅ Reset model statistics for \`${args.model}\`\n\n**Before:** ${beforeScore ? `${(beforeScore.reliability * 100).toFixed(0)}% reliability, ${beforeScore.totalCalls} calls` : "No data"}\n**After:** ${afterScore ? `${(afterScore.reliability * 100).toFixed(0)}% reliability, ${afterScore.totalCalls} calls` : "Clean slate"}` 
+              output: `✅ Removed \`${args.model}\` from registry\n\n**Before:** ${beforeScore ? `${(beforeScore.reliability * 100).toFixed(0)}% reliability, ${beforeScore.totalCalls} calls` : "No data"}\n**After:** ${deleted ? "Removed (call count will rebuild naturally)" : "Not found"}` 
             }
           }
 
@@ -3071,9 +3070,9 @@ const confidenceStore = new ConfidenceStore()
           if (args.action === "reset-all") {
             const allScores = modelRegistry.getAllScores()
             for (const score of allScores) {
-              modelRegistry.resetModel(score.model)
+              modelRegistry.deleteModel(score.model)
             }
-            return { output: `⚠️ **EMERGENCY RESET:** Cleared statistics for ${allScores.length} model(s).\n\nAll models now have clean slate. Use this only when all models are blocked.` }
+            return { output: `⚠️ **EMERGENCY RESET:** Removed statistics for ${allScores.length} model(s).\n\nAll models now have clean slate. Use this only when all models are blocked.` }
           }
 
           return { output: "Unknown action. Use 'reset', 'reset-stale', or 'reset-all'." }
@@ -3543,7 +3542,7 @@ const confidenceStore = new ConfidenceStore()
           const check = hallucinationGuard.check(output, files)
 
           if (!check.passed) {
-            modelRegistry.recordHallucination(llmEngine.getCurrentModel())
+            modelRegistry.recordHallucination(llmEngine.getCurrentModel() ?? "unknown")
           }
 
           let response = `## 🛡️ Hallucination Check: Step "${args.stepId}"\n\n`
@@ -3569,7 +3568,7 @@ const confidenceStore = new ConfidenceStore()
           }
 
           response += `\n### 🤖 Model Reliability\n`
-          const modelScore = modelRegistry.getScore(llmEngine.getCurrentModel())
+          const modelScore = modelRegistry.getScore(llmEngine.getCurrentModel() ?? "unknown")
           if (modelScore && modelScore.totalCalls > 0) {
             const icon = modelScore.status === "healthy" ? "✅" : modelScore.status === "degraded" ? "⚠️" : "❌"
             response += `${icon} **${modelScore.model}** — reliability: ${(modelScore.reliability * 100).toFixed(0)}%, hallucinations: ${(modelScore.hallucinationRate * 100).toFixed(0)}%, calls: ${modelScore.totalCalls}\n`
@@ -5583,6 +5582,27 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
     //   Semua pengetahuan HARUS dari RAG / web / arXiv.
     "experimental.chat.system.transform": async (_input: { sessionID?: string; model: unknown }, output: { system: string[] }) => {
       let transformOk = false
+
+      // ── Model tracking for chat mode ──
+      // Each chat turn uses the model from _input.model (OpenCode auto-resolve).
+      // Track it so dashboard shows actual model usage, not just "opencode/default — calls: 0".
+      try {
+        if (_input.model && modelRegistry) {
+          let modelStr: string | undefined
+          if (typeof _input.model === "string") {
+            modelStr = _input.model
+          } else if (typeof _input.model === "object" && _input.model !== null) {
+            const m = _input.model as { providerID?: string; modelID?: string; id?: string }
+            const pid = m.providerID ?? "opencode"
+            const mid = m.modelID ?? m.id ?? "default"
+            modelStr = `${pid}/${mid}`
+          }
+          if (modelStr && modelStr !== "opencode/default" && modelStr !== "unknown" && modelStr !== "opencode/unknown") {
+            modelRegistry.recordCall(modelStr, true, 0, "chat")
+          }
+        }
+      } catch { /* silent — non-critical */ }
+
       try {
         const systemText = output.system.join("\n")
         const subAgent = detectSubAgentRole(systemText)

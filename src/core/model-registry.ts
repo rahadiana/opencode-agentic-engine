@@ -385,6 +385,14 @@ export class ModelRegistry {
     stat.consecutiveSuccesses = 0
   }
 
+  /**
+   * Hapus model dari registry sepenuhnya (bukan cuma reset stat).
+   * Dipake untuk model palsu kayak "opencode/default" yang gak pernah ada.
+   */
+  deleteModel(model: string): boolean {
+    return this.stats.delete(model)
+  }
+
   getSummary(): string {
     const scores = this.getAllScores()
     if (scores.length === 0) return "No model data recorded yet."
