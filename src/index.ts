@@ -3115,9 +3115,40 @@ const confidenceStore = new ConfidenceStore()
           if (args.action === "search") {
             if (!args.query) return { output: "Provide a search query." }
 
-            // Index episodes into vector store for RAG-enhanced search
-            const allEpisodes = episodicStore.getRecent(50)
-            // Index episodes into TF-IDF vector store for scoring
+            // Kumpulin episode dari current project + semua project lain (shared memory)
+            const localEpisodes = episodicStore.getRecent(50)
+            const allEpisodes = [...localEpisodes]
+            const seenIds = new Set(localEpisodes.map(e => e.id))
+
+            // Load episode dari project lain dari global store
+            try {
+              const scopes = persistence.listScopes("episodes")
+              for (const scope of scopes) {
+                if (scope === projectId) continue // udah di-load dari local
+                const globalEps = persistence.loadAll<{ planGoal: string; outcome: string; decisions: string[]; filesChanged: string[]; sessionId: string; timestamp: string; tags: string[]; projectId?: string }>("episodes", scope)
+                for (const ep of globalEps) {
+                  if (!seenIds.has(ep.data.sessionId)) {
+                    seenIds.add(ep.data.sessionId)
+                    allEpisodes.push({
+                      id: ep.data.sessionId,
+                      sessionId: ep.data.sessionId,
+                      projectId: ep.data.projectId ?? scope,
+                      planGoal: ep.data.planGoal,
+                      outcome: ep.data.outcome as "success" | "partial" | "failed",
+                      decisions: ep.data.decisions,
+                      filesChanged: ep.data.filesChanged,
+                      tags: ep.data.tags ?? [],
+                      timestamp: ep.data.timestamp,
+                      score: 0,
+                      usageCount: 0,
+                      summary: ep.data.planGoal,
+                    })
+                  }
+                }
+              }
+            } catch { /* non-fatal — search tetap jalan dari local */ }
+
+            // Index all episodes into TF-IDF vector store
             for (const ep of allEpisodes) {
               multiIndexRAG.vectorStore.index({
                 id: `ep:${ep.sessionId}`,
@@ -3125,17 +3156,18 @@ const confidenceStore = new ConfidenceStore()
                 title: ep.planGoal,
                 content: `${ep.outcome} ${ep.decisions.join(" ")}`,
                 keywords: ep.tags,
-                metadata: { type: "episode", sessionId: ep.sessionId, outcome: ep.outcome },
+                metadata: { type: "episode", sessionId: ep.sessionId, outcome: ep.outcome, projectId: ep.projectId },
               })
             }
             const tfidfResults = multiIndexRAG.vectorStore.search(args.query, "general", 5)
             const episodeIds = new Set(tfidfResults.map(r => r.doc.id))
             const episodes = allEpisodes.filter(e => episodeIds.has(`ep:${e.sessionId}`))
             if (episodes.length === 0) return { output: `No episodes found for "${args.query}".` }
-            let output = `## 🧠 Episodic Memory (TF-IDF): "${args.query}"\n\n`
+            let output = `## 🧠 Episodic Memory: "${args.query}"\n\n`
             output += episodes.map(e => {
               const score = tfidfResults.find(r => r.doc.id === `ep:${e.sessionId}`)?.score.toFixed(2) ?? "?"
-              return `- **${e.outcome === "success" ? "✅" : e.outcome === "partial" ? "⚠️" : "❌"} ${e.planGoal}**\n  TF-IDF Score: ${score} | Files: ${(e.filesChanged ?? []).length} | ${e.timestamp.slice(0, 10)}`
+              const projTag = e.projectId && e.projectId !== projectId ? ` 📁 ${e.projectId}` : ""
+              return `- **${e.outcome === "success" ? "✅" : e.outcome === "partial" ? "⚠️" : "❌"} ${e.planGoal}**${projTag}\n  Score: ${score} | Files: ${(e.filesChanged ?? []).length} | ${e.timestamp.slice(0, 10)}`
             }).join("\n")
             return { output }
           }

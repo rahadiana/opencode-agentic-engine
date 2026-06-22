@@ -1,10 +1,5 @@
 node_modules/
 dist/
-.agentic/*.json
-.agentic/store/
-.agentic/*.jsonl
-!.agentic/models.json
-!.agentic/config.json
 logs/
 .env
 .omo/
