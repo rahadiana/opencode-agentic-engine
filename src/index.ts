@@ -632,6 +632,32 @@ const confidenceStore = new ConfidenceStore()
     selfEvolver.feedStepStates(allStepStates)
     selfEvolver.feedTraces(traces)
 
+    // Index trace entries ke TF-IDF vector store biar bisa di-search via agentic_rag tanpa bash
+    try {
+      const tracePath = `${worktree}/.agentic/trace.jsonl`
+      const content = readFileSync(tracePath, "utf-8")
+      const lines = content.trim().split("\n").filter(Boolean)
+      // Ambil 200 baris terakhir aja (recent lebih relevan, hemat memory)
+      const recentTraces = lines.slice(-200)
+      for (const line of recentTraces) {
+        try {
+          const parsed = JSON.parse(line)
+          const tool = parsed.toolUsed ?? "unknown"
+          const input = parsed.input ?? ""
+          const output = parsed.output ?? ""
+          const step = parsed.step ?? ""
+          multiIndexRAG.vectorStore.index({
+            id: `trace:${parsed.timestamp ?? Date.now()}`,
+            category: "general",
+            title: `${tool}: ${String(input).slice(0, 80)}`,
+            content: `${tool} ${step} ${String(output).slice(0, 200)} ${String(input).slice(0, 200)}`,
+            keywords: [tool, step, ...String(input).toLowerCase().split(/\W+/).filter(Boolean).slice(0, 10)],
+            metadata: { type: "trace", tool, success: parsed.success, timestamp: parsed.timestamp },
+          })
+        } catch { /* skip corrupted line */ }
+      }
+    } catch { /* no trace file yet */ }
+
     const report = selfEvolver.evolve()
 
     // Auto-apply role suggestions
