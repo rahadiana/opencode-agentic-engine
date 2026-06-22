@@ -798,6 +798,7 @@ const confidenceStore = new ConfidenceStore()
         },
         async execute(args, context) {
           llmEngine.setSessionId(context.sessionID)
+          llmEngine.setToolContext('agentic_plan')
           let subtasks = args.subtasks ?? []
 
           if (subtasks.length === 0 && args.autoDecompose !== false) {
@@ -1068,6 +1069,7 @@ const confidenceStore = new ConfidenceStore()
         },
         async execute(args, context) {
           llmEngine.setSessionId(context.sessionID)
+          llmEngine.setToolContext('agentic_execute')
           const startTime = Date.now()
           const projectDir = ctxDir(context)
 
@@ -1486,6 +1488,7 @@ const confidenceStore = new ConfidenceStore()
         },
         async execute(args, context) {
           llmEngine.setSessionId(context.sessionID)
+          llmEngine.setToolContext('agentic_reflect')
           const stepState = executor.getStepState(context.sessionID, args.stepId)
           if (!stepState || !stepState.result) {
             return { output: `No execution record for step "${args.stepId}". Has it been run via \`agentic_execute\`?` }
@@ -1563,6 +1566,8 @@ const confidenceStore = new ConfidenceStore()
           tier: tool.schema.string().optional().describe("Verification tier: 'fast', 'standard', or 'deep' (default: 'deep')"),
         },
         async execute(args, context) {
+          llmEngine.setSessionId(context.sessionID)
+          llmEngine.setToolContext('agentic_verify')
           const projectDir = args.projectDir ?? ctxDir(context)
           const stepId = args.stepId ?? "full"
           const tier = (args.tier ?? "deep") as import("./core/verifier.js").VerificationTier
@@ -1746,6 +1751,8 @@ const confidenceStore = new ConfidenceStore()
           action: tool.schema.enum(["view", "compress"]).describe("'view' shows current context stats; 'compress' generates a compressed context prompt"),
         },
         async execute(args, context) {
+          llmEngine.setSessionId(context.sessionID)
+          llmEngine.setToolContext('agentic_context')
           const turns = sessionStore.getContext(context.sessionID, 100)
           const session = sessionStore.getOrCreate(context.sessionID)
           const allFiles = executor.getAllFilesModified(context.sessionID)
@@ -2091,6 +2098,8 @@ const confidenceStore = new ConfidenceStore()
           baseBranch: tool.schema.string().optional().describe("Base branch for PR creation (default: main)"),
         },
         async execute(args, context) {
+          llmEngine.setSessionId(context.sessionID)
+          llmEngine.setToolContext('agentic_pr')
           const session = sessionStore.getOrCreate(context.sessionID)
           const allFiles = executor.getAllFilesModified(context.sessionID)
 
@@ -2677,19 +2686,28 @@ const confidenceStore = new ConfidenceStore()
       }),
 
       agentic_model: tool({
-        description: "Configure per-role LLM model preferences for the current session. Use 'set' to assign a model to an agent role. Use 'get' to see current assignment. Use 'list' to view all preferences. Use 'clear' to remove a preference. Preferences are persisted to .agentic/models.json.",
+        description: "Configure per-role, per-tool, or per-category LLM model preferences. Use 'set' to assign a model. Use 'get' to check current assignment. Use 'list' to view all. Use 'clear' to remove. Accepts `role`, `tool`, or `category` parameter. Preferences are persisted to .agentic/models.json.",
         args: {
-          action: tool.schema.enum(["set", "get", "list", "clear"]).describe("Action: set/get/list/clear per-role model preference"),
+          action: tool.schema.enum(["set", "get", "list", "clear"]).describe("Action: set/get/list/clear model preference"),
           role: tool.schema.string().optional().describe("Agent role (architect, developer, qa, coordinator, pm)"),
+          tool: tool.schema.string().optional().describe("Tool name (e.g. 'agentic_plan')"),
+          category: tool.schema.string().optional().describe("Complexity category (quick, unspecified-low, unspecified-high, deep)"),
           model: tool.schema.string().optional().describe("Model name (e.g. 'gpt-4o', 'claude-sonnet-4-20250514')"),
         },
         async execute(args, context) {
-          const VALID_ROLES = ["architect", "developer", "qa", "coordinator", "pm"]
           const projectDir = ctxDir(context)
 
-          // ── Persistence helpers ──
+          // ── Persistence helpers (new nested format) ──
           const modelsPath = join(projectDir, ".agentic", "models.json")
-          function readPersistedPrefs(): Record<string, string> {
+
+          interface PersistedPrefs {
+            [key: string]: unknown
+            tools?: Record<string, string>
+            categories?: Record<string, string>
+            $schema?: string
+          }
+
+          function readPersistedPrefs(): PersistedPrefs {
             try {
               if (existsSync(modelsPath)) {
                 return JSON.parse(readFileSync(modelsPath, "utf-8"))
@@ -2697,7 +2715,8 @@ const confidenceStore = new ConfidenceStore()
             } catch { /* corrupt or missing */ }
             return {}
           }
-          function writePersistedPrefs(prefs: Record<string, string>): void {
+
+          function writePersistedPrefs(prefs: PersistedPrefs): void {
             try {
               const dir = dirname(modelsPath)
               mkdirSync(dir, { recursive: true })
@@ -2705,31 +2724,67 @@ const confidenceStore = new ConfidenceStore()
             } catch { /* non-fatal */ }
           }
 
-          // On first access, load persisted prefs into session
+          // On first access, load persisted prefs into session (all types)
           function ensureSessionLoaded(): void {
             const existing = sessionStore.getAllModelPreferences(context.sessionID)
             if (existing.length === 0) {
               const persisted = readPersistedPrefs()
-              for (const [role, model] of Object.entries(persisted)) {
-                sessionStore.setModelPreference(context.sessionID, role, model)
+              // Load role prefs (flat keys, excluding 'tools' and 'categories')
+              for (const [key, val] of Object.entries(persisted)) {
+                if (key === 'tools' || key === 'categories' || key === '$schema') continue
+                if (typeof val === 'string') {
+                  sessionStore.setModelPreference(context.sessionID, key, val)
+                }
+              }
+              // Load tool prefs
+              if (persisted.tools) {
+                for (const [tool, model] of Object.entries(persisted.tools)) {
+                  if (typeof model === 'string') {
+                    sessionStore.setToolPreference(context.sessionID, tool, model)
+                  }
+                }
+              }
+              // Load category prefs
+              if (persisted.categories) {
+                for (const [cat, model] of Object.entries(persisted.categories)) {
+                  if (typeof model === 'string') {
+                    sessionStore.setCategoryPreference(context.sessionID, cat, model)
+                  }
+                }
               }
             }
           }
 
           if (args.action === "list") {
             ensureSessionLoaded()
-            const prefs = sessionStore.getAllModelPreferences(context.sessionID)
-            let output = "## 🎯 Session Model Preferences\n\n"
-            if (prefs.length === 0) {
-              output += "No model preferences configured yet. Use `action: \"set\"` to assign models to agent roles.\n"
+            const sid = context.sessionID
+            const rolePrefs = sessionStore.getAllModelPreferences(sid)
+            const toolPrefs = sessionStore.getAllToolPreferences(sid)
+            const catPrefs = sessionStore.getAllCategoryPreferences(sid)
+
+            let output = "## 🎯 Model Preferences\n\n"
+
+            if (rolePrefs.length === 0 && toolPrefs.length === 0 && catPrefs.length === 0) {
+              output += "No model preferences configured. Use `agentic_model set role=... model=...` or `agentic_model set tool=... model=...` or `agentic_model set category=... model=...`.\n"
             } else {
-              output += "| Role | Model |\n"
-              output += "|------|-------|\n"
-              output += prefs.map(p => `| **${p.role}** | \`${p.model}\` |`).join("\n")
+              if (rolePrefs.length > 0) {
+                output += "### 👤 Per-Role\n| Role | Model |\n|------|-------|\n"
+                output += rolePrefs.map(p => `| **${p.role}** | \`${p.model}\` |`).join("\n") + "\n\n"
+              }
+              if (toolPrefs.length > 0) {
+                output += "### 🔧 Per-Tool\n| Tool | Model |\n|------|-------|\n"
+                output += toolPrefs.map(p => `| **${p.tool}** | \`${p.model}\` |`).join("\n") + "\n\n"
+              }
+              if (catPrefs.length > 0) {
+                output += "### 📊 Per-Category\n| Category | Model |\n|----------|-------|\n"
+                output += catPrefs.map(p => `| **${p.category}** | \`${p.model}\` |`).join("\n") + "\n\n"
+              }
               const persisted = readPersistedPrefs()
-              const persistedCount = Object.keys(persisted).length
-              output += `\n\n${persistedCount > 0 ? `💾 ${persistedCount} preference(s) persisted to \`.agentic/models.json\`` : "Preferences are session-only (not yet persisted)"}`
-              output += "\n\nThese preferences override the default model selection during delegation."
+              const totalCount = Object.keys(persisted).filter(k => k !== 'tools' && k !== 'categories' && k !== '$schema').length +
+                (persisted.tools ? Object.keys(persisted.tools).length : 0) +
+                (persisted.categories ? Object.keys(persisted.categories).length : 0)
+              output += totalCount > 0 ? `💾 ${totalCount} preference(s) persisted to \`.agentic/models.json\`` : "Preferences are session-only (not yet persisted)"
+              output += "\n\n**Resolution priority:** per-tool override → category fallback → engine default"
             }
 
             // Also show available models from OpenCode
@@ -2746,7 +2801,7 @@ const confidenceStore = new ConfidenceStore()
                 for (const [provider, models] of byProvider) {
                   output += `- **${provider}**: ${models.join(", ")}\n`
                 }
-                output += `\nUse \`action:"set"\` to assign any of these to a role.`
+                output += `\nUse \`action:"set"\` to assign any of these to a role, tool, or category.`
               }
             } catch { /* silent */ }
 
@@ -2754,49 +2809,114 @@ const confidenceStore = new ConfidenceStore()
           }
 
           if (args.action === "set") {
-            if (!args.role) return { output: "Provide a `role` (e.g. 'architect', 'developer', 'qa', 'coordinator', 'pm')." }
             if (!args.model) return { output: "Provide a `model` name (e.g. 'gpt-4o', 'claude-sonnet-4-20250514')." }
-            const roleLower = args.role.toLowerCase()
-            if (!VALID_ROLES.includes(roleLower)) {
-              return { output: `Invalid role "${args.role}". Valid roles: ${VALID_ROLES.join(", ")}` }
+            if (!args.role && !args.tool && !args.category) {
+              return { output: "Provide a `role`, `tool`, or `category` to assign the model to." }
             }
-            sessionStore.setModelPreference(context.sessionID, roleLower, args.model)
-            // Also register in model registry so it's tracked
+
             modelRegistry.addModel(args.model)
-            modelRegistry.registerAlias(roleLower, [args.model])
 
-            // Persist to .agentic/models.json
-            const persisted = readPersistedPrefs()
-            persisted[roleLower] = args.model
-            writePersistedPrefs(persisted)
+            if (args.tool) {
+              const toolLower = args.tool.toLowerCase()
+              sessionStore.setToolPreference(context.sessionID, toolLower, args.model)
+              // Persist
+              const persisted = readPersistedPrefs()
+              if (!persisted.tools) persisted.tools = {}
+              persisted.tools[toolLower] = args.model
+              writePersistedPrefs(persisted)
+              return { output: `✅ Tool model preference set: **${toolLower}** → \`${args.model}\`\nAll LLM calls from \`${toolLower}\` will use this model.\n💾 Persisted to \`.agentic/models.json\`` }
+            }
 
-            return { output: `✅ Model preference set: **${roleLower}** → \`${args.model}\`\nThis model will be used when delegating tasks to the ${roleLower} role in this session.\n💾 Persisted to \`.agentic/models.json\`` }
+            if (args.category) {
+              const catLower = args.category.toLowerCase()
+              sessionStore.setCategoryPreference(context.sessionID, catLower, args.model)
+              // Persist
+              const persisted = readPersistedPrefs()
+              if (!persisted.categories) persisted.categories = {}
+              persisted.categories[catLower] = args.model
+              writePersistedPrefs(persisted)
+              return { output: `✅ Category model preference set: **${catLower}** → \`${args.model}\`\nAll tools in this category will use this model.\n💾 Persisted to \`.agentic/models.json\`` }
+            }
+
+            if (args.role) {
+              const roleLower = args.role.toLowerCase()
+              sessionStore.setModelPreference(context.sessionID, roleLower, args.model)
+              modelRegistry.registerAlias(roleLower, [args.model])
+              // Persist
+              const persisted = readPersistedPrefs()
+              persisted[roleLower] = args.model
+              writePersistedPrefs(persisted)
+              return { output: `✅ Role model preference set: **${roleLower}** → \`${args.model}\`\nThis model will be used when delegating to the ${roleLower} role.\n💾 Persisted to \`.agentic/models.json\`` }
+            }
+
+            return { output: "Unknown target. Use `role`, `tool`, or `category`." }
           }
 
           if (args.action === "get") {
             ensureSessionLoaded()
-            if (!args.role) return { output: "Provide a `role` to check (e.g. 'architect')." }
-            const model = sessionStore.getModelPreference(context.sessionID, args.role)
-            if (!model) {
-              return { output: `No model preference set for role "${args.role}". Delegation will use default model selection.` }
+            if (!args.role && !args.tool && !args.category) {
+              return { output: "Provide a `role`, `tool`, or `category` to check." }
             }
-            const persisted = readPersistedPrefs()
-            const isPersisted = persisted[args.role] === model
-            return { output: `**${args.role}** → \`${model}\`${isPersisted ? " 💾 (persisted)" : ""}` }
+
+            if (args.tool) {
+              const model = sessionStore.getToolPreference(context.sessionID, args.tool)
+              if (!model) return { output: `No model preference set for tool "${args.tool}". Uses category fallback or default.` }
+              const persisted = readPersistedPrefs()
+              const isPersisted = persisted.tools?.[args.tool.toLowerCase()] === model
+              return { output: `**${args.tool}** → \`${model}\`${isPersisted ? " 💾 (persisted)" : ""}` }
+            }
+
+            if (args.category) {
+              const model = sessionStore.getCategoryPreference(context.sessionID, args.category)
+              if (!model) return { output: `No model preference set for category "${args.category}". Uses engine default.` }
+              const persisted = readPersistedPrefs()
+              const isPersisted = persisted.categories?.[args.category.toLowerCase()] === model
+              return { output: `**${args.category}** → \`${model}\`${isPersisted ? " 💾 (persisted)" : ""}` }
+            }
+
+            if (args.role) {
+              const model = sessionStore.getModelPreference(context.sessionID, args.role)
+              if (!model) return { output: `No model preference set for role "${args.role}". Delegation will use default model selection.` }
+              const persisted = readPersistedPrefs()
+              const isPersisted = persisted[args.role] === model
+              return { output: `**${args.role}** → \`${model}\`${isPersisted ? " 💾 (persisted)" : ""}` }
+            }
+
+            return { output: "Unknown target." }
           }
 
           if (args.action === "clear") {
-            sessionStore.clearModelPreference(context.sessionID, args.role)
-            // Also remove from persistence
+            if (args.tool) {
+              sessionStore.clearToolPreference(context.sessionID, args.tool)
+              const persisted = readPersistedPrefs()
+              if (persisted.tools) delete persisted.tools[args.tool.toLowerCase()]
+              writePersistedPrefs(persisted)
+              return { output: `Cleared model preference for tool "${args.tool}".` }
+            }
+
+            if (args.category) {
+              sessionStore.clearCategoryPreference(context.sessionID, args.category)
+              const persisted = readPersistedPrefs()
+              if (persisted.categories) delete persisted.categories[args.category.toLowerCase()]
+              writePersistedPrefs(persisted)
+              return { output: `Cleared model preference for category "${args.category}".` }
+            }
+
             if (args.role) {
+              sessionStore.clearModelPreference(context.sessionID, args.role)
               const persisted = readPersistedPrefs()
               delete persisted[args.role]
               writePersistedPrefs(persisted)
               return { output: `Cleared model preference for role "${args.role}".` }
             }
+
             // Clear all
+            const sid = context.sessionID
+            sessionStore.clearModelPreference(sid)
+            sessionStore.clearToolPreference(sid)
+            sessionStore.clearCategoryPreference(sid)
             writePersistedPrefs({})
-            return { output: "Cleared all model preferences for this session." }
+            return { output: "Cleared all model preferences (roles, tools, and categories) for this session." }
           }
 
           return { output: "Unknown action. Use 'set', 'get', 'list', or 'clear'." }
@@ -3012,6 +3132,8 @@ const confidenceStore = new ConfidenceStore()
           abortOnFailure: tool.schema.boolean().optional().describe("Stop all tasks in phase if one fails (default: false)"),
         },
         async execute(args, context) {
+          llmEngine.setSessionId(context.sessionID)
+          llmEngine.setToolContext('agentic_parallel')
           const session = sessionStore.getOrCreate(context.sessionID)
           if (!session.plan) return { output: "No plan found. Create one with `agentic_plan` first." }
 
@@ -3785,6 +3907,7 @@ const confidenceStore = new ConfidenceStore()
         },
         async execute(args, context) {
           llmEngine.setSessionId(context.sessionID)
+          llmEngine.setToolContext('agentic_debate')
           const startTime = Date.now()
 
           const maxRounds = Math.min(args.maxRounds ?? 3, 5)
@@ -3848,6 +3971,7 @@ const confidenceStore = new ConfidenceStore()
         },
         async execute(args, context) {
           llmEngine.setSessionId(context.sessionID)
+          llmEngine.setToolContext('agentic_router')
           const startTime = Date.now()
 
           if (args.categories && Array.isArray(args.categories) && args.categories.length > 0) {
@@ -3885,6 +4009,7 @@ const confidenceStore = new ConfidenceStore()
         },
         async execute(args, context) {
           llmEngine.setSessionId(context.sessionID)
+          llmEngine.setToolContext('agentic_clean')
           const startTime = Date.now()
 
           const result = await dataCleaner.clean({
@@ -4622,6 +4747,7 @@ const confidenceStore = new ConfidenceStore()
         },
         async execute(args, context) {
           llmEngine.setSessionId(context.sessionID)
+          llmEngine.setToolContext('agentic_auto')
           const projectDir = ctxDir(context)
           const startTime = Date.now()
           const thorough = args.thorough !== false

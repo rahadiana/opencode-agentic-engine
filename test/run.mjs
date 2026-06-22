@@ -1573,10 +1573,10 @@ const getNone = await hooks.tool.agentic_model.execute({ action: "get", role: "p
 const getNoneOut = typeof getNone === "string" ? getNone : getNone.output
 assert(getNoneOut.includes("No model preference"), "get for unset role shows no preference")
 
-// Set with invalid role
-const invalidRole = await hooks.tool.agentic_model.execute({ action: "set", role: "invalid", model: "gpt-4o" }, modelCtx)
-const invalidOut = typeof invalidRole === "string" ? invalidRole : invalidRole.output
-assert(invalidOut.includes("Invalid role"), "set with invalid role returns error")
+// Set with custom dynamic role (roles are now dynamic, any string works)
+const dynRole = await hooks.tool.agentic_model.execute({ action: "set", role: "custom-agent", model: "gpt-4o" }, modelCtx)
+const dynOut = typeof dynRole === "string" ? dynRole : dynRole.output
+assert(dynOut.includes("custom-agent") && dynOut.includes("gpt-4o"), "set with custom dynamic role works")
 
 // Set without role
 const noRole = await hooks.tool.agentic_model.execute({ action: "set", model: "gpt-4o" }, modelCtx)

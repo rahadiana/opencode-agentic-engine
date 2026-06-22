@@ -30,6 +30,10 @@ export class SessionStore {
   private executorSnapshots = new Map<string, ExecutorSnapshot>()
   /** Per-session model preferences: role → model name */
   private modelPreferences = new Map<string, Map<string, string>>()
+  /** Per-session tool model preferences: tool → model name */
+  private toolModelPreferences = new Map<string, Map<string, string>>()
+  /** Per-session category model preferences: category → model name */
+  private categoryModelPreferences = new Map<string, Map<string, string>>()
   /** TTL in days for session expiry (0 = never expire). Config-hot-reloadable. */
   private forgetAfterDays = 30
   private persistLayer?: import("./persistence.js").PersistenceLayer
@@ -242,6 +246,68 @@ export class SessionStore {
       prefs.delete(role.toLowerCase())
     } else {
       this.modelPreferences.delete(sessionId)
+    }
+  }
+
+  // ── Tool Model Preferences ──
+
+  setToolPreference(sessionId: string, tool: string, model: string): void {
+    let prefs = this.toolModelPreferences.get(sessionId)
+    if (!prefs) {
+      prefs = new Map()
+      this.toolModelPreferences.set(sessionId, prefs)
+    }
+    prefs.set(tool.toLowerCase(), model)
+  }
+
+  getToolPreference(sessionId: string, tool: string): string | undefined {
+    return this.toolModelPreferences.get(sessionId)?.get(tool.toLowerCase())
+  }
+
+  getAllToolPreferences(sessionId: string): Array<{ tool: string; model: string }> {
+    const prefs = this.toolModelPreferences.get(sessionId)
+    if (!prefs) return []
+    return [...prefs.entries()].map(([tool, model]) => ({ tool, model }))
+  }
+
+  clearToolPreference(sessionId: string, tool?: string): void {
+    const prefs = this.toolModelPreferences.get(sessionId)
+    if (!prefs) return
+    if (tool) {
+      prefs.delete(tool.toLowerCase())
+    } else {
+      this.toolModelPreferences.delete(sessionId)
+    }
+  }
+
+  // ── Category Model Preferences ──
+
+  setCategoryPreference(sessionId: string, category: string, model: string): void {
+    let prefs = this.categoryModelPreferences.get(sessionId)
+    if (!prefs) {
+      prefs = new Map()
+      this.categoryModelPreferences.set(sessionId, prefs)
+    }
+    prefs.set(category.toLowerCase(), model)
+  }
+
+  getCategoryPreference(sessionId: string, category: string): string | undefined {
+    return this.categoryModelPreferences.get(sessionId)?.get(category.toLowerCase())
+  }
+
+  getAllCategoryPreferences(sessionId: string): Array<{ category: string; model: string }> {
+    const prefs = this.categoryModelPreferences.get(sessionId)
+    if (!prefs) return []
+    return [...prefs.entries()].map(([cat, model]) => ({ category: cat, model }))
+  }
+
+  clearCategoryPreference(sessionId: string, category?: string): void {
+    const prefs = this.categoryModelPreferences.get(sessionId)
+    if (!prefs) return
+    if (category) {
+      prefs.delete(category.toLowerCase())
+    } else {
+      this.categoryModelPreferences.delete(sessionId)
     }
   }
 }

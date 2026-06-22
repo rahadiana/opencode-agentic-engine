@@ -225,24 +225,40 @@ Semua tool menggunakan prefix `agentic_`. Dikelompokkan berdasarkan Stage:
 
 ## Model Resolution
 
-Sistem model preference memungkinkan setiap agent role menggunakan model LLM yang berbeda. Model dikirim ke **OpenCode SDK** — plugin tidak pernah call API external langsung.
+Sistem model preference memungkinkan setiap agent role, tool, dan category menggunakan model LLM yang berbeda. Model dikirim ke **OpenCode SDK** — plugin tidak pernah call API external langsung.
+
+### 3-Level Resolution
+
+Setiap tool yang panggil LLM punya `complexityTier` bawaan:
+
+| Tier | Tools | Contoh Model |
+|------|-------|-------------|
+| **quick** | `agentic_nav`, `agentic_clean`, `agentic_pr`, `agentic_router` | `9router/FlashCombo` |
+| **unspecified-low** | `agentic_context`, `agentic_execute`, `agentic_reflect` | `9router/FlashCombo` |
+| **unspecified-high** | `agentic_debate`, `agentic_plan` | `9router/StrongReason` |
+| **deep** | `agentic_verify`, `agentic_finetune` | `9router/StrongReason` |
 
 ### Priority (Tinggi ke Rendah)
 
 ```
-1. agentic_model set role=X model="providerID/modelID"
-     ↓ Disimpan di session + .agentic/models.json
-     ↓ Diterapkan ke engine via updateConfig()
+1. Per-call explicit          — llmEngine.call({ model: {...} })
      ↓
-2. Tidak ada preference
-     ↓ SDK body.model TIDAK dikirim
-     ↓ OpenCode pakai model session yang aktif
+2. Per-tool override          — agentic_model set tool=agentic_plan model="..."
+     ↓
+3. Category by complexity     — agentic_model set category=deep model="..."
+     ↓
+4. Per-role (via delegate)    — agentic_model set role=developer model="..."
+     ↓
+5. Engine default             — Current session model
 ```
 
-| Priority | Kondisi | Dikirim ke SDK | OpenCode pakai |
-|----------|---------|---------------|----------------|
-| **1 (override)** | `agentic_model set` dipanggil | `{ providerID, modelID }` | Model yang ditentukan |
-| **2 (default)** | Tidak ada preference | (tidak dikirim) | Current session model |
+| Priority | Level | Dikirim ke SDK |
+|----------|-------|----------------|
+| **1** | `req.model` explicit | `{ providerID, modelID }` |
+| **2** | Per-tool override | `{ providerID, modelID }` |
+| **3** | Category fallback | `{ providerID, modelID }` |
+| **4** | Per-role (delegasi) | `{ providerID, modelID }` |
+| **5** | Default | (tidak dikirim) → pakai session model |
 
 ### Format Model String
 
@@ -255,26 +271,49 @@ Sistem model preference memungkinkan setiap agent role menggunakan model LLM yan
 ### Cara Pakai
 
 ```bash
-# Set model untuk role developer
-agentic_model action="set" role="developer" model="deepseek/deepseek-chat"
-# Output: ✅ Model preference set: developer → deepseek/deepseek-chat
+# ── Per-Role (untuk delegasi) ──
+agentic_model set role=developer model="deepseek/deepseek-chat"
 
-# Lihat semua preferences
-agentic_model action="list"
-# Output: | Role       | Model                    |
-#         |------------|--------------------------|
-#         | developer  | deepseek/deepseek-chat   |
-#         | architect  | anthropic/claude-opus-4-7|
+# ── Per-Tool (override langsung) ──
+agentic_model set tool=agentic_plan model="gpt-4o"
+agentic_model set tool=agentic_verify model="claude-sonnet-4-6"
 
-# Cek preference satu role
-agentic_model action="get" role="developer"
-# Output: developer → deepseek/deepseek-chat 💾 (persisted)
+# ── Per-Category (fallback by complexity) ──
+agentic_model set category=quick model="9router/FlashCombo"
+agentic_model set category=deep model="9router/StrongReason"
 
-# Hapus preference (kembali ke default)
-agentic_model action="clear" role="developer"
+# ── Lihat semua ──
+agentic_model list
+# Output:
+# 👤 Per-Role
+# | Role      | Model                    |
+# |-----------|--------------------------|
+# | developer | deepseek/deepseek-chat   |
+#
+# 🔧 Per-Tool
+# | Tool            | Model                    |
+# |-----------------|--------------------------|
+# | agentic_verify  | claude-sonnet-4-6        |
+#
+# 📊 Per-Category
+# | Category | Model                    |
+# |----------|--------------------------|
+# | quick    | 9router/FlashCombo       |
+# | deep     | 9router/StrongReason     |
 
-# Reset statistics model yang degraded
-agentic_model_reset action="reset" model="deepseek-chat"
+# ── Cek preference spesifik ──
+agentic_model get tool=agentic_plan
+# Output: agentic_plan → gpt-4o 💾 (persisted)
+
+agentic_model get category=deep
+# Output: deep → 9router/StrongReason 💾 (persisted)
+
+# ── Hapus preference ──
+agentic_model clear tool=agentic_plan
+agentic_model clear category=deep
+
+# ── Reset statistics ──
+agentic_model_reset reset model="deepseek-chat"
 ```
 
 ### File Persistence
@@ -284,36 +323,42 @@ Preference disimpan di `.agentic/models.json`:
 ```json
 {
   "developer": "deepseek/deepseek-chat",
-  "architect": "anthropic/claude-sonnet-4-6"
+  "tools": {
+    "agentic_plan": "gpt-4o",
+    "agentic_verify": "claude-sonnet-4-6"
+  },
+  "categories": {
+    "quick": "9router/FlashCombo",
+    "deep": "9router/StrongReason"
+  }
 }
 ```
 
 Statistics model (reliability, hallucination, latency) disimpan di `~/.config/opencode/models-stats.json` (global, cross-project).
 
-### Alur Delegasi dengan Model
+### Alur Resolusi per-Tool
 
 ```
-agentic_model set role=developer model="deepseek/deepseek-chat"
+agentic_model set category=deep model="9router/StrongReason"
     ↓
-agentic_delegate role=developer taskId="..." description="..."
-    ↓ sessionStore.getModelPreference(sessionID, "developer") → "deepseek/deepseek-chat"
-    ↓ agentCtx.modelPreference = "deepseek/deepseek-chat"
+agentic_verify handler dipanggil
+    ↓ llmEngine.setToolContext('agentic_verify')
     ↓
-agentRuntime.execute(agentCtx)
-    ↓ engine.updateConfig({ model: "deepseek/deepseek-chat" })
+verifier.verifyAllDeep() → llmEngine.call({ ... })
     ↓
-engine.call(req)
-    ↓ callOpenCode(req)
-    ↓ parseModelForSDK() → { providerID: "deepseek", modelID: "deepseek-chat" }
+call() → toolName = 'agentic_verify'
+    ↓ Priority 1: req.model? → undefined
+    ↓ Priority 2: sessionStore.getToolPreference('agentic_verify') → undefined
+    ↓ Priority 3: TOOL_COMPLEXITY['agentic_verify'] = 'deep'
+    ↓   sessionStore.getCategoryPreference('deep') → "9router/StrongReason"
+    ↓   parseModelForSDK("9router/StrongReason") → { providerID: "9router", modelID: "StrongReason" }
     ↓
-OpenCode SDK session.prompt({ body: { model: {...}, parts: [...] } })
-    ↓
-OpenCode → panggil DeepSeek API dengan model deepseek-chat ✅
+OpenCode SDK → panggil 9router/StrongReason ✅
 ```
 
 ### Tracking Reliability
 
-Plugin otomatis track reliabilitas setiap model:
+Plugin otomatis track reliabilitas setiap model (per-model, bukan per-tool):
 
 ```
 agentic_dashboard

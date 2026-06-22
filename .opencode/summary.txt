@@ -14,10 +14,29 @@
 ### Model Resolution Architecture
 - `callOpenCode()` ONLY routes through OpenCode SDK (no direct HTTP calls)
 - `detectProvider()` always returns "opencode"
-- `LLMRequest` punya field `model?: string`
+- `LLMRequest` punya field `model?: { providerID, modelID }`
+- `LLMRequest` punya field `toolName?: string` — untuk auto model resolution
 - `parseModelForSDK()` helper: parse "providerID/modelID" → `{ providerID, modelID }`
 - Jika format tanpa "/" → providerID = "opencode" (auto-resolve)
 - Jika model tidak di-set → SDK body.model tidak dikirim → OpenCode pakai session default
+
+### 3-Level Model Resolution (Per-Tool)
+- **Priority 1**: `req.model` explicit (per-call)
+- **Priority 2**: Per-tool override (`agentic_model set tool=X model="Y"`)
+- **Priority 3**: Category by complexity (`agentic_model set category=quick model="Y"`)
+  - Tiap tool punya `complexityTier` bawaan (quick/unspecified-low/unspecified-high/deep)
+  - `TOOL_COMPLEXITY` map di `llm.ts`
+- **Priority 4**: Per-role (via `agentic_delegate` → `agentRuntime.execute()`)
+- **Priority 5**: Engine default (`engine.config.model`)
+
+### Implementasi
+- `sessionStore` punya 3 namespace: `modelPreferences` (role), `toolModelPreferences` (tool), `categoryModelPreferences` (category)
+- `LLMEngine` punya `_toolContext` — diset tiap tool handler via `setToolContext()`
+- Tiap tool handler yang panggil LLM set `llmEngine.setToolContext('agentic_xxx')`
+- `call()` resolve model: `req.model ?? _toolContext → toolPref → categoryPref → parseModelForSDK()`
+- `.agentic/models.json` struktur baru: `{ "developer": "...", "tools": {...}, "categories": {...} }`
+- `agentic_model` handler diperluas: terima `tool` dan `category` params
+- Role sekarang **dynamic** — validasi dihapus, semua string diterima
 
 ### Agent Runtime
 - `AgentContext` punya `modelPreference?: string`
@@ -25,8 +44,12 @@
 - `agentic_delegate` membaca `sessionStore.getModelPreference()` dan apply ke agentCtx
 
 ### Files Changed (sesi ini)
-- `AGENTS.md` — added 3 documentation sections
+- `AGENTS.md` — added File Config, Tools Detail, Model Resolution sections
 - `.opencode/summary.txt` — dibuat pertama kali
+- `src/memory/session-store.ts` — +tool +category preference methods
+- `src/core/llm.ts` — +TOOL_COMPLEXITY, +toolContext, model resolution in call()
+- `src/index.ts` — agentic_model handler diperluas, toolContext di 10+ handler
+- `test/run.mjs` — test adjusted for dynamic roles
 
 ### Inspirasi
-- oh-my-openagent / omo: 6-level model resolution (task -> project -> role -> user default -> provider default -> system default)
+- oh-my-openagent / omo: 6-level model resolution, per-agent & per-category model config

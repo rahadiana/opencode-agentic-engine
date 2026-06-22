@@ -36,6 +36,8 @@ export interface LLMRequest {
     providerID: string
     modelID: string
   }
+  /** Tool name for auto model resolution (tool→category→default). */
+  toolName?: string
 }
 
 export interface LLMResponse {
@@ -55,6 +57,31 @@ const DEFAULT_MODELS: Record<string, string> = {
   anthropic: "claude-3-5-sonnet-20240620",
   local: "codellama",
   opencode: "opencode-default",
+}
+
+/**
+ * Map tool → complexity category for auto-model-resolution.
+ * Tools call LLM; which model depends on:
+ *   1. Per-tool override (agentic_model set tool=X model="Y")
+ *   2. Category by complexity tier (agentic_model set category=Z model="Y")
+ *   3. Engine default model
+ */
+export const TOOL_COMPLEXITY: Record<string, string> = {
+  // Quick — ringan, gak perlu reasoning berat
+  agentic_nav: 'quick',
+  agentic_clean: 'quick',
+  agentic_pr: 'quick',
+  agentic_router: 'quick',
+  // Unspecified-low — agak berat tapi gak kritis
+  agentic_context: 'unspecified-low',
+  agentic_execute: 'unspecified-low',
+  agentic_reflect: 'unspecified-low',
+  // Unspecified-high — butuh model cukup kuat
+  agentic_debate: 'unspecified-high',
+  agentic_plan: 'unspecified-high',
+  // Deep — paling berat, butuh reasoning maksimal
+  agentic_verify: 'deep',
+  agentic_finetune: 'deep',
 }
 
 import type { ModelRegistry } from "./model-registry.js"
@@ -79,6 +106,8 @@ export class LLMEngine {
   private readonly CACHE_TTL = 30_000 // 30s cache for identical requests
   private readonly CACHE_MAX_ENTRIES = 1000 // prevent unbounded memory growth
   private semanticCache?: SemanticCache // Gap #7: semantic similarity-based cache
+  /** Per-call tool context for auto model resolution (tool→category→default) */
+  private _toolContext?: string
 
   constructor(config: Partial<LLMConfig> = {}) {
     this.config = {
@@ -193,6 +222,20 @@ export class LLMEngine {
   }
 
   /**
+   * Set tool context for auto model resolution.
+   * When set, subsequent call() will resolve model via:
+   *   tool preference → category preference → engine default
+   */
+  setToolContext(toolName?: string): void {
+    this._toolContext = toolName
+  }
+
+  /** Get current tool context, if any. */
+  getToolContext(): string | undefined {
+    return this._toolContext
+  }
+
+  /**
    * Mendapatkan model ASLI dari OpenCode session.
    * Lebih akurat karena ini model beneran yang dipakai sama OpenCode.
    * Fallback: this.getCurrentModel() kalau gagal baca dari session.
@@ -234,6 +277,29 @@ export class LLMEngine {
     const startTime = Date.now()
     let success = false
     let response: LLMResponse
+
+    // Resolve model: per-call > tool-context > category > engine default
+    const effectiveToolName = req.toolName ?? this._toolContext
+    if (!req.model && effectiveToolName) {
+      // Priority 1: per-tool override
+      if (this.sessionStore && this.pluginSessionId) {
+        const toolModel = this.sessionStore.getToolPreference(this.pluginSessionId, effectiveToolName)
+        if (toolModel) {
+          req.model = this.parseModelForSDK(toolModel)
+        }
+        // Priority 2: category by complexity tier
+        if (!req.model) {
+          const category = TOOL_COMPLEXITY[effectiveToolName]
+          if (category) {
+            const catModel = this.sessionStore.getCategoryPreference(this.pluginSessionId, category)
+            if (catModel) {
+              req.model = this.parseModelForSDK(catModel)
+            }
+          }
+        }
+      }
+    }
+    // Priority 3: engine default (already handled by parseModelForSDK fallback in callOpenCode)
 
     if (!req.bypassCache && this.semanticCache) {
       const query = `${req.systemPrompt}${req.userPrompt}`
@@ -315,10 +381,15 @@ export class LLMEngine {
 
     const latency = Date.now() - startTime
     
+    // Use the effective model (resolved via tool→category→default) for tracking
+    const effectiveModel = req.model
+      ? `${req.model.providerID}/${req.model.modelID}`
+      : this.getCurrentModel()
+    
     const taskType = this.sessionStore && this.pluginSessionId
       ? this.sessionStore.getOrCreate(this.pluginSessionId).currentTaskType
       : undefined
-    this.modelRegistry?.recordCall(this.getCurrentModel(), success, latency, taskType)
+    this.modelRegistry?.recordCall(effectiveModel, success, latency, taskType)
 
     // Feed token usage to BudgetTracker
     const tInput = response.usage?.promptTokens ?? 0
@@ -328,7 +399,7 @@ export class LLMEngine {
     const tCacheWrite = response.usage?.cacheWriteTokens ?? 0
 
     if (success && this.budgetTracker) {
-      this.budgetTracker.recordTokens(this.getCurrentModel(), tInput, tOutput, tReasoning, tCacheRead, tCacheWrite)
+      this.budgetTracker.recordTokens(effectiveModel, tInput, tOutput, tReasoning, tCacheRead, tCacheWrite)
     }
 
     // Sync session data (model + cost) dari OpenCode setelah LLM call sukses.
@@ -346,7 +417,7 @@ export class LLMEngine {
         type: "llm.response",
         payload: {
           sessionID: this.pluginSessionId ?? "",
-          model: this.getCurrentModel(),
+          model: effectiveModel,
           tokens: { input: tInput, output: tOutput, reasoning: tReasoning, cacheRead: tCacheRead, cacheWrite: tCacheWrite },
           costUsd: cost,
           success,
