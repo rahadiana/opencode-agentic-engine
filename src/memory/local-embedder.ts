@@ -13,8 +13,16 @@
  */
 
 export interface EmbedderConfig {
+  /** Model name for embedding (default: "text-embedding-3-small") */
   model?: string
+  /** API endpoint for embedding service. Set to null or "" to use local hash fallback.
+   *  Common providers:
+   *  - OpenAI: "https://api.openai.com/v1/embeddings"
+   *  - Ollama (local): "http://localhost:11434/v1/embeddings"
+   *  - Any OpenAI-compatible embedding endpoint
+   */
   endpoint?: string | null
+  /** API key (required for OpenAI; not needed for local providers like Ollama) */
   apiKey?: string | null
   /** Dimension of the embedding vectors (default: 256 for local fallback) */
   dimension?: number

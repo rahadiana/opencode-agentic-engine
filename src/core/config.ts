@@ -161,7 +161,7 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
   // Merge valid parts with defaults
   const merged = { ...defaults }
   if (embeddingRaw && typeof embeddingRaw === "object") {
-    (merged as any).embedding = { ...defaults.embedding, ...embeddingRaw as EmbeddingConfig }
+    merged.embedding = { ...(defaults.embedding ?? {}), ...embeddingRaw } as EmbeddingConfig
   }
   if (cfg.memory && typeof cfg.memory === "object") {
     merged.memory = { ...defaults.memory, ...cfg.memory as MemoryConfig }

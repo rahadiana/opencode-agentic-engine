@@ -6,6 +6,7 @@ import { DependencyTracker } from "../drift/dependency-tracker.js"
 import { LLMEngine } from "./llm.js"
 import { BudgetTracker } from "./budget-tracker.js"
 import type { Planner } from "./planner.js"
+import { TimeoutError } from "./errors.js"
 
 export interface AgentLoopConfig {
   maxIterations: number
@@ -258,11 +259,17 @@ export class AgentLoop {
 
       this.observers.forEach(o => o.onStepStart(step.id, depth + 1))
 
-      const stepPromise = stepExecutor(step)
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error(`Step ${step.id} timed out after 120000ms`)), 120_000)
-      })
-      const result = await Promise.race([stepPromise, timeoutPromise])
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 120_000)
+      const result = await Promise.race([
+        stepExecutor(step),
+        new Promise<never>((_, reject) => {
+          controller.signal.addEventListener("abort", () => {
+            reject(new TimeoutError(`Step ${step.id}`, 120000))
+          })
+        }),
+      ])
+      clearTimeout(timeoutId)
 
       if (result.filesModified && result.filesModified.length > 0) {
         depTracker.recordChange(sessionId, step.id, result.filesModified)
@@ -384,7 +391,10 @@ export class AgentLoop {
         // If a fixExecutor is provided, try it. If it fails, still retry (the step executor
         // will get another chance with the error context).
         if (fixExecutor) {
-          const fixed = await fixExecutor(llmAnalysis.fix).catch(() => false)
+          const fixed = await fixExecutor(llmAnalysis.fix).catch((err) => {
+            console.warn(`[AgentLoop] fixExecutor failed for step ${_step.id}:`, err)
+            return false
+          })
           if (fixed) return true
         }
         return true // retry step execution even if bash fix failed

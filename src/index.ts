@@ -178,7 +178,7 @@ const createEngine: Plugin = async (input, _options) => {
   // skills/models/prompts shared globally.
   const projectId = ((): string => {
     // Prefer explicit project name from input
-    if ((input as any).project?.name) return (input as any).project.name
+    if (input.project && "name" in input.project) return (input.project as { name: string }).name
     // Fallback to worktree dirname, sanitised
     const name = worktree.split("/").filter(Boolean).pop() || "unknown"
     return name.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 64)
@@ -468,7 +468,7 @@ const confidenceStore = new ConfidenceStore()
   // Load persisted RAG data from disk (global, unscoped — shared across all projects)
   const savedRAG = persistence.loadAll("rag")
   for (const item of savedRAG) {
-    multiIndexRAG.importAll(item.data as any)
+    multiIndexRAG.importAll(item.data as import("./memory/multi-index-rag.js").IndexData)
   }
   // Auto-persist RAG every time data is stored (via indexEpisode/indexSkill)
   multiIndexRAG.setPersistCallback((data) => {
@@ -496,7 +496,7 @@ const confidenceStore = new ConfidenceStore()
   // Restore persisted evolution trend + evaluator score (scoped per project)
   const savedEvo = persistence.load<{ results: any[]; evolveCount: number; windowSize: number }>("evolution", "trend", projectId)
   if (savedEvo) continuousEvolution.fromJSON(savedEvo)
-  const savedEval = persistence.load<any>("evaluation", "live", projectId)
+  const savedEval = persistence.load<Record<string, unknown>>("evaluation", "live", projectId)
   if (savedEval) liveEvaluator.fromJSON(savedEval)
 
   // Restore persisted episodes (scoped per project)
@@ -516,8 +516,8 @@ const confidenceStore = new ConfidenceStore()
   // Seed RAG from persisted episodes + skills so it's not empty on fresh sessions
   multiIndexRAG.setBatchMode(true)  // suppress individual persist calls
   for (const ep of savedEpisodes) {
-    const cat = multiIndexRAG.autoCategory(ep.data.planGoal + " " + (ep.data as any).summary || "")
-    const epData = ep.data as any
+    const epData = ep.data as { planGoal: string; summary?: string; sessionId: string; outcome?: string; decisions?: string[]; filesChanged?: string[]; timestamp: string; tags?: string[]; projectId?: string }
+    const cat = multiIndexRAG.autoCategory(epData.planGoal + " " + (epData.summary || ""))
     multiIndexRAG.indexEpisode(cat, {
       id: epData.sessionId,
       sessionId: epData.sessionId,
@@ -534,10 +534,10 @@ const confidenceStore = new ConfidenceStore()
     })
   }
   for (const sk of savedSkills) {
-    const skData = sk.data as any
+    const skData = sk.data as { meta?: { name?: string }; definition?: { meta?: { name?: string }; trigger?: { pattern?: string } }; trigger?: { pattern?: string }; usageCount?: number; successRate?: number; successWindow?: boolean[]; lastUsed?: string; audit?: { lastUsed?: string } }
     const cat = multiIndexRAG.autoCategory(skData.meta?.name || skData.definition?.meta?.name || "" + " " + skData.trigger?.pattern || skData.definition?.trigger?.pattern || "")
     const skillRecord: import("./memory/skill-store.js").SkillRecord = {
-      definition: skData.definition || skData,
+      definition: (skData.definition || skData) as import("./memory/skill-format.js").SkillDefinition,
       usageCount: skData.usageCount ?? 0,
       successRate: skData.successRate ?? 0.5,
       successWindow: skData.successWindow ?? [],
@@ -546,6 +546,10 @@ const confidenceStore = new ConfidenceStore()
     multiIndexRAG.indexSkill(cat, skillRecord)
   }
   multiIndexRAG.flushPersist()  // persist once after all seeding
+
+  // ── Bootstrap knowledge — seed RAG with plugin documentation (high confidence) ──
+  const { bootstrapKnowledge } = await import("./core/bootstrap-knowledge.js")
+  bootstrapKnowledge(multiIndexRAG, projectId)
 
   // ── SchemaValidator + DslExecutor (Phase 2) ──
   const schemaValidator = new SchemaValidator()
@@ -578,7 +582,7 @@ const confidenceStore = new ConfidenceStore()
       console.debug(`[init] Loaded ${knowledge.sessions.length} prior session(s) from knowledge.json`)
     }
     // Store in a global for tool access
-    ;(globalThis as any).__agenticKnowledge = knowledge
+    ;(globalThis as { __agenticKnowledge?: typeof knowledge }).__agenticKnowledge = knowledge
   } catch { /* knowledge.json may not exist yet — first session */ }
 
   // Restore persisted prompt states (Stage IV: versioned prompt history) — global
@@ -2248,8 +2252,8 @@ const confidenceStore = new ConfidenceStore()
             output += `## ⚠️ Breaking Changes\n\nSome steps failed. Review carefully before merging.\n\n`
           }
 
-          if ((pr as any).notes) {
-            output += `## 📝 Notes\n\n${(pr as any).notes}\n\n`
+          if (pr.notes) {
+            output += `## 📝 Notes\n\n${pr.notes}\n\n`
           }
 
           output += `## Steps Executed\n\n`
@@ -4134,7 +4138,7 @@ const confidenceStore = new ConfidenceStore()
           const startTime = Date.now()
 
           if (args.categories && Array.isArray(args.categories) && args.categories.length > 0) {
-            routerAgent.setCategories(args.categories as any[])
+            routerAgent.setCategories(args.categories as import("./core/router-agent.js").RouteCategory[])
           }
 
           const route = await routerAgent.route(args.input)
@@ -4474,7 +4478,7 @@ const confidenceStore = new ConfidenceStore()
               }
 
               const conn = await mcpClient.connect({
-                transport: args.transport as any,
+                transport: args.transport as import("./core/mcp-client.js").MCPTransport,
                 command: args.command,
                 args: args.args,
                 url: args.url,
@@ -4577,8 +4581,9 @@ const confidenceStore = new ConfidenceStore()
           const jobId = args.jobId as string | undefined
 
           // Session state for skill store and episodic store
-          const skillStore = (globalThis as any).__opencode_skillStore
-          const episodicStore = (globalThis as any).__opencode_episodicStore
+          const g = globalThis as { __opencode_skillStore?: import("./memory/skill-store.js").SkillStore; __opencode_episodicStore?: import("./memory/episodic-store.js").EpisodicStore }
+          const skillStore = g.__opencode_skillStore
+          const episodicStore = g.__opencode_episodicStore
 
           switch (action) {
             case "prepare": {
@@ -4649,8 +4654,8 @@ const confidenceStore = new ConfidenceStore()
             case "upload": {
               const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
               // Get config from configLoader if available
-              const configLoader = (globalThis as any).__opencode_configLoader
-              const ftConfig = configLoader?.get()?.fineTuning ?? {}
+              const configLoader = (globalThis as { __opencode_configLoader?: { get?: () => { fineTuning?: { apiKey?: string; baseURL?: string; model?: string; trainingEpochs?: number; suffix?: string } } } }).__opencode_configLoader
+              const ftConfig = configLoader?.get?.()?.fineTuning ?? {}
               const client = new FTC({
                 apiKey: ftConfig.apiKey || undefined,
                 baseURL: ftConfig.baseURL || undefined,
@@ -4689,8 +4694,8 @@ const confidenceStore = new ConfidenceStore()
               }
 
               const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
-              const configLoader = (globalThis as any).__opencode_configLoader
-              const ftConfig = configLoader?.get()?.fineTuning ?? {}
+              const configLoader = (globalThis as { __opencode_configLoader?: { get?: () => { fineTuning?: { apiKey?: string; baseURL?: string; model?: string; trainingEpochs?: number; suffix?: string } } } }).__opencode_configLoader
+              const ftConfig = configLoader?.get?.()?.fineTuning ?? {}
               const client = new FTC({
                 apiKey: ftConfig.apiKey || undefined,
                 baseURL: ftConfig.baseURL || undefined,
@@ -4728,8 +4733,8 @@ const confidenceStore = new ConfidenceStore()
               }
 
               const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
-              const configLoader = (globalThis as any).__opencode_configLoader
-              const ftConfig = configLoader?.get()?.fineTuning ?? {}
+              const configLoader = (globalThis as { __opencode_configLoader?: { get?: () => { fineTuning?: { apiKey?: string; baseURL?: string; model?: string; trainingEpochs?: number; suffix?: string } } } }).__opencode_configLoader
+              const ftConfig = configLoader?.get?.()?.fineTuning ?? {}
               const client = new FTC({
                 apiKey: ftConfig.apiKey || undefined,
                 baseURL: ftConfig.baseURL || undefined,
@@ -4761,8 +4766,8 @@ const confidenceStore = new ConfidenceStore()
 
             case "list": {
               const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
-              const configLoader = (globalThis as any).__opencode_configLoader
-              const ftConfig = configLoader?.get()?.fineTuning ?? {}
+              const configLoader = (globalThis as { __opencode_configLoader?: { get?: () => { fineTuning?: { apiKey?: string; baseURL?: string; model?: string; trainingEpochs?: number; suffix?: string } } } }).__opencode_configLoader
+              const ftConfig = configLoader?.get?.()?.fineTuning ?? {}
               const client = new FTC({
                 apiKey: ftConfig.apiKey || undefined,
                 baseURL: ftConfig.baseURL || undefined,
@@ -4794,8 +4799,8 @@ const confidenceStore = new ConfidenceStore()
               }
 
               const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
-              const configLoader = (globalThis as any).__opencode_configLoader
-              const ftConfig = configLoader?.get()?.fineTuning ?? {}
+              const configLoader = (globalThis as { __opencode_configLoader?: { get?: () => { fineTuning?: { apiKey?: string; baseURL?: string; model?: string; trainingEpochs?: number; suffix?: string } } } }).__opencode_configLoader
+              const ftConfig = configLoader?.get?.()?.fineTuning ?? {}
               const client = new FTC({
                 apiKey: ftConfig.apiKey || undefined,
                 baseURL: ftConfig.baseURL || undefined,
@@ -4819,8 +4824,8 @@ const confidenceStore = new ConfidenceStore()
               const { saveTrainingDataToFile, prepareFineTuningDataset } = await import("./memory/skill-training.js")
               const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
 
-              const configLoader = (globalThis as any).__opencode_configLoader
-              const ftConfig = configLoader?.get()?.fineTuning ?? {}
+              const configLoader = (globalThis as { __opencode_configLoader?: { get?: () => { fineTuning?: { apiKey?: string; baseURL?: string; model?: string; trainingEpochs?: number; suffix?: string } } } }).__opencode_configLoader
+              const ftConfig = configLoader?.get?.()?.fineTuning ?? {}
               const client = new FTC({
                 apiKey: ftConfig.apiKey || undefined,
                 baseURL: ftConfig.baseURL || undefined,
@@ -4884,8 +4889,8 @@ const confidenceStore = new ConfidenceStore()
               const { saveTrainingDataToFile, prepareFineTuningDataset } = await import("./memory/skill-training.js")
               const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
 
-              const configLoader = (globalThis as any).__opencode_configLoader
-              const ftConfig = configLoader?.get()?.fineTuning ?? {}
+              const configLoader = (globalThis as { __opencode_configLoader?: { get?: () => { fineTuning?: { apiKey?: string; baseURL?: string; model?: string; trainingEpochs?: number; suffix?: string } } } }).__opencode_configLoader
+              const ftConfig = configLoader?.get?.()?.fineTuning ?? {}
               const client = new FTC({
                 apiKey: ftConfig.apiKey || undefined,
                 baseURL: ftConfig.baseURL || undefined,
@@ -5153,7 +5158,7 @@ const confidenceStore = new ConfidenceStore()
           const skillContexts: string[] = []
 
           try {
-            await navigator.scan(projectDir).catch(() => {})
+            await navigator.scan(projectDir).catch((err) => console.warn(`[agentic_auto] navigator scan failed:`, err))
             codebaseSummary = navigator.getSummary()
             const found = navigator.findRelevantFiles(args.goal, 8)
             relevantFiles.push(...found)
@@ -5499,7 +5504,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                 }
                 scorer.score(args.goal, absFiles, contents)
               } catch { /* non-fatal */ }
-            })().catch(() => {})
+            })().catch((err) => console.warn(`[agentic_auto] thorough post-processing error:`, err))
           }
 
           const allSuccess = !hasNoLLM

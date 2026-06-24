@@ -74,6 +74,10 @@ const DEFAULT_CATEGORIES = [
  * Vector mode: uses LLM provider embedding endpoint for semantic search.
  * Hybrid: combines both with configurable weights.
  */
+
+/** Index data shape — exported for type-safe deserialization from persistence. */
+export type IndexData = Record<string, { episodes: Episode[]; skills: SkillRecord[]; tfidfDocs?: import("./vector-store.js").TfIdfDoc[] }>
+
 export class MultiIndexRAG {
   private indices = new Map<string, { episodes: Episode[]; skills: SkillRecord[] }>()
   private onIndex?: (entry: IndexEntry) => void
@@ -625,7 +629,7 @@ export class MultiIndexRAG {
   /**
    * Import persisted data.
    */
-  importAll(data: Record<string, { episodes: Episode[]; skills: SkillRecord[]; tfidfDocs?: import("./vector-store.js").TfIdfDoc[] }>): void {
+  importAll(data: IndexData): void {
     for (const [cat, { episodes, skills, tfidfDocs }] of Object.entries(data)) {
       const index = this.indices.get(cat)
       const epSet = new Set(index?.episodes.map(e => e.id) ?? [])

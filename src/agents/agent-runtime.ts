@@ -2,6 +2,7 @@ import { LLMEngine, type LLMResponse } from "../core/llm.js"
 import type { ModelRegistry } from "../core/model-registry.js"
 import type { AgentRole } from "./coordinator.js"
 import { RoleRegistry } from "./role-registry.js"
+import { TimeoutError } from "../core/errors.js"
 
 export interface AgentContext {
   systemPrompt: string
@@ -128,6 +129,8 @@ export class AgentRuntime {
     }
 
     try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 120_000)
       const resp = await Promise.race([
         engine.call({
           systemPrompt: promptParts.join("\n"),
@@ -136,10 +139,13 @@ export class AgentRuntime {
           maxTokens: 4096,
           model: modelOverride, // ← dikirim ke SDK langsung, bukan via config
         }),
-        new Promise<LLMResponse>((_, reject) =>
-          setTimeout(() => reject(new Error("LLM timeout after 120s")), 120_000)
-        ),
+        new Promise<LLMResponse>((_, reject) => {
+          controller.signal.addEventListener("abort", () => {
+            reject(new TimeoutError("LLM call", 120000))
+          })
+        }),
       ])
+      clearTimeout(timeoutId)
       const output = resp.content
       if (output.startsWith("LLM error") || output.startsWith("[NO_LLM]")) {
         return { output, success: false, error: output }

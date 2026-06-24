@@ -154,7 +154,7 @@ export class AgentCoordinator {
       const entry: SharedMemoryEntry = { key, value, writtenBy: agentRole, timestamp: Date.now() }
       this.sharedMemory.set(key, entry)
       for (const listener of this.memoryListeners) {
-        try { listener(entry) } catch { /* non-fatal */ }
+        try { listener(entry) } catch (err) { console.warn(`[Coordinator] memoryListener error:`, err) }
       }
       return entry
     } finally {
@@ -176,7 +176,7 @@ export class AgentCoordinator {
       }
       for (const entry of temp) {
         for (const listener of this.memoryListeners) {
-          try { listener(entry) } catch { /* non-fatal */ }
+          try { listener(entry) } catch (err) { console.warn(`[Coordinator] batch memoryListener error:`, err) }
         }
       }
     } finally {
@@ -418,7 +418,7 @@ export class AgentCoordinator {
     sec.history.push({ key, value, writtenBy: agentRole, timestamp: entry.timestamp, action: "write" })
     const cbs = this.sectionCallbacks.get(section) ?? []
     for (const cb of cbs) {
-      try { cb(section, entry) } catch { /* non-fatal */ }
+      try { cb(section, entry) } catch (err) { console.warn(`[Coordinator] sectionCallback error for section "${section}":`, err) }
     }
     return entry
   }
@@ -545,7 +545,7 @@ export class AgentCoordinator {
   setPhaseStatus(status: AgentPhase): void {
     this.phaseStatus = status
     for (const cb of this.phaseListeners) {
-      try { cb(status) } catch { /* non-fatal */ }
+      try { cb(status) } catch (err) { console.warn(`[Coordinator] phaseListener error:`, err) }
     }
   }
 

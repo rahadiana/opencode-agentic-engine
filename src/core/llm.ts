@@ -448,10 +448,10 @@ export class LLMEngine {
     if (this.eventBus) {
       const cost = (tInput * 2.5 + tOutput * 10 + tReasoning * 10 + tCacheRead * 0.3 + tCacheWrite * 2.5) / 1_000_000
       this.eventBus.emit({
-        type: "llm.response",
+        type: "llm.response" as const,
         payload: {
           sessionID: this.pluginSessionId ?? "",
-          model: effectiveModel,
+          model: effectiveModel ?? "unknown",
           tokens: { input: tInput, output: tOutput, reasoning: tReasoning, cacheRead: tCacheRead, cacheWrite: tCacheWrite },
           costUsd: cost,
           success,
@@ -460,7 +460,7 @@ export class LLMEngine {
           sourceTaskId: req.sourceTaskId,
           sourcePipelineRunId: req.sourcePipelineRunId,
         },
-      } as any)
+      })
     }
 
     return response

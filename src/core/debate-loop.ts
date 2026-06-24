@@ -1,4 +1,5 @@
 import type { LLMEngine } from "./llm.js"
+import { TimeoutError } from "./errors.js"
 
 export interface DebateConfig {
   /** The task to analyze/debate */
@@ -15,6 +16,8 @@ export interface DebateConfig {
   criticModel?: { providerID: string; modelID: string }
   /** Model override untuk Cleaner (default: resolved via tool context) */
   cleanerModel?: { providerID: string; modelID: string }
+  /** AbortSignal to cancel a long-running debate */
+  signal?: AbortSignal
 }
 
 export interface DebateRound {
@@ -34,6 +37,8 @@ export interface DebateResult {
   finalOutput: string
   /** Summary of what changed between rounds */
   revisionSummary: string
+  /** Whether the debate was cancelled via AbortSignal */
+  aborted?: boolean
 }
 
 const EXECUTOR_PROMPT = `You are an **executor agent**. Your job is to produce a thorough, well-structured analysis or implementation based on the given task and context.
@@ -98,6 +103,14 @@ export class DebateLoop {
     let approvalMessage = ""
 
     for (let round = 1; round <= maxRounds; round++) {
+      // Check for cancellation between rounds
+      if (config.signal?.aborted) {
+        return {
+          task: config.task, totalRounds: round - 1, approved: false,
+          rounds, finalOutput: "", revisionSummary: "Debate cancelled via AbortSignal", aborted: true,
+        }
+      }
+
       // ── Step 1: Executor produces draft (or revises based on feedback) ──
       let executorInput: string
       if (round === 1) {
@@ -110,6 +123,8 @@ export class DebateLoop {
       let draft = ""
       let issues: string[] = []
       try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 60_000)
         const draftResp = await Promise.race([
           this.llmEngine.call({
             systemPrompt: EXECUTOR_PROMPT,
@@ -120,10 +135,13 @@ export class DebateLoop {
             model: config.executorModel,
             toolName: 'debate-executor',
           }),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("LLM call timed out after 60000ms")), 60_000)
-          ),
+          new Promise<never>((_, reject) => {
+            controller.signal.addEventListener("abort", () => {
+              reject(new TimeoutError("LLM call", 60000))
+            })
+          }),
         ])
+        clearTimeout(timeoutId)
         draft = draftResp.content
       } catch (error) {
         logParseError("executor call", error)

@@ -174,7 +174,7 @@ export class Verifier {
         output: `Semantic verification: ${passed ? "PASS" : "ISSUES FOUND"}\nReasoning: ${parsed.reasoning ?? "N/A"}\n${issues.length > 0 ? `Issues:\n${issues.map((i: string) => `- ${i}`).join("\n")}` : ""}`,
       }
     } catch {
-      return { name: "semantic", passed: true, output: `Semantic verification: ${resp.content.slice(0, 500)}` }
+      return { name: "semantic", passed: false, output: `Semantic verification: LLM returned unparseable response — manual review needed\nRaw: ${resp.content.slice(0, 500)}` }
     }
   }
 
@@ -217,7 +217,7 @@ export class Verifier {
         output: `Criteria verification: ${allPassed ? "ALL PASS" : "SOME FAILED"}\n${details}`,
       }
     } catch {
-      return { name: "criteria", passed: true, output: `Criteria verification: ${resp.content.slice(0, 500)}` }
+      return { name: "criteria", passed: false, output: `Criteria verification: LLM returned unparseable response — manual review needed\nRaw: ${resp.content.slice(0, 500)}` }
     }
   }
 
@@ -465,7 +465,7 @@ export class Verifier {
         output: `${name} verification: ${passed ? "PASS" : "ISSUES FOUND"}\nReasoning: ${parsed.reasoning ?? "N/A"}\n${issues.length > 0 ? `Issues:\n${issues.map((i: string) => `- ${i}`).join("\n")}` : ""}`,
       }
     } catch {
-      return { name, passed: true, output: `${name} verification: ${content.slice(0, 500)}` }
+      return { name, passed: false, output: `${name} verification: LLM returned unparseable response — manual review needed\nRaw: ${content.slice(0, 500)}` }
     }
   }
 
@@ -637,7 +637,9 @@ export class Verifier {
             testCmd: () => ({ bin: testBin, args: testArgs, timeout: 60000 }),
           }
         }
-      } catch { /* use default */ }
+      } catch {
+        console.warn(`[Verifier] Failed to parse package.json in ${projectDir}, using default test config`)
+      }
     }
 
     const { bin, args, timeout } = customConfig.testCmd(projectDir, testPattern)

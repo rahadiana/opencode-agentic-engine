@@ -454,8 +454,8 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
           const xv = await this.crossValidate("coordinator", goal, allStageResults)
           if (!xv.passed) verifyNote += ` ⚠️ Cross-validation: ${xv.issues.length} issues`
         }
-      } catch {
-        console.warn(`[Orchestrator] Cross-validation failed for run ${runId}`)
+      } catch (err) {
+        console.warn(`[Orchestrator] Cross-validation failed for run ${runId}:`, err)
       }
     }
 
