@@ -1257,8 +1257,8 @@ const confidenceStore = new ConfidenceStore()
                   response += `  ❌ ${c.type}: ${c.claim}\n`
                 })
 
-                const modelId = llmEngine.getCurrentModel()
-                if (modelId) {
+                const modelId = await llmEngine.getOpenCodeModel()
+                if (modelId && modelId !== "unknown") {
                   modelRegistry.recordHallucination(modelId)
                 }
 
@@ -1288,12 +1288,12 @@ const confidenceStore = new ConfidenceStore()
           }
 
           // ── Confidence Scoring per Output (Gap #2) ──
-          const modelId = llmEngine.getCurrentModel()
+          const modelId = await llmEngine.getOpenCodeModel()
           let confidenceScore_: ConfidenceScore | undefined
           if (args.filesModified && args.filesModified.length > 0) {
             const signals: import("./core/confidence-scorer.js").ScoringSignals = {
               stepId: args.stepId,
-              modelName: modelId ?? undefined,
+              modelName: modelId && modelId !== "unknown" ? modelId : undefined,
               compileResult: verifyResult ? { passed: verifyResult.passed, output: verifyResult.checks.map(c => c.output).join("\n") } : undefined,
               guardResult: guardResult ? { passed: guardResult.passed, claims: guardResult.claims } : undefined,
               testResult: undefined,
@@ -3542,7 +3542,10 @@ const confidenceStore = new ConfidenceStore()
           const check = hallucinationGuard.check(output, files)
 
           if (!check.passed) {
-            modelRegistry.recordHallucination(llmEngine.getCurrentModel() ?? "unknown")
+            const guardModelId = await llmEngine.getOpenCodeModel()
+            if (guardModelId && guardModelId !== "unknown") {
+              modelRegistry.recordHallucination(guardModelId)
+            }
           }
 
           let response = `## 🛡️ Hallucination Check: Step "${args.stepId}"\n\n`
@@ -3568,7 +3571,8 @@ const confidenceStore = new ConfidenceStore()
           }
 
           response += `\n### 🤖 Model Reliability\n`
-          const modelScore = modelRegistry.getScore(llmEngine.getCurrentModel() ?? "unknown")
+          const guardModelStr = await llmEngine.getOpenCodeModel()
+          const modelScore = modelRegistry.getScore(guardModelStr)
           if (modelScore && modelScore.totalCalls > 0) {
             const icon = modelScore.status === "healthy" ? "✅" : modelScore.status === "degraded" ? "⚠️" : "❌"
             response += `${icon} **${modelScore.model}** — reliability: ${(modelScore.reliability * 100).toFixed(0)}%, hallucinations: ${(modelScore.hallucinationRate * 100).toFixed(0)}%, calls: ${modelScore.totalCalls}\n`
@@ -5587,7 +5591,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
       // Each chat turn uses the model from _input.model (OpenCode auto-resolve).
       // Track it so dashboard shows actual model usage, not just "opencode/default — calls: 0".
       try {
-        if (_input.model && modelRegistry) {
+        if (_input.model) {
           let modelStr: string | undefined
           if (typeof _input.model === "string") {
             modelStr = _input.model
@@ -5598,7 +5602,9 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
             modelStr = `${pid}/${mid}`
           }
           if (modelStr && modelStr !== "opencode/default" && modelStr !== "unknown" && modelStr !== "opencode/unknown") {
-            modelRegistry.recordCall(modelStr, true, 0, "chat")
+            modelRegistry?.recordCall(modelStr, true, 0, "chat")
+            // Sync ke llmEngine biar getCurrentModel() bisa return model yg bener
+            llmEngine.setCurrentModel(modelStr)
           }
         }
       } catch { /* silent — non-critical */ }
@@ -5723,6 +5729,29 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
         }
         diagnosticStore.set(sid, diag)
       } catch { /* non-critical */ }
+    },
+
+    // ── Model detection via chat.params — source of truth dari OpenCode SDK ──
+    // Setiap kali prompt dikirim ke LLM, hook ini fires dengan model ASLI yang dipakai.
+    // Struktur input: { sessionID, agent, model: { providerID, id, name, family }, provider, message }
+    // Struktur output: { temperature, topP, topK, maxOutputTokens, options }
+    // Lebih akurat daripada experimental.chat.system.transform karena ini hook resmi.
+    "chat.params": async (input: unknown, _output: unknown) => {
+      try {
+        const inp = input as Record<string, unknown>
+        const mdl = inp.model as Record<string, unknown> | undefined
+        const providerID = mdl?.providerID as string | undefined
+        const modelID = mdl?.id as string | undefined
+        if (providerID && modelID) {
+          const modelStr = `${providerID}/${modelID}`
+          if (modelStr !== "opencode/default" && modelStr !== "unknown" && modelStr !== "opencode/unknown") {
+            // Sync ke llmEngine biar getCurrentModel() / getOpenCodeModel() return model beneran
+            llmEngine.setCurrentModel(modelStr)
+            // Track ke registry (dengan taskType "chat" biar gak campur aduk sama agentic)
+            modelRegistry?.recordCall(modelStr, true, 0, "chat")
+          }
+        }
+      } catch { /* silent — non-critical */ }
     },
 
     "tool.execute.after": async (toolInput: { tool: string; args: Record<string, unknown>; sessionID: string; callID: string }, _output: { title: string; output: string; metadata: unknown }) => {

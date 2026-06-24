@@ -108,6 +108,10 @@ export class LLMEngine {
   private semanticCache?: SemanticCache // Gap #7: semantic similarity-based cache
   /** Per-call tool context for auto model resolution (tool→category→default) */
   private _toolContext?: string
+  /** Last successfully resolved model, set after every successful LLM call.
+   *  Allows getCurrentModel() to return the actual model instead of undefined.
+   *  Format: "providerID/modelID" (e.g. "opencode/deepseek-v4-flash-free") */
+  private _lastKnownModel?: string
 
   constructor(config: Partial<LLMConfig> = {}) {
     this.config = {
@@ -185,12 +189,26 @@ export class LLMEngine {
 
   /**
    * Nama model untuk display fallback.
-   * Model ASLI cuma diketahui OpenCode SDK — ini cuma label aja.
-   * Untuk model real, pake getOpenCodeModel() yang async.
-   * Kalau gak tau model asli, return undefined — jangan rekam statistik palsu.
+   * Mengembalikan model terakhir yang berhasil di-resolve dari OpenCode SDK.
+   * Di-update setiap kali call() sukses (dari auto-resolve atau explicit model).
+   *
+   * Kalau belum pernah ada LLM call yang sukses, return undefined —
+   * caller harus handle fallback ke "unknown" sendiri.
+   *
+   * Untuk model real-time dari session (bukan cache), pake getOpenCodeModel() async.
    */
   getCurrentModel(): string | undefined {
-    return undefined
+    return this._lastKnownModel
+  }
+
+  /**
+   * Set current model dari external source (misalnya dari _input.model di chat hook).
+   * Biar getCurrentModel() bisa return model yg bener meski belum ada LLM call.
+   */
+  setCurrentModel(modelStr: string): void {
+    if (modelStr && modelStr !== "opencode/default" && modelStr !== "unknown" && modelStr !== "opencode/unknown") {
+      this._lastKnownModel = modelStr
+    }
   }
 
   /** Enable Gap #7 semantic cache with optional config */
@@ -397,6 +415,11 @@ export class LLMEngine {
       } catch {
         // silent — leave undefined, skip tracking (same as before)
       }
+    }
+
+    // Cache model untuk getCurrentModel() — baik sukses maupun gagal
+    if (effectiveModel) {
+      this._lastKnownModel = effectiveModel
     }
 
     const taskType = this.sessionStore && this.pluginSessionId
