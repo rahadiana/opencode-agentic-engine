@@ -5592,6 +5592,11 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
     "experimental.chat.system.transform": async (_input: { sessionID?: string; model: unknown }, output: { system: string[] }) => {
       let transformOk = false
 
+      // ⚡ This hook ONLY fires in chat mode.
+      // Set flag so LLMEngine can skip session.prompt() immediately
+      // instead of hanging for 120s waiting for user input.
+      llmEngine.setChatMode(true)
+
       // ── Model tracking for chat mode ──
       // Each chat turn uses the model from _input.model (OpenCode auto-resolve).
       // Track it so dashboard shows actual model usage, not just "opencode/default — calls: 0".

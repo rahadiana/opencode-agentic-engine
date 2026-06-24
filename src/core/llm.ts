@@ -106,6 +106,10 @@ export class LLMEngine {
   private readonly CACHE_TTL = 30_000 // 30s cache for identical requests
   private readonly CACHE_MAX_ENTRIES = 1000 // prevent unbounded memory growth
   private semanticCache?: SemanticCache // Gap #7: semantic similarity-based cache
+  /** Flag: true if running in chat mode (set via experimental.chat.system.transform hook).
+   *  In chat mode, session.prompt({ noReply: false }) would hang waiting for user input.
+   *  When set, callOpenCode() returns fallback immediately instead of calling session.prompt(). */
+  private _chatMode: boolean = false
   /** Per-call tool context for auto model resolution (tool→category→default) */
   private _toolContext?: string
   /** Last successfully resolved model, set after every successful LLM call.
@@ -231,6 +235,16 @@ export class LLMEngine {
   /** Get semantic cache stats (or null if disabled) */
   getSemanticCacheStats(): { size: number; hits: number; misses: number; hitRate: number } | null {
     return this.semanticCache?.stats() ?? null
+  }
+
+  /** Set chat mode flag. Called from experimental.chat.system.transform hook. */
+  setChatMode(chat: boolean): void {
+    this._chatMode = chat
+  }
+
+  /** Check if running in chat mode. */
+  isChatMode(): boolean {
+    return this._chatMode
   }
 
   /**
@@ -693,60 +707,107 @@ export class LLMEngine {
    * Every LLM call goes through OpenCode SDK — NO direct external API calls.
    * If OpenCode is not available, returns [NO_LLM] fallback.
    */
+  /**
+   * Shared client type for session operations.
+   */
+  private _getClient(): {
+    session: {
+      create: (opts: { body: { title?: string } }) => Promise<{ data?: { id: string }; id?: string }>
+      delete: (opts: { path: { id: string } }) => Promise<{ data?: boolean } | boolean>
+      prompt: (opts: {
+        body: {
+          system?: string
+          noReply?: boolean
+          model?: { providerID: string; modelID: string }
+          parts: Array<{ type: string; text: string }>
+        }
+        path: { id: string }
+      }) => Promise<{ data?: { parts?: Array<{ type: string; text?: string }> }; parts?: Array<{ type: string; text?: string }> }>
+    }
+  } | null {
+    return this.opencodeClient as ReturnType<LLMEngine['_getClient']>
+  }
+
+  /**
+   * Extract text response from a session.prompt result.
+   */
+  private _extractResponse(result: { data?: { parts?: Array<{ type: string; text?: string }> }; parts?: Array<{ type: string; text?: string }> }): string {
+    const parts = result.data?.parts ?? result.parts ?? []
+    const textPart = parts.find((p: { type: string; text?: string }) => p.type === "text")
+    return textPart?.text ?? ""
+  }
+
+  /**
+   * Build the prompt body for a session.prompt call.
+   */
+  private _buildPromptBody(req: LLMRequest): {
+    system: string
+    noReply: false
+    model?: { providerID: string; modelID: string }
+    parts: Array<{ type: 'text'; text: string }>
+  } {
+    const sdkModel = req.model ?? this.parseModelForSDK()
+    return {
+      system: req.jsonMode
+        ? `${req.systemPrompt}\n\nRespond with ONLY valid JSON. No markdown, no explanation.`
+        : req.systemPrompt,
+      noReply: false,
+      ...(sdkModel ? { model: sdkModel } : {}),
+      parts: [{ type: 'text' as const, text: req.userPrompt }],
+    }
+  }
+
+  /**
+   * Run session.prompt with timeout + abort controller.
+   */
+  private async _promptWithTimeout(
+    client: NonNullable<ReturnType<LLMEngine['_getClient']>>,
+    sessionId: string,
+    body: ReturnType<LLMEngine['_buildPromptBody']>,
+    timeoutMs: number = 120_000,
+  ): Promise<string> {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+    try {
+      const result = await Promise.race([
+        client.session.prompt({
+          body,
+          path: { id: sessionId },
+        }),
+        new Promise<never>((_, reject) => {
+          controller.signal.addEventListener('abort', () => {
+            reject(new Error(`OpenCode call timed out after ${timeoutMs}ms`))
+          })
+        }),
+      ])
+      return this._extractResponse(result)
+    } finally {
+      clearTimeout(timeoutId)
+    }
+  }
+
   private async callOpenCode(req: LLMRequest): Promise<LLMResponse> {
     if (!this.opencodeClient || !this.pluginSessionId) {
       return this.fallbackResponse(req)
     }
 
+    const client = this._getClient()
+    if (!client) return this.fallbackResponse(req)
+
+    // In chat mode: session.prompt({ noReply: false }) on the current session
+    // would hang because the chat's agent loop is already running.
+    // Solution: create a temporary child session for the LLM call.
+    if (this._chatMode) {
+      return this._callOpenCodeTempSession(client, req)
+    }
+
     try {
-      const client = this.opencodeClient as {
-        session: {
-          prompt: (opts: {
-            body: {
-              system?: string
-              noReply?: boolean
-              model?: { providerID: string; modelID: string }
-              parts: Array<{ type: string; text: string }>
-            }
-            path: { id: string }
-          }) => Promise<{ data?: { parts?: Array<{ type: string; text?: string }> }; parts?: Array<{ type: string; text?: string }> }>
-        }
-      }
-
-      // Model: per-request override → undefined (SDK default).
-      // Plugin gak punya default model — SEMUA dari OpenCode SDK.
-      const sdkModel = req.model ?? this.parseModelForSDK()
-
-      const timeoutMs = 120_000
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-
-      const result = await Promise.race([
-        client.session.prompt({
-          body: {
-            system: req.jsonMode
-              ? `${req.systemPrompt}\n\nRespond with ONLY valid JSON. No markdown, no explanation.`
-              : req.systemPrompt,
-            noReply: false,
-            ...(sdkModel ? { model: sdkModel } : {}),
-            parts: [{ type: "text", text: req.userPrompt }],
-          },
-          path: { id: this.pluginSessionId },
-        }),
-        new Promise<never>((_, reject) => {
-          controller.signal.addEventListener("abort", () => {
-            reject(new Error(`OpenCode call timed out after ${timeoutMs}ms`))
-          })
-        }),
-      ])
-      clearTimeout(timeoutId)
-
-      const parts = result.data?.parts ?? result.parts ?? []
-      const textPart = parts.find((p: { type: string; text?: string }) => p.type === "text")
-      const text = textPart?.text ?? ""
+      const body = this._buildPromptBody(req)
+      const text = await this._promptWithTimeout(client, this.pluginSessionId, body)
 
       if (text.trim()) {
-        return { content: text.trim(), finishReason: "stop" }
+        return { content: text.trim(), finishReason: 'stop' }
       }
     } catch (error) {
       logParseError('callOpenCode', error);
@@ -756,14 +817,64 @@ export class LLMEngine {
   }
 
   /**
-   * Fallback response when LLM is unavailable (not running inside OpenCode,
-   * or SDK call failed).
+   * Call LLM in chat mode via a temporary child session.
+   * Avoids hanging the parent chat session's agent loop.
    */
-  private fallbackResponse(req: LLMRequest): LLMResponse {
-    if (req.jsonMode) {
-      return { content: `{"status":"no_llm","data":null}`, finishReason: "no_llm" }
+  private async _callOpenCodeTempSession(
+    client: NonNullable<ReturnType<LLMEngine['_getClient']>>,
+    req: LLMRequest,
+  ): Promise<LLMResponse> {
+    let tempSessionId: string | undefined
+
+    try {
+      // Create temporary child session
+      // SDK returns { data: { id } } — plugin client may return { id } directly
+      const tempSession = await client.session.create({
+        body: { title: `agentic-${Date.now()}` },
+      })
+      tempSessionId = tempSession.data?.id ?? (tempSession as Record<string, unknown>).id as string | undefined
+      if (!tempSessionId) {
+        logParseError('callOpenCode chat mode', new Error('Failed to create temp session — no ID returned'))
+        return this.fallbackResponse(req, 'chat')
+      }
+
+      const body = this._buildPromptBody(req)
+      const text = await this._promptWithTimeout(client, tempSessionId, body)
+
+      if (text.trim()) {
+        return { content: text.trim(), finishReason: 'stop' }
+      }
+    } catch (error) {
+      logParseError('callOpenCode chat mode', error);
+    } finally {
+      // Clean up temp session
+      if (tempSessionId) {
+        try { await client.session.delete({ path: { id: tempSessionId } }) } catch { /* ignore */ }
+      }
     }
-    return { content: `[NO_LLM] No LLM available. Run within OpenCode for native LLM access. Plugin does NOT call external APIs directly.`, finishReason: "no_llm" }
+
+    return this.fallbackResponse(req, 'chat')
+  }
+
+  /**
+   * Fallback response when LLM is unavailable (not running inside OpenCode,
+   * SDK call failed, or running in chat mode where session.prompt() would hang).
+   *
+   * @param reason - Optional context for the fallback message.
+   */
+  private fallbackResponse(req: LLMRequest, reason?: string): LLMResponse {
+    let msg: string
+    if (reason === 'chat') {
+      msg = '[NO_LLM] Chat mode: agentic_* tools cannot call LLM directly. Use /plan, /execute, /verify commands instead, or run in agent mode (opencode run).'
+    } else if (reason === 'sdk') {
+      msg = '[NO_LLM] OpenCode SDK unavailable. Plugin requires OpenCode runtime.'
+    } else {
+      msg = '[NO_LLM] No LLM available. Run within OpenCode for native LLM access. Plugin does NOT call external APIs directly.'
+    }
+    if (req.jsonMode) {
+      return { content: `{"status":"no_llm","data":null,"reason":"${reason ?? 'unavailable'}"}`, finishReason: "no_llm" }
+    }
+    return { content: msg, finishReason: "no_llm" }
   }
 }
 
