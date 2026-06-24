@@ -1,0 +1,32 @@
+{
+  "key": "blueprint-e2e-1782328779615",
+  "data": {
+    "id": "ep-1782328779630-7boy",
+    "sessionId": "blueprint-e2e-1782328779615",
+    "projectId": "test",
+    "planGoal": "Debate: ",
+    "summary": "Partially completed: Debate: ",
+    "outcome": "partial",
+    "decisions": [
+      "2 rounds",
+      "Approved: false",
+      "2 rounds, 1 issues raised, max rounds reached"
+    ],
+    "filesChanged": [],
+    "domain": "generic",
+    "timestamp": "2026-06-24T19:19:39.630Z",
+    "tags": [
+      "rounds",
+      "debate:",
+      "approved:",
+      "false",
+      "rounds,",
+      "issues",
+      "raised,",
+      "reached"
+    ],
+    "score": 1,
+    "usageCount": 0
+  },
+  "updatedAt": "2026-06-24T19:19:39.630Z"
+}

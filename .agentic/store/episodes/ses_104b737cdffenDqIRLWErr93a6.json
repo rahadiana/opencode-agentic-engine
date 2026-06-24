@@ -1,0 +1,24 @@
+{
+  "key": "ses_104b737cdffenDqIRLWErr93a6",
+  "data": {
+    "id": "ep-1782333491063-47hy",
+    "sessionId": "ses_104b737cdffenDqIRLWErr93a6",
+    "planGoal": "Debate: Apa 3 kelebihan utama dari arsitektur native Node.js http module dibanding Express.js untuk API keci",
+    "summary": "Partially completed: Debate: Apa 3 kelebihan utama dari arsitektur native Node.js http module dibanding Express.js untuk API keci",
+    "outcome": "partial",
+    "decisions": [
+      "1 rounds",
+      "Approved: false",
+      "Single round (max rounds reached)"
+    ],
+    "filesChanged": [],
+    "domain": "generic",
+    "timestamp": "2026-06-24T20:38:11.063Z",
+    "tags": [
+      "rounds"
+    ],
+    "score": 1,
+    "usageCount": 0
+  },
+  "updatedAt": "2026-06-24T20:38:11.064Z"
+}

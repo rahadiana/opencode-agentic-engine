@@ -1,0 +1,25 @@
+{
+  "key": "ses_1050b5714ffeLwJVlaOXUmYEFy",
+  "data": {
+    "id": "ep-1782328070114-en6d",
+    "sessionId": "ses_1050b5714ffeLwJVlaOXUmYEFy",
+    "projectId": "opencode-agentic-engine",
+    "planGoal": "Debate: Analisis kelebihan dan kekurangan arsitektur todo app di /tmp/opencode/test-todo-app",
+    "summary": "Partially completed: Debate: Analisis kelebihan dan kekurangan arsitektur todo app di /tmp/opencode/test-todo-app",
+    "outcome": "partial",
+    "decisions": [
+      "0 rounds",
+      "Approved: false",
+      "Single round (max rounds reached)"
+    ],
+    "filesChanged": [],
+    "domain": "devops",
+    "timestamp": "2026-06-24T19:07:50.114Z",
+    "tags": [
+      "rounds"
+    ],
+    "score": 1,
+    "usageCount": 0
+  },
+  "updatedAt": "2026-06-24T19:07:50.114Z"
+}

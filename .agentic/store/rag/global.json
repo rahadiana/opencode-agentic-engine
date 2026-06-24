@@ -366,6 +366,633 @@
           "successRate": 0.5,
           "successWindow": [],
           "lastUsed": "2026-06-24T16:19:21.510Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782328610413",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-24T19:16:50.413Z",
+              "lastUsed": "2026-06-24T19:16:50.413Z",
+              "lastModified": "2026-06-24T19:16:50.413Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-24T19:16:50.413Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782328776510",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-24T19:19:36.510Z",
+              "lastUsed": "2026-06-24T19:19:36.510Z",
+              "lastModified": "2026-06-24T19:19:36.510Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-24T19:19:36.510Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782328884137",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-24T19:21:24.137Z",
+              "lastUsed": "2026-06-24T19:21:24.137Z",
+              "lastModified": "2026-06-24T19:21:24.137Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-24T19:21:24.137Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782329112588",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-24T19:25:12.588Z",
+              "lastUsed": "2026-06-24T19:25:12.588Z",
+              "lastModified": "2026-06-24T19:25:12.588Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-24T19:25:12.588Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782329179274",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-24T19:26:19.274Z",
+              "lastUsed": "2026-06-24T19:26:19.274Z",
+              "lastModified": "2026-06-24T19:26:19.274Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-24T19:26:19.274Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782333123055",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-24T20:32:03.055Z",
+              "lastUsed": "2026-06-24T20:32:03.055Z",
+              "lastModified": "2026-06-24T20:32:03.055Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-24T20:32:03.055Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782333427541",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-24T20:37:07.541Z",
+              "lastUsed": "2026-06-24T20:37:07.541Z",
+              "lastModified": "2026-06-24T20:37:07.541Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-24T20:37:07.541Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782334202830",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-24T20:50:02.830Z",
+              "lastUsed": "2026-06-24T20:50:02.830Z",
+              "lastModified": "2026-06-24T20:50:02.830Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-24T20:50:02.830Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782334742958",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-24T20:59:02.958Z",
+              "lastUsed": "2026-06-24T20:59:02.958Z",
+              "lastModified": "2026-06-24T20:59:02.958Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-24T20:59:02.958Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782335667974",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-24T21:14:27.974Z",
+              "lastUsed": "2026-06-24T21:14:27.974Z",
+              "lastModified": "2026-06-24T21:14:27.974Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-24T21:14:27.974Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782335426291",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-24T21:10:26.291Z",
+              "lastUsed": "2026-06-24T21:10:26.291Z",
+              "lastModified": "2026-06-24T21:10:26.291Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-24T21:10:26.291Z"
         }
       ],
       "tfidfDocs": [
@@ -500,6 +1127,248 @@
             "type": "skill",
             "skillId": "skill-1782317961510"
           }
+        },
+        {
+          "id": "sk-skill-1782328610413",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782328610413"
+          }
+        },
+        {
+          "id": "sk-skill-1782328776510",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782328776510"
+          }
+        },
+        {
+          "id": "sk-skill-1782328884137",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782328884137"
+          }
+        },
+        {
+          "id": "sk-skill-1782329112588",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782329112588"
+          }
+        },
+        {
+          "id": "sk-skill-1782329179274",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782329179274"
+          }
+        },
+        {
+          "id": "sk-skill-1782333123055",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782333123055"
+          }
+        },
+        {
+          "id": "sk-skill-1782333427541",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782333427541"
+          }
+        },
+        {
+          "id": "sk-skill-1782334202830",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782334202830"
+          }
+        },
+        {
+          "id": "sk-skill-1782334742958",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782334742958"
+          }
+        },
+        {
+          "id": "sk-skill-1782335667974",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782335667974"
+          }
+        },
+        {
+          "id": "sk-skill-1782335426291",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782335426291"
+          }
         }
       ]
     },
@@ -509,9 +1378,93 @@
       "tfidfDocs": []
     },
     "personal": {
-      "episodes": [],
+      "episodes": [
+        {
+          "id": "test-session-13",
+          "sessionId": "test-session-13",
+          "planGoal": "Add input validation to login",
+          "summary": "Completed: Add input validation to login",
+          "outcome": "success",
+          "decisions": [
+            "completed",
+            "completed",
+            "completed"
+          ],
+          "filesChanged": [
+            "src/plan-types.ts",
+            "src/plan-impl.ts",
+            "src/plan-tests.ts"
+          ],
+          "timestamp": "2026-06-24T19:18:56.980Z",
+          "tags": [
+            "completed",
+            "input",
+            "validation",
+            "login"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "test-session-25",
+          "sessionId": "test-session-25",
+          "planGoal": "Add login validation",
+          "summary": "Completed: Add login validation",
+          "outcome": "success",
+          "decisions": [
+            "completed",
+            "completed"
+          ],
+          "filesChanged": [
+            "src/pr1.ts",
+            "src/pr2.ts"
+          ],
+          "timestamp": "2026-06-24T19:18:58.931Z",
+          "tags": [
+            "completed",
+            "login",
+            "validation"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        }
+      ],
       "skills": [],
-      "tfidfDocs": []
+      "tfidfDocs": [
+        {
+          "id": "ep-test-session-13",
+          "category": "personal",
+          "title": "Add input validation to login",
+          "content": "Completed: Add input validation to login\ncompleted\ncompleted\ncompleted",
+          "keywords": [
+            "completed",
+            "input",
+            "validation",
+            "login"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "test-session-13"
+          }
+        },
+        {
+          "id": "ep-test-session-25",
+          "category": "personal",
+          "title": "Add login validation",
+          "content": "Completed: Add login validation\ncompleted\ncompleted",
+          "keywords": [
+            "completed",
+            "login",
+            "validation"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "test-session-25"
+          }
+        }
+      ]
     },
     "tech": {
       "episodes": [
@@ -573,6 +1526,138 @@
           ],
           "projectId": "opencode-agentic-engine",
           "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "ses_1050779c9ffev5Oi8XvGnv4bgg",
+          "sessionId": "ses_1050779c9ffev5Oi8XvGnv4bgg",
+          "planGoal": "Create 4 post-exploitation modules for NPF framework",
+          "summary": "Completed: Create 4 post-exploitation modules for NPF framework",
+          "outcome": "success",
+          "decisions": [
+            "completed",
+            "completed",
+            "completed",
+            "completed"
+          ],
+          "filesChanged": [
+            "/home/runner/hs/npf/modules/post_exploitation/hash_extractor.py",
+            "/home/runner/hs/npf/modules/post_exploitation/sensitive_finder.py",
+            "/home/runner/hs/npf/modules/post_exploitation/priv_esc_checker.py",
+            "/home/runner/hs/npf/modules/post_exploitation/persistence_checker.py"
+          ],
+          "timestamp": "2026-06-24T18:56:20.876Z",
+          "tags": [
+            "completed",
+            "create",
+            "post-exploitation",
+            "modules",
+            "framework"
+          ],
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "test-session-74",
+          "sessionId": "test-session-74",
+          "planGoal": "Debate: Apa kelebihan dan kekurangan TypeScript dibanding JavaScript?",
+          "summary": "Partially completed: Debate: Apa kelebihan dan kekurangan TypeScript dibanding JavaScript?",
+          "outcome": "partial",
+          "decisions": [
+            "2 rounds",
+            "Approved: false",
+            "2 rounds, 1 issues raised, max rounds reached"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:19:36.500Z",
+          "tags": [
+            "rounds"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "test-session-75",
+          "sessionId": "test-session-75",
+          "planGoal": "Debate: Review kode berikut: function add(a,b){return a+b}",
+          "summary": "Partially completed: Debate: Review kode berikut: function add(a,b){return a+b}",
+          "outcome": "partial",
+          "decisions": [
+            "2 rounds",
+            "Approved: false",
+            "2 rounds, 1 issues raised, max rounds reached"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:19:36.503Z",
+          "tags": [
+            "rounds"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "rag-ep-1782329240075",
+          "sessionId": "ses_1050b5714ffeLwJVlaOXUmYEFy",
+          "planGoal": "Test Todo App Architecture",
+          "summary": "Todo app at /tmp/opencode/test-todo-app uses Node.js http module, in-memory storage with SQLite fallback. Has CRUD endpoints and unit tests.",
+          "outcome": "success",
+          "decisions": [],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:27:20.075Z",
+          "tags": [
+            "todo",
+            "opencode",
+            "test",
+            "todo",
+            "uses",
+            "node",
+            "http",
+            "module"
+          ],
+          "score": 1,
+          "usageCount": 0
+        },
+        {
+          "id": "ses_1050b5714ffeLwJVlaOXUmYEFy",
+          "sessionId": "ses_1050b5714ffeLwJVlaOXUmYEFy",
+          "planGoal": "Debate: Apa kelebihan dan kekurangan todo app sederhana?",
+          "summary": "Partially completed: Debate: Apa kelebihan dan kekurangan todo app sederhana?",
+          "outcome": "partial",
+          "decisions": [
+            "0 rounds",
+            "Approved: false",
+            "Single round (max rounds reached)"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T20:11:45.367Z",
+          "tags": [
+            "rounds"
+          ],
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "rag-ep-1782332652933",
+          "sessionId": "ses_104b737cdffenDqIRLWErr93a6",
+          "planGoal": "Todo API Project Structure",
+          "summary": "Project test-agentic-full di /tmp/opencode/test-agentic-full: Node.js ESM, better-sqlite3, CRUD todos/users/categories, API key auth, 25 unit tests, native http module",
+          "outcome": "success",
+          "decisions": [],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T20:24:12.933Z",
+          "tags": [
+            "project",
+            "test",
+            "agentic",
+            "full",
+            "opencode",
+            "test",
+            "agentic",
+            "full"
+          ],
+          "score": 1,
           "usageCount": 0
         }
       ],
@@ -752,13 +1837,1004 @@
             "type": "episode",
             "episodeId": "ses_105d52052ffejfaid7RrizMn3h"
           }
+        },
+        {
+          "id": "ep-test-session-74",
+          "category": "tech",
+          "title": "Debate: Apa kelebihan dan kekurangan TypeScript dibanding JavaScript?",
+          "content": "Partially completed: Debate: Apa kelebihan dan kekurangan TypeScript dibanding JavaScript?\n2 rounds\nApproved: false\n2 rounds, 1 issues raised, max rounds reached",
+          "keywords": [
+            "rounds"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "test-session-74"
+          }
+        },
+        {
+          "id": "ep-test-session-75",
+          "category": "tech",
+          "title": "Debate: Review kode berikut: function add(a,b){return a+b}",
+          "content": "Partially completed: Debate: Review kode berikut: function add(a,b){return a+b}\n2 rounds\nApproved: false\n2 rounds, 1 issues raised, max rounds reached",
+          "keywords": [
+            "rounds"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "test-session-75"
+          }
+        },
+        {
+          "id": "ep-rag-ep-1782329240075",
+          "category": "tech",
+          "title": "Test Todo App Architecture",
+          "content": "Todo app at /tmp/opencode/test-todo-app uses Node.js http module, in-memory storage with SQLite fallback. Has CRUD endpoints and unit tests.\n",
+          "keywords": [
+            "todo",
+            "opencode",
+            "test",
+            "todo",
+            "uses",
+            "node",
+            "http",
+            "module"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "rag-ep-1782329240075"
+          }
+        },
+        {
+          "id": "ep-rag-ep-1782332652933",
+          "category": "tech",
+          "title": "Todo API Project Structure",
+          "content": "Project test-agentic-full di /tmp/opencode/test-agentic-full: Node.js ESM, better-sqlite3, CRUD todos/users/categories, API key auth, 25 unit tests, native http module\n",
+          "keywords": [
+            "project",
+            "test",
+            "agentic",
+            "full",
+            "opencode",
+            "test",
+            "agentic",
+            "full"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "rag-ep-1782332652933"
+          }
         }
       ]
     },
     "general": {
-      "episodes": [],
+      "episodes": [
+        {
+          "id": "rag-ep-1782328779635",
+          "sessionId": "blueprint-e2e-1782328779634",
+          "planGoal": "Test Entry",
+          "summary": "This is test data for RAG search.",
+          "outcome": "success",
+          "decisions": [],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:19:39.635Z",
+          "tags": [
+            "this",
+            "test",
+            "data",
+            "search"
+          ],
+          "score": 1,
+          "usageCount": 0
+        },
+        {
+          "id": "rag-ep-1782329116071",
+          "sessionId": "blueprint-e2e-1782329116071",
+          "planGoal": "Test Entry",
+          "summary": "This is test data for RAG search.",
+          "outcome": "success",
+          "decisions": [],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:25:16.071Z",
+          "tags": [
+            "this",
+            "test",
+            "data",
+            "search"
+          ],
+          "score": 1,
+          "usageCount": 0
+        },
+        {
+          "id": "rag-ep-1782329179764",
+          "sessionId": "blueprint-e2e-1782329179763",
+          "planGoal": "Test Entry",
+          "summary": "This is test data for RAG search.",
+          "outcome": "success",
+          "decisions": [],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:26:19.764Z",
+          "tags": [
+            "this",
+            "test",
+            "data",
+            "search"
+          ],
+          "score": 1,
+          "usageCount": 0
+        },
+        {
+          "id": "ses_1050b5714ffeLwJVlaOXUmYEFy",
+          "sessionId": "ses_1050b5714ffeLwJVlaOXUmYEFy",
+          "planGoal": "Debate: Apa kelebihan dan kekurangan todo app sederhana?",
+          "summary": "Partially completed: Debate: Apa kelebihan dan kekurangan todo app sederhana?",
+          "outcome": "partial",
+          "decisions": [
+            "0 rounds",
+            "Approved: false",
+            "Single round (max rounds reached)"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T20:11:45.367Z",
+          "tags": [
+            "rounds"
+          ],
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "ses_1050779c9ffev5Oi8XvGnv4bgg",
+          "sessionId": "ses_1050779c9ffev5Oi8XvGnv4bgg",
+          "planGoal": "Create 4 post-exploitation modules for NPF framework",
+          "summary": "Completed: Create 4 post-exploitation modules for NPF framework",
+          "outcome": "success",
+          "decisions": [
+            "completed",
+            "completed",
+            "completed",
+            "completed"
+          ],
+          "filesChanged": [
+            "/home/runner/hs/npf/modules/post_exploitation/hash_extractor.py",
+            "/home/runner/hs/npf/modules/post_exploitation/sensitive_finder.py",
+            "/home/runner/hs/npf/modules/post_exploitation/priv_esc_checker.py",
+            "/home/runner/hs/npf/modules/post_exploitation/persistence_checker.py"
+          ],
+          "timestamp": "2026-06-24T18:56:20.876Z",
+          "tags": [
+            "completed",
+            "create",
+            "post-exploitation",
+            "modules",
+            "framework"
+          ],
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "ses_104b737cdffenDqIRLWErr93a6",
+          "sessionId": "ses_104b737cdffenDqIRLWErr93a6",
+          "planGoal": "Debate: Analisis 3 kelebihan dan 3 kekurangan dari project Todo API di /tmp/opencode/test-agentic-full",
+          "summary": "Partially completed: Debate: Analisis 3 kelebihan dan 3 kekurangan dari project Todo API di /tmp/opencode/test-agentic-full",
+          "outcome": "partial",
+          "decisions": [
+            "1 rounds",
+            "Approved: false",
+            "Single round (max rounds reached)"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T20:32:10.693Z",
+          "tags": [
+            "rounds"
+          ],
+          "score": 0.5,
+          "usageCount": 0
+        }
+      ],
       "skills": [],
-      "tfidfDocs": []
+      "tfidfDocs": [
+        {
+          "id": "ep-ses_1050779c9ffev5Oi8XvGnv4bgg",
+          "category": "general",
+          "title": "Create 4 post-exploitation modules for NPF framework",
+          "content": "Completed: Create 4 post-exploitation modules for NPF framework\ncompleted\ncompleted\ncompleted\ncompleted",
+          "keywords": [
+            "completed",
+            "create",
+            "post-exploitation",
+            "modules",
+            "framework"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "ses_1050779c9ffev5Oi8XvGnv4bgg"
+          }
+        },
+        {
+          "id": "ep-ses_1050b5714ffeLwJVlaOXUmYEFy",
+          "category": "general",
+          "title": "Debate: Apa kelebihan dan kekurangan todo app sederhana?",
+          "content": "Partially completed: Debate: Apa kelebihan dan kekurangan todo app sederhana?\n0 rounds\nApproved: false\nSingle round (max rounds reached)",
+          "keywords": [
+            "rounds"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "ses_1050b5714ffeLwJVlaOXUmYEFy"
+          }
+        },
+        {
+          "id": "ep-rag-ep-1782328779635",
+          "category": "general",
+          "title": "Test Entry",
+          "content": "This is test data for RAG search.\n",
+          "keywords": [
+            "this",
+            "test",
+            "data",
+            "search"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "rag-ep-1782328779635"
+          }
+        },
+        {
+          "id": "ep-rag-ep-1782329116071",
+          "category": "general",
+          "title": "Test Entry",
+          "content": "This is test data for RAG search.\n",
+          "keywords": [
+            "this",
+            "test",
+            "data",
+            "search"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "rag-ep-1782329116071"
+          }
+        },
+        {
+          "id": "ep-rag-ep-1782329179764",
+          "category": "general",
+          "title": "Test Entry",
+          "content": "This is test data for RAG search.\n",
+          "keywords": [
+            "this",
+            "test",
+            "data",
+            "search"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "rag-ep-1782329179764"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/errors/app-error.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/errors/app-error.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/errors/app-error.ts",
+          "keywords": [
+            "app-error",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/errors/app-error.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/config/app.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/config/app.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/config/app.ts",
+          "keywords": [
+            "app",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/config/app.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/app.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/app.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/app.ts",
+          "keywords": [
+            "app",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/app.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/core/navigator.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/core/navigator.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/core/navigator.ts",
+          "keywords": [
+            "navigator",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/core/navigator.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/models/ConfigModel.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/models/ConfigModel.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/models/ConfigModel.ts",
+          "keywords": [
+            "ConfigModel",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/models/ConfigModel.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/core/planner.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/core/planner.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/core/planner.ts",
+          "keywords": [
+            "planner",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/core/planner.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/CacheService.test.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/CacheService.test.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/CacheService.test.ts",
+          "keywords": [
+            "CacheService",
+            "test",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/CacheService.test.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/UserService.test.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/UserService.test.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/UserService.test.ts",
+          "keywords": [
+            "UserService",
+            "test",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/UserService.test.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/FlagsService.test.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/FlagsService.test.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/FlagsService.test.ts",
+          "keywords": [
+            "FlagsService",
+            "test",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/FlagsService.test.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/Paginator.test.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/Paginator.test.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/Paginator.test.ts",
+          "keywords": [
+            "Paginator",
+            "test",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/Paginator.test.ts"
+          }
+        },
+        {
+          "id": "ep:ses_104b737cdffenDqIRLWErr93a6",
+          "category": "general",
+          "title": "Buat proyek Todo API lengkap dengan Node.js (ESM) di /tmp/opencode/test-agentic-full",
+          "content": "success completed completed completed completed completed",
+          "keywords": [
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "ses_104b737cdffenDqIRLWErr93a6",
+            "outcome": "success"
+          }
+        },
+        {
+          "id": "ep:ses_1050779c9ffev5Oi8XvGnv4bgg",
+          "category": "general",
+          "title": "Create 4 post-exploitation modules for NPF framework",
+          "content": "success completed completed completed completed",
+          "keywords": [
+            "completed",
+            "create",
+            "post-exploitation",
+            "modules",
+            "framework"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "ses_1050779c9ffev5Oi8XvGnv4bgg",
+            "outcome": "success"
+          }
+        },
+        {
+          "id": "ep:ses_1050b5714ffeLwJVlaOXUmYEFy",
+          "category": "general",
+          "title": "Debate: Analisis kelebihan dan kekurangan arsitektur todo app di /tmp/opencode/test-todo-app",
+          "content": "partial 0 rounds Approved: false Single round (max rounds reached)",
+          "keywords": [
+            "rounds"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "ses_1050b5714ffeLwJVlaOXUmYEFy",
+            "outcome": "partial",
+            "projectId": "opencode-agentic-engine"
+          }
+        },
+        {
+          "id": "ep:test-session-69",
+          "category": "general",
+          "title": "Guard test",
+          "content": "success completed",
+          "keywords": [
+            "guard",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "test-session-69",
+            "outcome": "success",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:test-session-59",
+          "category": "general",
+          "title": "Dashboard test",
+          "content": "success completed",
+          "keywords": [
+            "dashboard",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "test-session-59",
+            "outcome": "success",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:test-session-26",
+          "category": "general",
+          "title": "Score test",
+          "content": "success completed",
+          "keywords": [
+            "score",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "test-session-26",
+            "outcome": "success",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:blueprint-e2e-1782328779615",
+          "category": "general",
+          "title": "Debate: ",
+          "content": "partial 2 rounds Approved: false 2 rounds, 1 issues raised, max rounds reached",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "blueprint-e2e-1782328779615",
+            "outcome": "partial",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:test-session-45",
+          "category": "general",
+          "title": "Ghost test",
+          "content": "success completed",
+          "keywords": [
+            "ghost",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "test-session-45",
+            "outcome": "success",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:test-session-23",
+          "category": "general",
+          "title": "Context test",
+          "content": "success completed",
+          "keywords": [
+            "context",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "test-session-23",
+            "outcome": "success",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:test-session-24",
+          "category": "general",
+          "title": "Snapshot test",
+          "content": "success completed",
+          "keywords": [
+            "snapshot",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "test-session-24",
+            "outcome": "success",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:test-session-71",
+          "category": "general",
+          "title": "Evolution test",
+          "content": "success completed",
+          "keywords": [
+            "evolution",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "test-session-71",
+            "outcome": "success",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:blueprint-e2e-1782329116055",
+          "category": "general",
+          "title": "Debate: ",
+          "content": "partial 2 rounds Approved: false 2 rounds, 1 issues raised, max rounds reached",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "blueprint-e2e-1782329116055",
+            "outcome": "partial",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:test-session-39",
+          "category": "general",
+          "title": "Episode test task",
+          "content": "success completed",
+          "keywords": [
+            "episode",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "test-session-39",
+            "outcome": "success",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:test-session-76",
+          "category": "general",
+          "title": "Debate: ",
+          "content": "partial 1 rounds Approved: false Single round (max rounds reached)",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "single",
+            "(max",
+            "reached)"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "test-session-76",
+            "outcome": "partial",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:test-session-38",
+          "category": "general",
+          "title": "Skill test",
+          "content": "success completed",
+          "keywords": [
+            "skill",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "test-session-38",
+            "outcome": "success",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:test-session-40",
+          "category": "general",
+          "title": "Config change",
+          "content": "success completed",
+          "keywords": [
+            "config",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "test-session-40",
+            "outcome": "success",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:test-session-58",
+          "category": "general",
+          "title": "Test verify",
+          "content": "success completed",
+          "keywords": [
+            "verify",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "test-session-58",
+            "outcome": "success",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:blueprint-e2e-1782329179752",
+          "category": "general",
+          "title": "Debate: ",
+          "content": "partial 2 rounds Approved: false 2 rounds, 1 issues raised, max rounds reached",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "blueprint-e2e-1782329179752",
+            "outcome": "partial",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:test-session-75",
+          "category": "general",
+          "title": "Debate: Review kode berikut: function add(a,b){return a+b}",
+          "content": "partial 2 rounds Approved: false 2 rounds, 1 issues raised, max rounds reached",
+          "keywords": [
+            "rounds"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "test-session-75",
+            "outcome": "partial",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:test-session-44",
+          "category": "general",
+          "title": "Guard test",
+          "content": "success completed",
+          "keywords": [
+            "guard",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "test-session-44",
+            "outcome": "success",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:test-session-13",
+          "category": "general",
+          "title": "Add input validation to login",
+          "content": "success completed completed completed",
+          "keywords": [
+            "completed",
+            "input",
+            "validation",
+            "login"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "test-session-13",
+            "outcome": "success",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:test-session-67",
+          "category": "general",
+          "title": "PR test feature",
+          "content": "success completed",
+          "keywords": [
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "test-session-67",
+            "outcome": "success",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:test-session-74",
+          "category": "general",
+          "title": "Debate: Apa kelebihan dan kekurangan TypeScript dibanding JavaScript?",
+          "content": "partial 2 rounds Approved: false 2 rounds, 1 issues raised, max rounds reached",
+          "keywords": [
+            "rounds"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "test-session-74",
+            "outcome": "partial",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:test-session-25",
+          "category": "general",
+          "title": "Add login validation",
+          "content": "success completed completed",
+          "keywords": [
+            "completed",
+            "login",
+            "validation"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "test-session-25",
+            "outcome": "success",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:blueprint-e2e-1782147906979",
+          "category": "general",
+          "title": "Debate: ",
+          "content": "partial 2 rounds Approved: false 2 rounds, 1 issues raised, max rounds reached",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "blueprint-e2e-1782147906979",
+            "outcome": "partial",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:blueprint-e2e-1782147112665",
+          "category": "general",
+          "title": "Debate: ",
+          "content": "partial 2 rounds Approved: false 2 rounds, 1 issues raised, max rounds reached",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "blueprint-e2e-1782147112665",
+            "outcome": "partial",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:blueprint-e2e-1782145498593",
+          "category": "general",
+          "title": "Debate: ",
+          "content": "partial 2 rounds Approved: false 2 rounds, 1 issues raised, max rounds reached",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "blueprint-e2e-1782145498593",
+            "outcome": "partial",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:blueprint-e2e-1782145867007",
+          "category": "general",
+          "title": "Debate: ",
+          "content": "partial 2 rounds Approved: false 2 rounds, 1 issues raised, max rounds reached",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "blueprint-e2e-1782145867007",
+            "outcome": "partial",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:blueprint-e2e-1782145433407",
+          "category": "general",
+          "title": "Debate: ",
+          "content": "partial 2 rounds Approved: false 2 rounds, 1 issues raised, max rounds reached",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "blueprint-e2e-1782145433407",
+            "outcome": "partial",
+            "projectId": "test"
+          }
+        },
+        {
+          "id": "ep:ses_110d5afe5ffeMyrtsLXbZ5W6Vd",
+          "category": "general",
+          "title": "Debate: Analisis perbandingan komprehensif antara opencode-agentic-engine (plugin OpenCode dengan 29 tools, ",
+          "content": "partial 0 rounds Approved: false Single round (max rounds reached)",
+          "keywords": [
+            "rounds"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "ses_110d5afe5ffeMyrtsLXbZ5W6Vd",
+            "outcome": "partial",
+            "projectId": "opencode-agentic-engine"
+          }
+        },
+        {
+          "id": "ep:ses_105d52052ffejfaid7RrizMn3h",
+          "category": "general",
+          "title": "Debate: Bandingkan `chat.params` hook vs `experimental.chat.system.transform` untuk model detection di OpenC",
+          "content": "partial 0 rounds Approved: false Single round (max rounds reached)",
+          "keywords": [
+            "rounds"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "ses_105d52052ffejfaid7RrizMn3h",
+            "outcome": "partial",
+            "projectId": "opencode-agentic-engine"
+          }
+        },
+        {
+          "id": "ep:ses_106680572ffeYF8rKGmIbPFfV0",
+          "category": "general",
+          "title": "Debate: 1+1 apakah =2 ?",
+          "content": "partial 0 rounds Approved: false Single round (max rounds reached)",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "single",
+            "(max",
+            "reached)"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "ses_106680572ffeYF8rKGmIbPFfV0",
+            "outcome": "partial",
+            "projectId": "opencode-agentic-engine"
+          }
+        },
+        {
+          "id": "ep-ses_104b737cdffenDqIRLWErr93a6",
+          "category": "general",
+          "title": "Debate: Apa 3 kelebihan utama dari arsitektur native Node.js http module dibanding Express.js untuk API keci",
+          "content": "Partially completed: Debate: Apa 3 kelebihan utama dari arsitektur native Node.js http module dibanding Express.js untuk API keci\n1 rounds\nApproved: false\nSingle round (max rounds reached)",
+          "keywords": [
+            "rounds"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "ses_104b737cdffenDqIRLWErr93a6"
+          }
+        }
+      ]
     },
     "opencode-plugin": {
       "episodes": [],
@@ -874,7 +2950,1313 @@
         }
       ],
       "tfidfDocs": []
+    },
+    "knowledge-tech": {
+      "episodes": [
+        {
+          "id": "bootstrap-understand-opencode-agentic-engine-archi",
+          "sessionId": "bootstrap",
+          "planGoal": "Understand opencode-agentic-engine architecture",
+          "summary": "opencode-agentic-engine is an OpenCode plugin implementing agentic software engineering. It has 77 TypeScript source files across 6 layers: core/ (engine: planning, execution, verification, LLM, git, budget), agents/ (multi-agent coordination), drift/ (error detection, hallucination guard), memory/ (episodic store, skill store, vector store, RAG), evaluation/ (live evaluator), observability/ (trace logger, dashboard). The entry point is src/index.ts which registers 29 tools and 6 hooks.",
+          "outcome": "success",
+          "decisions": [
+            "Entry: src/index.ts",
+            "Core engine: src/core/",
+            "Multi-agent: src/agents/",
+            "Memory: src/memory/"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:12:35.392Z",
+          "tags": [
+            "architecture",
+            "structure",
+            "overview",
+            "plugin",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "score": 0.95,
+          "usageCount": 1
+        },
+        {
+          "id": "bootstrap-what-are-the-29-agentic-tools-",
+          "sessionId": "bootstrap",
+          "planGoal": "What are the 29 agentic tools?",
+          "summary": "Stage I Foundation (5): agentic_plan, agentic_execute, agentic_reflect, agentic_verify, agentic_status. Stage II Intelligence (8): agentic_nav, agentic_context, agentic_snapshot, agentic_pr, agentic_score, agentic_model, agentic_model_reset, agentic_budget. Stage III Orchestration (9): agentic_delegate, agentic_pipeline, agentic_message, agentic_parallel, agentic_skill, agentic_episodes, agentic_dashboard, agentic_guard, agentic_finetune. Stage IV Evolution (1): agentic_evolve. Stage V Autonomous (1): agentic_auto. Blueprint (5): agentic_debate, agentic_router, agentic_clean, agentic_rag, agentic_mcp. All tools use the agentic_ prefix.",
+          "outcome": "success",
+          "decisions": [
+            "29 tools total",
+            "Grouped by stage (I-V + Blueprint)",
+            "All prefixed with agentic_"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:12:35.392Z",
+          "tags": [
+            "tools",
+            "agentic",
+            "reference",
+            "list",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "score": 0.95,
+          "usageCount": 1
+        },
+        {
+          "id": "bootstrap-recommended-workflow--research---plan---",
+          "sessionId": "bootstrap",
+          "planGoal": "Recommended workflow: research → plan → implement → verify",
+          "summary": "Phase 1 (Research): Use agentic_nav to scan codebase, agentic_skill find to find reusable skills, agentic_episodes search to learn from past sessions. Phase 2 (Plan): agentic_plan to decompose the goal into ordered subtasks with dependencies. Phase 3 (Implement): agentic_execute for each step, agentic_delegate for complex sub-tasks, agentic_parallel for concurrent independent steps. Phase 4 (Verify): agentic_verify for deep multi-dimensional checks (compile, lint, test, security, performance, architecture, deps). If a step fails, use agentic_reflect to diagnose error category and propagation.",
+          "outcome": "success",
+          "decisions": [
+            "Research first: nav + skill + episodes",
+            "Plan: decompose with dependencies",
+            "Implement: execute steps, delegate complex",
+            "Verify: multi-dimensional checks"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:12:35.392Z",
+          "tags": [
+            "workflow",
+            "pattern",
+            "recommended",
+            "best-practice",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "score": 0.95,
+          "usageCount": 1
+        },
+        {
+          "id": "bootstrap-how-model-preferences-work",
+          "sessionId": "bootstrap",
+          "planGoal": "How model preferences work",
+          "summary": "The plugin has a 3-level model resolution system: (1) Per-call explicit model override via llmEngine.call({ model: {...} }), (2) Per-tool override via agentic_model set tool=agentic_plan model=..., (3) Category fallback by complexity tier (quick, unspecified-low, unspecified-high, deep). Tool complexity: agentic_nav/clean/pr/router are 'quick', agentic_debate/plan are 'unspecified-high', agentic_verify/finetune are 'deep'. Model preferences are persisted to .agentic/models.json.",
+          "outcome": "success",
+          "decisions": [
+            "3-level resolution: call > tool > category > default",
+            "Persisted to .agentic/models.json",
+            "Per-role preferences for delegation"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:12:35.392Z",
+          "tags": [
+            "model",
+            "preference",
+            "configuration",
+            "llm",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "score": 0.95,
+          "usageCount": 1
+        },
+        {
+          "id": "bootstrap-how-error-analysis-and-recovery-works",
+          "sessionId": "bootstrap",
+          "planGoal": "How error analysis and recovery works",
+          "summary": "When a step fails, agentic_reflect calls ErrorAnalyzer which categorizes errors into: import, type, compile, test, runtime, or unknown. The DependencyTracker traces error propagation across the step chain — if step A depends on step B and B failed, A is marked as affected. The AgentLoop has auto-retry with exponential backoff and jitter (via auto-retry.ts). After maxRetries, it attempts LLM-based repair via attemptRepair(). HallucinationGuard checks file/function/import claims on every successful execute.",
+          "outcome": "success",
+          "decisions": [
+            "Error categories: import, type, compile, test, runtime, unknown",
+            "Auto-retry with exponential backoff + jitter",
+            "LLM-based repair on repeated failure",
+            "HallucinationGuard on every execute"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:12:35.392Z",
+          "tags": [
+            "error",
+            "recovery",
+            "reflect",
+            "retry",
+            "debugging",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "score": 0.95,
+          "usageCount": 1
+        },
+        {
+          "id": "bootstrap-how-multi-agent-coordination-works",
+          "sessionId": "bootstrap",
+          "planGoal": "How multi-agent coordination works",
+          "summary": "The agents/ layer has: Orchestrator (multi-agent workflow pipelines), Coordinator (task delegation, shared memory, inter-agent messaging), AgentRuntime (sub-process spawner), RoleRegistry (built-in roles: architect, developer, qa, coordinator, pm + custom). Pipelines chain PM → Architect → Developer → QA with cross-validation between stages. Inter-agent messaging supports: result, review_request, review_response, clarification, approval, revision.",
+          "outcome": "success",
+          "decisions": [
+            "Roles: architect, developer, qa, coordinator, pm",
+            "Pipeline: PM → Architect → Developer → QA",
+            "Cross-validation between stages",
+            "Inter-agent messaging with review/approval flow"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:12:35.392Z",
+          "tags": [
+            "multi-agent",
+            "pipeline",
+            "delegate",
+            "orchestrator",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "score": 0.95,
+          "usageCount": 1
+        },
+        {
+          "id": "bootstrap-how-memory-and-skills-work-across-sessio",
+          "sessionId": "bootstrap",
+          "planGoal": "How memory and skills work across sessions",
+          "summary": "The memory/ layer provides cross-session persistence: EpisodicStore (past task outcomes with project scoping), SkillStore (reusable skill extraction from successful tasks with success rate tracking), VectorStore (TF-IDF sparse retrieval), MultiIndexRAG (hybrid TF-IDF + vector search with category segregation), LocalEmbedder (text embedding via API or hash fallback). Skills use self-describing format (agentic-skill/v1 schema). Episodes are scoped per project. Skills are globally shared.",
+          "outcome": "success",
+          "decisions": [
+            "Episodes: project-scoped",
+            "Skills: globally shared",
+            "Vector: TF-IDF + optional embedding",
+            "RAG: hybrid search with category segregation"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:12:35.392Z",
+          "tags": [
+            "memory",
+            "skills",
+            "episodes",
+            "RAG",
+            "cross-session",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "score": 0.95,
+          "usageCount": 1
+        },
+        {
+          "id": "bootstrap-how-to-add-a-new-feature-to-the-plugin",
+          "sessionId": "bootstrap",
+          "planGoal": "How to add a new feature to the plugin",
+          "summary": "1) Create source file in appropriate src/ subdirectory. 2) Add import + instance in src/index.ts. 3) Add tool definition in the tools object. 4) Add to expected tool list in test/run.mjs, test/dropin.mjs, test/load-samedir.mjs. 5) Add ≥2 test cases (happy path + error path). 6) Run npm run build && node test/run.mjs. 7) If Docker: ./test-container.sh. Conventions: English for code, Indonesian for communication, ESM imports with .js extensions, use execFileSync not execSync for shell safety.",
+          "outcome": "success",
+          "decisions": [
+            "File in appropriate subdirectory",
+            "Register in src/index.ts tools object",
+            "Add to 3 test files",
+            "2+ test cases per tool",
+            "npm run build && node test/run.mjs"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:12:35.392Z",
+          "tags": [
+            "development",
+            "contribution",
+            "new-feature",
+            "howto",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "score": 0.95,
+          "usageCount": 1
+        },
+        {
+          "id": "bootstrap-opencode-plugin-api-and-hooks",
+          "sessionId": "bootstrap",
+          "planGoal": "OpenCode Plugin API and hooks",
+          "summary": "The plugin implements 6 hooks: experimental.chat.system.transform (injects Knowledge-First system prompt with RAG results), experimental.chat.params (model detection), experimental.chat.pre (route to agentic tools), tool.* (29 agentic_ tool handlers), experimental.tool-call (observability tracing), experimental.chat.post (post-processing). The plugin runs via OpenCode SDK — all LLM calls go through client.session.prompt(), never directly to external APIs. The engine uses LLMEngine which wraps the SDK client.",
+          "outcome": "success",
+          "decisions": [
+            "6 hooks: system.transform, chat.params, chat.pre, tool.*, tool-call, chat.post",
+            "All LLM via SDK client.session.prompt()",
+            "No direct external API calls for LLM inference"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:12:35.392Z",
+          "tags": [
+            "hooks",
+            "plugin-api",
+            "opencode",
+            "sdk",
+            "integration",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "score": 0.95,
+          "usageCount": 1
+        },
+        {
+          "id": "bootstrap-how-testing-works",
+          "sessionId": "bootstrap",
+          "planGoal": "How testing works",
+          "summary": "Tests live in test/run.mjs (1117+ unit tests spanning 50+ sections). Additional test files: dropin.mjs (plugin discovery), load-samedir.mjs (E2E workflow), e2e-scenario.mjs (EvoClaw benchmark), swebench-harness.mjs (SWE-bench), e2e-llm.mjs (LLM E2E). Tests use custom assert() functions, not Jest/Mocha. Each tool must have ≥2 test cases. Run with: node test/run.mjs for unit tests, LLM_OFF=true node test/swebench-harness.mjs for mock mode.",
+          "outcome": "success",
+          "decisions": [
+            "1117+ unit tests in run.mjs",
+            "22+ test files total",
+            "Custom assert() framework",
+            "Each tool: 2+ test cases"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:12:35.392Z",
+          "tags": [
+            "testing",
+            "test",
+            "run.mjs",
+            "e2e",
+            "benchmark",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "score": 0.95,
+          "usageCount": 1
+        },
+        {
+          "id": "test-session-23",
+          "sessionId": "test-session-23",
+          "planGoal": "Context test",
+          "summary": "Completed: Context test",
+          "outcome": "success",
+          "decisions": [
+            "completed"
+          ],
+          "filesChanged": [
+            "src/ctx.ts"
+          ],
+          "timestamp": "2026-06-24T19:18:58.917Z",
+          "tags": [
+            "context",
+            "completed"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "test-session-24",
+          "sessionId": "test-session-24",
+          "planGoal": "Snapshot test",
+          "summary": "Completed: Snapshot test",
+          "outcome": "success",
+          "decisions": [
+            "completed"
+          ],
+          "filesChanged": [
+            "src/snap.ts"
+          ],
+          "timestamp": "2026-06-24T19:18:58.921Z",
+          "tags": [
+            "snapshot",
+            "completed"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "test-session-26",
+          "sessionId": "test-session-26",
+          "planGoal": "Score test",
+          "summary": "Completed: Score test",
+          "outcome": "success",
+          "decisions": [
+            "completed"
+          ],
+          "filesChanged": [
+            "/tmp/test-project/src/utils.ts"
+          ],
+          "timestamp": "2026-06-24T19:18:58.935Z",
+          "tags": [
+            "score",
+            "completed"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "test-session-38",
+          "sessionId": "test-session-38",
+          "planGoal": "Skill test",
+          "summary": "Completed: Skill test",
+          "outcome": "success",
+          "decisions": [
+            "completed"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:18:58.948Z",
+          "tags": [
+            "skill",
+            "completed"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "test-session-39",
+          "sessionId": "test-session-39",
+          "planGoal": "Episode test task",
+          "summary": "Completed: Episode test task",
+          "outcome": "success",
+          "decisions": [
+            "completed"
+          ],
+          "filesChanged": [
+            "src/ep.ts"
+          ],
+          "timestamp": "2026-06-24T19:18:58.949Z",
+          "tags": [
+            "episode",
+            "completed"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "test-session-40",
+          "sessionId": "test-session-40",
+          "planGoal": "Config change",
+          "summary": "Completed: Config change",
+          "outcome": "success",
+          "decisions": [
+            "completed"
+          ],
+          "filesChanged": [
+            "config/env.ts"
+          ],
+          "timestamp": "2026-06-24T19:19:00.639Z",
+          "tags": [
+            "config",
+            "completed"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "test-session-44",
+          "sessionId": "test-session-44",
+          "planGoal": "Guard test",
+          "summary": "Completed: Guard test",
+          "outcome": "success",
+          "decisions": [
+            "completed"
+          ],
+          "filesChanged": [
+            "src/login.ts"
+          ],
+          "timestamp": "2026-06-24T19:19:01.483Z",
+          "tags": [
+            "guard",
+            "completed"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "test-session-45",
+          "sessionId": "test-session-45",
+          "planGoal": "Ghost test",
+          "summary": "Completed: Ghost test",
+          "outcome": "success",
+          "decisions": [
+            "completed"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:19:02.323Z",
+          "tags": [
+            "ghost",
+            "completed"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "test-session-58",
+          "sessionId": "test-session-58",
+          "planGoal": "Test verify",
+          "summary": "Completed: Test verify",
+          "outcome": "success",
+          "decisions": [
+            "completed"
+          ],
+          "filesChanged": [
+            "src/test.ts"
+          ],
+          "timestamp": "2026-06-24T19:19:09.595Z",
+          "tags": [
+            "verify",
+            "completed"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "test-session-59",
+          "sessionId": "test-session-59",
+          "planGoal": "Dashboard test",
+          "summary": "Completed: Dashboard test",
+          "outcome": "success",
+          "decisions": [
+            "completed"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:19:10.450Z",
+          "tags": [
+            "dashboard",
+            "completed"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "test-session-67",
+          "sessionId": "test-session-67",
+          "planGoal": "PR test feature",
+          "summary": "Completed: PR test feature",
+          "outcome": "success",
+          "decisions": [
+            "completed"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:19:10.459Z",
+          "tags": [
+            "completed"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "test-session-69",
+          "sessionId": "test-session-69",
+          "planGoal": "Guard test",
+          "summary": "Completed: Guard test",
+          "outcome": "success",
+          "decisions": [
+            "completed"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:19:10.459Z",
+          "tags": [
+            "guard",
+            "completed"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "test-session-71",
+          "sessionId": "test-session-71",
+          "planGoal": "Evolution test",
+          "summary": "Completed: Evolution test",
+          "outcome": "success",
+          "decisions": [
+            "completed"
+          ],
+          "filesChanged": [
+            "src/evo-test.ts"
+          ],
+          "timestamp": "2026-06-24T19:19:12.176Z",
+          "tags": [
+            "evolution",
+            "completed"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "test-session-76",
+          "sessionId": "test-session-76",
+          "planGoal": "Debate: ",
+          "summary": "Partially completed: Debate: ",
+          "outcome": "partial",
+          "decisions": [
+            "1 rounds",
+            "Approved: false",
+            "Single round (max rounds reached)"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:19:36.504Z",
+          "tags": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "single",
+            "(max",
+            "reached)"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "blueprint-e2e-1782145433407",
+          "sessionId": "blueprint-e2e-1782145433407",
+          "planGoal": "Debate: ",
+          "summary": "Partially completed: Debate: ",
+          "outcome": "partial",
+          "decisions": [
+            "2 rounds",
+            "Approved: false",
+            "2 rounds, 1 issues raised, max rounds reached"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-22T16:23:53.414Z",
+          "tags": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "blueprint-e2e-1782145498593",
+          "sessionId": "blueprint-e2e-1782145498593",
+          "planGoal": "Debate: ",
+          "summary": "Partially completed: Debate: ",
+          "outcome": "partial",
+          "decisions": [
+            "2 rounds",
+            "Approved: false",
+            "2 rounds, 1 issues raised, max rounds reached"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-22T16:24:58.601Z",
+          "tags": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "blueprint-e2e-1782145867007",
+          "sessionId": "blueprint-e2e-1782145867007",
+          "planGoal": "Debate: ",
+          "summary": "Partially completed: Debate: ",
+          "outcome": "partial",
+          "decisions": [
+            "2 rounds",
+            "Approved: false",
+            "2 rounds, 1 issues raised, max rounds reached"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-22T16:31:07.019Z",
+          "tags": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "blueprint-e2e-1782147112665",
+          "sessionId": "blueprint-e2e-1782147112665",
+          "planGoal": "Debate: ",
+          "summary": "Partially completed: Debate: ",
+          "outcome": "partial",
+          "decisions": [
+            "2 rounds",
+            "Approved: false",
+            "2 rounds, 1 issues raised, max rounds reached"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-22T16:51:52.676Z",
+          "tags": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "blueprint-e2e-1782147906979",
+          "sessionId": "blueprint-e2e-1782147906979",
+          "planGoal": "Debate: ",
+          "summary": "Partially completed: Debate: ",
+          "outcome": "partial",
+          "decisions": [
+            "2 rounds",
+            "Approved: false",
+            "2 rounds, 1 issues raised, max rounds reached"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-22T17:05:06.991Z",
+          "tags": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "blueprint-e2e-1782328779615",
+          "sessionId": "blueprint-e2e-1782328779615",
+          "planGoal": "Debate: ",
+          "summary": "Partially completed: Debate: ",
+          "outcome": "partial",
+          "decisions": [
+            "2 rounds",
+            "Approved: false",
+            "2 rounds, 1 issues raised, max rounds reached"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:19:39.630Z",
+          "tags": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "blueprint-e2e-1782329116055",
+          "sessionId": "blueprint-e2e-1782329116055",
+          "planGoal": "Debate: ",
+          "summary": "Partially completed: Debate: ",
+          "outcome": "partial",
+          "decisions": [
+            "2 rounds",
+            "Approved: false",
+            "2 rounds, 1 issues raised, max rounds reached"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T19:25:16.065Z",
+          "tags": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "projectId": "test",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "ses_10473a6dbffeDUpEzFikyy4JMe",
+          "sessionId": "ses_10473a6dbffeDUpEzFikyy4JMe",
+          "planGoal": "Debate: apakah 2+2=4?",
+          "summary": "Partially completed: Debate: apakah 2+2=4?",
+          "outcome": "partial",
+          "decisions": [
+            "1 rounds",
+            "Approved: false",
+            "Single round (max rounds reached)"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T21:32:59.395Z",
+          "tags": [
+            "rounds",
+            "debate:",
+            "2+2=4?",
+            "approved:",
+            "false",
+            "single",
+            "(max",
+            "reached)"
+          ],
+          "score": 0.5,
+          "usageCount": 0
+        }
+      ],
+      "skills": [],
+      "tfidfDocs": [
+        {
+          "id": "ep-bootstrap-understand-opencode-agentic-engine-archi",
+          "category": "knowledge-tech",
+          "title": "Understand opencode-agentic-engine architecture",
+          "content": "opencode-agentic-engine is an OpenCode plugin implementing agentic software engineering. It has 77 TypeScript source files across 6 layers: core/ (engine: planning, execution, verification, LLM, git, budget), agents/ (multi-agent coordination), drift/ (error detection, hallucination guard), memory/ (episodic store, skill store, vector store, RAG), evaluation/ (live evaluator), observability/ (trace logger, dashboard). The entry point is src/index.ts which registers 29 tools and 6 hooks.\nEntry: src/index.ts\nCore engine: src/core/\nMulti-agent: src/agents/\nMemory: src/memory/",
+          "keywords": [
+            "architecture",
+            "structure",
+            "overview",
+            "plugin",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-understand-opencode-agentic-engine-archi"
+          }
+        },
+        {
+          "id": "ep-bootstrap-what-are-the-29-agentic-tools-",
+          "category": "knowledge-tech",
+          "title": "What are the 29 agentic tools?",
+          "content": "Stage I Foundation (5): agentic_plan, agentic_execute, agentic_reflect, agentic_verify, agentic_status. Stage II Intelligence (8): agentic_nav, agentic_context, agentic_snapshot, agentic_pr, agentic_score, agentic_model, agentic_model_reset, agentic_budget. Stage III Orchestration (9): agentic_delegate, agentic_pipeline, agentic_message, agentic_parallel, agentic_skill, agentic_episodes, agentic_dashboard, agentic_guard, agentic_finetune. Stage IV Evolution (1): agentic_evolve. Stage V Autonomous (1): agentic_auto. Blueprint (5): agentic_debate, agentic_router, agentic_clean, agentic_rag, agentic_mcp. All tools use the agentic_ prefix.\n29 tools total\nGrouped by stage (I-V + Blueprint)\nAll prefixed with agentic_",
+          "keywords": [
+            "tools",
+            "agentic",
+            "reference",
+            "list",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-what-are-the-29-agentic-tools-"
+          }
+        },
+        {
+          "id": "ep-bootstrap-recommended-workflow--research---plan---",
+          "category": "knowledge-tech",
+          "title": "Recommended workflow: research → plan → implement → verify",
+          "content": "Phase 1 (Research): Use agentic_nav to scan codebase, agentic_skill find to find reusable skills, agentic_episodes search to learn from past sessions. Phase 2 (Plan): agentic_plan to decompose the goal into ordered subtasks with dependencies. Phase 3 (Implement): agentic_execute for each step, agentic_delegate for complex sub-tasks, agentic_parallel for concurrent independent steps. Phase 4 (Verify): agentic_verify for deep multi-dimensional checks (compile, lint, test, security, performance, architecture, deps). If a step fails, use agentic_reflect to diagnose error category and propagation.\nResearch first: nav + skill + episodes\nPlan: decompose with dependencies\nImplement: execute steps, delegate complex\nVerify: multi-dimensional checks",
+          "keywords": [
+            "workflow",
+            "pattern",
+            "recommended",
+            "best-practice",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-recommended-workflow--research---plan---"
+          }
+        },
+        {
+          "id": "ep-bootstrap-how-model-preferences-work",
+          "category": "knowledge-tech",
+          "title": "How model preferences work",
+          "content": "The plugin has a 3-level model resolution system: (1) Per-call explicit model override via llmEngine.call({ model: {...} }), (2) Per-tool override via agentic_model set tool=agentic_plan model=..., (3) Category fallback by complexity tier (quick, unspecified-low, unspecified-high, deep). Tool complexity: agentic_nav/clean/pr/router are 'quick', agentic_debate/plan are 'unspecified-high', agentic_verify/finetune are 'deep'. Model preferences are persisted to .agentic/models.json.\n3-level resolution: call > tool > category > default\nPersisted to .agentic/models.json\nPer-role preferences for delegation",
+          "keywords": [
+            "model",
+            "preference",
+            "configuration",
+            "llm",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-how-model-preferences-work"
+          }
+        },
+        {
+          "id": "ep-bootstrap-how-error-analysis-and-recovery-works",
+          "category": "knowledge-tech",
+          "title": "How error analysis and recovery works",
+          "content": "When a step fails, agentic_reflect calls ErrorAnalyzer which categorizes errors into: import, type, compile, test, runtime, or unknown. The DependencyTracker traces error propagation across the step chain — if step A depends on step B and B failed, A is marked as affected. The AgentLoop has auto-retry with exponential backoff and jitter (via auto-retry.ts). After maxRetries, it attempts LLM-based repair via attemptRepair(). HallucinationGuard checks file/function/import claims on every successful execute.\nError categories: import, type, compile, test, runtime, unknown\nAuto-retry with exponential backoff + jitter\nLLM-based repair on repeated failure\nHallucinationGuard on every execute",
+          "keywords": [
+            "error",
+            "recovery",
+            "reflect",
+            "retry",
+            "debugging",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-how-error-analysis-and-recovery-works"
+          }
+        },
+        {
+          "id": "ep-bootstrap-how-multi-agent-coordination-works",
+          "category": "knowledge-tech",
+          "title": "How multi-agent coordination works",
+          "content": "The agents/ layer has: Orchestrator (multi-agent workflow pipelines), Coordinator (task delegation, shared memory, inter-agent messaging), AgentRuntime (sub-process spawner), RoleRegistry (built-in roles: architect, developer, qa, coordinator, pm + custom). Pipelines chain PM → Architect → Developer → QA with cross-validation between stages. Inter-agent messaging supports: result, review_request, review_response, clarification, approval, revision.\nRoles: architect, developer, qa, coordinator, pm\nPipeline: PM → Architect → Developer → QA\nCross-validation between stages\nInter-agent messaging with review/approval flow",
+          "keywords": [
+            "multi-agent",
+            "pipeline",
+            "delegate",
+            "orchestrator",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-how-multi-agent-coordination-works"
+          }
+        },
+        {
+          "id": "ep-bootstrap-how-memory-and-skills-work-across-sessio",
+          "category": "knowledge-tech",
+          "title": "How memory and skills work across sessions",
+          "content": "The memory/ layer provides cross-session persistence: EpisodicStore (past task outcomes with project scoping), SkillStore (reusable skill extraction from successful tasks with success rate tracking), VectorStore (TF-IDF sparse retrieval), MultiIndexRAG (hybrid TF-IDF + vector search with category segregation), LocalEmbedder (text embedding via API or hash fallback). Skills use self-describing format (agentic-skill/v1 schema). Episodes are scoped per project. Skills are globally shared.\nEpisodes: project-scoped\nSkills: globally shared\nVector: TF-IDF + optional embedding\nRAG: hybrid search with category segregation",
+          "keywords": [
+            "memory",
+            "skills",
+            "episodes",
+            "RAG",
+            "cross-session",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-how-memory-and-skills-work-across-sessio"
+          }
+        },
+        {
+          "id": "ep-bootstrap-how-to-add-a-new-feature-to-the-plugin",
+          "category": "knowledge-tech",
+          "title": "How to add a new feature to the plugin",
+          "content": "1) Create source file in appropriate src/ subdirectory. 2) Add import + instance in src/index.ts. 3) Add tool definition in the tools object. 4) Add to expected tool list in test/run.mjs, test/dropin.mjs, test/load-samedir.mjs. 5) Add ≥2 test cases (happy path + error path). 6) Run npm run build && node test/run.mjs. 7) If Docker: ./test-container.sh. Conventions: English for code, Indonesian for communication, ESM imports with .js extensions, use execFileSync not execSync for shell safety.\nFile in appropriate subdirectory\nRegister in src/index.ts tools object\nAdd to 3 test files\n2+ test cases per tool\nnpm run build && node test/run.mjs",
+          "keywords": [
+            "development",
+            "contribution",
+            "new-feature",
+            "howto",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-how-to-add-a-new-feature-to-the-plugin"
+          }
+        },
+        {
+          "id": "ep-bootstrap-opencode-plugin-api-and-hooks",
+          "category": "knowledge-tech",
+          "title": "OpenCode Plugin API and hooks",
+          "content": "The plugin implements 6 hooks: experimental.chat.system.transform (injects Knowledge-First system prompt with RAG results), experimental.chat.params (model detection), experimental.chat.pre (route to agentic tools), tool.* (29 agentic_ tool handlers), experimental.tool-call (observability tracing), experimental.chat.post (post-processing). The plugin runs via OpenCode SDK — all LLM calls go through client.session.prompt(), never directly to external APIs. The engine uses LLMEngine which wraps the SDK client.\n6 hooks: system.transform, chat.params, chat.pre, tool.*, tool-call, chat.post\nAll LLM via SDK client.session.prompt()\nNo direct external API calls for LLM inference",
+          "keywords": [
+            "hooks",
+            "plugin-api",
+            "opencode",
+            "sdk",
+            "integration",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-opencode-plugin-api-and-hooks"
+          }
+        },
+        {
+          "id": "ep-bootstrap-how-testing-works",
+          "category": "knowledge-tech",
+          "title": "How testing works",
+          "content": "Tests live in test/run.mjs (1117+ unit tests spanning 50+ sections). Additional test files: dropin.mjs (plugin discovery), load-samedir.mjs (E2E workflow), e2e-scenario.mjs (EvoClaw benchmark), swebench-harness.mjs (SWE-bench), e2e-llm.mjs (LLM E2E). Tests use custom assert() functions, not Jest/Mocha. Each tool must have ≥2 test cases. Run with: node test/run.mjs for unit tests, LLM_OFF=true node test/swebench-harness.mjs for mock mode.\n1117+ unit tests in run.mjs\n22+ test files total\nCustom assert() framework\nEach tool: 2+ test cases",
+          "keywords": [
+            "testing",
+            "test",
+            "run.mjs",
+            "e2e",
+            "benchmark",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-how-testing-works"
+          }
+        },
+        {
+          "id": "ep-test-session-23",
+          "category": "knowledge-tech",
+          "title": "Context test",
+          "content": "Completed: Context test\ncompleted",
+          "keywords": [
+            "context",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "test-session-23"
+          }
+        },
+        {
+          "id": "ep-test-session-24",
+          "category": "knowledge-tech",
+          "title": "Snapshot test",
+          "content": "Completed: Snapshot test\ncompleted",
+          "keywords": [
+            "snapshot",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "test-session-24"
+          }
+        },
+        {
+          "id": "ep-test-session-26",
+          "category": "knowledge-tech",
+          "title": "Score test",
+          "content": "Completed: Score test\ncompleted",
+          "keywords": [
+            "score",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "test-session-26"
+          }
+        },
+        {
+          "id": "ep-test-session-38",
+          "category": "knowledge-tech",
+          "title": "Skill test",
+          "content": "Completed: Skill test\ncompleted",
+          "keywords": [
+            "skill",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "test-session-38"
+          }
+        },
+        {
+          "id": "ep-test-session-39",
+          "category": "knowledge-tech",
+          "title": "Episode test task",
+          "content": "Completed: Episode test task\ncompleted",
+          "keywords": [
+            "episode",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "test-session-39"
+          }
+        },
+        {
+          "id": "ep-test-session-40",
+          "category": "knowledge-tech",
+          "title": "Config change",
+          "content": "Completed: Config change\ncompleted",
+          "keywords": [
+            "config",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "test-session-40"
+          }
+        },
+        {
+          "id": "ep-test-session-44",
+          "category": "knowledge-tech",
+          "title": "Guard test",
+          "content": "Completed: Guard test\ncompleted",
+          "keywords": [
+            "guard",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "test-session-44"
+          }
+        },
+        {
+          "id": "ep-test-session-45",
+          "category": "knowledge-tech",
+          "title": "Ghost test",
+          "content": "Completed: Ghost test\ncompleted",
+          "keywords": [
+            "ghost",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "test-session-45"
+          }
+        },
+        {
+          "id": "ep-test-session-58",
+          "category": "knowledge-tech",
+          "title": "Test verify",
+          "content": "Completed: Test verify\ncompleted",
+          "keywords": [
+            "verify",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "test-session-58"
+          }
+        },
+        {
+          "id": "ep-test-session-59",
+          "category": "knowledge-tech",
+          "title": "Dashboard test",
+          "content": "Completed: Dashboard test\ncompleted",
+          "keywords": [
+            "dashboard",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "test-session-59"
+          }
+        },
+        {
+          "id": "ep-test-session-67",
+          "category": "knowledge-tech",
+          "title": "PR test feature",
+          "content": "Completed: PR test feature\ncompleted",
+          "keywords": [
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "test-session-67"
+          }
+        },
+        {
+          "id": "ep-test-session-69",
+          "category": "knowledge-tech",
+          "title": "Guard test",
+          "content": "Completed: Guard test\ncompleted",
+          "keywords": [
+            "guard",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "test-session-69"
+          }
+        },
+        {
+          "id": "ep-test-session-71",
+          "category": "knowledge-tech",
+          "title": "Evolution test",
+          "content": "Completed: Evolution test\ncompleted",
+          "keywords": [
+            "evolution",
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "test-session-71"
+          }
+        },
+        {
+          "id": "ep-test-session-76",
+          "category": "knowledge-tech",
+          "title": "Debate: ",
+          "content": "Partially completed: Debate: \n1 rounds\nApproved: false\nSingle round (max rounds reached)",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "single",
+            "(max",
+            "reached)"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "test-session-76"
+          }
+        },
+        {
+          "id": "ep-blueprint-e2e-1782145433407",
+          "category": "knowledge-tech",
+          "title": "Debate: ",
+          "content": "Partially completed: Debate: \n2 rounds\nApproved: false\n2 rounds, 1 issues raised, max rounds reached",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "blueprint-e2e-1782145433407"
+          }
+        },
+        {
+          "id": "ep-blueprint-e2e-1782145498593",
+          "category": "knowledge-tech",
+          "title": "Debate: ",
+          "content": "Partially completed: Debate: \n2 rounds\nApproved: false\n2 rounds, 1 issues raised, max rounds reached",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "blueprint-e2e-1782145498593"
+          }
+        },
+        {
+          "id": "ep-blueprint-e2e-1782145867007",
+          "category": "knowledge-tech",
+          "title": "Debate: ",
+          "content": "Partially completed: Debate: \n2 rounds\nApproved: false\n2 rounds, 1 issues raised, max rounds reached",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "blueprint-e2e-1782145867007"
+          }
+        },
+        {
+          "id": "ep-blueprint-e2e-1782147112665",
+          "category": "knowledge-tech",
+          "title": "Debate: ",
+          "content": "Partially completed: Debate: \n2 rounds\nApproved: false\n2 rounds, 1 issues raised, max rounds reached",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "blueprint-e2e-1782147112665"
+          }
+        },
+        {
+          "id": "ep-blueprint-e2e-1782147906979",
+          "category": "knowledge-tech",
+          "title": "Debate: ",
+          "content": "Partially completed: Debate: \n2 rounds\nApproved: false\n2 rounds, 1 issues raised, max rounds reached",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "blueprint-e2e-1782147906979"
+          }
+        },
+        {
+          "id": "ep-blueprint-e2e-1782328779615",
+          "category": "knowledge-tech",
+          "title": "Debate: ",
+          "content": "Partially completed: Debate: \n2 rounds\nApproved: false\n2 rounds, 1 issues raised, max rounds reached",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "blueprint-e2e-1782328779615"
+          }
+        },
+        {
+          "id": "ep-blueprint-e2e-1782329116055",
+          "category": "knowledge-tech",
+          "title": "Debate: ",
+          "content": "Partially completed: Debate: \n2 rounds\nApproved: false\n2 rounds, 1 issues raised, max rounds reached",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "rounds,",
+            "issues",
+            "raised,",
+            "reached"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "blueprint-e2e-1782329116055"
+          }
+        },
+        {
+          "id": "ep-ses_10473a6dbffeDUpEzFikyy4JMe",
+          "category": "knowledge-tech",
+          "title": "Debate: apakah 2+2=4?",
+          "content": "Partially completed: Debate: apakah 2+2=4?\n1 rounds\nApproved: false\nSingle round (max rounds reached)",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "2+2=4?",
+            "approved:",
+            "false",
+            "single",
+            "(max",
+            "reached)"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "ses_10473a6dbffeDUpEzFikyy4JMe"
+          }
+        }
+      ]
     }
   },
-  "updatedAt": "2026-06-24T16:26:48.022Z"
+  "updatedAt": "2026-06-24T21:34:29.960Z"
 }

@@ -1,7 +1,6 @@
 {
   "$schema": "v1",
   "description": "Model preferences per tool/category/role. Kosongkan untuk fallback ke tier → session default. Lihat kompleksitas tiap tool di comment.",
-
   "tools": {
     "agentic_nav": "",
     "agentic_skill": "",
@@ -10,48 +9,39 @@
     "agentic_rag": "",
     "agentic_db": "",
     "agentic_context": "",
-
-    "agentic_plan": "",
     "agentic_parallel": "",
     "agentic_pipeline": "",
-
     "agentic_execute": "",
     "agentic_delegate": "",
     "agentic_snapshot": "",
     "agentic_status": "",
     "agentic_auto": "",
-
-    "agentic_verify": "",
+    "agentic_verify": "claude-sonnet-4-6",
     "agentic_reflect": "",
     "agentic_guard": "",
     "agentic_score": "",
     "agentic_debate": "",
-
     "agentic_evolve": "",
     "agentic_finetune": "",
     "agentic_dashboard": "",
     "agentic_model": "",
     "agentic_model_reset": "",
-
     "agentic_pr": "",
     "agentic_clean": "",
     "agentic_message": "",
     "agentic_mcp": "",
     "agentic_budget": "",
-
     "debate-executor": "",
     "debate-critic": "",
     "debate-cleaner": ""
   },
-
   "categories": {
     "quick": "",
     "unspecified-low": "",
     "unspecified-high": "",
-    "deep": ""
+    "deep": "9router/StrongReason"
   },
-
-  "developer": "",
+  "developer": "deepseek/deepseek-chat",
   "architect": "",
   "qa": "",
   "pm": "",

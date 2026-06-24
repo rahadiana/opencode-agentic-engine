@@ -55,9 +55,66 @@
         "success": false,
         "sessionId": "ses_106680572ffeYF8rKGmIbPFfV0",
         "timestamp": 1782314165280
+      },
+      {
+        "stepId": "confidence-setup-project",
+        "success": false,
+        "sessionId": "ses_1050b5714ffeLwJVlaOXUmYEFy",
+        "timestamp": 1782327412843
+      },
+      {
+        "stepId": "setup-project",
+        "success": true,
+        "sessionId": "ses_1050b5714ffeLwJVlaOXUmYEFy",
+        "timestamp": 1782327412845
+      },
+      {
+        "stepId": "test-audit",
+        "success": false,
+        "sessionId": "ses_1050b5714ffeLwJVlaOXUmYEFy",
+        "timestamp": 1782327426269
+      },
+      {
+        "stepId": "confidence-guard-test-step",
+        "success": false,
+        "sessionId": "ses_1050b5714ffeLwJVlaOXUmYEFy",
+        "timestamp": 1782327744861
+      },
+      {
+        "stepId": "guard-test-step",
+        "success": true,
+        "sessionId": "ses_1050b5714ffeLwJVlaOXUmYEFy",
+        "timestamp": 1782327744862
+      },
+      {
+        "stepId": "debate-Analisis kelebihan dan kekurangan arsite",
+        "success": false,
+        "sessionId": "ses_1050b5714ffeLwJVlaOXUmYEFy",
+        "timestamp": 1782328070115
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_1050b5714ffeLwJVlaOXUmYEFy",
+        "timestamp": 1782328299314
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_1050b5714ffeLwJVlaOXUmYEFy",
+        "timestamp": 1782328341520
       }
     ],
-    "errorRecoveries": [],
+    "errorRecoveries": [
+      {
+        "errorId": "exec-test-audit",
+        "recovered": false
+      },
+      {
+        "errorId": "reflect-test-audit",
+        "recovered": true
+      }
+    ],
     "navigations": [
       {
         "query": "project structure architecture overview",
@@ -83,6 +140,16 @@
         "query": "model input cari search model",
         "resultsCount": 15,
         "focused": false
+      },
+      {
+        "query": "todo app REST API server",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "Saya mau nambahin fitur login JWT ke todo app",
+        "resultsCount": 1,
+        "focused": true
       }
     ],
     "delegations": [
@@ -95,6 +162,11 @@
         "taskId": "dev-analysis",
         "role": "developer",
         "success": true
+      },
+      {
+        "taskId": "review-todo-app",
+        "role": "qa",
+        "success": true
       }
     ],
     "skillLookups": [
@@ -106,8 +178,11 @@
       },
       {
         "found": true
+      },
+      {
+        "found": true
       }
     ]
   },
-  "updatedAt": "2026-06-24T16:26:47.197Z"
+  "updatedAt": "2026-06-24T19:12:23.864Z"
 }
