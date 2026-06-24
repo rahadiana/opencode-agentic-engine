@@ -1,0 +1,880 @@
+{
+  "key": "global",
+  "data": {
+    "automotive": {
+      "episodes": [
+        {
+          "id": "ses_110d5afe5ffeMyrtsLXbZ5W6Vd",
+          "sessionId": "ses_110d5afe5ffeMyrtsLXbZ5W6Vd",
+          "planGoal": "Debate: Analisis perbandingan komprehensif antara opencode-agentic-engine (plugin OpenCode dengan 29 tools, ",
+          "summary": "Partially completed: Debate: Analisis perbandingan komprehensif antara opencode-agentic-engine (plugin OpenCode dengan 29 tools, ",
+          "outcome": "partial",
+          "decisions": [
+            "0 rounds",
+            "Approved: false",
+            "Single round (max rounds reached)"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-22T11:58:58.403Z",
+          "tags": [
+            "rounds"
+          ],
+          "projectId": "opencode-agentic-engine",
+          "score": 0.5,
+          "usageCount": 0
+        }
+      ],
+      "skills": [
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782304154974",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-24T12:29:14.974Z",
+              "lastUsed": "2026-06-24T12:29:14.974Z",
+              "lastModified": "2026-06-24T12:29:14.974Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-24T12:29:14.974Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782304645190",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-24T12:37:25.190Z",
+              "lastUsed": "2026-06-24T12:37:25.190Z",
+              "lastModified": "2026-06-24T12:37:25.190Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-24T12:37:25.190Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782304471117",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-24T12:34:31.117Z",
+              "lastUsed": "2026-06-24T12:34:31.117Z",
+              "lastModified": "2026-06-24T12:34:31.117Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-24T12:34:31.117Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782316677389",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-24T15:57:57.389Z",
+              "lastUsed": "2026-06-24T15:57:57.389Z",
+              "lastModified": "2026-06-24T15:57:57.389Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-24T15:57:57.389Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782317631522",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-24T16:13:51.522Z",
+              "lastUsed": "2026-06-24T16:13:51.522Z",
+              "lastModified": "2026-06-24T16:13:51.522Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-24T16:13:51.522Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782317961510",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-24T16:19:21.510Z",
+              "lastUsed": "2026-06-24T16:19:21.510Z",
+              "lastModified": "2026-06-24T16:19:21.510Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-24T16:19:21.510Z"
+        }
+      ],
+      "tfidfDocs": [
+        {
+          "id": "sk-skill-1782304154974",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782304154974"
+          }
+        },
+        {
+          "id": "sk-skill-1782304645190",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782304645190"
+          }
+        },
+        {
+          "id": "sk-skill-1782304471117",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782304471117"
+          }
+        },
+        {
+          "id": "sk-skill-1782316677389",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782316677389"
+          }
+        },
+        {
+          "id": "sk-skill-1782317631522",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782317631522"
+          }
+        },
+        {
+          "id": "sk-skill-1782317961510",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782317961510"
+          }
+        }
+      ]
+    },
+    "financial": {
+      "episodes": [],
+      "skills": [],
+      "tfidfDocs": []
+    },
+    "personal": {
+      "episodes": [],
+      "skills": [],
+      "tfidfDocs": []
+    },
+    "tech": {
+      "episodes": [
+        {
+          "id": "ses_110d5afe5ffeMyrtsLXbZ5W6Vd",
+          "sessionId": "ses_110d5afe5ffeMyrtsLXbZ5W6Vd",
+          "planGoal": "Debate: Analisis perbandingan komprehensif antara opencode-agentic-engine (plugin OpenCode dengan 29 tools, ",
+          "summary": "Partially completed: Debate: Analisis perbandingan komprehensif antara opencode-agentic-engine (plugin OpenCode dengan 29 tools, ",
+          "outcome": "partial",
+          "decisions": [
+            "0 rounds",
+            "Approved: false",
+            "Single round (max rounds reached)"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-22T11:58:58.403Z",
+          "tags": [
+            "rounds"
+          ],
+          "projectId": "opencode-agentic-engine",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "ses_106680572ffeYF8rKGmIbPFfV0",
+          "sessionId": "ses_106680572ffeYF8rKGmIbPFfV0",
+          "planGoal": "Debate: Bandingkan chat.params hook vs experimental.chat.system.transform untuk model detection di OpenCode ",
+          "summary": "Partially completed: Debate: Bandingkan chat.params hook vs experimental.chat.system.transform untuk model detection di OpenCode ",
+          "outcome": "partial",
+          "decisions": [
+            "2 rounds",
+            "Approved: false",
+            "2 rounds, 1 issues raised, max rounds reached"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T15:05:51.434Z",
+          "tags": [
+            "rounds"
+          ],
+          "projectId": "opencode-agentic-engine",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "ses_105d52052ffejfaid7RrizMn3h",
+          "sessionId": "ses_105d52052ffejfaid7RrizMn3h",
+          "planGoal": "Debate: Bandingkan `chat.params` hook vs `experimental.chat.system.transform` untuk model detection di OpenC",
+          "summary": "Partially completed: Debate: Bandingkan `chat.params` hook vs `experimental.chat.system.transform` untuk model detection di OpenC",
+          "outcome": "partial",
+          "decisions": [
+            "0 rounds",
+            "Approved: false",
+            "Single round (max rounds reached)"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T15:09:20.348Z",
+          "tags": [
+            "rounds"
+          ],
+          "projectId": "opencode-agentic-engine",
+          "score": 0.5,
+          "usageCount": 0
+        }
+      ],
+      "skills": [
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782303867854",
+              "name": "Opencode Plugin API — Model Detection & Event Hook Structure",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Opencode Plugin API — Model Detection & Event Hook Structure",
+              "keywords": [
+                "input",
+                "string",
+                "output",
+                "model",
+                "tool",
+                "chat",
+                "contoh",
+                "opencode",
+                "plugin",
+                "name"
+              ],
+              "context": [
+                "opencode-plugin"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "# Opencode Plugin API (v1.17.9) — Field Mapping Hasil Eksperimen",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                },
+                {
+                  "order": 2,
+                  "action": "verify",
+                  "description": "## Hook Structures (actual, from live testing)",
+                  "tool": "agentic_verify",
+                  "expectedOutput": "Step 2 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                },
+                {
+                  "order": 3,
+                  "action": "execute",
+                  "description": "### tool.execute.before / after",
+                  "expectedOutput": "Step 3 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                },
+                {
+                  "order": 4,
+                  "action": "execute",
+                  "description": "`input.tool` — nama tool (String), BUKAN `input.name`",
+                  "expectedOutput": "Step 4 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                },
+                {
+                  "order": 5,
+                  "action": "execute",
+                  "description": "`input.sessionID` — session ID",
+                  "expectedOutput": "Step 5 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                },
+                {
+                  "order": 6,
+                  "action": "execute",
+                  "description": "`input.callID` — call ID",
+                  "expectedOutput": "Step 6 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                },
+                {
+                  "order": 7,
+                  "action": "execute",
+                  "description": "`output.args` — arguments yang akan dikirim",
+                  "expectedOutput": "Step 7 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                },
+                {
+                  "order": 8,
+                  "action": "execute",
+                  "description": "`output.error` — error message (if any)",
+                  "expectedOutput": "Step 8 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "16m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-24T12:24:27.854Z",
+              "lastUsed": "2026-06-24T12:24:27.854Z",
+              "lastModified": "2026-06-24T12:24:27.854Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-24T12:24:27.854Z"
+        }
+      ],
+      "tfidfDocs": [
+        {
+          "id": "ep-ses_110d5afe5ffeMyrtsLXbZ5W6Vd",
+          "category": "tech",
+          "title": "Debate: Analisis perbandingan komprehensif antara opencode-agentic-engine (plugin OpenCode dengan 29 tools, ",
+          "content": "Partially completed: Debate: Analisis perbandingan komprehensif antara opencode-agentic-engine (plugin OpenCode dengan 29 tools, \n0 rounds\nApproved: false\nSingle round (max rounds reached)",
+          "keywords": [
+            "rounds"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "ses_110d5afe5ffeMyrtsLXbZ5W6Vd"
+          }
+        },
+        {
+          "id": "sk-skill-1782303867854",
+          "category": "tech",
+          "title": "Opencode Plugin API — Model Detection & Event Hook Structure",
+          "content": "Opencode Plugin API — Model Detection & Event Hook Structure",
+          "keywords": [
+            "input",
+            "string",
+            "output",
+            "model",
+            "tool",
+            "chat",
+            "contoh",
+            "opencode",
+            "plugin",
+            "name"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782303867854"
+          }
+        },
+        {
+          "id": "ep-ses_106680572ffeYF8rKGmIbPFfV0",
+          "category": "tech",
+          "title": "Debate: 1+1 apakah =2 ?",
+          "content": "Partially completed: Debate: 1+1 apakah =2 ?\n0 rounds\nApproved: false\nSingle round (max rounds reached)",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "single",
+            "(max",
+            "reached)"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "ses_106680572ffeYF8rKGmIbPFfV0"
+          }
+        },
+        {
+          "id": "ep-ses_105d52052ffejfaid7RrizMn3h",
+          "category": "tech",
+          "title": "Debate: Bandingkan `chat.params` hook vs `experimental.chat.system.transform` untuk model detection di OpenC",
+          "content": "Partially completed: Debate: Bandingkan `chat.params` hook vs `experimental.chat.system.transform` untuk model detection di OpenC\n0 rounds\nApproved: false\nSingle round (max rounds reached)",
+          "keywords": [
+            "rounds"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "ses_105d52052ffejfaid7RrizMn3h"
+          }
+        }
+      ]
+    },
+    "general": {
+      "episodes": [],
+      "skills": [],
+      "tfidfDocs": []
+    },
+    "opencode-plugin": {
+      "episodes": [],
+      "skills": [
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782303867854",
+              "name": "Opencode Plugin API — Model Detection & Event Hook Structure",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Opencode Plugin API — Model Detection & Event Hook Structure",
+              "keywords": [
+                "input",
+                "string",
+                "output",
+                "model",
+                "tool",
+                "chat",
+                "contoh",
+                "opencode",
+                "plugin",
+                "name"
+              ],
+              "context": [
+                "opencode-plugin"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "# Opencode Plugin API (v1.17.9) — Field Mapping Hasil Eksperimen",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                },
+                {
+                  "order": 2,
+                  "action": "verify",
+                  "description": "## Hook Structures (actual, from live testing)",
+                  "tool": "agentic_verify",
+                  "expectedOutput": "Step 2 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                },
+                {
+                  "order": 3,
+                  "action": "execute",
+                  "description": "### tool.execute.before / after",
+                  "expectedOutput": "Step 3 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                },
+                {
+                  "order": 4,
+                  "action": "execute",
+                  "description": "`input.tool` — nama tool (String), BUKAN `input.name`",
+                  "expectedOutput": "Step 4 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                },
+                {
+                  "order": 5,
+                  "action": "execute",
+                  "description": "`input.sessionID` — session ID",
+                  "expectedOutput": "Step 5 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                },
+                {
+                  "order": 6,
+                  "action": "execute",
+                  "description": "`input.callID` — call ID",
+                  "expectedOutput": "Step 6 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                },
+                {
+                  "order": 7,
+                  "action": "execute",
+                  "description": "`output.args` — arguments yang akan dikirim",
+                  "expectedOutput": "Step 7 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                },
+                {
+                  "order": 8,
+                  "action": "execute",
+                  "description": "`output.error` — error message (if any)",
+                  "expectedOutput": "Step 8 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "16m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-24T12:24:27.854Z",
+              "lastUsed": "2026-06-24T12:24:27.854Z",
+              "lastModified": "2026-06-24T12:24:27.854Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 1,
+          "successRate": 1,
+          "successWindow": [
+            true
+          ],
+          "lastUsed": "2026-06-24T12:24:27.854Z"
+        }
+      ],
+      "tfidfDocs": []
+    }
+  },
+  "updatedAt": "2026-06-24T16:26:48.022Z"
+}

@@ -1,0 +1,25 @@
+{
+  "key": "ses_105d52052ffejfaid7RrizMn3h",
+  "data": {
+    "id": "ep-1782313760348-57kw",
+    "sessionId": "ses_105d52052ffejfaid7RrizMn3h",
+    "projectId": "opencode-agentic-engine",
+    "planGoal": "Debate: Bandingkan `chat.params` hook vs `experimental.chat.system.transform` untuk model detection di OpenC",
+    "summary": "Partially completed: Debate: Bandingkan `chat.params` hook vs `experimental.chat.system.transform` untuk model detection di OpenC",
+    "outcome": "partial",
+    "decisions": [
+      "0 rounds",
+      "Approved: false",
+      "Single round (max rounds reached)"
+    ],
+    "filesChanged": [],
+    "domain": "generic",
+    "timestamp": "2026-06-24T15:09:20.348Z",
+    "tags": [
+      "rounds"
+    ],
+    "score": 1,
+    "usageCount": 0
+  },
+  "updatedAt": "2026-06-24T15:09:20.349Z"
+}

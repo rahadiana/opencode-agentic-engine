@@ -9,7 +9,7 @@ Plugin OpenCode yang mengimplementasikan agentic software engineering workflow b
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
                     # postbuild: auto-copy ke ~/.cache/opencode/packages/ (jika ada)
-node test/run.mjs   # 744 unit tests (mock, no LLM needed)
+node test/run.mjs   # 1117+ unit tests (mock, no LLM needed)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
 node test/e2e-scenario.mjs # EvoClaw: 50-file codebase, 5 iterations
@@ -29,14 +29,16 @@ src/
 ├── core/                      # Inti engine: planning, execution, verification
 │   ├── README.md              # Dokumentasi 29 file + 6 domain
 │   ├── agent-loop.ts          # Autonomous loop: plan → execute → verify → retry
-│   ├── auto-retry.ts          # Exponential backoff + jitter retry logic
-│   ├── budget-tracker.ts      # Token/steps/time/cost budget enforcement
+    │   ├── auto-retry.ts          # Exponential backoff + jitter retry logic
+    │   ├── bootstrap-knowledge.ts # Seeds RAG with high-confidence plugin docs
+    │   ├── budget-tracker.ts      # Token/steps/time/cost budget enforcement
 │   ├── config.ts              # Plugin config, env vars, defaults
 │   ├── data-cleaner.ts        # Strip debate artifacts, format output
 │   ├── debate-loop.ts         # Executor ↔ Critic AI debate for analysis
 │   ├── domain-registry.ts     # Domain-specific code generation (code/data/devops/..)
-│   ├── error-analyzer.ts      # Categorizes errors (import/type/compile/test/runtime)
-│   ├── event-bus.ts           # Pub/sub event bus for tool hooks
+    │   ├── error-analyzer.ts      # Categorizes errors (import/type/compile/test/runtime)
+    │   ├── errors.ts              # Custom error classes (TimeoutError, LLMError, etc.)
+    │   ├── event-bus.ts           # Pub/sub event bus for tool hooks
 │   ├── event-taxonomy.ts      # Event type taxonomy schema
 │   ├── execution-helpers.ts   # Shared execution primitives
 │   ├── executor.ts            # Step execution state, retry tracking
@@ -517,3 +519,17 @@ KNOWLEDGE-FIRST PROMPT INJECTION PIPELINE
 5. Add test cases in `test/run.mjs` (≥2: happy + error)
 6. `npm run build && node test/run.mjs` — must pass
 7. `./test-container.sh` — must pass all Docker layers
+
+## Recent Updates
+
+### v0.5.3 — P0-P3 Reliability Hardening (2026-06-24)
+
+- **P0 (Reliability)**: Fixed Promise.race timeout leaks in agent-loop, debate-loop, agent-runtime, fine-tuning — all now use AbortController + clearTimeout pattern
+- **P0 (Errors)**: Added custom error classes (`errors.ts`): `AgenticError`, `TimeoutError`, `SessionNotFoundError`, `BudgetExceededError`, `LLMError`, `ValidationError`, `NotFoundError`
+- **P1 (Observability)**: Added `console.warn` to all silent catch blocks in verifier, agent-loop, orchestrator, coordinator
+- **P1 (Verification)**: Fixed verifier LLM parse fallback — garbage LLM output now returns `passed: false` instead of `passed: true` (prevents false-negative security blind spot)
+- **P2 (Types)**: Reduced `as any` casts from 25 → 3 (88% reduction). Exported `IndexData` type from multi-index-rag.ts
+- **P2 (Knowledge-First)**: Added `bootstrap-knowledge.ts` — seeds RAG with 10 high-confidence entries about plugin architecture, tools, and workflows
+- **P3 (UX)**: Cancelable debate loop via `AbortSignal` in `DebateConfig`. Documented alternative embedding providers (Ollama, etc.)
+- **1117+ unit tests** (was 744)
+

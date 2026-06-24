@@ -25,7 +25,57 @@
           "quarantineUntil": 0
         }
       }
+    },
+    "opencode/deepseek-v4-flash-free": {
+      "model": "opencode/deepseek-v4-flash-free",
+      "totalCalls": 572,
+      "successCalls": 572,
+      "failedCalls": 0,
+      "hallucinationCount": 0,
+      "avgLatencyMs": 3568.055944055951,
+      "lastUsed": 1782318307434,
+      "consecutiveFailures": 0,
+      "consecutiveSuccesses": 572,
+      "quarantineUntil": 0,
+      "byTaskType": {
+        "chat": {
+          "totalCalls": 571,
+          "successCalls": 571,
+          "failedCalls": 0,
+          "hallucinationCount": 0,
+          "avgLatencyMs": 0,
+          "lastUsed": 1782318307434,
+          "consecutiveFailures": 0,
+          "consecutiveSuccesses": 0,
+          "quarantineUntil": 0
+        }
+      }
+    },
+    "opencode/big-pickle": {
+      "model": "opencode/big-pickle",
+      "totalCalls": 42,
+      "successCalls": 42,
+      "failedCalls": 0,
+      "hallucinationCount": 0,
+      "avgLatencyMs": 0,
+      "lastUsed": 1782311675227,
+      "consecutiveFailures": 0,
+      "consecutiveSuccesses": 42,
+      "quarantineUntil": 0,
+      "byTaskType": {
+        "chat": {
+          "totalCalls": 42,
+          "successCalls": 42,
+          "failedCalls": 0,
+          "hallucinationCount": 0,
+          "avgLatencyMs": 0,
+          "lastUsed": 1782311675227,
+          "consecutiveFailures": 0,
+          "consecutiveSuccesses": 0,
+          "quarantineUntil": 0
+        }
+      }
     }
   },
-  "updatedAt": "2026-06-22T17:07:27.094Z"
+  "updatedAt": "2026-06-24T16:26:47.196Z"
 }

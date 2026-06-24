@@ -1,0 +1,31 @@
+{
+  "key": "ses_106680572ffeYF8rKGmIbPFfV0",
+  "data": {
+    "id": "ep-1782314165278-j3rj",
+    "sessionId": "ses_106680572ffeYF8rKGmIbPFfV0",
+    "projectId": "opencode-agentic-engine",
+    "planGoal": "Debate: 1+1 apakah =2 ?",
+    "summary": "Partially completed: Debate: 1+1 apakah =2 ?",
+    "outcome": "partial",
+    "decisions": [
+      "0 rounds",
+      "Approved: false",
+      "Single round (max rounds reached)"
+    ],
+    "filesChanged": [],
+    "domain": "generic",
+    "timestamp": "2026-06-24T15:16:05.278Z",
+    "tags": [
+      "rounds",
+      "debate:",
+      "approved:",
+      "false",
+      "single",
+      "(max",
+      "reached)"
+    ],
+    "score": 1,
+    "usageCount": 0
+  },
+  "updatedAt": "2026-06-24T15:16:05.279Z"
+}
