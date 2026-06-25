@@ -627,6 +627,21 @@ export class MultiIndexRAG {
   }
 
   /**
+   * Hapus semua data di satu kategori (episodes, skills, TF-IDF docs).
+   */
+  clearCategory(category: string): void {
+    const idx = this.indices.get(category)
+    if (!idx) return
+    idx.episodes = []
+    idx.skills = []
+    const docs = this.vectorStore.exportAll().filter(d => d.category === category)
+    for (const doc of docs) {
+      this.vectorStore.remove(doc.id)
+    }
+    this.notifyPersist()
+  }
+
+  /**
    * Import persisted data.
    */
   importAll(data: IndexData): void {

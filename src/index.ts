@@ -4442,7 +4442,7 @@ const confidenceStore = new ConfidenceStore()
       agentic_rag: registryTool("agentic_rag", {
         description: "Multi-index RAG: search or store knowledge in category-segregated indices. Prevents cross-category context pollution. Use with agentic_router to scope searches to relevant domains.",
         args: {
-          action: tool.schema.enum(["search", "store", "stats", "categories", "list"]).describe("Action: search across categories, store new data, view stats, list categories, or list all entries"),
+          action: tool.schema.enum(["search", "store", "stats", "categories", "list", "clear"]).describe("Action: search across categories, store new data, view stats, list categories, list all entries, or clear a category"),
           query: tool.schema.string().optional().describe("Search query (required for search/stats)"),
           category: tool.schema.string().optional().describe("Category to search within (omit for all)"),
           title: tool.schema.string().optional().describe("Title for stored entry"),
@@ -4652,6 +4652,16 @@ const confidenceStore = new ConfidenceStore()
               }
             }
 
+            case "clear": {
+              const clearCat = args.category || "automotive"
+              const statsBefore = multiIndexRAG.getStats().perCategory[clearCat]
+              multiIndexRAG.clearCategory(clearCat)
+              return {
+                output: `## 🗑️ RAG Category Cleared\n\n**Category:** ${clearCat}\n**Removed:** ${statsBefore?.episodes ?? 0} episodes, ${statsBefore?.skills ?? 0} skills`,
+                metadata: { category: clearCat, cleared: true },
+              }
+            }
+
             case "stats": {
               const stats = multiIndexRAG.getStats()
               const lines = [
@@ -4680,7 +4690,7 @@ const confidenceStore = new ConfidenceStore()
             }
 
             default:
-              return { output: "Unknown action. Use: search, store, stats, categories" }
+              return { output: "Unknown action. Use: search, store, stats, categories, list, clear" }
           }
         },
       }),
