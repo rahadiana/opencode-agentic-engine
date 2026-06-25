@@ -1223,6 +1223,12 @@ const confidenceStore = new ConfidenceStore()
             }
           }
 
+          // Gap #2b: Execution Trace — begin step tracking
+          const traceId = `exec-${context.sessionID}`
+          const session_ = sessionStore.getOrCreate(context.sessionID)
+          const goal = session_.plan?.intent?.goal ?? args.output.slice(0, 100)
+          memoryOrchestrator.beginStep(traceId, context.sessionID, goal, args.stepId, args.output.slice(0, 200))
+
           executor.recordResult(context.sessionID, {
             stepId: args.stepId,
             success: args.success,
@@ -1507,6 +1513,30 @@ const confidenceStore = new ConfidenceStore()
                   }
                 }
               } catch { /* non-fatal */ }
+            }
+          }
+
+          // ── Execution Trace: complete step ──
+          {
+            const traceId = `exec-${context.sessionID}`
+            const trace = memoryOrchestrator.getExecutionTrace(traceId)
+            const stepConfidence = confidenceStore.get(args.stepId)
+            memoryOrchestrator.completeStep(
+              traceId,
+              args.stepId,
+              args.success ? "success" : "failed",
+              args.error,
+              stepConfidence?.score,
+            )
+            if (trace) {
+              const modelId_ = llmEngine.getCurrentModel()
+              if (modelId_ && !trace.modelUsed) trace.modelUsed = modelId_
+              const budgetStates = budgetTracker.getState(["session"])
+              const budgetData = budgetStates.length > 0 ? budgetStates[0] : undefined
+              if (budgetData) {
+                trace.tokensUsed = budgetData.usage.totalTokens
+                trace.costUsd = budgetData.usage.totalCostUsd
+              }
             }
           }
 

@@ -248,6 +248,28 @@ export class AgentLoop {
         }
         const cs = this.confidenceScorer.score(signals)
         this.confidenceStore.set(node.id, cs)
+
+        // Gap #8: Confidence-based decision gates
+        // Non-blocking WARN for low confidence (0.2 <= overall < 0.4)
+        if (cs.overall < 0.4 && cs.overall >= 0.2) {
+          const warnMsg = `[Confidence Warning] Score ${cs.overall.toFixed(2)} < 0.4 — review recommended`
+          result.output = `${warnMsg}\n\n${result.output}`
+          console.warn(`[AgentLoop] ${warnMsg} for step ${node.id}`)
+        }
+        // Blocking FAIL for very low confidence (< 0.2)
+        if (cs.overall < 0.2) {
+          const isFinalStep = this.isAllCompleted(dagPlan, dagCtx)
+          if (isFinalStep) {
+            const failMsg = `[Confidence Block] Score ${cs.overall.toFixed(2)} < 0.2 — final step blocked`
+            result.success = false
+            result.output = `${failMsg}\n\n${result.output}`
+            console.warn(`[AgentLoop] ${failMsg} for step ${node.id}`)
+          } else {
+            const warnMsg = `[Confidence Block Warning] Score ${cs.overall.toFixed(2)} < 0.2 — intermediate step at risk`
+            result.output = `${warnMsg}\n\n${result.output}`
+            console.warn(`[AgentLoop] ${warnMsg} for step ${node.id}`)
+          }
+        }
       }
 
       // Record result in Executor (for backward compat)

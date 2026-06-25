@@ -440,6 +440,39 @@ export class LLMEngine {
     }
     // Priority 3: NO fallback — kalo gak ada override, SDK pake session default
 
+    // ── Cost-Aware Auto-Switch (Gap #8) ──
+    // Untuk task "quick" atau "unspecified-low", auto-switch ke model termurah
+    // yang punya reliability >= 70% dari primary model (threshold-based).
+    if (req.model && effectiveToolName) {
+      const category = TOOL_COMPLEXITY[effectiveToolName]
+      const isQuick = category === "quick" || category === "unspecified-low"
+      if (isQuick && this.modelRegistry) {
+        const currentModelStr = `${req.model.providerID}/${req.model.modelID}`
+        const currentScore = this.modelRegistry.getScore(currentModelStr)
+        const currentReliability = currentScore?.reliability ?? 0.5
+        const minRequiredReliability = currentReliability * 0.7 // >= 70% of primary
+
+        // Gather available models from fallback chain + current
+        const availableModels = [currentModelStr, ...(this.config.fallbackModels ?? [])]
+        const scored = availableModels
+          .map(m => ({ model: m, score: this.modelRegistry!.getScore(m) }))
+          .filter(s => s.score && s.score.totalCalls >= 3) // only models with sufficient data
+          .sort((a, b) => (a.score?.avgCostPerCall ?? Infinity) - (b.score?.avgCostPerCall ?? Infinity))
+
+        // Pick cheapest that meets reliability threshold
+        for (const candidate of scored) {
+          const candidateReliability = candidate.score?.reliability ?? 0
+          if (candidateReliability >= minRequiredReliability) {
+            const parsed = this.parseModelForSDK(candidate.model)
+            if (parsed && (parsed.providerID !== req.model.providerID || parsed.modelID !== req.model.modelID)) {
+              req.model = parsed
+            }
+            break // first (cheapest) match
+          }
+        }
+      }
+    }
+
     // Simpan model override sebelum call — dipake buat fallback tracking
     const explicitModel = req.model ? { ...req.model } : undefined
 

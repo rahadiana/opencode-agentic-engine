@@ -23,6 +23,36 @@ import type { SimulationInput } from "../core/simulation-engine.js"
 
 export type MemoryLevel = "working" | "episodic" | "semantic" | "procedural"
 
+/**
+ * ExecutionTrace — structured record of a step-by-step execution.
+ * Stored in procedural memory for querying past execution patterns.
+ * Paper ref: arXiv:2604.11378 (Graph Harness) — DAG-based execution tracking
+ */
+export interface ExecutionStep {
+  stepId: string
+  description: string
+  status: "pending" | "running" | "success" | "failed"
+  startedAt?: number
+  completedAt?: number
+  error?: string
+  retries: number
+  /** Confidence score at completion (Gap #2) */
+  confidence?: number
+}
+
+export interface ExecutionTrace {
+  id: string
+  sessionId: string
+  goal: string
+  steps: ExecutionStep[]
+  startedAt: number
+  completedAt?: number
+  outcome: "running" | "success" | "partial" | "failed"
+  tokensUsed?: number
+  costUsd?: number
+  modelUsed?: string
+}
+
 export interface MemoryEntry {
   id: string
   level: MemoryLevel
@@ -88,6 +118,10 @@ export class MemoryOrchestrator {
   private proceduralEntries: MemoryEntry[] = []
   /** Working entries stored via store() calls (transient, merged with session-derived entries) */
   private workingEntries: MemoryEntry[] = []
+  /** Execution traces — structured step-by-step records (Procedural depth) */
+  private executionTraces: ExecutionTrace[] = []
+  /** Max execution traces kept (LRU eviction) */
+  private readonly maxExecutionTraces = 200
 
   private maxImportanceEntries: number
 
@@ -153,6 +187,146 @@ export class MemoryOrchestrator {
     }
 
     this.indexImportance(entry.id, level, entry.importance)
+  }
+
+  // ── Execution Tracing (Procedural depth) ─────────────────────────
+
+  /**
+   * Record or update an execution trace.
+   * If a trace with the same ID already exists, updates it (for multi-step flows).
+   * Also stores a summary entry in procedural memory for cross-level querying.
+   *
+   * Paper ref: arXiv:2604.11378 (Graph Harness) — DAG execution tracking
+   * Paper ref: arXiv:2602.23720 (Auton) — Procedural memory for execution patterns
+   */
+  trackExecution(trace: ExecutionTrace): void {
+    const existing = this.executionTraces.findIndex(t => t.id === trace.id)
+    if (existing >= 0) {
+      this.executionTraces[existing] = trace
+    } else {
+      this.executionTraces.push(trace)
+    }
+
+    // Store a summary entry in procedural memory for cross-level querying
+    const stepSummary = trace.steps.map(s =>
+      `${s.stepId}:${s.status}${s.confidence !== undefined ? `@${(s.confidence * 100).toFixed(0)}%` : ""}`
+    ).join(", ")
+    this.store("procedural", {
+      id: `exec-${trace.id}`,
+      content: `Execution: ${trace.goal} — ${trace.outcome} (${trace.steps.filter(s => s.status === "success").length}/${trace.steps.length} steps) [${stepSummary}]`,
+      keywords: [...trace.goal.split(/\s+/).filter(w => w.length > 3), trace.outcome, "execution_trace"],
+      importance: trace.outcome === "success" ? 0.9 : trace.outcome === "partial" ? 0.6 : 0.3,
+      sourceSession: trace.sessionId,
+      metadata: {
+        type: "execution_trace",
+        stepCount: trace.steps.length,
+        outcome: trace.outcome,
+        tokensUsed: trace.tokensUsed,
+        costUsd: trace.costUsd,
+        modelUsed: trace.modelUsed,
+      },
+    })
+
+    // LRU eviction if over limit
+    if (this.executionTraces.length > this.maxExecutionTraces) {
+      const sorted = [...this.executionTraces].sort((a, b) =>
+        (a.completedAt ?? a.startedAt) - (b.completedAt ?? b.startedAt)
+      )
+      this.executionTraces = sorted.slice(-this.maxExecutionTraces)
+    }
+  }
+
+  /** Get a specific execution trace by ID. */
+  getExecutionTrace(id: string): ExecutionTrace | undefined {
+    return this.executionTraces.find(t => t.id === id)
+  }
+
+  /** Get all execution traces for a session. */
+  getSessionTraces(sessionId: string): ExecutionTrace[] {
+    return this.executionTraces.filter(t => t.sessionId === sessionId)
+  }
+
+  /** Get all execution traces. */
+  getAllTraces(): ExecutionTrace[] {
+    return [...this.executionTraces]
+  }
+
+  /** Create a new step within a trace. If trace doesn't exist, creates it. */
+  beginStep(traceId: string, sessionId: string, goal: string, stepId: string, description: string): void {
+    let trace = this.executionTraces.find(t => t.id === traceId)
+    if (!trace) {
+      trace = {
+        id: traceId,
+        sessionId,
+        goal,
+        steps: [],
+        startedAt: Date.now(),
+        outcome: "running",
+      }
+      this.executionTraces.push(trace)
+    }
+    // Remove old step with same ID if exists (re-run)
+    const existingIdx = trace.steps.findIndex(s => s.stepId === stepId)
+    if (existingIdx >= 0) {
+      trace.steps.splice(existingIdx, 1)
+    }
+    trace.steps.push({
+      stepId,
+      description,
+      status: "running",
+      startedAt: Date.now(),
+      retries: 0,
+    })
+  }
+
+  /** Complete a step within a trace. */
+  completeStep(
+    traceId: string,
+    stepId: string,
+    status: "success" | "failed",
+    error?: string,
+    confidence?: number,
+  ): void {
+    const trace = this.executionTraces.find(t => t.id === traceId)
+    if (!trace) return
+
+    const step = trace.steps.find(s => s.stepId === stepId)
+    if (!step) return
+
+    step.status = status
+    step.completedAt = Date.now()
+    if (error) step.error = error
+    if (confidence !== undefined) step.confidence = confidence
+
+    // Update trace outcome
+    const allDone = trace.steps.every(s => s.status === "success" || s.status === "failed")
+    if (allDone) {
+      trace.completedAt = Date.now()
+      const successCount = trace.steps.filter(s => s.status === "success").length
+      if (successCount === trace.steps.length) {
+        trace.outcome = "success"
+      } else if (successCount > 0) {
+        trace.outcome = "partial"
+      } else {
+        trace.outcome = "failed"
+      }
+      // Re-store summary with final outcome
+      this.store("procedural", {
+        id: `exec-${trace.id}`,
+        content: `Execution: ${trace.goal} — ${trace.outcome} (${successCount}/${trace.steps.length} steps)`,
+        keywords: [...trace.goal.split(/\s+/).filter(w => w.length > 3), trace.outcome, "execution_trace"],
+        importance: trace.outcome === "success" ? 0.9 : trace.outcome === "partial" ? 0.6 : 0.3,
+        sourceSession: trace.sessionId,
+        metadata: {
+          type: "execution_trace",
+          stepCount: trace.steps.length,
+          outcome: trace.outcome,
+          tokensUsed: trace.tokensUsed,
+          costUsd: trace.costUsd,
+          modelUsed: trace.modelUsed,
+        },
+      })
+    }
   }
 
   // ── Query ────────────────────────────────────────────────────────
@@ -653,6 +827,7 @@ export class MemoryOrchestrator {
     semantic: number
     procedural: number
     totalIndexed: number
+    executionTraces: number
   } {
     return {
       working: this.workingMem.getActiveSessions().length,
@@ -660,6 +835,7 @@ export class MemoryOrchestrator {
       semantic: this.semanticEntries.length,
       procedural: this.proceduralEntries.length,
       totalIndexed: this.importanceIndex.size,
+      executionTraces: this.executionTraces.length,
     }
   }
 }
