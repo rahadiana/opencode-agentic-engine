@@ -8855,6 +8855,145 @@ function tv_assert(cond, msg) { if (cond) { tv++ } else { console.error(`  ❌ $
 console.log(`  TV: ${tv} passed, ${tvf} failed`)
 passed += tv; failed += tvf
 
+// ── StateStore Tests ──
+// SS: Unified data layer — single source of truth
+let ss = 0, ssf = 0
+function ss_assert(cond, msg) { if (cond) { ss++ } else { console.error(`  ❌ ${msg}`); ssf++ } }
+{
+  const { StateStore } = mod
+  const fsMod = await import("fs")
+  const tmpDir = `/tmp/ss-test-${Date.now()}`
+  const tmpGlobalDir = `${tmpDir}-global`
+  fsMod.mkdirSync(tmpDir, { recursive: true })
+  fsMod.mkdirSync(tmpGlobalDir, { recursive: true })
+
+  // SS-1: Constructor + basic get/set
+  const store = new StateStore({ worktree: tmpDir, globalDir: tmpGlobalDir })
+  ss_assert(typeof store.get === "function", "SS-1a get exported")
+  ss_assert(typeof store.set === "function", "SS-1b set exported")
+  ss_assert(typeof store.getAll === "function", "SS-1c getAll exported")
+  ss_assert(typeof store.delete === "function", "SS-1d delete exported")
+
+  // SS-2: Set lalu Get (read-after-write)
+  store.set("session", "test-key", { hello: "world", num: 42 })
+  const val = store.get("session", "test-key")
+  ss_assert(val?.hello === "world", "SS-2a get returns set data")
+  ss_assert(val?.num === 42, "SS-2b numeric field preserved")
+  ss_assert(typeof val?.hello === "string", "SS-2c type preserved")
+
+  // SS-3: Get non-existent key returns null
+  const missing = store.get("session", "nonexistent")
+  ss_assert(missing === null, "SS-3a missing key returns null")
+
+  // SS-4: Delete entry
+  store.set("session", "delete-me", { data: "to-delete" })
+  ss_assert(store.get("session", "delete-me") !== null, "SS-4a exists before delete")
+  const deleted = store.delete("session", "delete-me")
+  ss_assert(deleted === true, "SS-4b delete returns true")
+  ss_assert(store.get("session", "delete-me") === null, "SS-4c gone after delete")
+
+  // SS-5: Delete non-existent returns false
+  const delMissing = store.delete("session", "i-dont-exist")
+  ss_assert(delMissing === false, "SS-5a delete missing returns false")
+
+  // SS-6: getAll returns all entries
+  store.set("session", "a1", { id: 1 })
+  store.set("session", "a2", { id: 2 })
+  store.set("session", "a3", { id: 3 })
+  const all = store.getAll("session")
+  ss_assert(all.length >= 3, "SS-6a getAll returns 3+ entries")
+  const ids = all.map(e => e.data.id).filter(x => x !== undefined)
+  ss_assert(ids.includes(1) && ids.includes(2) && ids.includes(3), "SS-6b all entries present")
+
+  // SS-7: Namespace isolation
+  store.set("rag", "rag-1", { content: "rag data" })
+  store.set("skills", "sk-1", { content: "skill data" })
+  const ragData = store.get("rag", "rag-1")
+  const skillData = store.get("skills", "sk-1")
+  ss_assert(ragData?.content === "rag data", "SS-7a rag namespace isolated")
+  ss_assert(skillData?.content === "skill data", "SS-7b skills namespace isolated")
+  ss_assert(store.get("rag", "sk-1") === null, "SS-7c cross-namespace leak prevented")
+
+  // SS-8: Persistence across instances (file = memory)
+  const store2 = new StateStore({ worktree: tmpDir, globalDir: tmpGlobalDir })
+  const val2 = store2.get("session", "test-key")
+  ss_assert(val2?.hello === "world", "SS-8a data persists across instances")
+  ss_assert(val2?.num === 42, "SS-8b numeric persists")
+
+  // SS-9: reload() re-reads from disk
+  store.set("session", "pre-reload", { ok: true })
+  // Direct file write (simulate external change)
+  const filePath2 = `${tmpDir}/.agentic/store/session/pre-reload.json`
+  const raw2 = fsMod.readFileSync(filePath2, "utf8")
+  const parsed2 = JSON.parse(raw2)
+  parsed2.data.ok = false
+  parsed2.data.modified = true
+  fsMod.writeFileSync(filePath2, JSON.stringify(parsed2))
+  // Cache still has old value
+  ss_assert(store.get("session", "pre-reload")?.ok === true, "SS-9a cache has old value before reload")
+  // Reload
+  store.reload("session")
+  ss_assert(store.get("session", "pre-reload")?.ok === false, "SS-9b after reload gets new value")
+  ss_assert(store.get("session", "pre-reload")?.modified === true, "SS-9c modified field visible after reload")
+
+  // SS-10: keys() returns all keys
+  const keys = store.keys("session")
+  ss_assert(keys.includes("test-key"), "SS-10a keys includes test-key")
+  ss_assert(keys.includes("a1"), "SS-10b keys includes a1")
+
+  // SS-11: stats() returns info
+  const stats = store.stats("session")
+  ss_assert(stats.entries > 0, "SS-11a entries > 0")
+  ss_assert(stats.loaded === true, "SS-11b loaded = true")
+
+  // SS-12: Overwrite existing key
+  store.set("session", "overwrite-test", { version: 1 })
+  ss_assert(store.get("session", "overwrite-test")?.version === 1, "SS-12a version 1 set")
+  store.set("session", "overwrite-test", { version: 2, updated: true })
+  const overwritten = store.get("session", "overwrite-test")
+  ss_assert(overwritten?.version === 2, "SS-12b version 2 overwrites")
+  ss_assert(overwritten?.updated === true, "SS-12c new field present after overwrite")
+
+  // SS-13: Empty namespace
+  const emptyStore = new StateStore({ worktree: `/tmp/ss-empty-${Date.now()}`, globalDir: `/tmp/ss-empty-global-${Date.now()}` })
+  ss_assert(emptyStore.getAll("session").length === 0, "SS-13a empty namespace returns []")
+  ss_assert(emptyStore.keys("session").length === 0, "SS-13b empty keys returns []")
+  ss_assert(emptyStore.get("session", "x") === null, "SS-13c get on empty returns null")
+
+  // SS-14: Complex nested data
+  store.set("rag", "complex", {
+    nested: { level1: { level2: "deep" } },
+    array: [1, 2, { three: 3 }],
+    bool: true,
+    null_val: null,
+  })
+  const complex = store.get("rag", "complex")
+  ss_assert(complex?.nested?.level1?.level2 === "deep", "SS-14a nested object preserved")
+  ss_assert(complex?.array?.[2]?.three === 3, "SS-14b array with object preserved")
+  ss_assert(complex?.bool === true, "SS-14c boolean preserved")
+  ss_assert(complex?.null_val === null, "SS-14d null preserved")
+
+  // SS-15: Large number of entries
+  for (let i = 0; i < 100; i++) {
+    store.set("session", `bulk-${i}`, { index: i })
+  }
+  const bulkAll = store.getAll("session")
+  const bulkEntries = bulkAll.filter(e => e.key.startsWith("bulk-"))
+  ss_assert(bulkEntries.length === 100, "SS-15a 100 bulk entries stored")
+
+  // Cleanup: remove temp dir
+  try {
+    fsMod.rmSync(tmpDir, { recursive: true, force: true })
+  } catch { /* best effort */ }
+  try {
+    fsMod.rmSync(tmpGlobalDir, { recursive: true, force: true })
+  } catch { /* best effort */ }
+
+  ss_assert(true, "SS-DONE StateStore tests complete")
+}
+console.log(`  SS: ${ss} passed, ${ssf} failed`)
+passed += ss; failed += ssf
+
 // ── WorkflowEngine Tests ──
 // WE: Event-driven tool chaining
 let we = 0, wef = 0
