@@ -6362,3 +6362,4 @@ export { ConstraintManifold, type ConstraintViolation, type ConstraintCheck, typ
 export { type SkillLifecycleStage, type MaturationCriteria } from "./memory/skill-store.js"
 export { LLMEngine, type LLMConfig, type LLMRequest, type LLMResponse, TOOL_COMPLEXITY } from "./core/llm.js"
 export { ModelRegistry, type ModelStats, type ModelScore } from "./core/model-registry.js"
+export { ConfidenceScorer, ConfidenceStore, type ConfidenceScore, type ConfidenceDimensions, type ScoringSignals, type StepConfidenceRecord } from "./core/confidence-scorer.js"

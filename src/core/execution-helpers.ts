@@ -138,6 +138,13 @@ export interface CompletionRecord {
   role?: string
   /** If true, skip skill extraction even for developer (e.g., empty output) */
   skipSkillExtract?: boolean
+  /** Confidence scoring signals (Gap #2) */
+  compileResult?: { passed: boolean; output?: string }
+  testResult?: { passed: boolean; total?: number; passedCount?: number; output?: string }
+  lintResult?: { passed: boolean; output?: string }
+  semanticResult?: { passed: boolean; issues?: string[]; output?: string }
+  techDebtScore?: { overall: "low" | "medium" | "high" | "critical" }
+  modelReliability?: number
 }
 
 export interface CompletionResult {
@@ -199,11 +206,17 @@ export async function recordCompletion(
     }
   }
 
-  // 2b. Confidence scoring (Gap #2) — uses guard result + other available signals
+  // 2b. Confidence scoring (Gap #2) — multi-dimensional signals
   if (deps.confidenceScorer && deps.confidenceStore) {
     const signals: ScoringSignals = {
       stepId: record.stepId ?? record.taskId ?? "unknown",
       guardResult,
+      compileResult: record.compileResult,
+      testResult: record.testResult,
+      lintResult: record.lintResult,
+      semanticResult: record.semanticResult,
+      techDebtScore: record.techDebtScore,
+      modelReliability: record.modelReliability,
     }
     confidenceScore_ = deps.confidenceScorer.score(signals)
     deps.confidenceStore.set(record.stepId ?? record.taskId ?? "unknown", confidenceScore_)

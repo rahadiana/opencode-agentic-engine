@@ -6908,6 +6908,88 @@ const assertA2A = (cond, msg) => { if (cond) a2a++; else { a2af++; console.error
 console.log(`  A2A: ${a2a} passed, ${a2af} failed`)
 passed += a2a; failed += a2af
 
+// ── Confidence Scorer Tests (Gap #2) ──
+console.log("\n[CS] ConfidenceScorer — scoring, store, edge cases")
+let csp2 = 0, csf2 = 0
+function assertCS2(cond, msg) {
+  if (cond) { console.log(`  PASS: ${msg}`); csp2++ } else { console.error(`  FAIL: ${msg}`); csf2++ }
+}
+{
+  const { ConfidenceScorer: CS, ConfidenceStore: CStore } = await import(pluginDist)
+
+  const cs = new CS()
+  // Full signals
+  const fullScore = cs.score({
+    stepId: "step-1", modelName: "gpt-4o",
+    compileResult: { passed: true },
+    guardResult: { passed: true, claims: [{ verified: true }, { verified: true }, { verified: false }] },
+    testResult: { passed: true, total: 10, passedCount: 9 },
+    lintResult: { passed: true },
+    semanticResult: { passed: true },
+    techDebtScore: { overall: "low" },
+    modelReliability: 0.95,
+  })
+  assertCS2(fullScore.overall > 0.8, "CS-1a: full score > 0.8")
+  assertCS2(fullScore.passed === true, "CS-1b: passed=true when over threshold")
+  assertCS2(fullScore.dimensions.compileCheck === 1, "CS-1c: compile dim = 1")
+  assertCS2(Math.abs(fullScore.dimensions.hallucinationCheck - 2/3) < 0.001, "CS-1d: guard dim = 2/3")
+  assertCS2(fullScore.provenance.length === 7, "CS-1e: all 7 signals have provenance")
+
+  // Empty signals (conservative)
+  const emptyScore = cs.score({ stepId: "step-empty" })
+  assertCS2(emptyScore.overall < 0.3, "CS-2a: empty score < 0.3")
+  assertCS2(emptyScore.passed === false, "CS-2b: passed=false when no signals")
+
+  // Custom threshold
+  const strict = new CS(undefined, 0.9)
+  const borderline = strict.score({ stepId: "step-b", compileResult: { passed: true }, guardResult: { passed: true, claims: [{ verified: true }] } })
+  assertCS2(borderline.passed === false, "CS-3a: borderline fails with 0.9 threshold")
+
+  // Custom weights
+  const weighted = new CS({ compileCheck: 0.5, hallucinationCheck: 0.5 })
+  const wScore = weighted.score({ stepId: "step-w", compileResult: { passed: true }, guardResult: { passed: false, claims: [{ verified: false }] } })
+  assertCS2(Math.abs(wScore.overall - 0.525) < 0.001, "CS-4a: 50/50 weights = 0.525")
+
+  // ConfidenceStore
+  const store = new CStore()
+  assertCS2(store.size === 0, "CS-5a: empty store")
+  store.set("step-1", fullScore)
+  assertCS2(store.size === 1, "CS-5b: store has 1 entry")
+  assertCS2(store.get("step-1")?.stepId === "step-1", "CS-5c: get returns correct entry")
+
+  const low = cs.score({ stepId: "step-low", compileResult: { passed: false } })
+  store.set("step-low", low)
+  const lowConf = store.getLowConfidence()
+  assertCS2(lowConf.length >= 1, "CS-6a: at least 1 low confidence step")
+  assertCS2(lowConf.some(r => r.stepId === "step-low"), "CS-6b: step-low is low confidence")
+  const sorted = store.getSorted()
+  assertCS2(sorted[0].score >= sorted[1].score, "CS-6c: sorted highest first")
+  assertCS2(store.getAverage() > 0, "CS-6d: average > 0")
+  store.clear()
+  assertCS2(store.size === 0, "CS-6e: clear works")
+
+  // Edge cases
+  const noClaimsScore = cs.score({ stepId: "step-nc", compileResult: { passed: true }, guardResult: { passed: true, claims: [] } })
+  assertCS2(noClaimsScore.dimensions.hallucinationCheck === 1, "CS-7a: no claims = 1.0")
+  const noTests = cs.score({ stepId: "step-nt", testResult: { passed: true } })
+  assertCS2(noTests.dimensions.testPassRate === 1, "CS-7b: no test details, passed=true = 1.0")
+  const failedTests = cs.score({ stepId: "step-ft", testResult: { passed: false, total: 5, passedCount: 2 } })
+  assertCS2(Math.abs(failedTests.dimensions.testPassRate - 0.4) < 0.001, "CS-7c: failed tests 2/5 = 0.4")
+
+  const debtLevels = [
+    { overall: "low", expected: 1.0 },
+    { overall: "medium", expected: 0.7 },
+    { overall: "high", expected: 0.3 },
+    { overall: "critical", expected: 0.0 },
+  ]
+  for (const { overall, expected } of debtLevels) {
+    const s = cs.score({ stepId: "step-dt", techDebtScore: { overall } })
+    assertCS2(Math.abs(s.dimensions.techDebtImpact - expected) < 0.001, `CS-7d: debt ${overall} = ${expected}`)
+  }
+}
+console.log(`  CS: ${csp2} passed, ${csf2} failed`)
+passed += csp2; failed += csf2
+
 // ── Multi-Provider Auto Fallback Tests ──
 console.log("\n[MPF] Multi-Provider Auto Fallback — LLMEngine fallback chain")
 let mpf = 0, mpff = 0

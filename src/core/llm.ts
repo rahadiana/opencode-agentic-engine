@@ -585,6 +585,23 @@ export class LLMEngine {
       this._lastKnownModel = effectiveModel
     }
 
+    // ── Extract token usage ──
+    const tInput = response.usage?.promptTokens ?? 0
+    const tOutput = response.usage?.completionTokens ?? 0
+    const tReasoning = response.usage?.reasoningTokens ?? 0
+    const tCacheRead = response.usage?.cacheReadTokens ?? 0
+    const tCacheWrite = response.usage?.cacheWriteTokens ?? 0
+
+    // ── Calculate cost using per-model prices ──
+    const modelForCost = effectiveModel ?? "unknown"
+    const price = this.budgetTracker?.lookupPrice(modelForCost) ?? { input: 2.5, output: 10, cacheRead: 0.3, cacheWrite: 2.5 }
+    const cost = (
+      (tInput / 1000) * price.input +
+      ((tOutput + tReasoning) / 1000) * price.output +
+      (tCacheRead / 1000) * price.cacheRead +
+      (tCacheWrite / 1000) * price.cacheWrite
+    )
+
     // ── Record successful call to registry ──
     // Note: failures are already recorded in the fallback loop above.
     // We only record the final success here to avoid double-counting.
@@ -592,15 +609,10 @@ export class LLMEngine {
       ? this.sessionStore.getOrCreate(this.pluginSessionId).currentTaskType
       : undefined
     if (success && effectiveModel) {
-      this.modelRegistry?.recordCall(effectiveModel, true, latency, taskType)
+      this.modelRegistry?.recordCall(effectiveModel, true, latency, taskType, cost)
     }
 
     // Feed token usage to BudgetTracker
-    const tInput = response.usage?.promptTokens ?? 0
-    const tOutput = response.usage?.completionTokens ?? 0
-    const tReasoning = response.usage?.reasoningTokens ?? 0
-    const tCacheRead = response.usage?.cacheReadTokens ?? 0
-    const tCacheWrite = response.usage?.cacheWriteTokens ?? 0
     if (success && this.budgetTracker) {
       this.budgetTracker.recordTokens(effectiveModel ?? "unknown", tInput, tOutput, tReasoning, tCacheRead, tCacheWrite)
     }
@@ -612,7 +624,6 @@ export class LLMEngine {
 
     // Emit llm.response event
     if (this.eventBus) {
-      const cost = (tInput * 2.5 + tOutput * 10 + tReasoning * 10 + tCacheRead * 0.3 + tCacheWrite * 2.5) / 1_000_000
       this.eventBus.emit({
         type: "llm.response" as const,
         payload: {

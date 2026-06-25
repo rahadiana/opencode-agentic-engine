@@ -19,6 +19,7 @@ import { BudgetTracker } from "./budget-tracker.js"
 import type { Planner } from "./planner.js"
 import { TimeoutError } from "./errors.js"
 import { DAGEngine, type DAGPlan, type DAGExecutionContext, type DAGNode } from "./dag-engine.js"
+import { ConfidenceScorer, ConfidenceStore, type ScoringSignals } from "./confidence-scorer.js"
 
 export interface AgentLoopConfig {
   maxIterations: number
@@ -52,6 +53,9 @@ export class AgentLoop {
   private budgetTracker?: BudgetTracker
   private planner?: Planner
   private replannedSteps = new Set<string>()
+  /** Confidence scoring (Gap #2) */
+  private confidenceScorer?: ConfidenceScorer
+  private confidenceStore?: ConfidenceStore
 
   /** DAG Engine — the new execution core (Phase 1B) */
   private dagEngine: DAGEngine
@@ -81,6 +85,11 @@ export class AgentLoop {
 
   setPlanner(planner: Planner): void {
     this.planner = planner
+  }
+
+  setConfidenceScorer(scorer: ConfidenceScorer, store: ConfidenceStore): void {
+    this.confidenceScorer = scorer
+    this.confidenceStore = store
   }
 
   addObserver(observer: LoopObserver): void {
@@ -227,6 +236,18 @@ export class AgentLoop {
             result.output = `Criteria check: ${criteriaResult.output}`
           }
         }
+      }
+
+      // Gap #2: Confidence scoring — assess output quality from verification signals
+      if (this.confidenceScorer && this.confidenceStore && result.success) {
+        const signals: ScoringSignals = {
+          stepId: node.id,
+          compileResult: { passed: result.success },
+          guardResult: result.filesModified.length > 0 ? { passed: true, claims: [] } : undefined,
+          modelReliability: 0.5,
+        }
+        const cs = this.confidenceScorer.score(signals)
+        this.confidenceStore.set(node.id, cs)
       }
 
       // Record result in Executor (for backward compat)

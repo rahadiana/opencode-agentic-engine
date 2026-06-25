@@ -381,7 +381,7 @@ export class BudgetTracker {
     return entry
   }
 
-  private lookupPrice(modelId: string): ModelPriceEntry {
+  lookupPrice(modelId: string): ModelPriceEntry {
     const price = this.modelPrices[modelId]
     if (price) return price
 

@@ -12,6 +12,10 @@ export interface ModelStats {
   byTaskType?: Record<string, Omit<ModelStats, 'model' | 'byTaskType'>>
   /** User satisfaction per task type — dari feedback positive/negative */
   userFeedback?: Record<string, { positive: number; negative: number }>
+  /** Cost-aware routing: accumulated USD cost */
+  totalCost?: number
+  /** Running average cost per call in USD */
+  avgCostPerCall?: number
 }
 
 export interface ModelScore {
@@ -20,6 +24,8 @@ export interface ModelScore {
   hallucinationRate: number
   totalCalls: number
   status: "healthy" | "degraded" | "unstable"
+  /** Cost-aware routing: average cost per call in USD */
+  avgCostPerCall?: number
 }
 
 export class ModelRegistry {
@@ -51,14 +57,21 @@ export class ModelRegistry {
         consecutiveSuccesses: 0,
         quarantineUntil: 0,
         byTaskType: {},
+        totalCost: 0,
+        avgCostPerCall: 0,
       })
     }
   }
 
-  recordCall(model: string, success: boolean, latencyMs: number, taskType?: string): void {
+  recordCall(model: string, success: boolean, latencyMs: number, taskType?: string, costUsd?: number): void {
     this.addModel(model)
     const stat = this.stats.get(model)!
     stat.totalCalls++
+    // Track cost for routing decisions
+    if (costUsd !== undefined && costUsd > 0) {
+      stat.totalCost = (stat.totalCost ?? 0) + costUsd
+      stat.avgCostPerCall = stat.totalCost / stat.totalCalls
+    }
     stat.lastUsed = Date.now()
 
     if (success) {
@@ -164,6 +177,7 @@ export class ModelRegistry {
         hallucinationRate: 0,
         totalCalls: 0,
         status: "healthy",
+        avgCostPerCall: stat?.avgCostPerCall,
       }
     }
 
@@ -175,7 +189,7 @@ export class ModelRegistry {
     if (stat.consecutiveFailures >= this.maxConsecutiveFailures) status = "degraded"
     if (hallucinationRate > 0.3 || successRate < 0.4) status = "unstable"
 
-    return { model, reliability, hallucinationRate, totalCalls: stat.totalCalls, status }
+    return { model, reliability, hallucinationRate, totalCalls: stat.totalCalls, status, avgCostPerCall: stat.avgCostPerCall }
   }
 
   getScoreByTaskType(model: string, taskType: string): ModelScore | null {
@@ -187,6 +201,7 @@ export class ModelRegistry {
         hallucinationRate: 0,
         totalCalls: 0,
         status: "healthy",
+        avgCostPerCall: stat?.avgCostPerCall,
       }
     }
 
@@ -198,6 +213,7 @@ export class ModelRegistry {
         hallucinationRate: 0,
         totalCalls: 0,
         status: "healthy",
+        avgCostPerCall: stat.avgCostPerCall,
       }
     }
 
@@ -209,7 +225,7 @@ export class ModelRegistry {
     if (taskStat.consecutiveFailures >= this.maxConsecutiveFailures) status = "degraded"
     if (hallucinationRate > 0.3 || successRate < 0.4) status = "unstable"
 
-    return { model, reliability, hallucinationRate, totalCalls: taskStat.totalCalls, status }
+    return { model, reliability, hallucinationRate, totalCalls: taskStat.totalCalls, status, avgCostPerCall: stat.avgCostPerCall }
   }
 
   getAllScores(): ModelScore[] {
@@ -295,7 +311,7 @@ export class ModelRegistry {
         const resolvedModels = this.resolveAlias(model)
         if (resolvedModels.length === 0) return { model, score: null, blocked: false, userSat: 0.5 }
         
-        const bestResolved = resolvedModels
+        const resolvedObjs = resolvedModels
           .map(m => {
             const blockStatus = blockingConfig 
               ? this.isBlocked(m, blockingConfig)
@@ -308,19 +324,25 @@ export class ModelRegistry {
             }
           })
           .filter(s => !s.blocked)
-          .sort((a, b) => {
-            // Pertimbangkan user satisfaction (60%) + technical reliability (40%)
-            const aScore = a.userSat * 0.6 + (a.score?.reliability ?? 0.5) * 0.4
-            const bScore = b.userSat * 0.6 + (b.score?.reliability ?? 0.5) * 0.4
-            return bScore - aScore
-          })[0]
+        // Cost-aware scoring: userSat (40%) + reliability (35%) + cost inverse (25%)
+        const maxCost = resolvedObjs.reduce((max, o) => Math.max(max, o.score?.avgCostPerCall ?? 0), 0.001)
+        const bestResolved = resolvedObjs.sort((a, b) => {
+          const aCostNormalized = 1 - ((a.score?.avgCostPerCall ?? 0) / maxCost)
+          const bCostNormalized = 1 - ((b.score?.avgCostPerCall ?? 0) / maxCost)
+          const aScore = a.userSat * 0.4 + (a.score?.reliability ?? 0.5) * 0.35 + aCostNormalized * 0.25
+          const bScore = b.userSat * 0.4 + (b.score?.reliability ?? 0.5) * 0.35 + bCostNormalized * 0.25
+          return bScore - aScore
+        })[0]
         
         return bestResolved
       })
       .filter(s => s && s.score !== null)
       .sort((a, b) => {
-        const aScore = a.userSat * 0.6 + (a.score?.reliability ?? 0.5) * 0.4
-        const bScore = b.userSat * 0.6 + (b.score?.reliability ?? 0.5) * 0.4
+        const maxCost = scored.reduce((max, m) => Math.max(max, m?.score?.avgCostPerCall ?? 0), 0.001)
+        const aCostNormalized = 1 - ((a.score?.avgCostPerCall ?? 0) / maxCost)
+        const bCostNormalized = 1 - ((b.score?.avgCostPerCall ?? 0) / maxCost)
+        const aScore = a.userSat * 0.4 + (a.score?.reliability ?? 0.5) * 0.35 + aCostNormalized * 0.25
+        const bScore = b.userSat * 0.4 + (b.score?.reliability ?? 0.5) * 0.35 + bCostNormalized * 0.25
         return bScore - aScore
       })
 
@@ -436,7 +458,8 @@ export class ModelRegistry {
 
     return scores.map(s => {
       const icon = s.status === "healthy" ? "✅" : s.status === "degraded" ? "⚠️" : "❌"
-      return `${icon} **${s.model}** — reliability: ${(s.reliability * 100).toFixed(0)}%, hallucinations: ${(s.hallucinationRate * 100).toFixed(0)}%, calls: ${s.totalCalls}`
+      const costStr = s.avgCostPerCall !== undefined ? `, avg $${(s.avgCostPerCall * 1000).toFixed(2)}/1K calls` : ""
+      return `${icon} **${s.model}** — reliability: ${(s.reliability * 100).toFixed(0)}%, hallucinations: ${(s.hallucinationRate * 100).toFixed(0)}%, calls: ${s.totalCalls}${costStr}`
     }).join("\n")
   }
 

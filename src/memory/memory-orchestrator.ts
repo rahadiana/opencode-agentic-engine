@@ -86,6 +86,8 @@ export class MemoryOrchestrator {
   /** Semantic/procedural entries gak disimpan di session/episodic store — di sini */
   private semanticEntries: MemoryEntry[] = []
   private proceduralEntries: MemoryEntry[] = []
+  /** Working entries stored via store() calls (transient, merged with session-derived entries) */
+  private workingEntries: MemoryEntry[] = []
 
   private maxImportanceEntries: number
 
@@ -135,7 +137,9 @@ export class MemoryOrchestrator {
 
     switch (level) {
       case "working":
-        // Working memory is handled by SessionStore — just index it
+        // Working memory: store in a transient list so store() calls don't lose data
+        // These entries are merged with session-derived entries in getEntriesByLevel()
+        this.workingEntries.push(entry)
         break
       case "episodic":
         // Episodic memory tracks sessions — handled by EpisodicStore
@@ -517,8 +521,7 @@ export class MemoryOrchestrator {
   private getEntriesByLevel(level: MemoryLevel): MemoryEntry[] {
     switch (level) {
       case "working":
-        // Working memory = session store sessions — convert to entries
-        return []  // Skip for now — too dynamic
+        return [...this.workingEntries, ...this.sessionToEntries()]
       case "episodic":
         return this.episodicStore.getAll().map(ep => this.episodeToEntry(ep))
       case "semantic":
@@ -526,6 +529,47 @@ export class MemoryOrchestrator {
       case "procedural":
         return this.proceduralEntries
     }
+  }
+
+  /** Convert active sessions to MemoryEntries for working memory queries */
+  private sessionToEntries(): MemoryEntry[] {
+    const entries: MemoryEntry[] = []
+    const sessions = this.workingMem.getActiveSessions()
+    for (const session of sessions) {
+      // Entry dari session plan/goal
+      if (session.plan?.intent?.goal) {
+        entries.push({
+          id: `working-${session.sessionId}-plan`,
+          level: "working",
+          content: `Goal: ${session.plan.intent.goal}`,
+          keywords: session.plan.intent.goal.split(/\s+/).filter(w => w.length > 3),
+          importance: 1.0,
+          createdAt: Date.now(),
+          lastAccessed: Date.now(),
+          accessCount: 0,
+          sourceSession: session.sessionId,
+          metadata: { type: "plan", domain: session.currentDomain },
+        })
+      }
+      // Entry dari recent turns (last 10)
+      const recentTurns = session.turns.slice(-10)
+      for (const turn of recentTurns) {
+        const contentPreview = turn.content.slice(0, 200)
+        entries.push({
+          id: `working-${session.sessionId}-turn-${turn.timestamp}`,
+          level: "working",
+          content: `[${turn.role}] ${contentPreview}`,
+          keywords: contentPreview.split(/\s+/).filter(w => w.length > 3).slice(0, 8),
+          importance: 0.8,
+          createdAt: turn.timestamp,
+          lastAccessed: Date.now(),
+          accessCount: 1,
+          sourceSession: session.sessionId,
+          metadata: { type: "turn", role: turn.role },
+        })
+      }
+    }
+    return entries
   }
 
   private episodeToEntry(ep: Episode): MemoryEntry {
