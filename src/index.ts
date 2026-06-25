@@ -1635,6 +1635,8 @@ const confidenceStore = new ConfidenceStore()
             const taskType = sessionStore.getOrCreate(context.sessionID).currentTaskType
             if (currentModel && taskType) {
               modelRegistry.recordUserFeedback(currentModel, taskType, isPositive)
+              // Persist immediately so feedback survives restart
+              persistence.save("models", "registry", modelRegistry.toJSON())
               response += `  Model feedback: \`${currentModel}\` untuk task \`${taskType}\` → ${isPositive ? "✅" : "❌"}\n`
             }
 

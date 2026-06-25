@@ -46,6 +46,8 @@ export interface LLMConfig {
 /**
  * Cost-aware auto-switch configuration.
  * Controls when the engine automatically switches to cheaper models.
+ * User satisfaction feedback (from agentic_execute feedback) is also considered —
+ * models with low user satisfaction are deprioritized even if they meet cost/reliability.
  */
 export interface CostAutoSwitchConfig {
   /** Enable cost-aware auto-switch (default: true) */
@@ -56,6 +58,13 @@ export interface CostAutoSwitchConfig {
    * Default: 0.5
    */
   minReliability: number
+  /**
+   * Minimum user satisfaction threshold (0.0-1.0).
+   * Models with satisfaction below this threshold are deprioritized
+   * even if they meet cost/reliability criteria.
+   * Default: 0.3
+   */
+  minUserSatisfaction: number
   /**
    * Maximum cost per call in USD before forced switch.
    * If the primary model's avgCostPerCall exceeds this, switch to cheaper.
@@ -195,6 +204,7 @@ export class LLMEngine {
       costAutoSwitch: config.costAutoSwitch ?? {
         enabled: true,
         minReliability: 0.5,
+        minUserSatisfaction: 0.3,
         maxCostPerCall: 0.01,
         budgetTightMultiplier: 0.5,
         categories: ["quick", "unspecified-low"],
@@ -513,13 +523,14 @@ export class LLMEngine {
     }
     // Priority 3: NO fallback — kalo gak ada override, SDK pake session default
 
-    // ── Cost-Aware Auto-Switch (Gap #8) ──
-    // Auto-switch to cheapest model that meets minimum reliability threshold.
+    // ── Cost- & Satisfaction-Aware Auto-Switch (Gap #8 + Feedback Loop) ──
+    // Auto-switch to best model balancing: cost + reliability + user satisfaction.
     // Supports all tool categories (default: quick + unspecified-low).
     // Budget-aware: tightens threshold when budget > 80% utilized.
+    // User satisfaction from feedback loop: models with low satisfaction are deprioritized.
     if (req.model && effectiveToolName && this.modelRegistry) {
       const category = TOOL_COMPLEXITY[effectiveToolName]
-      const costCfg = this.config.costAutoSwitch ?? { enabled: true, minReliability: 0.5, maxCostPerCall: 0.01, budgetTightMultiplier: 0.5, categories: ["quick", "unspecified-low"] }
+      const costCfg = this.config.costAutoSwitch ?? { enabled: true, minReliability: 0.5, minUserSatisfaction: 0.3, maxCostPerCall: 0.01, budgetTightMultiplier: 0.5, categories: ["quick", "unspecified-low"] }
       const eligibleCategories = costCfg.categories ?? ["quick", "unspecified-low"]
       const isEligible = !category || eligibleCategories.includes(category)
 
@@ -527,6 +538,9 @@ export class LLMEngine {
         const currentModelStr = `${req.model.providerID}/${req.model.modelID}`
         const currentScore = this.modelRegistry.getScore(currentModelStr)
         const currentReliability = currentScore?.reliability ?? 0.5
+        const taskType = this.sessionStore && this.pluginSessionId
+          ? this.sessionStore.getOrCreate(this.pluginSessionId).currentTaskType
+          : undefined
 
         // Budget-aware threshold: tighten when budget is tight
         let budgetMultiplier = 1.0
@@ -558,20 +572,35 @@ export class LLMEngine {
 
         // Gather available models from fallback chain + current
         const availableModels = [currentModelStr, ...(this.config.fallbackModels ?? [])]
-        const getOpenCodeModels = availableModels
-          .map(m => ({ model: m, score: this.modelRegistry!.getScore(m) }))
+        const candidates = availableModels
+          .map(m => ({
+            model: m,
+            score: this.modelRegistry!.getScore(m),
+            userSat: taskType ? this.modelRegistry!.getUserSatisfaction(m, taskType) : 0.5,
+          }))
           .filter(s => s.score && s.score.totalCalls >= 3) // only models with sufficient data
-          .sort((a, b) => (a.score?.avgCostPerCall ?? Infinity) - (b.score?.avgCostPerCall ?? Infinity))
 
-        // Pick cheapest that meets reliability threshold (or force switch)
+        // Score candidates by composite: userSat (30%) + reliability (35%) + inverse cost (35%)
+        // This ensures user feedback influences model selection alongside technical metrics.
+        const maxCost = candidates.reduce((max, c) => Math.max(max, c.score?.avgCostPerCall ?? 0), 0.001)
+        const scored = candidates
+          .map(c => ({
+            model: c.model,
+            score: c.score!,
+            userSat: c.userSat,
+            compositeScore: c.userSat * 0.3 + (c.score?.reliability ?? 0.5) * 0.35 + (1 - (c.score?.avgCostPerCall ?? 0) / maxCost) * 0.35,
+          }))
+          .sort((a, b) => b.compositeScore - a.compositeScore)
+
+        // Pick best composite score that meets reliability + satisfaction thresholds
         const originalModel = { ...req.model }
-        for (const candidate of getOpenCodeModels) {
+        for (const candidate of scored) {
           const candidateReliability = candidate.score?.reliability ?? 0
-          const meetsThreshold = candidateReliability >= minRequiredReliability
-          const isCheaper = (candidate.score?.avgCostPerCall ?? Infinity) < (currentScore?.avgCostPerCall ?? Infinity)
+          const meetsReliability = candidateReliability >= minRequiredReliability
+          const meetsSatisfaction = candidate.userSat >= costCfg.minUserSatisfaction
           const isDifferent = candidate.model !== currentModelStr
 
-          if (isDifferent && (meetsThreshold || forceSwitch) && isCheaper) {
+          if (isDifferent && (meetsReliability && meetsSatisfaction) || forceSwitch) {
             const parsed = this.parseModelForSDK(candidate.model)
             if (parsed) {
               req.model = parsed
@@ -583,11 +612,17 @@ export class LLMEngine {
         // Record switch event if model changed
         const switchedModel = req.model
         if (switchedModel && (switchedModel.providerID !== originalModel.providerID || switchedModel.modelID !== originalModel.modelID)) {
-          const estimatedSavings = (currentScore?.avgCostPerCall ?? 0) - (this.modelRegistry.getScore(`${switchedModel.providerID}/${switchedModel.modelID}`)?.avgCostPerCall ?? 0)
+          const newScore = this.modelRegistry.getScore(`${switchedModel.providerID}/${switchedModel.modelID}`)
+          const estimatedSavings = (currentScore?.avgCostPerCall ?? 0) - (newScore?.avgCostPerCall ?? 0)
+          const switchedModelSat = taskType ? this.modelRegistry.getUserSatisfaction(`${switchedModel.providerID}/${switchedModel.modelID}`, taskType) : 0.5
+          const reasons: string[] = []
+          if (forceSwitch) reasons.push(`cost exceeded $${costCfg.maxCostPerCall}`)
+          if (switchedModelSat > (taskType ? this.modelRegistry.getUserSatisfaction(currentModelStr, taskType) : 0.5)) reasons.push(`higher user satisfaction (${(switchedModelSat * 100).toFixed(0)}%)`)
+          reasons.push(`composite score: ${scored.find(s => s.model === `${switchedModel.providerID}/${switchedModel.modelID}`)?.compositeScore.toFixed(2) ?? 'N/A'}`)
           const event: CostSwitchEvent = {
             fromModel: currentModelStr,
             toModel: `${switchedModel.providerID}/${switchedModel.modelID}`,
-            reason: forceSwitch ? `Cost exceeded $${costCfg.maxCostPerCall}` : `Cheaper model meets reliability ≥ ${(minRequiredReliability * 100).toFixed(0)}%`,
+            reason: reasons.join(', '),
             category: category ?? "unknown",
             estimatedSavingsUsd: Math.max(0, estimatedSavings),
             timestamp: Date.now(),

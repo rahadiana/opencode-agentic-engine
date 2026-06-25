@@ -245,7 +245,7 @@ const engine = new LLMEngine({
 ### Phase 4 — Evolution & Safety
 - [x] ~~Constraint manifold~~ → ConstraintManifold (Phase 4C)
 - [x] Auto-trigger evolution (in-context → SFT → RL)
-- [ ] Feedback loop: user rating → policy update
+- [x] ~~Feedback loop: user rating → policy update~~ (wired into cost-aware auto-switch via composite scoring: 30% userSat + 35% reliability + 35% inverse cost)
 - [x] ~~Skill maturation lifecycle~~ → raw → validated → compiled → evolved
 - [ ] Formal verification: POMDP-based execution model
 
@@ -289,7 +289,7 @@ const engine = new LLMEngine({
 
 *(Semua PARTIAL item dari sesi sebelumnya sudah selesai)*
 
-### ❌ BELUM (4 item)
+### ❌ BELUM (3 item)
 
 | # | Fitur | Keterangan |
 |---|-------|------------|
@@ -297,6 +297,12 @@ const engine = new LLMEngine({
 | 2 | Tool versioning | Belum ada versioning system |
 | 3 | RL pipeline | Reinforcement learning dari execution outcomes |
 | 4 | POMDP verification | Formal verification model |
+
+### ✅ BARU SELESAI (1 item)
+
+| # | Fitur | File | Versi |
+|---|-------|------|-------|
+| 28 | **Feedback loop** (user rating → model selection) | `llm.ts` cost-aware auto-switch + `model-registry.ts` getUserSatisfaction() | v0.6.0 |
 
 ---
 
@@ -343,7 +349,8 @@ const engine = new LLMEngine({
 | 2026-06-25 | `6fa84a3` | ProtocolAdapter: unified MCP+A2A gateway + ProtocolAdapter a2aClient null-safety fix |
 | 2026-06-25 | `6fa84a3` | MCP-first infrastructure: DynamicToolRegistry + MCPServer + agentic_mcp_server tool + 96 tests |
 | 2026-06-25 | `78e9242` | registryTool() helper: Zod 4 toJSONSchema → DynamicToolRegistry. 5 tools migrated (agentic_plan, status, reflect, verify, auto). 13 integration tests proving MCP discover+call cycle |
-| 2026-06-25 | *(pending)* | Batch migrate 28 tools to DynamicToolRegistry. All 33 tools now in registry. Fix 12 type inference errors from registryTool lazy typing. 1628 tests pass. |
+| 2026-06-25 | `78e9242` | Batch migrate 28 tools to DynamicToolRegistry. All 33 tools now in registry. Fix 12 type inference errors from registryTool lazy typing. 1628 tests pass. |
+| 2026-06-25 | *(pending)* | **Feedback loop**: wire user satisfaction (30%) + reliability (35%) + cost (35%) into cost-aware auto-switch. Persist user feedback cross-session. Composite scoring replaces simple cheapest-threshold logic. |
 
 ---
 
@@ -363,7 +370,7 @@ Prioritas berdasarkan dampak vs effort:
 | Item | Alasan |
 |------|--------|
 | **Tool versioning** | Version pinning + migration path buat breaking changes. Prasyarat buat MCP-first. |
-| **Feedback loop** (user rating → policy update) | Rating sudah ada di `agentic_execute`, tinggal wiring ke policy auto-update. Effort kecil. |
+| ~~**Feedback loop** (user rating → policy update)~~ | ~~Rating sudah ada di `agentic_execute`, tinggal wiring ke policy auto-update. Effort kecil.~~ ✅ SELESAI |
 
 ### 🟢 Priority 3 — High Impact, High Effort
 
@@ -376,5 +383,5 @@ Prioritas berdasarkan dampak vs effort:
 
 1. **✅ MCP-first infrastructure** (DynamicToolRegistry + MCPServer + agentic_mcp_server) — SELESAI.
 2. **✅ All 33 tools migrated to DynamicToolRegistry** — SELESAI. Setiap tool terdaftar via registryTool() helper dengan Zod → JSON Schema auto-conversion.
-3. Selanjutnya: **Session bridging** (memory persist lintas env).
-4. Barengan: **Feedback loop** (low effort, high UX impact).
+3. **✅ Feedback loop** (user rating → model selection) — SELESAI. User satisfaction (30%) + reliability (35%) + inverse cost (35%) composite scoring in cost-aware auto-switch.
+4. Selanjutnya: **Session bridging** (memory persist lintas env).
