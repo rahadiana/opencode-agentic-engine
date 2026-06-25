@@ -4,7 +4,8 @@
     "results": [],
     "evolveCount": 0,
     "windowSize": 30,
-    "lastEvolveSession": null
+    "lastEvolveSession": null,
+    "cumulativeResults": 0
   },
-  "updatedAt": "2026-06-22T16:52:32.951Z"
+  "updatedAt": "2026-06-25T15:29:41.175Z"
 }

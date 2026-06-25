@@ -1173,7 +1173,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_nav: tool({
+      agentic_nav: registryTool("agentic_nav", {
         description: "Scan the project codebase and find relevant files for a task. Use this to understand the project structure before planning, or to find which files to modify.",
         args: {
           query: tool.schema.string().describe("What you're looking for — a task description, module name, or feature keyword"),
@@ -1230,7 +1230,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_execute: tool({
+      agentic_execute: registryTool("agentic_execute", {
         description: "Record completion of a subtask. Auto-verifies compilation on success. Includes error recovery guidance + error propagation analysis on failure. Supports user feedback for continuous learning.",
         args: {
           stepId: tool.schema.string().describe("The ID of the step that was executed (leaf in ID chain: sessionID ⊃ pipelineRunId ⊃ taskId ⊃ stepId)"),
@@ -1957,7 +1957,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_context: tool({
+      agentic_context: registryTool("agentic_context", {
         description: "View and compress the execution context. When approaching context limits, this tool summarizes the conversation history into a compact form preserving key decisions, file changes, and invariants.",
         args: {
           action: tool.schema.enum(["view", "compress"]).describe("'view' shows current context stats; 'compress' generates a compressed context prompt"),
@@ -2022,7 +2022,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_snapshot: tool({
+      agentic_snapshot: registryTool("agentic_snapshot", {
         description: "Save, restore, or list execution snapshots. Use 'save' to checkpoint state (plan progress, file changes, decisions). Use 'restore' to reload a previous checkpoint and reset execution state. Use 'list' to see all snapshots.",
         args: {
           action: tool.schema.enum(["save", "list", "restore"]).describe("'save' creates a checkpoint; 'restore' reloads a checkpoint; 'list' shows all saved snapshots"),
@@ -2148,7 +2148,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_pipeline: tool({
+      agentic_pipeline: registryTool("agentic_pipeline", {
         description: "Define and run multi-agent workflow pipelines. Chain PM → Architect → Developer → QA for complete feature development. Includes cross-validation between stages.",
         args: {
           action: tool.schema.enum(["define", "list", "run", "status", "suggest"]).describe("'define' to create a new pipeline; 'list' to show existing; 'run' to start a pipeline; 'status' to check progress; 'suggest' to auto-suggest a pipeline"),
@@ -2302,7 +2302,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_pr: tool({
+      agentic_pr: registryTool("agentic_pr", {
         description: "Generate a pull request description from the execution plan, all step results, and files changed. Use `action: 'create'` to actually open a PR via GitHub CLI (`gh`).",
         args: {
           title: tool.schema.string().optional().describe("Override the PR title (defaults to the plan goal)"),
@@ -2431,7 +2431,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_score: tool({
+      agentic_score: registryTool("agentic_score", {
         description: "Score the current changeset for technical debt. Analyzes coupling, file size, scope, and code patterns. Use before completing to ensure code quality.",
         args: {
           files: tool.schema.array(tool.schema.string()).optional().describe("Specific files to score (defaults to all modified files)"),
@@ -2485,7 +2485,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_delegate: tool({
+      agentic_delegate: registryTool("agentic_delegate", {
         description: "Assign a task to a specialized agent role (architect/developer/qa/coordinator/pm). Supports pipeline-aware delegation with cross-validation between stages and inter-agent messaging.",
         args: {
           taskId: tool.schema.string().describe("Unique ID for this delegated task"),
@@ -2755,7 +2755,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_message: tool({
+      agentic_message: registryTool("agentic_message", {
         description: "Inter-agent messaging system. Send messages between agent roles, request reviews, check inbox, and view conversation threads. Part of the multi-agent coordination framework.",
         args: {
           action: tool.schema.enum(["send", "inbox", "conversation", "mark-read"]).describe("'send' to send a message; 'inbox' to check messages; 'conversation' to view a thread; 'mark-read' to acknowledge a message"),
@@ -2821,7 +2821,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_skill: tool({
+      agentic_skill: registryTool("agentic_skill", {
         description: "Manage reusable skills extracted from successful task completions. Use 'extract' to create a skill from a completed step. Use 'find' to search existing skills. Use 'capability' for exact-match lookup.",
         args: {
           action: tool.schema.enum(["extract", "find", "list", "capability"]).describe("'extract' creates a skill; 'find' searches; 'list' shows all; 'capability' exact-match lookup"),
@@ -2897,7 +2897,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_model: tool({
+      agentic_model: registryTool("agentic_model", {
         description: "Configure per-role, per-tool, or per-category LLM model preferences. Use 'set' to assign a model. Use 'get' to check current assignment. Use 'list' to view all. Use 'clear' to remove. Accepts `role`, `tool`, or `category` parameter. Preferences are persisted to .agentic/models.json.",
         args: {
           action: tool.schema.enum(["set", "get", "list", "clear"]).describe("Action: set/get/list/clear model preference"),
@@ -3167,7 +3167,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_model_reset: tool({
+      agentic_model_reset: registryTool("agentic_model_reset", {
         description: "Reset model statistics to recover from degraded performance. Use 'reset' to clear stats for a specific model. Use 'reset-stale' to auto-reset models not used in 7+ days. Use 'reset-all' for emergency recovery.",
         args: {
           action: tool.schema.enum(["reset", "reset-stale", "reset-all"]).describe("Action: reset (single model), reset-stale (auto-detect old models), reset-all (emergency)"),
@@ -3209,7 +3209,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_budget: tool({
+      agentic_budget: registryTool("agentic_budget", {
         description: "Set, view, or reset resource budget limits. Prevents runaway loops by capping tokens, steps, time, or cost. Acts as circuit breaker for autonomous execution. Use 'set' to define limits, 'status' to view usage, 'reset' to clear counters.",
         args: {
           action: tool.schema.enum(["set", "get", "status", "reset"]).describe("'set' defines limits; 'get' shows current limits; 'status' shows usage; 'reset' clears counters"),
@@ -3246,8 +3246,9 @@ const confidenceStore = new ConfidenceStore()
 
               // Override model prices jika dikirim
               if (args.modelPrices) {
+                const prices = args.modelPrices as Record<string, import("./core/budget-tracker.js").ModelPriceEntry>
                 const normalized: Record<string, import("./core/budget-tracker.js").ModelPriceEntry> = {}
-                for (const [modelId, price] of Object.entries(args.modelPrices)) {
+                for (const [modelId, price] of Object.entries(prices)) {
                   normalized[modelId] = {
                     input: price.input,
                     output: price.output,
@@ -3315,7 +3316,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_episodes: tool({
+      agentic_episodes: registryTool("agentic_episodes", {
         description: "Browse cross-session memory. Search past tasks, patterns, and knowledge across all 4 memory levels (working/episodic/semantic/procedural). Use before planning similar tasks to avoid repeating mistakes.",
         args: {
           action: tool.schema.enum(["search", "recent", "stats"]).describe("'search' finds relevant past tasks; 'recent' shows latest; 'stats' shows summary"),
@@ -3330,7 +3331,8 @@ const confidenceStore = new ConfidenceStore()
             // Try MemoryOrchestrator cross-level search first (if levels specified or all)
             const useOrchLevels = args.levels && args.levels.length > 0
             if (useOrchLevels || args.minImportance !== undefined) {
-              const validLevels = (args.levels ?? []).filter(l =>
+              const levelsArr: string[] = args.levels ?? []
+              const validLevels = levelsArr.filter((l: string) =>
                 ["working", "episodic", "semantic", "procedural"].includes(l))
               const result = memoryOrchestrator.query({
                 query: args.query,
@@ -3425,7 +3427,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_parallel: tool({
+      agentic_parallel: registryTool("agentic_parallel", {
         description: "Analyze or run steps concurrently. Use action: `analyze` to see parallelism opportunities. Use action: `execute` to run ready steps in parallel. Does NOT replace agentic_execute — only orchestrates concurrent runs.",
         args: {
           action: tool.schema.enum(["analyze", "execute"]).optional().describe("'analyze' shows parallelism plan; 'execute' runs ready steps concurrently (does not replace agentic_execute for step execution)"),
@@ -3588,7 +3590,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_dashboard: tool({
+      agentic_dashboard: registryTool("agentic_dashboard", {
         description: "Generate an observability dashboard from execution traces. Shows timeline, statistics, tool usage, anomaly detection, and model reliability (timeouts, retry storms, silent failures).",
         args: {},
         async execute(_args, _context) {
@@ -3699,7 +3701,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_guard: tool({
+      agentic_guard: registryTool("agentic_guard", {
         description: "MANUAL re-run of the hallucination guard. NOTE: Guard already runs automatically inside `agentic_execute` on every successful step (if `autoHallucinationCheck: true` in config). This standalone tool is only needed for: (a) re-checking an older step after files changed, (b) auditing a step that was executed while auto-check was disabled, or (c) getting a detailed per-claim breakdown. Do NOT call redundantly — the auto-check already ran.",
         args: {
           stepId: tool.schema.string().describe("The step ID whose output to verify (in ID chain: sessionID ⊃ stepId)"),
@@ -3764,7 +3766,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_evolve: tool({
+      agentic_evolve: registryTool("agentic_evolve", {
         description: "Inspect and extend the agent system itself (Stage IV). Register custom agent roles, define versioned memory schemas, and export skills in self-describing format for other agents to consume.",
         args: {
           action: tool.schema.enum(["inspect", "register-role", "export-skill", "memory-schema", "evolve", "read-prompt", "edit-prompt", "prompt-history", "rollback-prompt", "export-training-data"]).describe("What to do: inspect system state, register a custom agent role, export a skill, view memory schema, run self-evolution, manage agent prompts (Stage IV), or export skills as training data for fine-tuning"),
@@ -4264,7 +4266,7 @@ const confidenceStore = new ConfidenceStore()
       }),
 
       // ── Debate Loop: multi-agent analysis with executor ↔ critic ──
-      agentic_debate: tool({
+      agentic_debate: registryTool("agentic_debate", {
         description: "Debate loop between two agents (executor ↔ critic) for thorough analysis. Produces cleaner, more accurate results than a single LLM call. Best for complex analysis, data validation, and reviews.",
         args: {
           task: tool.schema.string().describe("The task or question to analyze in depth"),
@@ -4330,7 +4332,7 @@ const confidenceStore = new ConfidenceStore()
       }),
 
       // ── Router Agent: lightweight intent-to-category routing ──
-      agentic_router: tool({
+      agentic_router: registryTool("agentic_router", {
         description: "Lightweight intent classifier that routes user input to the right knowledge category, RAG index, and tools. Use before searching memory to scope results to relevant domain.",
         args: {
           input: tool.schema.string().describe("User input or query to classify"),
@@ -4371,7 +4373,7 @@ const confidenceStore = new ConfidenceStore()
       }),
 
       // ── Layer 3: Data Cleaner — strip artifacts, validate structure ──
-      agentic_clean: tool({
+      agentic_clean: registryTool("agentic_clean", {
         description: "Clean raw text by stripping debate artifacts, reformatting to markdown/json, and optionally validating against a schema. Use after debate or any multi-step analysis to get clean output.",
         args: {
           text: tool.schema.string().describe("Raw text to clean"),
@@ -4408,7 +4410,7 @@ const confidenceStore = new ConfidenceStore()
       }),
 
       // ── Layer 4: Multi-Index RAG — category-segregated memory ──
-      agentic_rag: tool({
+      agentic_rag: registryTool("agentic_rag", {
         description: "Multi-index RAG: search or store knowledge in category-segregated indices. Prevents cross-category context pollution. Use with agentic_router to scope searches to relevant domains.",
         args: {
           action: tool.schema.enum(["search", "store", "stats", "categories", "list"]).describe("Action: search across categories, store new data, view stats, list categories, or list all entries"),
@@ -4520,8 +4522,8 @@ const confidenceStore = new ConfidenceStore()
 
             case "store": {
               const cat = args.category || multiIndexRAG.autoCategory(args.title || args.content || args.query || "")
+              const content: string = args.content || ""
               const title = args.title || args.query || "untitled"
-              const content = args.content || ""
 
               if (args.type === "skill" && content) {
                 // Extract keywords from content (filter common words)
@@ -4655,7 +4657,7 @@ const confidenceStore = new ConfidenceStore()
       }),
 
       // ── Layer 1: MCP Client — connect to external tools/APIs ──
-      agentic_mcp: tool({
+      agentic_mcp: registryTool("agentic_mcp", {
         description: "MCP (Model Context Protocol) client. Connect to external servers (databases, APIs, tools) via stdio or HTTP, discover available tools, and call them. Lets agents interact with the real world.",
         args: {
           action: tool.schema.enum(["connect", "list", "call", "disconnect", "disconnect-all"]).describe("Action: connect to a server, list connections, call a tool, or disconnect"),
@@ -4765,7 +4767,7 @@ const confidenceStore = new ConfidenceStore()
       }),
 
       // ── A2A Protocol: Agent-to-Agent Interop ──
-      agentic_a2a: tool({
+      agentic_a2a: registryTool("agentic_a2a", {
         description: "A2A (Agent-to-Agent) protocol: discover remote agents, delegate tasks, serve Agent Card. Google A2A standard for cross-framework interoperability.",
         args: {
           action: tool.schema.string().describe("Action: serve, stop, discover, delegate, list, ping, stats, status"),
@@ -5015,7 +5017,7 @@ const confidenceStore = new ConfidenceStore()
       }),
 
       // ── MCP Server: expose plugin tools via MCP protocol ──
-      agentic_mcp_server: tool({
+      agentic_mcp_server: registryTool("agentic_mcp_server", {
         description: "Start or stop the MCP server that exposes plugin tools via standard MCP protocol. External MCP clients can discover and call plugin tools. Use 'status' to check server state.",
         args: {
           action: tool.schema.enum(["start", "stop", "status", "restart"]).describe("Action: start (start server), stop (stop server), status (check state), restart (stop + start)"),
@@ -5068,7 +5070,7 @@ const confidenceStore = new ConfidenceStore()
       }),
 
       // ── Protocol Adapter: Unified tool discovery & calling ──
-      agentic_tools: tool({
+      agentic_tools: registryTool("agentic_tools", {
         description: "Unified tool discovery and calling across MCP + A2A protocols. Search for tools, auto-route calls to the right backend, list all connections, and view combined stats.",
         args: {
           action: tool.schema.enum(["search", "call", "list", "stats"]).describe("Action: search (find tools across protocols), call (auto-route call), list (all connections), stats (combined)"),
@@ -5184,7 +5186,7 @@ const confidenceStore = new ConfidenceStore()
       }),
 
       // ── Stage III: Fine-Tuning Pipeline ──
-      agentic_finetune: tool({
+      agentic_finetune: registryTool("agentic_finetune", {
         description: "End-to-end fine-tuning pipeline: prepare dataset, save file, upload to OpenAI, create and monitor fine-tuning job.",
         args: {
           action: tool.schema.string().describe("Action: prepare, save, upload, create-job, status, list, cancel, full-pipeline"),
@@ -5567,7 +5569,7 @@ const confidenceStore = new ConfidenceStore()
       }),
 
       // ── SQLite Database — persistence backend ──
-      agentic_db: tool({
+      agentic_db: registryTool("agentic_db", {
         description: "SQLite database backend. Query, save, load, list, stats. Structured queries support WHERE, JOIN, GROUP BY.",
         args: {
           action: tool.schema.enum(["query", "save", "load", "list", "stats", "tables", "migrate"]).describe("Action: query (raw SQL), save (key-value), load (by key), list (all keys), stats, tables (list tables), migrate (JSON→SQLite)"),

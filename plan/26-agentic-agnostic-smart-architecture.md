@@ -2,7 +2,9 @@
 
 > **Tujuan**: Menerapkan 7 prinsip agentic agnostic dari riset terbaru (2026) ke opencode-agentic-engine — biar plugin ini gak cuma "tool caller" tapi smart agentic system yang vendor-agnostic, protocol-agnostic, dan self-evolving.
 
-**Terakhir diperbarui**: 2026-06-25 (sesi 2)
+**Terakhir diperbarui**: 2026-06-25 (sesi 3)
+
+> **Sesi 3**: All 33 tools migrated to `registryTool()` — DynamicToolRegistry fully populated. 1628 tests pass.
 
 ---
 
@@ -79,7 +81,7 @@ const engine = new LLMEngine({
 |------|--------|------------|
 | MCP client: list/connect/call | ✅ DONE | `agentic_mcp` tool |
 | A2A protocol: agent interop | ✅ DONE | A2AServer + A2AClient + Agent Card |
-| Dynamic tool registry | ⚠️ PARTIAL | MCP discover ada, runtime add/remove belum |
+| Dynamic tool registry | ✅ DONE | All 33 tools registered, runtime add/remove via registryTool() |
 | Protocol adapter pattern | ✅ DONE | `ProtocolAdapter` class — unified search, call, list, stats |
 | Session bridging | ❌ BELUM | Belum ada cross-platform session |
 
@@ -135,7 +137,7 @@ const engine = new LLMEngine({
 |------|--------|------------|
 | MCP client: connect/call | ✅ DONE | `agentic_mcp` tool |
 | Dynamic tool discovery | ✅ DONE | `listTools()` via MCP |
-| MCP-first (all tools via MCP) | ❌ BELUM | Masih ada 30 tools hardcoded |
+| MCP-first (all tools via MCP) | ✅ DONE | All 33 tools in DynamicToolRegistry, discoverable via MCP |
 | Tool sandbox | ⚠️ PARTIAL | CodeSandbox ada untuk code execution |
 | Tool versioning | ❌ BELUM | Belum ada versioning system |
 
@@ -236,7 +238,7 @@ const engine = new LLMEngine({
 - [x] ~~MCP-first infrastructure: DynamicToolRegistry + MCPServer + agentic_mcp_server tool~~
 - [x] ~~registryTool() helper: Zod → JSON Schema converter using Zod 4 built-in toJSONSchema()~~
 - [x] ~~Register 5 representative tools: agentic_plan, agentic_status, agentic_reflect, agentic_verify, agentic_auto~~
-- [ ] Migrate remaining 25 built-in tools to DynamicToolRegistry
+- [x] ~~Migrate remaining 28 built-in tools to DynamicToolRegistry~~
 - [x] ~~A2A protocol~~ → A2AServer + A2AClient
 - [x] ~~Protocol gateway: unified API, multiple backend~~ → `ProtocolAdapter` class
 
@@ -281,20 +283,20 @@ const engine = new LLMEngine({
 | 24 | **ProtocolAdapter (unified gateway)** | `protocol-adapter.ts` | v0.6.0 |
 | 25 | **MCP-first infrastructure** | `dynamic-tool-registry.ts`, `mcp-server.ts`, `agentic_mcp_server` tool | v0.6.0 |
 | 26 | **registryTool() helper + 5 tools migrated** | `index.ts` registryTool, Zod 4 toJSONSchema | v0.6.0 |
+| 27 | **Batch migrate 28 tools + 0 tsc errors** | `index.ts` all 33 tools via registryTool, 12 type fixes | v0.6.0 |
 
 ### ⚠️ PARTIAL (0 item)
 
 *(Semua PARTIAL item dari sesi sebelumnya sudah selesai)*
 
-### ❌ BELUM (5 item)
+### ❌ BELUM (4 item)
 
 | # | Fitur | Keterangan |
 |---|-------|------------|
 | 1 | Session bridging | Cross-platform session (VS Code ↔ CLI) |
-| 2 | Migrate 25 tools to DynamicToolRegistry | 5 tools registered ✅ (agentic_plan, status, reflect, verify, auto), 25 tersisa |
-| 3 | Tool versioning | Belum ada versioning system |
-| 4 | RL pipeline | Reinforcement learning dari execution outcomes |
-| 5 | POMDP verification | Formal verification model |
+| 2 | Tool versioning | Belum ada versioning system |
+| 3 | RL pipeline | Reinforcement learning dari execution outcomes |
+| 4 | POMDP verification | Formal verification model |
 
 ---
 
@@ -306,7 +308,7 @@ const engine = new LLMEngine({
 | **Control Flow** | 3-layer Graph Harness ✅ | 3-layer terpisah |
 | **Agent Spec** | Blueprint interface ✅ | Multi-env deployment |
 | **Memory** | 4-level + procedural depth ✅ | + Working query + Procedural depth |
-| **Tools** | DynamicToolRegistry + MCPServer ✅ | MCP-first + dynamic discovery |
+| **Tools** | DynamicToolRegistry (33 tools) + MCPServer ✅ | MCP-first + dynamic discovery + versioning |
 | **Protocol** | Unified gateway ✅ | Unified gateway |
 | **Evolution** | Auto-trigger ✅ | Full auto (in-context → SFT → RL) |
 | **Safety** | ConstraintManifold ✅ | + POMDP verification |
@@ -340,7 +342,8 @@ const engine = new LLMEngine({
 | 2026-06-25 | `43e1ce4` | Auto-trigger evolution: EventBus per-step wiring + cumulativeResults milestone fix |
 | 2026-06-25 | `6fa84a3` | ProtocolAdapter: unified MCP+A2A gateway + ProtocolAdapter a2aClient null-safety fix |
 | 2026-06-25 | `6fa84a3` | MCP-first infrastructure: DynamicToolRegistry + MCPServer + agentic_mcp_server tool + 96 tests |
-| 2026-06-25 | *(pending)* | registryTool() helper: Zod 4 toJSONSchema → DynamicToolRegistry. 5 tools migrated (agentic_plan, status, reflect, verify, auto). 13 integration tests proving MCP discover+call cycle |
+| 2026-06-25 | `78e9242` | registryTool() helper: Zod 4 toJSONSchema → DynamicToolRegistry. 5 tools migrated (agentic_plan, status, reflect, verify, auto). 13 integration tests proving MCP discover+call cycle |
+| 2026-06-25 | *(pending)* | Batch migrate 28 tools to DynamicToolRegistry. All 33 tools now in registry. Fix 12 type inference errors from registryTool lazy typing. 1628 tests pass. |
 
 ---
 
@@ -352,7 +355,7 @@ Prioritas berdasarkan dampak vs effort:
 
 | Item | Alasan |
 |------|--------|
-| **MCP-first tools** (30 hardcoded → MCP-based) | Paling transformatif: semua tool bisa dynamic register/unregister, third-party bisa add tools tanpa plugin update. Core arsitektur berubah. |
+| ✅ ~~**MCP-first tools** (30 hardcoded → MCP-based)~~ | ~~Paling transformatif: semua tool bisa dynamic register/unregister, third-party bisa add tools tanpa plugin update.~~ ✅ SELESAI |
 | **Session bridging** (VS Code ↔ CLI) | Cross-platform session = memory + plan persist lintas env. Gap besar buat enterprise adoption. |
 
 ### 🟡 Priority 2 — Medium Impact, Low/Medium Effort
@@ -372,6 +375,6 @@ Prioritas berdasarkan dampak vs effort:
 ### 📋 Rekomendasi Immediate
 
 1. **✅ MCP-first infrastructure** (DynamicToolRegistry + MCPServer + agentic_mcp_server) — SELESAI.
-2. **Migrate 30 built-in tools to DynamicToolRegistry** — langkah selanjutnya. Setiap tool perlu didaftarkan ke registry agar bisa di-discover via MCP. Butuh bantuan auto-converter dari Zod schema → JSON Schema.
-3. Setelah migrasi 30 tool selesai, lanjut **Session bridging** (memory persist lintas env).
+2. **✅ All 33 tools migrated to DynamicToolRegistry** — SELESAI. Setiap tool terdaftar via registryTool() helper dengan Zod → JSON Schema auto-conversion.
+3. Selanjutnya: **Session bridging** (memory persist lintas env).
 4. Barengan: **Feedback loop** (low effort, high UX impact).
