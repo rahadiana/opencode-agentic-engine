@@ -89,6 +89,8 @@ const DEFAULT_METAS: Record<string, Partial<ToolMeta>> = {
   agentic_clean: { keywords: ["clean", "strip", "format", "reformat", "remove-artifact", "bersihkan"], category: "blueprint" },
   agentic_rag: { keywords: ["rag", "search", "knowledge", "store", "retrieve", "index", "cari", "pengetahuan", "ingat", "memori", "lama", "sejarah"], category: "memory" },
   agentic_mcp: { keywords: ["mcp", "external", "connect", "server", "api", "tool-call", "eksternal"], category: "blueprint" },
+  agentic_a2a: { keywords: ["a2a", "agent", "discover", "serve", "interop", "delegate"], category: "blueprint" },
+  agentic_tools: { keywords: ["tools", "unified", "search", "discover", "protocol", "gateway", "mcp", "a2a"], category: "blueprint" },
   agentic_finetune: { keywords: ["finetune", "fine-tune", "training", "dataset", "openai", "model"], category: "blueprint" },
 }
 

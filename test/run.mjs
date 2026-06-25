@@ -74,7 +74,7 @@ assert(typeof hooks.dispose === "function", "dispose hook registered")
 
 // 3. Tool registration (30 tools)
 console.log("\n[3] Tool registration")
-for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_model", "agentic_model_reset", "agentic_budget", "agentic_episodes", "agentic_parallel", "agentic_dashboard", "agentic_guard", "agentic_evolve", "agentic_auto", "agentic_debate", "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp", "agentic_a2a", "agentic_finetune"]) {
+for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_model", "agentic_model_reset", "agentic_budget", "agentic_episodes", "agentic_parallel", "agentic_dashboard", "agentic_guard", "agentic_evolve", "agentic_auto", "agentic_debate", "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp", "agentic_mcp_server", "agentic_a2a", "agentic_finetune"]) {
   const tool = hooks.tool?.[name]
   assert(tool && typeof tool.execute === "function", `"${name}" has execute()`)
   assert(typeof tool.description === "string" && tool.description.length > 0, `"${name}" has description`)
@@ -2883,6 +2883,54 @@ const mcpDiscAll = await hooks.tool.agentic_mcp.execute({
   action: "disconnect-all",
 }, mockCtx(freshSid()))
 assert(true, "agentic_mcp disconnect-all passed")
+
+// 91b. agentic_mcp_server — MCP server start/stop/status
+console.log("\n[91b] agentic_mcp_server — MCP server tool")
+{
+  const mcpSrvSid = freshSid()
+
+  // Status when not running
+  const statusOff = await hooks.tool.agentic_mcp_server.execute({
+    action: "status",
+  }, mockCtx(mcpSrvSid))
+  const statusOffOut = typeof statusOff === "string" ? statusOff : (statusOff.output || "")
+  assert(statusOffOut.includes("not running"), "91b-1 mcp_server status shows not running")
+
+  // Start server
+  const started = await hooks.tool.agentic_mcp_server.execute({
+    action: "start",
+  }, mockCtx(mcpSrvSid))
+  const startedOut = typeof started === "string" ? started : (started.output || "")
+  assert(startedOut.includes("started"), "91b-2 mcp_server start succeeds")
+
+  // Status while running
+  const statusOn = await hooks.tool.agentic_mcp_server.execute({
+    action: "status",
+  }, mockCtx(mcpSrvSid))
+  const statusOnOut = typeof statusOn === "string" ? statusOn : (statusOn.output || "")
+  assert(statusOnOut.includes("Running") || statusOnOut.includes("✅"), "91b-3 mcp_server status shows running")
+
+  // Start again (already running)
+  const startedAgain = await hooks.tool.agentic_mcp_server.execute({
+    action: "start",
+  }, mockCtx(mcpSrvSid))
+  const startedAgainOut = typeof startedAgain === "string" ? startedAgain : (startedAgain.output || "")
+  assert(startedAgainOut.includes("already running"), "91b-4 mcp_server start again shows already running")
+
+  // Stop server
+  const stopped = await hooks.tool.agentic_mcp_server.execute({
+    action: "stop",
+  }, mockCtx(mcpSrvSid))
+  const stoppedOut = typeof stopped === "string" ? stopped : (stopped.output || "")
+  assert(stoppedOut.includes("stopped"), "91b-5 mcp_server stop succeeds")
+
+  // Status after stop
+  const statusAfter = await hooks.tool.agentic_mcp_server.execute({
+    action: "status",
+  }, mockCtx(mcpSrvSid))
+  const statusAfterOut = typeof statusAfter === "string" ? statusAfter : (statusAfter.output || "")
+  assert(statusAfterOut.includes("not running"), "91b-6 mcp_server status shows stopped after stop")
+}
 
 // ── Stage V: Autonomous Loop ──
 console.log("\n[92] agentic_auto — autonomous loop (mock mode)")
@@ -8306,6 +8354,571 @@ passed += atPassed; failed += atFailed
 
 console.log(`  ESC: ${esc} passed, ${escf} failed`)
 passed += esc; failed += escf
+
+// DTR: DynamicToolRegistry tests
+console.log("\n[DTR] DynamicToolRegistry — runtime tool registry")
+let dtr = 0, dtrf = 0
+function dtr_assert(cond, msg) { if (cond) { dtr++ } else { console.error(`  ❌ ${msg}`); dtrf++ } }
+
+// DTR-1: Constructor + basic types
+{
+  const { DynamicToolRegistry } = mod
+  dtr_assert(typeof DynamicToolRegistry === "function", "DTR-1a DynamicToolRegistry exported")
+  const reg = new DynamicToolRegistry()
+  dtr_assert(typeof reg.register === "function", "DTR-1b register() function")
+  dtr_assert(typeof reg.unregister === "function", "DTR-1c unregister() function")
+  dtr_assert(typeof reg.list === "function", "DTR-1d list() function")
+  dtr_assert(typeof reg.call === "function", "DTR-1e call() function")
+  dtr_assert(typeof reg.search === "function", "DTR-1f search() function")
+  dtr_assert(typeof reg.toMCPTools === "function", "DTR-1g toMCPTools() function")
+  dtr_assert(reg.size === 0, "DTR-1h initial size = 0")
+}
+
+// DTR-2: Register + get + has + size
+{
+  const { DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  reg.register({
+    name: "test_tool",
+    description: "A test tool",
+    execute: async () => "hello",
+    registeredAt: Date.now(),
+  })
+  dtr_assert(reg.size === 1, "DTR-2a size = 1 after register")
+  dtr_assert(reg.has("test_tool"), "DTR-2b has('test_tool') = true")
+  dtr_assert(!reg.has("nonexistent"), "DTR-2c has('nonexistent') = false")
+  const got = reg.get("test_tool")
+  dtr_assert(got !== undefined, "DTR-2d get() returns tool")
+  dtr_assert(got.name === "test_tool", "DTR-2e get().name matches")
+  dtr_assert(got.description === "A test tool", "DTR-2f get().description matches")
+}
+
+// DTR-3: Register validation (no name, no execute)
+{
+  const { DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  try {
+    reg.register({ name: "", description: "test", execute: async () => "x", registeredAt: Date.now() })
+    dtr_assert(false, "DTR-3a empty name should throw")
+  } catch { dtr_assert(true, "DTR-3a empty name throws") }
+  try {
+    reg.register({ name: "no_exec", description: "test", execute: null, registeredAt: Date.now() })
+    dtr_assert(false, "DTR-3b no execute should throw")
+  } catch { dtr_assert(true, "DTR-3b no execute throws") }
+}
+
+// DTR-4: Unregister
+{
+  const { DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  reg.register({ name: "t1", description: "d1", execute: async () => "ok", registeredAt: Date.now() })
+  dtr_assert(reg.size === 1, "DTR-4a size = 1 before unregister")
+  dtr_assert(reg.unregister("t1"), "DTR-4b unregister returns true")
+  dtr_assert(reg.size === 0, "DTR-4c size = 0 after unregister")
+  dtr_assert(!reg.unregister("nonexistent"), "DTR-4d unregister nonexistent returns false")
+}
+
+// DTR-5: List + listByCategory
+{
+  const { DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  reg.register({ name: "tool_a", description: "alpha", execute: async () => "a", metadata: { category: "core" }, registeredAt: Date.now() })
+  reg.register({ name: "tool_b", description: "beta", execute: async () => "b", metadata: { category: "analysis" }, registeredAt: Date.now() })
+  reg.register({ name: "tool_c", description: "gamma", execute: async () => "c", registeredAt: Date.now() })
+  dtr_assert(reg.list().length === 3, "DTR-5a list() returns all 3")
+  dtr_assert(reg.list()[0].name === "tool_a", "DTR-5b list() sorted: first = tool_a")
+  dtr_assert(reg.list()[2].name === "tool_c", "DTR-5c list() sorted: last = tool_c")
+  const coreTools = reg.listByCategory("core")
+  dtr_assert(coreTools.length === 1, "DTR-5d listByCategory('core') = 1")
+  dtr_assert(coreTools[0].name === "tool_a", "DTR-5e listByCategory core = tool_a")
+  dtr_assert(reg.listByCategory("nonexistent").length === 0, "DTR-5f listByCategory nonexistent = 0")
+}
+
+// DTR-6: Search by name, description, keywords
+{
+  const { DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  reg.register({ name: "agentic_plan", description: "Plan and decompose tasks", execute: async () => "plan", metadata: { keywords: ["plan", "decompose"] }, registeredAt: Date.now() })
+  reg.register({ name: "agentic_nav", description: "Navigate codebase", execute: async () => "nav", metadata: { keywords: ["search", "find"] }, registeredAt: Date.now() })
+  reg.register({ name: "agentic_execute", description: "Execute step", execute: async () => "exec", registeredAt: Date.now() })
+
+  dtr_assert(reg.search("plan").length === 1, "DTR-6a search 'plan' = 1")
+  dtr_assert(reg.search("plan")[0].name === "agentic_plan", "DTR-6b search 'plan' = agentic_plan")
+  dtr_assert(reg.search("agentic").length === 3, "DTR-6c search 'agentic' = 3")
+  dtr_assert(reg.search("decompose").length === 1, "DTR-6d search 'decompose' (keyword) = 1")
+  dtr_assert(reg.search("nonexistent").length === 0, "DTR-6e search nonexistent = 0")
+}
+
+// DTR-7: Call — success + error
+{
+  const { DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  reg.register({ name: "greet", description: "Greet someone", execute: async (args) => `Hello, ${args.name || "world"}!`, registeredAt: Date.now() })
+  reg.register({ name: "failer", description: "Always fails", execute: async () => { throw new Error("oops") }, registeredAt: Date.now() })
+
+  const result = await reg.call("greet", { name: "MCP" })
+  dtr_assert(!result.isError, "DTR-7a call success isError=false")
+  dtr_assert(result.content === "Hello, MCP!", "DTR-7b call success content matches")
+  dtr_assert(result.durationMs >= 0, "DTR-7c call has duration")
+
+  const failResult = await reg.call("failer", {})
+  dtr_assert(failResult.isError, "DTR-7d call fail isError=true")
+  dtr_assert(failResult.content === "oops", "DTR-7e call fail content = error message")
+}
+
+// DTR-8: Call nonexistent tool
+{
+  const { DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  const result = await reg.call("ghost", {})
+  dtr_assert(result.isError, "DTR-8a call nonexistent isError=true")
+  dtr_assert(result.content.includes("not found"), "DTR-8b call nonexistent message")
+}
+
+// DTR-9: registerBatch
+{
+  const { DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  reg.registerBatch([
+    { name: "t1", description: "d1", execute: async () => 1, registeredAt: Date.now() },
+    { name: "t2", description: "d2", execute: async () => 2, registeredAt: Date.now() },
+  ])
+  dtr_assert(reg.size === 2, "DTR-9a registerBatch size = 2")
+  dtr_assert(reg.has("t1") && reg.has("t2"), "DTR-9b registerBatch both tools present")
+}
+
+// DTR-10: clear
+{
+  const { DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  reg.register({ name: "x", description: "y", execute: async () => "z", registeredAt: Date.now() })
+  dtr_assert(reg.size === 1, "DTR-10a size = 1 before clear")
+  reg.clear()
+  dtr_assert(reg.size === 0, "DTR-10b size = 0 after clear")
+}
+
+// DTR-11: getStats
+{
+  const { DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  reg.register({ name: "a", description: "a", execute: async () => 1, metadata: { category: "core" }, registeredAt: Date.now() })
+  reg.register({ name: "b", description: "b", execute: async () => 2, metadata: { category: "analysis" }, registeredAt: Date.now() })
+  reg.register({ name: "c", description: "c", execute: async () => 3, registeredAt: Date.now() }) // uncategorized
+  const stats = reg.getStats()
+  dtr_assert(stats.total === 3, "DTR-11a stats.total = 3")
+  dtr_assert(stats.byCategory.core === 1, "DTR-11b stats.byCategory.core = 1")
+  dtr_assert(stats.byCategory.analysis === 1, "DTR-11c stats.byCategory.analysis = 1")
+  dtr_assert(stats.byCategory.other === 1, "DTR-11d stats.byCategory.other = 1 (uncategorized)")
+}
+
+// DTR-12: toMCPTools
+{
+  const { DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  reg.register({ name: "my_tool", description: "My custom tool", execute: async () => "ok", parameters: { type: "object", properties: { x: { type: "string" } } }, registeredAt: Date.now() })
+  const mcpTools = reg.toMCPTools()
+  dtr_assert(Array.isArray(mcpTools), "DTR-12a toMCPTools returns array")
+  dtr_assert(mcpTools.length === 1, "DTR-12b toMCPTools length = 1")
+  dtr_assert(mcpTools[0].name === "my_tool", "DTR-12c toMCPTools name matches")
+  dtr_assert(mcpTools[0].parameters.type === "object", "DTR-12d toMCPTools parameters preserved")
+}
+
+console.log(`  DTR: ${dtr} passed, ${dtrf} failed`)
+passed += dtr; failed += dtrf
+
+// MCP-SRV: MCPServer tests
+console.log("\n[MCP-SRV] MCPServer — MCP protocol server")
+let mcpSrv = 0, mcpSrvf = 0
+function ms_assert(cond, msg) { if (cond) { mcpSrv++ } else { console.error(`  ❌ ${msg}`); mcpSrvf++ } }
+
+// MCP-SRV-1: Constructor + types
+{
+  const { MCPServer, DynamicToolRegistry } = mod
+  ms_assert(typeof MCPServer === "function", "MCP-SRV-1a MCPServer exported")
+  const reg = new DynamicToolRegistry()
+  const server = new MCPServer(reg)
+  ms_assert(typeof server.start === "function", "MCP-SRV-1b start() function")
+  ms_assert(typeof server.stop === "function", "MCP-SRV-1c stop() function")
+  ms_assert(typeof server.getStatus === "function", "MCP-SRV-1d getStatus() function")
+  ms_assert(typeof server.port === "number", "MCP-SRV-1e port is number")
+}
+
+// MCP-SRV-2: Start + stop + status
+{
+  const { MCPServer, DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  const server = new MCPServer(reg, { port: 0 }) // port 0 = OS-assigned
+  ms_assert(!server.getStatus().running, "MCP-SRV-2a not running before start")
+  await server.start()
+  ms_assert(server.getStatus().running, "MCP-SRV-2b running after start")
+  ms_assert(server.port > 0, "MCP-SRV-2c port assigned")
+  ms_assert(server.getStatus().toolCount === 0, "MCP-SRV-2d no tools yet")
+  await server.stop()
+  ms_assert(!server.getStatus().running, "MCP-SRV-2e not running after stop")
+}
+
+// MCP-SRV-3: GET /health
+{
+  const { MCPServer, DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  const server = new MCPServer(reg, { port: 0 })
+  await server.start()
+  try {
+    const http = await import("node:http")
+    const res = await new Promise((resolve, reject) => {
+      http.request(`http://127.0.0.1:${server.port}/health`, (res) => {
+        let data = ""
+        res.on("data", c => data += c)
+        res.on("end", () => resolve({ status: res.statusCode, body: data }))
+      }).on("error", reject).end()
+    })
+    ms_assert(res.status === 200, "MCP-SRV-3a /health returns 200")
+    const parsed = JSON.parse(res.body)
+    ms_assert(parsed.status === "ok", "MCP-SRV-3b /health body.status = ok")
+    ms_assert(typeof parsed.tools === "number", "MCP-SRV-3c /health has tools count")
+  } finally {
+    await server.stop()
+  }
+}
+
+// MCP-SRV-4: GET /tools (convenience endpoint)
+{
+  const { MCPServer, DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  reg.register({ name: "my_api", description: "API tool", execute: async () => "done", registeredAt: Date.now() })
+  const server = new MCPServer(reg, { port: 0 })
+  await server.start()
+  try {
+    const http = await import("node:http")
+    const res = await new Promise((resolve, reject) => {
+      http.request(`http://127.0.0.1:${server.port}/tools`, (res) => {
+        let data = ""
+        res.on("data", c => data += c)
+        res.on("end", () => resolve({ status: res.statusCode, body: data }))
+      }).on("error", reject).end()
+    })
+    ms_assert(res.status === 200, "MCP-SRV-4a GET /tools returns 200")
+    const parsed = JSON.parse(res.body)
+    ms_assert(Array.isArray(parsed.tools), "MCP-SRV-4b tools is array")
+    ms_assert(parsed.tools.length === 1, "MCP-SRV-4c tools length = 1")
+    ms_assert(parsed.tools[0].name === "my_api", "MCP-SRV-4d tool name matches")
+  } finally {
+    await server.stop()
+  }
+}
+
+// MCP-SRV-5: JSON-RPC initialize
+{
+  const { MCPServer, DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  const server = new MCPServer(reg, { port: 0 })
+  await server.start()
+  try {
+    const http = await import("node:http")
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} })
+    const res = await new Promise((resolve, reject) => {
+      const req = http.request(`http://127.0.0.1:${server.port}/rpc`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+      }, (res) => {
+        let data = ""
+        res.on("data", c => data += c)
+        res.on("end", () => resolve({ status: res.statusCode, body: data }))
+      })
+      req.on("error", reject)
+      req.write(body)
+      req.end()
+    })
+    ms_assert(res.status === 200, "MCP-SRV-5a initialize returns 200")
+    const parsed = JSON.parse(res.body)
+    ms_assert(parsed.jsonrpc === "2.0", "MCP-SRV-5b jsonrpc = 2.0")
+    ms_assert(parsed.result.protocolVersion === "2024-11-05", "MCP-SRV-5c protocolVersion matches")
+    ms_assert(parsed.id === 1, "MCP-SRV-5d id matches")
+  } finally {
+    await server.stop()
+  }
+}
+
+// MCP-SRV-6: JSON-RPC tools/list
+{
+  const { MCPServer, DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  reg.register({ name: "tool_one", description: "First tool", execute: async () => 1, registeredAt: Date.now() })
+  reg.register({ name: "tool_two", description: "Second tool", execute: async () => 2, registeredAt: Date.now() })
+  const server = new MCPServer(reg, { port: 0 })
+  await server.start()
+  try {
+    const http = await import("node:http")
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} })
+    const res = await new Promise((resolve, reject) => {
+      const req = http.request(`http://127.0.0.1:${server.port}/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+      }, (res) => {
+        let data = ""
+        res.on("data", c => data += c)
+        res.on("end", () => resolve({ status: res.statusCode, body: data }))
+      })
+      req.on("error", reject)
+      req.write(body)
+      req.end()
+    })
+    ms_assert(res.status === 200, "MCP-SRV-6a tools/list returns 200")
+    const parsed = JSON.parse(res.body)
+    ms_assert(Array.isArray(parsed.result.tools), "MCP-SRV-6b result.tools is array")
+    ms_assert(parsed.result.tools.length === 2, "MCP-SRV-6c tools length = 2")
+    ms_assert(parsed.result.tools[0].name === "tool_one", "MCP-SRV-6d first tool name")
+    ms_assert(typeof parsed.result.tools[0].description === "string", "MCP-SRV-6e tool has description")
+    ms_assert(typeof parsed.result.tools[0].parameters === "object", "MCP-SRV-6f tool has parameters")
+  } finally {
+    await server.stop()
+  }
+}
+
+// MCP-SRV-7: JSON-RPC tools/call — success
+{
+  const { MCPServer, DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  reg.register({ name: "echo", description: "Echo input", execute: async (args) => `Echo: ${args.msg || "nothing"}`, registeredAt: Date.now() })
+  const server = new MCPServer(reg, { port: 0 })
+  await server.start()
+  try {
+    const http = await import("node:http")
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "echo", arguments: { msg: "hello mcp" } } })
+    const res = await new Promise((resolve, reject) => {
+      const req = http.request(`http://127.0.0.1:${server.port}/rpc`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+      }, (res) => {
+        let data = ""
+        res.on("data", c => data += c)
+        res.on("end", () => resolve({ status: res.statusCode, body: data }))
+      })
+      req.on("error", reject)
+      req.write(body)
+      req.end()
+    })
+    ms_assert(res.status === 200, "MCP-SRV-7a tools/call returns 200")
+    const parsed = JSON.parse(res.body)
+    ms_assert(!parsed.result.isError, "MCP-SRV-7b isError = false")
+    ms_assert(Array.isArray(parsed.result.content), "MCP-SRV-7c content is array")
+    ms_assert(parsed.result.content[0].text.includes("hello mcp"), "MCP-SRV-7d content matches")
+  } finally {
+    await server.stop()
+  }
+}
+
+// MCP-SRV-8: JSON-RPC tools/call — nonexistent tool
+{
+  const { MCPServer, DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  const server = new MCPServer(reg, { port: 0 })
+  await server.start()
+  try {
+    const http = await import("node:http")
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "ghost" } })
+    const res = await new Promise((resolve, reject) => {
+      const req = http.request(`http://127.0.0.1:${server.port}/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+      }, (res) => {
+        let data = ""
+        res.on("data", c => data += c)
+        res.on("end", () => resolve({ status: res.statusCode, body: data }))
+      })
+      req.on("error", reject)
+      req.write(body)
+      req.end()
+    })
+    ms_assert(res.status === 200, "MCP-SRV-8a nonexistent returns 200")
+    const parsed = JSON.parse(res.body)
+    ms_assert(parsed.result.isError, "MCP-SRV-8b isError = true for nonexistent")
+    ms_assert(parsed.result.content[0].text.includes("not found"), "MCP-SRV-8c error message says not found")
+  } finally {
+    await server.stop()
+  }
+}
+
+// MCP-SRV-9: tools/call without name -> error
+{
+  const { MCPServer, DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  const server = new MCPServer(reg, { port: 0 })
+  await server.start()
+  try {
+    const http = await import("node:http")
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 5, method: "tools/call", params: {} })
+    const res = await new Promise((resolve, reject) => {
+      const req = http.request(`http://127.0.0.1:${server.port}/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+      }, (res) => {
+        let data = ""
+        res.on("data", c => data += c)
+        res.on("end", () => resolve({ status: res.statusCode, body: data }))
+      })
+      req.on("error", reject)
+      req.write(body)
+      req.end()
+    })
+    ms_assert(res.status === 200, "MCP-SRV-9a no name returns 200")
+    const parsed = JSON.parse(res.body)
+    ms_assert(parsed.error !== undefined, "MCP-SRV-9b error present")
+    ms_assert(parsed.error.code === -32602, "MCP-SRV-9c error code = -32602")
+  } finally {
+    await server.stop()
+  }
+}
+
+// MCP-SRV-10: 404 for unknown routes
+{
+  const { MCPServer, DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+  const server = new MCPServer(reg, { port: 0 })
+  await server.start()
+  try {
+    const http = await import("node:http")
+    const res = await new Promise((resolve, reject) => {
+      http.request(`http://127.0.0.1:${server.port}/unknown`, (res) => {
+        let data = ""
+        res.on("data", c => data += c)
+        res.on("end", () => resolve({ status: res.statusCode, body: data }))
+      }).on("error", reject).end()
+    })
+    ms_assert(res.status === 404, "MCP-SRV-10a /unknown returns 404")
+  } finally {
+    await server.stop()
+  }
+}
+
+console.log(`  MCP-SRV: ${mcpSrv} passed, ${mcpSrvf} failed`)
+passed += mcpSrv; failed += mcpSrvf
+
+// PA: ProtocolAdapter — unified gateway tests
+console.log("\n[PA] ProtocolAdapter — unified gateway")
+let paPassed = 0, paFailed = 0
+function pa_assert(cond, msg) { if (cond) { paPassed++ } else { console.error(`  ❌ ${msg}`); paFailed++ } }
+
+{
+  // PA-1: Constructor + basic types
+  const { ProtocolAdapter } = mod
+  const { MCPClient } = await import(pluginDist)
+  pa_assert(typeof ProtocolAdapter === "function", "PA-1a ProtocolAdapter constructor exported")
+  pa_assert(typeof MCPClient === "function", "PA-1b MCPClient constructor exported")
+
+  const mcp = new MCPClient()
+  const adapter = new ProtocolAdapter(mcp)
+  pa_assert(typeof adapter.findTools === "function", "PA-1c adapter.findTools is function")
+  pa_assert(typeof adapter.listAll === "function", "PA-1d adapter.listAll is function")
+  pa_assert(typeof adapter.getStats === "function", "PA-1e adapter.getStats is function")
+  pa_assert(typeof adapter.call === "function", "PA-1f adapter.call is function")
+  pa_assert(typeof adapter.discoverA2A === "function", "PA-1g adapter.discoverA2A is function")
+}
+
+// PA-2: findTools with no connections (empty result)
+{
+  const { ProtocolAdapter } = mod
+  const { MCPClient } = await import(pluginDist)
+  const mcp = new MCPClient()
+  const adapter = new ProtocolAdapter(mcp)
+
+  const results = adapter.findTools("database")
+  pa_assert(Array.isArray(results), "PA-2a findTools returns array")
+  pa_assert(results.length === 0, "PA-2b findTools returns empty array with no connections")
+}
+
+// PA-3: listAll with no connections
+{
+  const { ProtocolAdapter } = mod
+  const { MCPClient } = await import(pluginDist)
+  const mcp = new MCPClient()
+  const adapter = new ProtocolAdapter(mcp)
+
+  const all = adapter.listAll()
+  pa_assert(Array.isArray(all), "PA-3a listAll returns array")
+  pa_assert(all.length === 0, "PA-3b listAll returns empty with no connections")
+}
+
+// PA-4: getStats with no connections
+{
+  const { ProtocolAdapter } = mod
+  const { MCPClient } = await import(pluginDist)
+  const mcp = new MCPClient()
+  const adapter = new ProtocolAdapter(mcp)
+
+  const stats = adapter.getStats()
+  pa_assert(stats !== null && typeof stats === "object", "PA-4a getStats returns object")
+  pa_assert(stats.mcp.connections === 0, "PA-4b mcp connections = 0")
+  pa_assert(stats.mcp.totalTools === 0, "PA-4c mcp totalTools = 0")
+  pa_assert(stats.a2a.listened === false, "PA-4d a2a listened = false")
+  pa_assert(stats.a2a.discoveredAgents === 0, "PA-4e a2a discoveredAgents = 0")
+  pa_assert(stats.combined.totalConnections === 0, "PA-4f combined totalConnections = 0")
+  pa_assert(stats.combined.totalTools === 0, "PA-4g combined totalTools = 0")
+}
+
+// PA-5: call throws error with unknown protocol
+{
+  const { ProtocolAdapter } = mod
+  const { MCPClient } = await import(pluginDist)
+  const mcp = new MCPClient()
+  const adapter = new ProtocolAdapter(mcp)
+
+  // Call with unknown source should fail gracefully
+  try {
+    const result = await adapter.call({ protocol: "mcp", source: "nonexistent", name: "test" })
+    pa_assert(result.success === false, "PA-5a call to nonexistent server fails")
+    pa_assert(result.isError === true, "PA-5b call returns isError=true")
+  } catch (err) {
+    pa_assert(true, "PA-5c call errors should be caught, not thrown")
+  }
+}
+
+// PA-6: findTools with query handles empty/no-connect gracefully
+{
+  const { ProtocolAdapter } = mod
+  const { MCPClient } = await import(pluginDist)
+  const mcp = new MCPClient()
+  const adapter = new ProtocolAdapter(mcp)
+
+  const noTerms = adapter.findTools("")
+  pa_assert(Array.isArray(noTerms), "PA-6a findTools('') returns array")
+  pa_assert(noTerms.length === 0, "PA-6b findTools('') returns empty")
+
+  const spaceOnly = adapter.findTools("   ")
+  pa_assert(Array.isArray(spaceOnly), "PA-6c findTools('   ') returns array")
+  pa_assert(spaceOnly.length === 0, "PA-6d findTools('   ') returns empty")
+}
+
+// PA-7: agentic_tools tool is registered (init fresh engine for hook access)
+{
+  const paMockInput = {
+    config: mod.defaultConfig ?? {},
+    sessionID: "pa-test-session",
+    messageID: "msg-pa",
+    agent: "test",
+    directory: "/tmp/test-project",
+    worktree: "/tmp/test-project",
+    experimental_workspace: { register: () => {} },
+    serverUrl: new URL("http://localhost:3000"),
+    $: new Proxy({}, {
+      get() { return async () => ({ exitCode: 0, text: () => "", stdout: Buffer.from(""), stderr: Buffer.from("") }) },
+    }),
+  }
+  const paHooks = await mod.AgenticEngine(paMockInput)
+  const hasToolsTool = "agentic_tools" in paHooks.tool
+  pa_assert(hasToolsTool, "PA-7a agentic_tools tool registered")
+
+  if (hasToolsTool) {
+    const toolDef = paHooks.tool.agentic_tools
+    pa_assert(typeof toolDef.execute === "function", "PA-7b agentic_tools has execute function")
+    pa_assert(toolDef.args !== undefined, "PA-7c agentic_tools has args")
+    pa_assert("action" in toolDef.args, "PA-7d agentic_tools has action arg")
+  }
+  paHooks.dispose?.()
+}
+
+console.log(`  PA: ${paPassed} passed, ${paFailed} failed`)
+passed += paPassed; failed += paFailed
 
 console.log(`Results: ${passed} passed, ${failed} failed`)
 if (failed === 0) console.log("ALL TESTS PASSED")

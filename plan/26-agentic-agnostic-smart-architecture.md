@@ -2,7 +2,7 @@
 
 > **Tujuan**: Menerapkan 7 prinsip agentic agnostic dari riset terbaru (2026) ke opencode-agentic-engine — biar plugin ini gak cuma "tool caller" tapi smart agentic system yang vendor-agnostic, protocol-agnostic, dan self-evolving.
 
-**Terakhir diperbarui**: 2026-06-25
+**Terakhir diperbarui**: 2026-06-25 (sesi 2)
 
 ---
 
@@ -80,7 +80,7 @@ const engine = new LLMEngine({
 | MCP client: list/connect/call | ✅ DONE | `agentic_mcp` tool |
 | A2A protocol: agent interop | ✅ DONE | A2AServer + A2AClient + Agent Card |
 | Dynamic tool registry | ⚠️ PARTIAL | MCP discover ada, runtime add/remove belum |
-| Protocol adapter pattern | ⚠️ PARTIAL | MCP + A2A ada, unified gateway belum |
+| Protocol adapter pattern | ✅ DONE | `ProtocolAdapter` class — unified search, call, list, stats |
 | Session bridging | ❌ BELUM | Belum ada cross-platform session |
 
 ### 3️⃣ Model Agnostic — Cognitive Blueprint ≠ Runtime
@@ -176,7 +176,7 @@ const engine = new LLMEngine({
 | In-context skill extraction | ✅ DONE | `agentic_skill extract` |
 | Skill maturation lifecycle | ✅ DONE | raw → validated → compiled → evolved |
 | Fine-tuning pipeline | ✅ DONE | `agentic_finetune` — prepare/upload/create-job |
-| Auto-trigger evolution | ⚠️ PARTIAL | Trigger ada di `agentic_execute` feedback + `agentic_auto`, belum di setiap step |
+| Auto-trigger evolution | ✅ DONE | EventBus per-step wiring + `cumulativeResults` counter (milestone fix) |
 | Feedback loop (user rating → policy) | ⚠️ PARTIAL | User feedback tracking ada, policy update belum |
 | RL from execution outcomes | ❌ BELUM | Belum ada RL pipeline |
 | Architecture search (RAAS-style) | ❌ BELUM | Belum ada workflow optimization |
@@ -227,7 +227,7 @@ const engine = new LLMEngine({
 - [x] ~~Circuit breaker~~ → hash-based loop detection + rate limiting
 - [x] ~~Hierarchical memory~~ → working → episodic → semantic → procedural
 - [x] ~~Consolidation scheduler~~ → pruning + dedup otomatis
-- [ ] Working memory query (level 1)
+- [x] ~~Working memory query (level 1)~~ → `sessionToEntries()`
 - [x] ~~Procedural memory depth — execution tracking, trace pattern extraction, pruning~~
 
 ### Phase 3 — Provider & Protocol
@@ -235,7 +235,7 @@ const engine = new LLMEngine({
 - [x] ~~Multi-provider dengan auto fallback~~ → fallback chain di LLMEngine
 - [ ] MCP-first: semua tool lewat MCP
 - [x] ~~A2A protocol~~ → A2AServer + A2AClient
-- [ ] Protocol gateway: unified API, multiple backend
+- [x] ~~Protocol gateway: unified API, multiple backend~~ → `ProtocolAdapter` class
 
 ### Phase 4 — Evolution & Safety
 - [x] ~~Constraint manifold~~ → ConstraintManifold (Phase 4C)
@@ -248,7 +248,7 @@ const engine = new LLMEngine({
 
 ## 📊 Status Summary
 
-### ✅ SUDAH SELESAI (23 item)
+### ✅ SUDAH SELESAI (24 item)
 
 | # | Fitur | File | Versi |
 |---|-------|------|-------|
@@ -275,21 +275,20 @@ const engine = new LLMEngine({
 | 21 | **Cost-aware auto-switch (enhanced)** | `llm.ts` budget-aware + tracking + all categories | v0.6.0 |
 | 22 | **Procedural memory depth** | `memory-orchestrator.ts` trace query + pattern extraction + pruning | v0.6.0 |
 | 23 | **Auto-trigger evolution** | `continuous-evolution.ts`, `index.ts` EventBus wiring | v0.6.0 |
+| 24 | **ProtocolAdapter (unified gateway)** | `protocol-adapter.ts` | v0.6.0 |
 
-### ⚠️ PARTIAL (1 item)
+### ⚠️ PARTIAL (0 item)
 
-| # | Fitur | Keterangan |
-|---|-------|------------|
-| 1 | Protocol adapter | MCP + A2A ada, unified gateway belum |
+*(Semua PARTIAL item dari sesi sebelumnya sudah selesai)*
 
 ### ❌ BELUM (5 item)
 
 | # | Fitur | Keterangan |
 |---|-------|------------|
-| 1 | Session bridging | Cross-platform session |
-| 2 | MCP-first tools | 30 tools masih hardcoded |
-| 3 | Tool versioning | Belum ada versioning |
-| 4 | RL pipeline | Reinforcement learning dari execution |
+| 1 | Session bridging | Cross-platform session (VS Code ↔ CLI) |
+| 2 | MCP-first tools | 30 tools masih hardcoded, harusnya via MCP |
+| 3 | Tool versioning | Belum ada versioning system |
+| 4 | RL pipeline | Reinforcement learning dari execution outcomes |
 | 5 | POMDP verification | Formal verification model |
 
 ---
@@ -303,8 +302,8 @@ const engine = new LLMEngine({
 | **Agent Spec** | Blueprint interface ✅ | Multi-env deployment |
 | **Memory** | 4-level + procedural depth ✅ | + Working query + Procedural depth |
 | **Tools** | MCP + A2A ✅ | MCP-first + dynamic discovery |
-| **Protocol** | MCP + A2A ✅ | Unified gateway |
-| **Evolution** | Auto-trigger partial ⚠️ | Full auto (in-context → SFT → RL) |
+| **Protocol** | Unified gateway ✅ | Unified gateway |
+| **Evolution** | Auto-trigger ✅ | Full auto (in-context → SFT → RL) |
 | **Safety** | ConstraintManifold ✅ | + POMDP verification |
 | **Context** | DAG-structured ✅ | + Bounded by depth |
 
@@ -333,3 +332,38 @@ const engine = new LLMEngine({
 | 2026-06-25 | `7df6472` | ConstraintManifold (Phase 4C) + Skill Lifecycle (Phase 4A) |
 | 2026-06-25 | `6035995` | Graph Harness 3-layer: PlanningLayer, ExecutionLayer, RecoveryLayer + Immutable plan enforcement (createPlanVersion) + Export layers + 47 PL/EL/RL tests |
 | 2026-06-25 | `982d664` | Multi-provider auto fallback for LLM calls (Phase 3B) |
+| 2026-06-25 | `43e1ce4` | Auto-trigger evolution: EventBus per-step wiring + cumulativeResults milestone fix |
+| 2026-06-25 | *(pending)* | ProtocolAdapter: unified MCP+A2A gateway (findTools, call, listAll, getStats) + agentic_tools tool |
+
+---
+
+## 🎯 Next Steps (Rekomendasi)
+
+Prioritas berdasarkan dampak vs effort:
+
+### 🔴 Priority 1 — High Impact, Medium Effort
+
+| Item | Alasan |
+|------|--------|
+| **MCP-first tools** (30 hardcoded → MCP-based) | Paling transformatif: semua tool bisa dynamic register/unregister, third-party bisa add tools tanpa plugin update. Core arsitektur berubah. |
+| **Session bridging** (VS Code ↔ CLI) | Cross-platform session = memory + plan persist lintas env. Gap besar buat enterprise adoption. |
+
+### 🟡 Priority 2 — Medium Impact, Low/Medium Effort
+
+| Item | Alasan |
+|------|--------|
+| **Tool versioning** | Version pinning + migration path buat breaking changes. Prasyarat buat MCP-first. |
+| **Feedback loop** (user rating → policy update) | Rating sudah ada di `agentic_execute`, tinggal wiring ke policy auto-update. Effort kecil. |
+
+### 🟢 Priority 3 — High Impact, High Effort
+
+| Item | Alasan |
+|------|--------|
+| **RL pipeline** | Dari execution outcomes → reward model → policy gradient. Prasyarat: butuh banyak data (ribuan episode). |
+| **POMDP verification** | Formal model buat execution verification. Butuh riset matematis. |
+
+### 📋 Rekomendasi Immediate
+
+1. **MCP-first tools** — karena semua PARTIAL/BELUM lainnya bergantung pada arsitektur tools: tool versioning perlu MCP-first, session bridging perlu tool serialization, RL pipeline butuh tool metrics. **Ini bottleneck-nya.**
+2. Setelah MCP-first selesai, lanjut **Session bridging** (memory persist lintas env).
+3. Barengan: **Feedback loop** (low effort, high UX impact).

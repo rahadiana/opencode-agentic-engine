@@ -61,6 +61,9 @@ import { RouterAgent } from "./core/router-agent.js"
 import { DataCleaner } from "./core/data-cleaner.js"
 import { MultiIndexRAG } from "./memory/multi-index-rag.js"
 import { MCPClient } from "./core/mcp-client.js"
+import { ProtocolAdapter } from "./core/protocol-adapter.js"
+import { DynamicToolRegistry } from "./core/dynamic-tool-registry.js"
+import { MCPServer } from "./core/mcp-server.js"
 import { buildAgenticSystemInstructions, type ToolEntry } from "./core/prompt-builder.js"
 import { type KnowledgeEntry } from "./core/prompt-template.js"
 import { ToolRouter } from "./core/tool-router.js"
@@ -222,6 +225,7 @@ const createEngine: Plugin = async (input, _options) => {
     { name: "agentic_rag", description: "Store, search, and retrieve knowledge across category-segregated indexes. Use with agentic_router for scoped search. Key: `action` (search/store/stats/categories), `query`." },
     { name: "agentic_mcp", description: "Connect to external servers (DB, APIs) via stdio/HTTP to call remote tools. Use when task needs real-world data (weather, DB, API). Key: `action` (connect/list/call/disconnect)." },
     { name: "agentic_a2a", description: "Agent-to-Agent protocol: discover remote agents, delegate tasks, start/stop A2A server. Google A2A standard for cross-framework interoperability. Key: `action` (serve/discover/delegate/list/ping/stats)." },
+    { name: "agentic_tools", description: "Unified tool search and calling across MCP + A2A protocols. Search for tools by keyword, auto-route calls, list all connections, view combined stats. Key: `action` (search/call/list/stats)." },
     { name: "agentic_finetune", description: "End-to-end pipeline: prepare training data from skills → upload to OpenAI → create/monitor jobs. Use to fine-tune models from agent experience. Key: `action` (prepare/save/upload/create-job/status)." },
     { name: "agentic_db", description: "SQLite database backend untuk persistence — query, save, load, stats. Lebih cepat dari file JSON. Support structured queries dengan WHERE, JOIN, GROUP BY." },
   ]
@@ -323,6 +327,8 @@ const createEngine: Plugin = async (input, _options) => {
       }
     }
   }
+  const dynamicToolRegistry = new DynamicToolRegistry()
+  const mcpServer = new MCPServer(dynamicToolRegistry, { port: 0 })
   const navigator = new CodebaseNavigator()
   const depTracker = new DependencyTracker()
   // Build initial file-level dependency graph from project source
@@ -517,6 +523,7 @@ const confidenceStore = new ConfidenceStore()
   const routerAgent = new RouterAgent(llmEngine)
   const dataCleaner = new DataCleaner(llmEngine)
   const mcpClient = new MCPClient()
+  const protocolAdapter = new ProtocolAdapter(mcpClient)
   const toolRouter = new ToolRouter()
   toolRouter.setDescriptions(TOOL_REGISTRY)
   const recentToolCalls: string[] = []  // last 20 tool calls for routing context
@@ -4981,6 +4988,175 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
+      // ── MCP Server: expose plugin tools via MCP protocol ──
+      agentic_mcp_server: tool({
+        description: "Start or stop the MCP server that exposes plugin tools via standard MCP protocol. External MCP clients can discover and call plugin tools. Use 'status' to check server state.",
+        args: {
+          action: tool.schema.enum(["start", "stop", "status", "restart"]).describe("Action: start (start server), stop (stop server), status (check state), restart (stop + start)"),
+          port: tool.schema.number().optional().describe("Port for MCP server (default: auto-assign). Only used with action=start."),
+        },
+        async execute(args, _context) {
+          switch (args.action) {
+            case "start": {
+              if (mcpServer.getStatus().running) {
+                return { output: `MCP server already running on port ${mcpServer.port}` }
+              }
+              await mcpServer.start()
+              const url = `http://127.0.0.1:${mcpServer.port}`
+              return { output: `MCP server started on port ${mcpServer.port}\n\nClients can connect via: ${url}\n\nRegistered tools: ${dynamicToolRegistry.size}`, metadata: { port: mcpServer.port, toolCount: dynamicToolRegistry.size } }
+            }
+            case "stop": {
+              if (!mcpServer.getStatus().running) {
+                return { output: "MCP server is not running" }
+              }
+              await mcpServer.stop()
+              return { output: "MCP server stopped" }
+            }
+            case "restart": {
+              await mcpServer.stop()
+              await mcpServer.start()
+              return { output: `MCP server restarted on port ${mcpServer.port}` }
+            }
+            case "status": {
+              const status = mcpServer.getStatus()
+              if (!status.running) {
+                return { output: "MCP server is not running", metadata: { running: false } }
+              }
+              return {
+                output: [
+                  `## MCP Server Status`,
+                  `| Metric | Value |`,
+                  `|--------|-------|`,
+                  `| Running | ✅ Yes |`,
+                  `| Port | ${status.port} |`,
+                  `| Tools | ${status.toolCount} |`,
+                  `| Uptime | ${(status.uptimeMs / 1000).toFixed(0)}s |`,
+                ].join("\n"),
+                metadata: { running: true, port: status.port, toolCount: status.toolCount, uptimeMs: status.uptimeMs },
+              }
+            }
+            default:
+              return { output: "Unknown action. Use: start, stop, status, restart" }
+          }
+        },
+      }),
+
+      // ── Protocol Adapter: Unified tool discovery & calling ──
+      agentic_tools: tool({
+        description: "Unified tool discovery and calling across MCP + A2A protocols. Search for tools, auto-route calls to the right backend, list all connections, and view combined stats.",
+        args: {
+          action: tool.schema.enum(["search", "call", "list", "stats"]).describe("Action: search (find tools across protocols), call (auto-route call), list (all connections), stats (combined)"),
+          query: tool.schema.string().optional().describe("Search query (for search action)"),
+          protocol: tool.schema.enum(["mcp", "a2a"]).optional().describe("Protocol hint (optional, for call action)"),
+          source: tool.schema.string().optional().describe("Source identifier: MCP server name or A2A agent URL (for call action)"),
+          method: tool.schema.string().optional().describe("Tool name or capability to call (for call action)"),
+          params: tool.schema.string().optional().describe("JSON string of parameters (for call action)"),
+          maxResults: tool.schema.number().optional().describe("Max search results (default: 20)"),
+        },
+        async execute(args, _context) {
+          switch (args.action) {
+            case "search": {
+              if (!args.query) return { output: "Parameter 'query' diperlukan untuk search" }
+              const results = protocolAdapter.findTools(args.query, args.maxResults ?? 20)
+              if (results.length === 0) {
+                return { output: `No tools found matching "${args.query}" across MCP or A2A.` }
+              }
+              const mcpCount = results.filter(r => r.protocol === "mcp").length
+              const a2aCount = results.filter(r => r.protocol === "a2a").length
+              const lines = [
+                `## 🔍 Unified Tool Search: "${args.query}"`,
+                ``,
+                `**${results.length} results** (${mcpCount} MCP · ${a2aCount} A2A)`,
+                ``,
+              ]
+              for (const r of results) {
+                const icon = r.protocol === "mcp" ? "🔌" : "🤖"
+                lines.push(`${icon} **${r.name}** \`[${r.protocol}]\``)
+                lines.push(`   ${r.description}`)
+                lines.push(`   Source: \`${r.source}\``)
+                lines.push(``)
+              }
+              return { output: lines.join("\n"), metadata: { results, total: results.length } }
+            }
+
+            case "call": {
+              if (!args.source) return { output: "Parameter 'source' diperlukan: MCP server name atau A2A agent URL" }
+              if (!args.method) return { output: "Parameter 'method' diperlukan: tool name atau capability" }
+              if (!args.protocol) return { output: "Parameter 'protocol' diperlukan: 'mcp' atau 'a2a'" }
+
+              let params: Record<string, unknown> = {}
+              if (args.params) {
+                try { params = JSON.parse(args.params) } catch { params = {} }
+              }
+
+              const result = await protocolAdapter.call({
+                protocol: args.protocol,
+                source: args.source,
+                name: args.method,
+              }, params)
+
+              const icon = result.isError ? "❌" : "✅"
+              const contentStr = typeof result.content === "string"
+                ? result.content.slice(0, 3000)
+                : JSON.stringify(result.content, null, 2).slice(0, 3000)
+
+              return {
+                output: `## ${icon} Protocol Call\n\n**Protocol:** ${result.protocol}\n**Source:** ${result.source}\n**Method:** ${result.method}\n**Duration:** ${result.durationMs}ms\n\n### Result\n\`\`\`json\n${contentStr}\n\`\`\``,
+                metadata: { callResult: result },
+              }
+            }
+
+            case "list": {
+              const all = protocolAdapter.listAll()
+              if (all.length === 0) {
+                return { output: "No connections. Use MCP connect or A2A serve/discover first." }
+              }
+              const lines = ["## 📡 Protocol Connections", ""]
+              for (const entry of all) {
+                const icon = entry.protocol === "mcp" ? "🔌" : "🤖"
+                lines.push(`${icon} **${entry.name}** \`[${entry.protocol}]\``)
+                lines.push(`   ${entry.description}`)
+                lines.push(`   ${entry.connected ? "✅ Connected" : "❌ Disconnected"} · ${entry.toolCount} tools`)
+                lines.push(``)
+              }
+              return { output: lines.join("\n"), metadata: { connections: all } }
+            }
+
+            case "stats": {
+              const stats = protocolAdapter.getStats()
+              const lines = [
+                "## 📊 Protocol Adapter Stats",
+                "",
+                "### 🔌 MCP",
+                `| Metric | Value |`,
+                `|--------|-------|`,
+                `| Connections | ${stats.mcp.connections} |`,
+                `| Total Tools | ${stats.mcp.totalTools} |`,
+                "",
+                "### 🤖 A2A",
+                `| Metric | Value |`,
+                `|--------|-------|`,
+                `| Server Active | ${stats.a2a.listened ? "✅ Yes" : "❌ No"} |`,
+                `| Discovered Agents | ${stats.a2a.discoveredAgents} |`,
+                `| Tasks Sent | ${stats.a2a.tasksSent} |`,
+                `| Tasks Completed | ${stats.a2a.tasksCompleted} |`,
+                `| Tasks Failed | ${stats.a2a.tasksFailed} |`,
+                "",
+                "### Combined",
+                `| Metric | Value |`,
+                `|--------|-------|`,
+                `| Total Connections | ${stats.combined.totalConnections} |`,
+                `| Total Tools/Capabilities | ${stats.combined.totalTools} |`,
+              ]
+              return { output: lines.join("\n"), metadata: { stats } }
+            }
+
+            default:
+              return { output: "Unknown action. Use: search, call, list, stats" }
+          }
+        },
+      }),
+
       // ── Stage III: Fine-Tuning Pipeline ──
       agentic_finetune: tool({
         description: "End-to-end fine-tuning pipeline: prepare dataset, save file, upload to OpenAI, create and monitor fine-tuning job.",
@@ -6411,5 +6587,9 @@ export { ConsolidationScheduler, type ConsolidationSchedule, type ConsolidationT
 export { ConstraintManifold, type ConstraintViolation, type ConstraintCheck, type SafetyPolicy, type ActionProposal, type ConstraintCategory, type ConstraintSeverity, type ConstraintConfig } from "./core/constraint-manifold.js"
 export { type SkillLifecycleStage, type MaturationCriteria } from "./memory/skill-store.js"
 export { LLMEngine, type LLMConfig, type LLMRequest, type LLMResponse, TOOL_COMPLEXITY, type CostAutoSwitchConfig, type CostSwitchEvent } from "./core/llm.js"
+export { MCPClient, type MCPConfig, type MCPConnection, type MCPCallResult } from "./core/mcp-client.js"
 export { ModelRegistry, type ModelStats, type ModelScore } from "./core/model-registry.js"
+export { ProtocolAdapter, type Protocol, type ToolDescriptor, type ProtocolCallResult, type ProtocolAdapterStats } from "./core/protocol-adapter.js"
+export { DynamicToolRegistry, type DynamicToolRegistration, type ToolCallResult } from "./core/dynamic-tool-registry.js"
+export { MCPServer, type MCPServerConfig, type MCPServerStatus } from "./core/mcp-server.js"
 export { ConfidenceScorer, ConfidenceStore, type ConfidenceScore, type ConfidenceDimensions, type ScoringSignals, type StepConfidenceRecord } from "./core/confidence-scorer.js"
