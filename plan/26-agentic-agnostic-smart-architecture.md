@@ -114,9 +114,9 @@ const engine = new LLMEngine({
 | Item | Status | Keterangan |
 |------|--------|------------|
 | DAG-based execution | ✅ DONE | `DAGEngine` — Kahn's sort, parallel, circuit breaker |
-| PlanningLayer/ExecutionLayer/RecoveryLayer | ⚠️ PARTIAL | DAG engine ada, tapi layer belum terpisah eksplisit |
+| PlanningLayer/ExecutionLayer/RecoveryLayer | ✅ DONE | 3-layer terpisah (v0.6.0) |
 | Immutable plan | ✅ DONE | `createPlanVersion()` — replan creates new version, v1 preserved immutably (v0.6.0) |
-| Strict escalation chain | ⚠️ PARTIAL | Recovery strategies ada (restart-node/plan/escalate), chaining otomatis belum |
+| Strict escalation chain | ✅ DONE | Auto-chaining retry→replan→escalate per node with max depth (v0.6.0) |
 | Circuit breaker + loop detection | ✅ DONE | Hash-based + max steps + token budget |
 | Legacy while(true) fallback | ⚠️ PARTIAL | `runLoopBatched()` masih ada sebagai backward compat |
 
@@ -272,17 +272,14 @@ const engine = new LLMEngine({
 | 18 | **Graph Harness 3-layer separation** | `planning-layer.ts`, `execution-layer.ts`, `recovery-layer.ts` | v0.6.0 |
 | 19 | **Immutable plan enforcement** | `planning-layer.ts` `createPlanVersion()` | v0.6.0 |
 
-### ⚠️ PARTIAL (5 item)
+### ⚠️ PARTIAL (4 item)
 
 | # | Fitur | Keterangan |
 |---|-------|------------|
 | 1 | Protocol adapter | MCP + A2A ada, unified gateway belum |
-| 2 | Layer separation | ✅ DONE | 3-layer: Planning/Execution/Recovery (v0.6.0) |
-| 3 | Immutable plan | ✅ DONE | `createPlanVersion()` — new version per replan, v1 preserved (v0.6.0) |
-| 4 | Strict escalation | ⚠️ PARTIAL | Recovery strategies ada, chaining belum |
-| 5 | Procedural depth | Store ada, execution tracking belum |
-| 6 | Auto-trigger evolution | Trigger di feedback path, belum di semua step |
-| 7 | Cost-aware auto-switch | Cost weighting ada, threshold-based switch belum |
+| 2 | Procedural depth | Store ada, execution tracking belum |
+| 3 | Auto-trigger evolution | Trigger di feedback path, belum di semua step |
+| 4 | Cost-aware auto-switch | Cost weighting ada, threshold-based switch belum |
 
 ### ❌ BELUM (5 item)
 

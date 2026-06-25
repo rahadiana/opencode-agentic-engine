@@ -7839,6 +7839,96 @@ const rl_assert = (c, m) => { if (c) { rl++; console.log(`  PASS: ${m}`) } else 
 console.log(`  RL: ${rl} passed, ${rlf} failed`)
 passed += rl; failed += rlf
 
+// ── Strict Escalation Chain Tests (ESC) ──
+console.log("\n[ESC] Strict Escalation Chain — Graph Harness §3.3")
+let esc = 0, escf = 0
+const esc_assert = (c, m) => { if (c) { esc++; console.log(`  PASS: ${m}`) } else { escf++; console.log(`  FAIL: ${m}`) } }
+
+// ESC-1: RecoveryLayer automatically escalates retry → replan → escalate across successive calls
+{
+  const escRl = new RecoveryLayer({ maxRetries: 1, maxReplans: 1 })
+  const escPll = new PlanningLayer(new DAGEngine())
+  const { plan: escPlan, context: escCtx } = escPll.createPlan("esc goal", [
+    { id: "s1", description: "step 1", dependsOn: [], verificationCriteria: [] },
+  ])
+  const escNode = escPlan.nodes[0]
+
+  // Call 1: retryCount=0 < maxRetries(1) → retry
+  escCtx.nodeStates.set("s1", { nodeId: "s1", status: "failed", retryCount: 0 })
+  const d1 = escRl.decide(escNode, escCtx, "fail 1")
+  esc_assert(d1.action === "retry", "ESC-1a first decide → retry")
+
+  // Call 2: retryCount=1 >= maxRetries(1) → replan
+  escCtx.nodeStates.set("s1", { nodeId: "s1", status: "failed", retryCount: 1 })
+  const d2 = escRl.decide(escNode, escCtx, "fail after retries")
+  esc_assert(d2.action === "replan", "ESC-1b retries exhausted → replan")
+
+  // Call 3: retryCount=2, replans tracked: replan calls so far = 1 >= maxReplans(1) → escalate
+  escCtx.nodeStates.set("s1", { nodeId: "s1", status: "failed", retryCount: 2 })
+  const d3 = escRl.decide(escNode, escCtx, "fail after replan")
+  esc_assert(d3.action === "escalate", "ESC-1c replans exhausted → escalate")
+}
+
+// ESC-2: Stateful escalation — recovery attempts tracked across retry and replan levels
+{
+  const escRl2 = new RecoveryLayer({ maxRetries: 2, maxReplans: 2 })
+  const escPll2 = new PlanningLayer(new DAGEngine())
+  const { plan: escPlan2, context: escCtx2 } = escPll2.createPlan("esc2", [
+    { id: "x", description: "node x", dependsOn: [], verificationCriteria: [] },
+  ])
+  const escNode2 = escPlan2.nodes[0]
+
+  // Simulate a full escalation chain: 5 decide() calls
+  // retry level: retryCount 0..1 (< maxRetries=2)
+  escCtx2.nodeStates.set("x", { nodeId: "x", status: "failed", retryCount: 0 })
+  esc_assert(escRl2.decide(escNode2, escCtx2, "e1").action === "retry", "ESC-2a retryCount=0 → retry")
+
+  escCtx2.nodeStates.set("x", { nodeId: "x", status: "failed", retryCount: 1 })
+  esc_assert(escRl2.decide(escNode2, escCtx2, "e2").action === "retry", "ESC-2b retryCount=1 → retry")
+
+  // replan level: retryCount >= maxRetries, replan attempts 0..1 (< maxReplans=2)
+  escCtx2.nodeStates.set("x", { nodeId: "x", status: "failed", retryCount: 2 })
+  esc_assert(escRl2.decide(escNode2, escCtx2, "e3").action === "replan", "ESC-2c retries exhausted → replan")
+
+  escCtx2.nodeStates.set("x", { nodeId: "x", status: "failed", retryCount: 3 })
+  esc_assert(escRl2.decide(escNode2, escCtx2, "e4").action === "replan", "ESC-2d replan #2")
+
+  // escalate level: replans exhausted
+  escCtx2.nodeStates.set("x", { nodeId: "x", status: "failed", retryCount: 4 })
+  esc_assert(escRl2.decide(escNode2, escCtx2, "e5").action === "escalate", "ESC-2e replans exhausted → escalate")
+}
+
+// ESC-3: Independent escalation for different nodes
+{
+  const escRl3 = new RecoveryLayer({ maxRetries: 1, maxReplans: 1 })
+  const escPll3 = new PlanningLayer(new DAGEngine())
+  const { plan: escPlan3, context: escCtx3 } = escPll3.createPlan("esc3", [
+    { id: "a", description: "node a", dependsOn: [], verificationCriteria: [] },
+    { id: "b", description: "node b", dependsOn: [], verificationCriteria: [] },
+  ])
+  const escNodeA = escPlan3.nodes[0]
+  const escNodeB = escPlan3.nodes[1]
+
+  // Node A: retryCount=0 → retry
+  escCtx3.nodeStates.set("a", { nodeId: "a", status: "failed", retryCount: 0 })
+  esc_assert(escRl3.decide(escNodeA, escCtx3, "fail a").action === "retry", "ESC-3a node A → retry")
+
+  // Node B: retryCount=0 → retry (independent of A)
+  escCtx3.nodeStates.set("b", { nodeId: "b", status: "failed", retryCount: 0 })
+  esc_assert(escRl3.decide(escNodeB, escCtx3, "fail b").action === "retry", "ESC-3b node B → retry")
+
+  // Node A exhausted (retryCount >= maxRetries) → replan
+  escCtx3.nodeStates.set("a", { nodeId: "a", status: "failed", retryCount: 1 })
+  const da2 = escRl3.decide(escNodeA, escCtx3, "fail a again")
+  esc_assert(da2.action === "replan", "ESC-3c node A exhausted → replan")
+
+  // Node B STILL at retryCount=0 → retry (independent escalation)
+  esc_assert(escRl3.decide(escNodeB, escCtx3, "fail b again").action === "retry", "ESC-3d node B still retry")
+}
+
+console.log(`  ESC: ${esc} passed, ${escf} failed`)
+passed += esc; failed += escf
+
 console.log(`Results: ${passed} passed, ${failed} failed`)
 if (failed === 0) console.log("ALL TESTS PASSED")
 process.exit(failed > 0 ? 1 : 0)
