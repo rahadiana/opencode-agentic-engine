@@ -6908,6 +6908,156 @@ const assertA2A = (cond, msg) => { if (cond) a2a++; else { a2af++; console.error
 console.log(`  A2A: ${a2a} passed, ${a2af} failed`)
 passed += a2a; failed += a2af
 
+// ── Multi-Provider Auto Fallback Tests ──
+console.log("\n[MPF] Multi-Provider Auto Fallback — LLMEngine fallback chain")
+let mpf = 0, mpff = 0
+function assertMPF(cond, msg) {
+  if (cond) { console.log(`  PASS: ${msg}`); mpf++ } else { console.error(`  FAIL: ${msg}`); mpff++ }
+}
+
+// Import LLMEngine and ModelRegistry from the built plugin
+const { LLMEngine, ModelRegistry } = await import(pluginDist)
+
+// MPF-1: LLMConfig has fallback settings
+{
+  const engine = new LLMEngine({ fallbackModels: ["deepseek/deepseek-chat", "openai/gpt-4o"], maxFallbackAttempts: 4 })
+  const config = engine.getFallbackConfig()
+  assertMPF(config.models.length === 2, "MPF-1a: fallback models stored")
+  assertMPF(config.models[0] === "deepseek/deepseek-chat", "MPF-1b: first fallback model correct")
+  assertMPF(config.models[1] === "openai/gpt-4o", "MPF-1c: second fallback model correct")
+  assertMPF(config.maxAttempts === 4, "MPF-1d: max fallback attempts stored")
+}
+
+// MPF-2: setFallbackModels updates config
+{
+  const engine = new LLMEngine()
+  engine.setFallbackModels(["anthropic/claude-sonnet-4-6"], 5)
+  const config = engine.getFallbackConfig()
+  assertMPF(config.models.length === 1, "MPF-2a: setFallbackModels stores models")
+  assertMPF(config.models[0] === "anthropic/claude-sonnet-4-6", "MPF-2b: model correct")
+  assertMPF(config.maxAttempts === 5, "MPF-2c: max attempts updated")
+}
+
+// MPF-3: Default config has empty fallback chain
+{
+  const engine = new LLMEngine()
+  const config = engine.getFallbackConfig()
+  assertMPF(config.models.length === 0, "MPF-3a: default fallback models empty")
+  assertMPF(config.maxAttempts === 3, "MPF-3b: default max attempts is 3")
+}
+
+// MPF-4: resolveFallbackChain excludes primary model
+{
+  const engine = new LLMEngine({ fallbackModels: ["deepseek/deepseek-chat", "openai/gpt-4o"] })
+  const chain = engine.previewFallbackChain("deepseek/deepseek-chat")
+  assertMPF(!chain.includes("deepseek/deepseek-chat"), "MPF-4a: primary model excluded from chain")
+  assertMPF(chain.includes("openai/gpt-4o"), "MPF-4b: other models included in chain")
+}
+
+// MPF-5: resolveFallbackChain respects maxFallbackAttempts
+{
+  const engine = new LLMEngine({
+    fallbackModels: ["m1/a", "m2/b", "m3/c", "m4/d"],
+    maxFallbackAttempts: 3  // primary + 2 fallbacks max
+  })
+  const chain = engine.previewFallbackChain("m0/primary")
+  assertMPF(chain.length <= 2, `MPF-5a: chain length capped (got ${chain.length}, max 2)`)
+}
+
+// MPF-6: resolveFallbackChain includes registry-ranked models
+{
+  const engine = new LLMEngine()
+  const registry = new ModelRegistry()
+  // Add models with scores
+  registry.addModel("reg-model-a")
+  registry.recordCall("reg-model-a", true, 100)
+  registry.recordCall("reg-model-a", true, 100)
+  registry.recordCall("reg-model-a", true, 100)
+  registry.addModel("reg-model-b")
+  registry.recordCall("reg-model-b", true, 100)
+  registry.recordCall("reg-model-b", false, 100)
+  engine.setModelRegistry(registry)
+
+  const chain = engine.previewFallbackChain("unrelated/model")
+  assertMPF(chain.includes("reg-model-a"), "MPF-6a: registry model included in chain")
+  assertMPF(chain.includes("reg-model-b"), "MPF-6b: both registry models included")
+}
+
+// MPF-7: resolveFallbackChain orders by reliability
+{
+  const engine = new LLMEngine()
+  const registry = new ModelRegistry()
+  // Model A: 90% success
+  registry.addModel("good-model")
+  for (let i = 0; i < 9; i++) registry.recordCall("good-model", true, 100)
+  registry.recordCall("good-model", false, 100)
+  // Model B: 60% success
+  registry.addModel("ok-model")
+  for (let i = 0; i < 6; i++) registry.recordCall("ok-model", true, 100)
+  for (let i = 0; i < 4; i++) registry.recordCall("ok-model", false, 100)
+  engine.setModelRegistry(registry)
+
+  const chain = engine.previewFallbackChain("unrelated/model")
+  const goodIdx = chain.indexOf("good-model")
+  const okIdx = chain.indexOf("ok-model")
+  assertMPF(goodIdx >= 0 && okIdx >= 0, "MPF-7a: both models in chain")
+  assertMPF(goodIdx < okIdx, "MPF-7b: higher reliability model comes first")
+}
+
+// MPF-8: resolveFallbackChain excludes unstable models
+{
+  const engine = new LLMEngine()
+  const registry = new ModelRegistry()
+  // Unstable model: <40% success
+  registry.addModel("unstable-model")
+  registry.recordCall("unstable-model", true, 100)
+  registry.recordCall("unstable-model", false, 100)
+  registry.recordCall("unstable-model", false, 100)
+  registry.recordCall("unstable-model", false, 100)
+  registry.recordCall("unstable-model", false, 100)
+  // Healthy model
+  registry.addModel("healthy-model")
+  for (let i = 0; i < 5; i++) registry.recordCall("healthy-model", true, 100)
+  engine.setModelRegistry(registry)
+
+  const chain = engine.previewFallbackChain("unrelated/model")
+  assertMPF(!chain.includes("unstable-model"), "MPF-8a: unstable model excluded")
+  assertMPF(chain.includes("healthy-model"), "MPF-8b: healthy model included")
+}
+
+// MPF-9: Empty config produces empty chain (no registry)
+{
+  const engine = new LLMEngine()
+  const chain = engine.previewFallbackChain("some/model")
+  assertMPF(chain.length === 0, "MPF-9a: empty config + no registry = empty chain")
+}
+
+// MPF-10: Config fallback models come before registry models
+{
+  const engine = new LLMEngine({ fallbackModels: ["config/first"] })
+  const registry = new ModelRegistry()
+  registry.addModel("registry/second")
+  for (let i = 0; i < 5; i++) registry.recordCall("registry/second", true, 100)
+  engine.setModelRegistry(registry)
+
+  const chain = engine.previewFallbackChain("unrelated/model")
+  assertMPF(chain[0] === "config/first", `MPF-10a: config model first (got ${chain[0]})`)
+  const regIdx = chain.indexOf("registry/second")
+  assertMPF(regIdx > 0, "MPF-10b: registry model after config model")
+}
+
+// MPF-11: updateConfig merges fallback settings
+{
+  const engine = new LLMEngine()
+  engine.updateConfig({ fallbackModels: ["a/b"], maxFallbackAttempts: 7 })
+  const config = engine.getFallbackConfig()
+  assertMPF(config.models.length === 1, "MPF-11a: updateConfig sets fallback models")
+  assertMPF(config.maxAttempts === 7, "MPF-11b: updateConfig sets max attempts")
+}
+
+console.log(`  MPF: ${mpf} passed, ${mpff} failed`)
+passed += mpf; failed += mpff
+
 console.log(`Results: ${passed} passed, ${failed} failed`)
 if (failed === 0) console.log("ALL TESTS PASSED")
 process.exit(failed > 0 ? 1 : 0)

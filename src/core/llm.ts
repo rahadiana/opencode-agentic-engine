@@ -6,18 +6,35 @@ function logParseError(context: string, error: unknown): void {
 }
 
 /**
- * LLMConfig — minimal: hanya token & temperature settings.
+ * LLMConfig — token, temperature, dan fallback settings.
  *
  * 🔴 CRITICAL: Model TIDAK bisa di-set dari sini.
  * Semua LLM calls lewat OpenCode SDK — SDK yang menentukan model.
  * Plugin gak pernah ngatur model secara langsung.
  * Model override hanya via agentic_model (per-tool/per-category).
+ *
+ * Multi-provider auto fallback:
+ *   Saat model utama gagal, engine mencoba model lain dari fallbackChain.
+ *   Urutan: explicit model → fallbackChain[0] → fallbackChain[1] → ... → session default.
+ *   Max attempts: 3 (termasuk primary).
  */
 export interface LLMConfig {
   /** Maximum tokens for completion */
   maxTokens?: number
   /** Temperature (0.0-1.0) */
   temperature?: number
+  /**
+   * Ordered list of fallback models when the primary model fails.
+   * Each entry is "providerID/modelID" format.
+   * Engine tries these in order before falling back to session default.
+   * Example: ["deepseek/deepseek-chat", "openai/gpt-4o", "anthropic/claude-sonnet-4-6"]
+   */
+  fallbackModels?: string[]
+  /**
+   * Maximum number of model attempts (including the primary).
+   * Prevents infinite fallback loops. Default: 3.
+   */
+  maxFallbackAttempts?: number
 }
 
 export interface LLMRequest {
@@ -121,6 +138,8 @@ export class LLMEngine {
     this.config = {
       maxTokens: config.maxTokens ?? 4096,
       temperature: config.temperature ?? 0.3,
+      fallbackModels: config.fallbackModels ?? [],
+      maxFallbackAttempts: config.maxFallbackAttempts ?? 3,
     }
     this.sessionReader = new SessionReader()
   }
@@ -192,6 +211,42 @@ export class LLMEngine {
   }
 
   /**
+   * Configure fallback models for multi-provider auto fallback.
+   * These models are tried in order when the primary model fails.
+   *
+   * @param models - Ordered list of "providerID/modelID" strings
+   * @param maxAttempts - Maximum total attempts (including primary). Default: 3.
+   */
+  setFallbackModels(models: string[], maxAttempts?: number): void {
+    this.config.fallbackModels = [...models]
+    if (maxAttempts !== undefined) {
+      this.config.maxFallbackAttempts = maxAttempts
+    }
+  }
+
+  /**
+   * Get current fallback configuration.
+   */
+  getFallbackConfig(): { models: string[]; maxAttempts: number } {
+    return {
+      models: [...(this.config.fallbackModels ?? [])],
+      maxAttempts: this.config.maxFallbackAttempts ?? 3,
+    }
+  }
+
+  /**
+   * Preview the fallback chain that would be used for a given primary model.
+   * Useful for debugging and testing.
+   *
+   * @param primaryModel - The model that would be tried first (e.g., "deepseek/deepseek-chat")
+   * @param taskType - Optional task type for registry scoring
+   * @returns Ordered list of fallback models that would be tried
+   */
+  previewFallbackChain(primaryModel: string, taskType?: string): string[] {
+    return this.resolveFallbackChain(primaryModel, taskType)
+  }
+
+  /**
    * Nama model untuk display fallback.
    * Mengembalikan model terakhir yang berhasil di-resolve dari OpenCode SDK.
    * Di-update setiap kali call() sukses (dari auto-resolve atau explicit model).
@@ -235,6 +290,64 @@ export class LLMEngine {
   /** Get semantic cache stats (or null if disabled) */
   getSemanticCacheStats(): { size: number; hits: number; misses: number; hitRate: number } | null {
     return this.semanticCache?.stats() ?? null
+  }
+
+  /**
+   * Build ordered fallback chain for multi-provider auto fallback.
+   * Returns models to try in order (excluding the primary model).
+   *
+   * Priority:
+   * 1. Config-level fallbackModels (user-configured via LLMConfig)
+   * 2. Registry-ranked models (healthy > degraded > unstable)
+   * 3. Empty chain (caller falls back to session default)
+   *
+   * @param primaryModel - The model that already failed (excluded from chain)
+   * @param taskType - Optional task type for registry scoring
+   * @returns Ordered list of "providerID/modelID" strings to try
+   */
+  private resolveFallbackChain(primaryModel: string | null, taskType?: string): string[] {
+    const chain: string[] = []
+    const seen = new Set<string>()
+
+    // Exclude primary model from candidates
+    if (primaryModel) seen.add(primaryModel)
+
+    // 1. Config-level fallback models (user-configured priority)
+    const configFallbacks = this.config.fallbackModels ?? []
+    for (const model of configFallbacks) {
+      if (!seen.has(model)) {
+        chain.push(model)
+        seen.add(model)
+      }
+    }
+
+    // 2. Registry-ranked models (if registry available)
+    if (this.modelRegistry) {
+      const allScores = this.modelRegistry.getAllScores()
+      for (const score of allScores) {
+        if (!seen.has(score.model) && score.status !== "unstable") {
+          chain.push(score.model)
+          seen.add(score.model)
+        }
+      }
+
+      // Also consider task-type-specific scores
+      if (taskType) {
+        for (const score of allScores) {
+          if (!seen.has(score.model)) {
+            const taskScore = this.modelRegistry.getScoreByTaskType(score.model, taskType)
+            if (taskScore && taskScore.status !== "unstable") {
+              chain.push(score.model)
+              seen.add(score.model)
+            }
+          }
+        }
+      }
+    }
+
+    // Respect maxFallbackAttempts (minus 1 for the primary attempt)
+    const maxChainLength = (this.config.maxFallbackAttempts ?? 3) - 1
+    return chain.slice(0, maxChainLength)
   }
 
   /** Set chat mode flag. Called from experimental.chat.system.transform hook. */
@@ -368,19 +481,55 @@ export class LLMEngine {
       success = false
     }
 
-    // ── Fallback: kalo model override gagal, retry 1x pake session default ──
-    if (!success && explicitModel) {
-      const failedModel = `${explicitModel.providerID}/${explicitModel.modelID}`
-      this.modelRegistry?.recordCall(failedModel, false, Date.now() - startTime)
+    // ── Multi-provider auto fallback ──
+    // Priority: explicit model → fallback chain (registry-ranked) → session default
+    if (!success) {
+      const primaryModel = explicitModel ? `${explicitModel.providerID}/${explicitModel.modelID}` : null
+      const taskType = this.sessionStore && this.pluginSessionId
+        ? this.sessionStore.getOrCreate(this.pluginSessionId).currentTaskType
+        : undefined
 
-      delete req.model
-      try {
-        response = await this.callOpenCode(req)
-        success = !response.content.startsWith("LLM error") && !response.content.startsWith("[NO_LLM]") && !response.content.startsWith("LLM call failed")
-      } catch (fallbackError) {
-        logParseError('LLM fallback call', fallbackError);
-        response = { content: "LLM call threw an exception", finishReason: "error" }
-        success = false
+      // Record primary model failure
+      if (primaryModel) {
+        this.modelRegistry?.recordCall(primaryModel, false, Date.now() - startTime, taskType)
+      }
+
+      // Build fallback chain from registry + config
+      const fallbackChain = this.resolveFallbackChain(primaryModel, taskType)
+
+      // Try each fallback model in order
+      for (const fallbackModel of fallbackChain) {
+        if (success) break
+
+        const [providerID, ...modelParts] = fallbackModel.split('/')
+        const modelID = modelParts.join('/')
+        if (!modelID) continue // Skip malformed entries
+
+        req.model = { providerID, modelID }
+        try {
+          response = await this.callOpenCode(req)
+          success = !response.content.startsWith("LLM error") && !response.content.startsWith("[NO_LLM]") && !response.content.startsWith("LLM call failed")
+        } catch (fallbackError) {
+          logParseError(`LLM fallback call (${fallbackModel})`, fallbackError);
+          response = { content: "LLM call threw an exception", finishReason: "error" }
+          success = false
+        }
+
+        // Record fallback attempt
+        this.modelRegistry?.recordCall(fallbackModel, success, Date.now() - startTime, taskType)
+      }
+
+      // Final fallback: session default (no model override)
+      if (!success) {
+        delete req.model
+        try {
+          response = await this.callOpenCode(req)
+          success = !response.content.startsWith("LLM error") && !response.content.startsWith("[NO_LLM]") && !response.content.startsWith("LLM call failed")
+        } catch (sessionFallbackError) {
+          logParseError('LLM session default fallback', sessionFallbackError);
+          response = { content: "LLM call threw an exception", finishReason: "error" }
+          success = false
+        }
       }
     }
 
@@ -436,11 +585,14 @@ export class LLMEngine {
       this._lastKnownModel = effectiveModel
     }
 
+    // ── Record successful call to registry ──
+    // Note: failures are already recorded in the fallback loop above.
+    // We only record the final success here to avoid double-counting.
     const taskType = this.sessionStore && this.pluginSessionId
       ? this.sessionStore.getOrCreate(this.pluginSessionId).currentTaskType
       : undefined
-    if (effectiveModel) {
-      this.modelRegistry?.recordCall(effectiveModel, success, latency, taskType)
+    if (success && effectiveModel) {
+      this.modelRegistry?.recordCall(effectiveModel, true, latency, taskType)
     }
 
     // Feed token usage to BudgetTracker

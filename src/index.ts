@@ -6358,3 +6358,5 @@ export { MemoryOrchestrator, type MemoryLevel, type MemoryEntry, type MemoryQuer
 export { ConsolidationScheduler, type ConsolidationSchedule, type ConsolidationTrigger, type SchedulerStats, type ConsolidationCallback } from "./memory/consolidation-scheduler.js"
 export { ConstraintManifold, type ConstraintViolation, type ConstraintCheck, type SafetyPolicy, type ActionProposal, type ConstraintCategory, type ConstraintSeverity, type ConstraintConfig } from "./core/constraint-manifold.js"
 export { type SkillLifecycleStage, type MaturationCriteria } from "./memory/skill-store.js"
+export { LLMEngine, type LLMConfig, type LLMRequest, type LLMResponse, TOOL_COMPLEXITY } from "./core/llm.js"
+export { ModelRegistry, type ModelStats, type ModelScore } from "./core/model-registry.js"
