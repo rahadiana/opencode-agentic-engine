@@ -521,6 +521,34 @@ KNOWLEDGE-FIRST PROMPT INJECTION PIPELINE
 6. `npm run build && node test/run.mjs` — must pass
 7. `./test-container.sh` — must pass all Docker layers
 
+Lanjutkan pekerjaan ini secara mandiri sampai checkpoint yang masuk akal.
+
+Aturan kerja yang wajib kamu ikuti:
+
+1. Selalu cari dan pakai referensi dari dokumentasi OpenCode agar implementasi tetap kompatibel dengan pola, API, dan praktik yang benar di OpenCode.
+2. Jika ada tool / tool-calling / integration yang perlu diimplementasikan atau disesuaikan, implementasinya harus mengikuti cara kerja OpenCode yang relevan, bukan asumsi sendiri.
+3. Baca ulang paper / referensi utama yang menjadi dasar implementasi sebelum melanjutkan, lalu pastikan implementasi benar-benar mengikuti paper tersebut.
+4. Saya sangat mengutamakan real test. Jadi jangan berhenti di asumsi atau reasoning saja:
+
+   * jalankan test yang relevan,
+   * lakukan verifikasi nyata bila memungkinkan,
+   * catat hasil test, kegagalan, dan perbaikannya.
+5. Buka dan gunakan skill `opencode-skill` jika itu relevan dengan pekerjaan ini.
+6. Setelah semua target pada sesi ini terpenuhi, lanjutkan ke sesi berikutnya tanpa menunggu instruksi tambahan, selama masih dalam ruang lingkup pekerjaan yang sama.
+7. Jika ada perubahan yang layak dikomit, lakukan commit/push ke repository.
+8. Beri catatan lengkap setelah selesai, minimal berisi:
+
+   * apa yang dikerjakan,
+   * referensi OpenCode / paper yang dipakai,
+   * perubahan implementasi yang dibuat,
+   * tool/integrasi yang disesuaikan,
+   * test yang dijalankan dan hasilnya,
+   * kendala / hal yang belum selesai,
+   * rekomendasi langkah berikutnya.
+
+Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pasti, cek referensinya dulu sebelum implementasi.
+
+
 ## Recent Updates
 
 ### v0.5.3 — P0-P3 Reliability Hardening (2026-06-24)
