@@ -23,7 +23,7 @@ node test/e2e-llm.mjs       # LLM E2E: 19 tests (auto: OpenCode Free)
 
 ```
 src/
-├── index.ts                   # Plugin entry: registers 29 tools + 6 hooks
+├── index.ts                   # Plugin entry: registers 30 tools + 6 hooks
 ├── README.md                  # → Dokumentasi fungsi per folder untuk AI context
 │
 ├── core/                      # Inti engine: planning, execution, verification
@@ -224,6 +224,7 @@ Semua tool menggunakan prefix `agentic_`. Dikelompokkan berdasarkan Stage:
 | `agentic_clean` | `text`, `format`, `schema?` | `{ cleaned, validJson }` | Strip debate artifacts + reformat. Regex first → LLM enhancement. |
 | `agentic_rag` | `action` (search/store/stats), `query` | `{ results }` | Multi-index RAG dengan category segregation. TF-IDF + vector hybrid search. |
 | `agentic_mcp` | `action` (connect/list/call/disconnect) | `{ tools, result }` | MCP client. Connect ke external servers (stdio/HTTP). Discover + call tools. |
+| `agentic_a2a` | `action` (serve/stop/discover/delegate/list/ping/stats) | `{ output }` | A2A (Agent-to-Agent) protocol. Discover remote agents, delegate tasks, serve Agent Card. Google A2A standard untuk cross-framework interop. |
 
 ## Model Resolution
 
