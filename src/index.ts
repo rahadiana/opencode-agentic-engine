@@ -898,7 +898,18 @@ const confidenceStore = new ConfidenceStore()
       const trigger = continuousEvolution.shouldEvolve(sessionId)
       if (trigger) {
         console.debug(`[auto-evolve] Triggered: ${trigger.reason}`)
-        runAutoEvolve().catch((err) => console.warn(`[auto-evolve] Fire-and-forget evolution error:`, (err as Error).message))
+        runAutoEvolve().then((result) => {
+          // Tampilkan hasil evolusi ke user via console.log + trace
+          console.log(`[auto-evolve] ${result.replace(/\n/g, " | ")}`)
+          traceLogger.log({
+            toolUsed: "auto-evolve",
+            success: true,
+            input: trigger.reason,
+            output: result.slice(0, 500),
+            step: "auto-evolve",
+            durationMs: 0,
+          })
+        }).catch((err) => console.warn(`[auto-evolve] Fire-and-forget evolution error:`, (err as Error).message))
       }
     } catch {
       // Non-fatal — don't let evolution errors affect step execution

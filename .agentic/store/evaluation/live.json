@@ -4,12 +4,23 @@
     "stepResults": [],
     "errorRecoveries": [],
     "navigations": [],
-    "delegations": [],
+    "delegations": [
+      {
+        "taskId": "arch-001",
+        "role": "architect",
+        "success": true
+      },
+      {
+        "taskId": "arch-001",
+        "role": "architect",
+        "success": true
+      }
+    ],
     "skillLookups": [
       {
         "found": true
       }
     ]
   },
-  "updatedAt": "2026-06-25T17:10:41.102Z"
+  "updatedAt": "2026-06-25T18:19:34.651Z"
 }

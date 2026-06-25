@@ -3,23 +3,23 @@
   "data": {
     "opencode/deepseek-v4-flash-free": {
       "model": "opencode/deepseek-v4-flash-free",
-      "totalCalls": 462,
-      "successCalls": 462,
+      "totalCalls": 979,
+      "successCalls": 979,
       "failedCalls": 0,
       "hallucinationCount": 0,
-      "avgLatencyMs": 0,
-      "lastUsed": 1782407405987,
+      "avgLatencyMs": 4134.081716036772,
+      "lastUsed": 1782411538432,
       "consecutiveFailures": 0,
-      "consecutiveSuccesses": 462,
+      "consecutiveSuccesses": 979,
       "quarantineUntil": 0,
       "byTaskType": {
         "chat": {
-          "totalCalls": 462,
-          "successCalls": 462,
+          "totalCalls": 968,
+          "successCalls": 968,
           "failedCalls": 0,
           "hallucinationCount": 0,
           "avgLatencyMs": 0,
-          "lastUsed": 1782407405987,
+          "lastUsed": 1782411538432,
           "consecutiveFailures": 0,
           "consecutiveSuccesses": 0,
           "quarantineUntil": 0
@@ -27,5 +27,5 @@
       }
     }
   },
-  "updatedAt": "2026-06-25T17:10:41.101Z"
+  "updatedAt": "2026-06-25T18:19:34.649Z"
 }

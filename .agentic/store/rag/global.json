@@ -3,8 +3,89 @@
   "data": {
     "automotive": {
       "episodes": [],
-      "skills": [],
-      "tfidfDocs": []
+      "skills": [
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782411534578-uin7",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-25T18:18:54.578Z",
+              "lastUsed": "2026-06-25T18:18:54.578Z",
+              "lastModified": "2026-06-25T18:18:54.578Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-25T18:18:54.578Z"
+        }
+      ],
+      "tfidfDocs": [
+        {
+          "id": "sk-skill-1782411534578-uin7",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782411534578-uin7"
+          }
+        }
+      ]
     },
     "financial": {
       "episodes": [],
@@ -457,6 +538,41 @@
           ],
           "score": 1,
           "usageCount": 0
+        },
+        {
+          "id": "ses_1001b0bf4ffeOTqIA8kU9Cpxh5",
+          "sessionId": "ses_1001b0bf4ffeOTqIA8kU9Cpxh5",
+          "planGoal": "Create 9 use case and worker files for the billing system",
+          "summary": "Completed: Create 9 use case and worker files for the billing system",
+          "outcome": "success",
+          "decisions": [
+            "completed",
+            "completed",
+            "completed",
+            "completed",
+            "completed",
+            "completed",
+            "completed",
+            "completed",
+            "completed"
+          ],
+          "filesChanged": [
+            "/home/runner/nn/internal/usecase/user_usecase.go",
+            "/home/runner/nn/internal/usecase/product_usecase.go",
+            "/home/runner/nn/internal/usecase/subscription_usecase.go",
+            "/home/runner/nn/internal/usecase/invoice_usecase.go",
+            "/home/runner/nn/internal/usecase/payment_usecase.go",
+            "/home/runner/nn/internal/usecase/reconciliation_usecase.go",
+            "/home/runner/nn/internal/worker/invoice_worker.go",
+            "/home/runner/nn/internal/worker/payment_worker.go",
+            "/home/runner/nn/internal/worker/reconciliation_worker.go"
+          ],
+          "timestamp": "2026-06-25T17:51:49.162Z",
+          "tags": [
+            "completed"
+          ],
+          "score": 0.5,
+          "usageCount": 0
         }
       ],
       "skills": [],
@@ -859,6 +975,19 @@
           "metadata": {
             "type": "episode",
             "episodeId": "rag-ep-1782404514497"
+          }
+        },
+        {
+          "id": "ep-ses_1001b0bf4ffeOTqIA8kU9Cpxh5",
+          "category": "tech",
+          "title": "Create 9 use case and worker files for the billing system",
+          "content": "Completed: Create 9 use case and worker files for the billing system\ncompleted\ncompleted\ncompleted\ncompleted\ncompleted\ncompleted\ncompleted\ncompleted\ncompleted",
+          "keywords": [
+            "completed"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "ses_1001b0bf4ffeOTqIA8kU9Cpxh5"
           }
         }
       ]
@@ -1312,5 +1441,5 @@
       ]
     }
   },
-  "updatedAt": "2026-06-25T17:11:26.914Z"
+  "updatedAt": "2026-06-25T18:19:42.946Z"
 }
