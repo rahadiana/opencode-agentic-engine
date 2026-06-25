@@ -1,0 +1,31 @@
+{
+  "key": "registry",
+  "data": {
+    "opencode/deepseek-v4-flash-free": {
+      "model": "opencode/deepseek-v4-flash-free",
+      "totalCalls": 462,
+      "successCalls": 462,
+      "failedCalls": 0,
+      "hallucinationCount": 0,
+      "avgLatencyMs": 0,
+      "lastUsed": 1782407405987,
+      "consecutiveFailures": 0,
+      "consecutiveSuccesses": 462,
+      "quarantineUntil": 0,
+      "byTaskType": {
+        "chat": {
+          "totalCalls": 462,
+          "successCalls": 462,
+          "failedCalls": 0,
+          "hallucinationCount": 0,
+          "avgLatencyMs": 0,
+          "lastUsed": 1782407405987,
+          "consecutiveFailures": 0,
+          "consecutiveSuccesses": 0,
+          "quarantineUntil": 0
+        }
+      }
+    }
+  },
+  "updatedAt": "2026-06-25T17:10:41.101Z"
+}

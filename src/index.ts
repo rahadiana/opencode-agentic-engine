@@ -54,6 +54,7 @@ import { ConfigLoader } from "./core/config.js"
 import { BudgetTracker } from "./core/budget-tracker.js"
 import { AutoRetryManager } from "./core/auto-retry.js"
 import { EventBus } from "./core/event-bus.js"
+import { WorkflowEngine } from "./core/workflow-engine.js"
 import { PatternDiscovery } from "./drift/pattern-discovery.js"
 import { LiveEvaluator } from "./evaluation/live-evaluator.js"
 import { DebateLoop } from "./core/debate-loop.js"
@@ -434,6 +435,13 @@ const confidenceStore = new ConfidenceStore()
   const agentRuntime = new AgentRuntime()
   agentRuntime.setOpencodeClient(input.client)
   agentRuntime.setModelRegistry(modelRegistry)
+
+  // WorkflowEngine — event-driven tool chaining
+  const workflowEngine = new WorkflowEngine({
+    eventBus,
+    sessionStore,
+    orchestrator,
+  })
 
   // Discover models from OpenCode client + env vars
   ;(async () => {
@@ -1691,6 +1699,18 @@ const confidenceStore = new ConfidenceStore()
             }
           }
 
+          // WorkflowEngine: auto-chain step events
+          const chainResult = workflowEngine.relayStep(
+            context.sessionID, args.stepId, args.success, args.output,
+            args.filesModified ?? [], args.error, Date.now() - startTime,
+          )
+          if (chainResult.nextSteps.length > 0) {
+            response += `\n### 🔗 Auto-Chain\nNext ready step(s): \`${chainResult.nextSteps.join("`, `")}\`\n`
+          }
+          if (chainResult.recoverySteps.length > 0) {
+            response += `\n### 🔄 Recovery Available\nRetry #${chainResult.recoverySteps.length} — call \`agentic_reflect\` to diagnose before retrying.\n`
+          }
+
           return { output: response, metadata: { progress, nextStep: nextStep?.id, verifyResult } }
         },
       }),
@@ -2747,6 +2767,9 @@ const confidenceStore = new ConfidenceStore()
               }
             }
           }
+
+          // WorkflowEngine: auto-chain delegation events
+          workflowEngine.relayDelegation(context.sessionID, args.taskId, role, !!agentResult, agentResult, args.pipelineRunId)
 
           traceLogger.log({
             step: "delegate",
@@ -6626,5 +6649,7 @@ export { MCPClient, type MCPConfig, type MCPConnection, type MCPCallResult } fro
 export { ModelRegistry, type ModelStats, type ModelScore } from "./core/model-registry.js"
 export { ProtocolAdapter, type Protocol, type ToolDescriptor, type ProtocolCallResult, type ProtocolAdapterStats } from "./core/protocol-adapter.js"
 export { DynamicToolRegistry, type DynamicToolRegistration, type ToolCallResult } from "./core/dynamic-tool-registry.js"
+export { EventBus } from "./core/event-bus.js"
+export { WorkflowEngine, type WorkflowConfig, type ChainedResult } from "./core/workflow-engine.js"
 export { MCPServer, type MCPServerConfig, type MCPServerStatus } from "./core/mcp-server.js"
 export { ConfidenceScorer, ConfidenceStore, type ConfidenceScore, type ConfidenceDimensions, type ScoringSignals, type StepConfidenceRecord } from "./core/confidence-scorer.js"
