@@ -74,6 +74,7 @@ import { WorldModel } from "./core/world-model.js"
 import { SimulationEngine, type SimulatedStep } from "./core/simulation-engine.js"
 import { MetaReasoner } from "./core/meta-reasoner.js"
 import { BlueprintParser, BlueprintResolver, type ModelSpecMap } from "./core/agent-blueprint.js"
+import { ConstraintManifold } from "./core/constraint-manifold.js"
 
 // ── Build-time version injected by esbuild define ──
 declare const __VERSION__: string
@@ -603,6 +604,10 @@ const confidenceStore = new ConfidenceStore()
 
   // ── MetaReasoner (Comparison 22: Meta-Reasoning Strategy) ──
   const metaReasoner = new MetaReasoner()
+
+  // ── ConstraintManifold (Phase 4C: Safety by design) ──
+  const constraintManifold = new ConstraintManifold()
+  void constraintManifold // available via import for direct usage
 
   // Load cross-session knowledge artifact
   try {
@@ -3519,7 +3524,22 @@ const confidenceStore = new ConfidenceStore()
           } catch { /* no traces yet */ }
 
           if (traces.length > 0) {
-            const data = dashboard.generate(traces, Date.now())
+            const data = dashboard.generate(traces, Date.now(), {
+              skillStore: {
+                getAll: () => skillStore.getAll(),
+                getLifecycleStats: () => skillStore.getLifecycleStats(),
+                get size() { return skillStore.size },
+              },
+              constraintManifold: {
+                snapshot: () => constraintManifold.snapshot(),
+                getActiveModifications: () => constraintManifold.getActiveModifications(),
+                getRecentViolations: () => constraintManifold.getRecentViolations(),
+              },
+              semanticCacheStats: llmEngine.getSemanticCacheStats(),
+              modelRegistry: {
+                getAllScores: () => modelRegistry.getAllScores(),
+              },
+            })
             traceSection = dashboard.formatForDisplay(data)
           }
 
@@ -5619,6 +5639,27 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                   consolidationScheduler.onSessionEnd()
                 }
               } catch { /* non-fatal */ }
+
+              // Phase 4B: Auto-evolution — check if evolution should be triggered
+              try {
+                const evoTrigger = continuousEvolution.shouldEvolve(context.sessionID)
+                if (evoTrigger) {
+                  runAutoEvolve().catch(() => { /* non-fatal */ })
+                }
+              } catch { /* non-fatal */ }
+
+              // Phase 4A: Auto-mature skills that meet next-stage criteria
+              try {
+                const matureSummary = skillStore.autoMature()
+                const matureKeys = Object.keys(matureSummary)
+                if (matureKeys.length > 0) {
+                  // Log for observability
+                  const totalMatured = Object.values(matureSummary).reduce((a: number, b: number) => a + b, 0)
+                  if (totalMatured > 0) {
+                    console.debug(`[auto] Auto-matured ${totalMatured} skills: ${JSON.stringify(matureSummary)}`)
+                  }
+                }
+              } catch { /* non-fatal */ }
             })().catch((err) => console.warn(`[agentic_auto] thorough post-processing error:`, err))
           }
 
@@ -5998,6 +6039,8 @@ const pluginModule: PluginModule = {
 export default pluginModule
 
 // Re-export key classes so tests can construct them directly
+export { Dashboard } from "./observability/dashboard.js"
+
 export { ErrorAnalyzer } from "./core/error-analyzer.js"
 export { RoleRegistry } from "./agents/role-registry.js"
 export { VectorStore } from "./memory/vector-store.js"
@@ -6036,3 +6079,5 @@ export { buildAgentPrompt, buildAgenticSystemInstructions, buildGenericAgentProm
 export { SessionStore } from "./memory/session-store.js"
 export { MemoryOrchestrator, type MemoryLevel, type MemoryEntry, type MemoryQuery, type MemoryQueryResult, type ConsolidationReport } from "./memory/memory-orchestrator.js"
 export { ConsolidationScheduler, type ConsolidationSchedule, type ConsolidationTrigger, type SchedulerStats, type ConsolidationCallback } from "./memory/consolidation-scheduler.js"
+export { ConstraintManifold, type ConstraintViolation, type ConstraintCheck, type SafetyPolicy, type ActionProposal, type ConstraintCategory, type ConstraintSeverity, type ConstraintConfig } from "./core/constraint-manifold.js"
+export { type SkillLifecycleStage, type MaturationCriteria } from "./memory/skill-store.js"

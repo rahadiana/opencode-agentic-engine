@@ -6281,6 +6281,362 @@ p3aOk("P3A-3d MemoryOrchestrator consolidation report includes all Phase 3 field
 console.log(`  Phase 3A: ${p3a} passed, ${p3af} failed`)
 passed += p3a; failed += p3af
 
+// ── Phase 4A: Skill Maturation Lifecycle ─────────────────────
+console.log("\n[P4] Phase 4 — Evolution & Safety")
+const CM = mod.ConstraintManifold
+let p4 = 0, p4f = 0
+const p4Ok = (name, fn) => { try { fn(); p4++; } catch (e) { console.error(`  FAIL: ${name}: ${e.message}`); p4f++; } }
+
+p4Ok("P4-1a new skills start as 'raw' lifecycle stage", () => {
+  const store = new SK2()
+  const def = csd("lifecycle-test", "pattern", [], [{ action: "execute", description: "Step", expectedOutput: "Done" }])
+  const rec = store.record(def)
+  const stage = store.getLifecycle(rec.definition.meta.id)
+  if (stage !== "raw") throw new Error(`Expected raw, got ${stage}`)
+})
+
+p4Ok("P4-1b canMature returns true when criteria met", () => {
+  const store = new SK2()
+  const def = csd("mature-test", "pattern", [], [{ action: "execute", description: "Step", expectedOutput: "Done" }])
+  const rec = store.record(def)
+  const id = rec.definition.meta.id
+  // Simulate enough usage for validated (usage >= 3, success >= 0.7)
+  rec.usageCount = 3
+  rec.successRate = 0.8
+  const canMature = store.canMature(id)
+  if (!canMature) throw new Error("Expected canMature to be true with usage=3, success=0.8")
+})
+
+p4Ok("P4-1c mature() promotes to next stage", () => {
+  const store = new SK2()
+  const def = csd("mature-promote", "pattern", [], [{ action: "execute", description: "Step", expectedOutput: "Done" }])
+  const rec = store.record(def)
+  const id = rec.definition.meta.id
+  rec.usageCount = 5; rec.successRate = 0.9
+  const next = store.mature(id)
+  if (next !== "validated") throw new Error(`Expected validated, got ${next}`)
+  if (store.getLifecycle(id) !== "validated") throw new Error("Lifecycle should now be validated")
+})
+
+p4Ok("P4-1d mature() advances through all stages", () => {
+  const store = new SK2()
+  const def = csd("mature-full", "pattern", [], [{ action: "execute", description: "Step", expectedOutput: "Done" }])
+  const rec = store.record(def)
+  const id = rec.definition.meta.id
+
+  // raw → validated
+  rec.usageCount = 3; rec.successRate = 0.8
+  const s1 = store.mature(id)
+  if (s1 !== "validated") throw new Error(`stage1: expected validated, got ${s1}`)
+
+  // validated → compiled
+  rec.usageCount = 12; rec.successRate = 0.85
+  const s2 = store.mature(id)
+  if (s2 !== "compiled") throw new Error(`stage2: expected compiled, got ${s2}`)
+
+  // compiled → evolved
+  rec.usageCount = 30; rec.successRate = 0.95
+  const s3 = store.mature(id)
+  if (s3 !== "evolved") throw new Error(`stage3: expected evolved, got ${s3}`)
+
+  // Already evolved — canMature should be false
+  if (store.canMature(id)) throw new Error("Should not be able to mature past evolved")
+  if (store.getNextStage(id) !== null) throw new Error("Next stage should be null for evolved")
+})
+
+p4Ok("P4-1e autoMature promotes multiple skills at once", () => {
+  const store = new SK2()
+  const ids = []
+  for (let i = 0; i < 3; i++) {
+    const def = csd(`auto-${i}`, "pattern", [], [{ action: "execute", description: `Step ${i}`, expectedOutput: "Done" }])
+    const rec = store.record(def)
+    rec.usageCount = 5; rec.successRate = 0.9
+    ids.push(rec.definition.meta.id)
+  }
+  const summary = store.autoMature()
+  const totalPromoted = Object.values(summary).reduce((a, b) => a + b, 0)
+  if (totalPromoted < 1) throw new Error(`Expected promotions, got: ${JSON.stringify(summary)}`)
+  for (const id of ids) {
+    if (store.getLifecycle(id) !== "validated") throw new Error(`Skill ${id} should be validated after autoMature`)
+  }
+})
+
+p4Ok("P4-1f getLifecycleStats returns correct distribution", () => {
+  const store = new SK2()
+  // raw skill
+  store.record(csd("raw-1", "p", [], [{ action: "execute", description: "S", expectedOutput: "D" }]))
+  // validated skill
+  const def2 = csd("val-1", "p", [], [{ action: "execute", description: "S", expectedOutput: "D" }])
+  const r2 = store.record(def2); r2.usageCount = 5; r2.successRate = 0.9; store.mature(r2.definition.meta.id)
+  const stats = store.getLifecycleStats()
+  if (stats.raw < 1) throw new Error(`Expected at least 1 raw, got ${JSON.stringify(stats)}`)
+  if (stats.validated < 1) throw new Error(`Expected at least 1 validated, got ${JSON.stringify(stats)}`)
+})
+
+// ── Phase 4C: ConstraintManifold ──────────────────────────────
+p4Ok("P4-2a ConstraintManifold blocks file deletion", () => {
+  const cm = new CM()
+  const check = cm.validate({ type: "file_delete", target: "/tmp/test.txt", description: "Delete test file" })
+  if (check.passed) throw new Error("File deletion should be blocked")
+  if (check.violations.length === 0) throw new Error("Expected violations for file deletion")
+  if (check.violations[0].category !== "file_safety") throw new Error("Expected file_safety category")
+})
+
+p4Ok("P4-2b ConstraintManifold blocks protected paths", () => {
+  const cm = new CM()
+  const check = cm.validate({ type: "file_write", target: ".env.production", description: "Write .env" })
+  if (check.passed) throw new Error("Protected path should be blocked")
+})
+
+p4Ok("P4-2c ConstraintManifold detects dangerous commands", () => {
+  const cm = new CM()
+  const check = cm.validate({
+    type: "shell_exec", target: "shell",
+    description: "Run rm -rf /",
+    command: "rm -rf /var/log"
+  })
+  if (check.passed) throw new Error("Dangerous command should be blocked")
+})
+
+p4Ok("P4-2d ConstraintManifold passes safe actions", () => {
+  const cm = new CM()
+  const check = cm.validate({
+    type: "file_write", target: "/tmp/safe-file.ts",
+    description: "Write safe file",
+    estimatedTokens: 5000,
+    estimatedFilesAffected: 1,
+  })
+  if (!check.passed) throw new Error("Safe file write should pass")
+  if (check.violations.length !== 0) throw new Error("Expected no violations")
+})
+
+p4Ok("P4-2e ConstraintManifold detects concurrent modifications", () => {
+  const cm = new CM()
+  cm.beginModification("/src/main.ts")
+  const check = cm.validate({
+    type: "file_edit", target: "/src/main.ts",
+    description: "Edit main.ts",
+  })
+  if (check.passed) throw new Error("Concurrent modification should be blocked")
+  cm.endModification("/src/main.ts")
+})
+
+p4Ok("P4-2f ConstraintManifold warns on budget overrun", () => {
+  const cm = new CM()
+  const check = cm.validate({
+    type: "file_write", target: "/tmp/big.ts",
+    description: "Write large file",
+    estimatedTokens: 200000,
+    estimatedFilesAffected: 50,
+  })
+  if (check.passed !== true) throw new Error("Budget warnings should not block (severity=warning)")
+  const hasWarning = check.violations.some(v => v.category === "budget" && v.severity === "warning")
+  if (!hasWarning) throw new Error("Expected budget warning")
+})
+
+p4Ok("P4-2g ConstraintManifold policy is configurable", () => {
+  const cm = new CM({
+    policies: { blockFileDeletion: false, maxFilesPerAction: 100 },
+  })
+  const check = cm.validate({ type: "file_delete", target: "/tmp/t.txt", description: "Delete" })
+  if (!check.passed) throw new Error("File deletion should pass when policy allows it")
+  if (cm.getPolicy().maxFilesPerAction !== 100) throw new Error("Expected maxFilesPerAction=100")
+})
+
+p4Ok("P4-2h ConstraintManifold snapshot returns state", () => {
+  const cm = new CM()
+  const snap = cm.snapshot()
+  if (!snap.policy) throw new Error("Snapshot should include policy")
+  if (!Array.isArray(snap.enabledCategories)) throw new Error("Snapshot should include enabledCategories")
+  if (typeof snap.violationCount !== "number") throw new Error("Snapshot should include violationCount")
+})
+
+p4Ok("P4-2i ConstraintManifold categories can be toggled", () => {
+  const cm = new CM()
+  cm.setCategoryEnabled("file_safety", false)
+  const check = cm.validate({ type: "file_delete", target: "/tmp/t.txt", description: "Delete" })
+  if (!check.passed) throw new Error("Should pass when file_safety is disabled")
+  cm.setCategoryEnabled("file_safety", true)
+})
+
+console.log(`  Phase 4: ${p4} passed, ${p4f} failed`)
+passed += p4; failed += p4f
+
+// ── Phase 5: Dashboard Metrics — Evolution, Constraint, Performance ──
+console.log("\n[P5] Phase 5 — Dashboard Metrics & Observability")
+const {
+  Dashboard,
+  SkillStore,
+  ConstraintManifold,
+  createSkillDefinition,
+} = mod
+let p5 = 0, p5f = 0
+const assertP5 = (cond, msg) => { if (cond) p5++; else { p5f++; console.error(`  ❌ ${msg}`) } }
+
+// ── P5-1: Evolution Metrics ──
+{
+  const dash = new Dashboard()
+  const store = new SkillStore()
+
+  // Add skills at various lifecycles
+  for (let i = 0; i < 3; i++) {
+    const s = store.record(createSkillDefinition(`evolved-skill-${i}`, "test", [], [
+      { action: "execute", description: `Evolved step ${i}`, expectedOutput: "Done" },
+    ]))
+    s.usageCount = 30; s.successRate = 0.95
+    store.mature(s.definition.meta.id) // raw→validated
+    store.mature(s.definition.meta.id) // validated→compiled
+    store.mature(s.definition.meta.id) // compiled→evolved
+  }
+  for (let i = 0; i < 2; i++) {
+    const s = store.record(createSkillDefinition(`raw-skill-${i}`, "test", [], [
+      { action: "execute", description: `Raw step ${i}`, expectedOutput: "Done" },
+    ]))
+  }
+
+  const traces = []
+  const data = dash.generate(traces, Date.now(), {
+    skillStore: {
+      getAll: () => store.getAll(),
+      getLifecycleStats: () => store.getLifecycleStats(),
+      get size() { return store.size },
+    },
+    matureCallCount: 9,
+    evolutionTriggerCount: 3,
+  })
+  assertP5(data.evolutionMetrics !== undefined, "P5-1a: evolutionMetrics present")
+  assertP5(data.evolutionMetrics.totalSkills === 5, `P5-1b: totalSkills = ${data.evolutionMetrics.totalSkills}`)
+  assertP5(data.evolutionMetrics.lifecycleDistribution.evolved === 3, "P5-1c: 3 evolved skills")
+  assertP5(data.evolutionMetrics.lifecycleDistribution.raw === 2, "P5-1d: 2 raw skills")
+  assertP5(data.evolutionMetrics.averageSuccessRate > 0.5, `P5-1e: avg success rate = ${data.evolutionMetrics.averageSuccessRate}`)
+  assertP5(data.evolutionMetrics.totalMatureCalls === 9, "P5-1f: mature calls tracked")
+  assertP5(data.evolutionMetrics.evolutionTriggerCount === 3, "P5-1g: evolution triggers tracked")
+  assertP5(data.evolutionMetrics.totalSkillUsageCount > 0, "P5-1h: total skill usage tracked")
+}
+
+// ── P5-2: Constraint Metrics ──
+{
+  const dash = new Dashboard()
+  const cm = new ConstraintManifold()
+
+  // Create violations (getRecentViolations only returns last check's violations)
+  cm.validate({ type: "file_delete", target: "/tmp/x", description: "Blocked del" })
+  cm.validate({ type: "file_write", target: ".env.prod", description: "Protected path" })
+  cm.beginModification("/src/main.ts")
+
+  const data = dash.generate([], Date.now(), {
+    constraintManifold: {
+      snapshot: () => cm.snapshot(),
+      getActiveModifications: () => cm.getActiveModifications(),
+      getRecentViolations: () => cm.getRecentViolations(),
+    },
+  })
+  assertP5(data.constraintMetrics !== undefined, "P5-2a: constraintMetrics present")
+  assertP5(data.constraintMetrics.activeModifications === 1, "P5-2b: 1 active modification")
+  // getRecentViolations only returns last check's violations (file_write on .env.prod = 1 violation)
+  assertP5(data.constraintMetrics.totalViolations >= 1, `P5-2c: >= 1 violation ${data.constraintMetrics.totalViolations}`)
+  assertP5(data.constraintMetrics.blockedActions >= 1, "P5-2d: >= 1 blocked action")
+  assertP5(data.constraintMetrics.categoryBreakdown.file_safety >= 1, "P5-2e: file safety violations tracked")
+  assertP5(data.constraintMetrics.circuitBreakerTripped === false, "P5-2f: circuit breaker not tripped")
+
+  cm.endModification("/src/main.ts")
+}
+
+// ── P5-3: Performance Metrics ──
+{
+  const dash = new Dashboard()
+  const traces = [
+    { step: "plan", input: "a", output: "b", toolUsed: "agentic_plan", success: true, durationMs: 1500, timestamp: new Date().toISOString() },
+    { step: "nav", input: "a", output: "b", toolUsed: "agentic_nav", success: true, durationMs: 200, timestamp: new Date().toISOString() },
+    { step: "execute", input: "a", output: "b", toolUsed: "agentic_execute", success: true, durationMs: 5000, timestamp: new Date().toISOString() },
+    { step: "verify", input: "a", output: "b", toolUsed: "agentic_verify", success: true, durationMs: 12000, timestamp: new Date().toISOString() },
+  ]
+
+  const data = dash.generate(traces, Date.now(), {
+    semanticCacheStats: { size: 42, hits: 10, misses: 30, hitRate: 0.25 },
+    modelRegistry: {
+      getAllScores: () => [
+        { model: "gpt-4o", reliability: 0.85, hallucinationRate: 0.02, totalCalls: 50, status: "healthy" },
+        { model: "claude-3", reliability: 0.9, hallucinationRate: 0.01, totalCalls: 30, status: "healthy" },
+      ],
+    },
+  })
+  assertP5(data.performanceMetrics !== undefined, "P5-3a: performanceMetrics present")
+  assertP5(data.performanceMetrics.semanticCacheHitRate === 0.25, "P5-3b: cache hit rate = 0.25")
+  assertP5(data.performanceMetrics.semanticCacheSize === 42, "P5-3c: cache size = 42")
+  assertP5(data.performanceMetrics.toolLatencyStats.length === 4, "P5-3d: 4 tools tracked")
+  assertP5(data.performanceMetrics.modelCount === 2, "P5-3e: 2 models tracked")
+  assertP5(data.performanceMetrics.totalModelCalls === 80, "P5-3f: 80 total model calls")
+
+  // Verify slowest tool is agentic_verify (12s)
+  const slowest = data.performanceMetrics.topSlowestTools[0]
+  assertP5(slowest.tool === "agentic_verify", `P5-3g: slowest = ${slowest.tool}`)
+  assertP5(slowest.calls === 1 && slowest.avgLatencyMs >= 10000, "P5-3h: verify latency correct")
+}
+
+// ── P5-4: Format Display ──
+{
+  const dash = new Dashboard()
+  const traces = [
+    { step: "test", input: "a", output: "b", toolUsed: "agentic_plan", success: true, durationMs: 100, timestamp: new Date().toISOString() },
+  ]
+  const cm = new ConstraintManifold()
+  cm.validate({ type: "file_delete", target: "/tmp/x", description: "Test" })
+
+  const store = new SkillStore()
+  const s = store.record(createSkillDefinition("fmt-skill", "test", [], [
+    { action: "execute", description: "Test step", expectedOutput: "Done" },
+  ]))
+
+  const data = dash.generate(traces, Date.now(), {
+    skillStore: {
+      getAll: () => store.getAll(),
+      getLifecycleStats: () => store.getLifecycleStats(),
+      get size() { return store.size },
+    },
+    constraintManifold: {
+      snapshot: () => cm.snapshot(),
+      getActiveModifications: () => cm.getActiveModifications(),
+      getRecentViolations: () => cm.getRecentViolations(),
+    },
+    semanticCacheStats: { size: 10, hits: 5, misses: 15, hitRate: 0.25 },
+  })
+  const formatted = dash.formatForDisplay(data)
+  assertP5(formatted.includes("Evolution Metrics"), "P5-4a: format has Evolution Metrics")
+  assertP5(formatted.includes("Constraint Safety"), "P5-4b: format has Constraint Safety")
+  assertP5(formatted.includes("Performance Metrics"), "P5-4c: format has Performance Metrics")
+  assertP5(formatted.includes("🧬"), "P5-4d: evolution emoji present")
+  assertP5(formatted.includes("🔒"), "P5-4e: constraint emoji present")
+  assertP5(formatted.includes("⚡"), "P5-4f: performance emoji present")
+  assertP5(formatted.includes("agentic_plan"), "P5-4g: tool name in display")
+}
+
+// ── P5-5: Backward Compat — no context = no evolution/constraint sections ──
+{
+  const dash = new Dashboard()
+  const traces = [
+    { step: "test", input: "a", output: "b", toolUsed: "agentic_plan", success: true, durationMs: 100, timestamp: new Date().toISOString() },
+  ]
+  const data = dash.generate(traces, Date.now()) // no context!
+  assertP5(data.evolutionMetrics === undefined, "P5-5a: no evolution without context")
+  assertP5(data.constraintMetrics === undefined, "P5-5b: no constraint without context")
+  // Performance metrics may still show from trace data (tool latency)
+  // but semantic cache stats and model count should be 0
+  if (data.performanceMetrics) {
+    assertP5(data.performanceMetrics.semanticCacheHitRate === 0, "P5-5c: cache hit rate 0 without context")
+    assertP5(data.performanceMetrics.modelCount === 0, "P5-5d: model count 0 without context")
+  } else {
+    assertP5(true, "P5-5c: no performance metrics (empty)") // also OK
+  }
+
+  const formatted = dash.formatForDisplay(data)
+  assertP5(!formatted.includes("🧬"), "P5-5e: no evolution emoji")
+  assertP5(!formatted.includes("🔒"), "P5-5f: no constraint emoji")
+}
+
+console.log(`  Phase 5: ${p5} passed, ${p5f} failed`)
+passed += p5; failed += p5f
+
 console.log(`Results: ${passed} passed, ${failed} failed`)
 if (failed === 0) console.log("ALL TESTS PASSED")
 process.exit(failed > 0 ? 1 : 0)
