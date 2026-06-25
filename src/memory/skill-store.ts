@@ -420,6 +420,43 @@ export class SkillStore {
   }
 
   /**
+   * Directly record a SkillDefinition into the store.
+   * Wraps it in a SkillRecord with default tracking metadata.
+   * Returns the created SkillRecord, or updates existing if skill with same ID exists.
+   */
+  record(definition: SkillDefinition): SkillRecord {
+    const existing = this.skills.get(definition.meta.id)
+    if (existing) {
+      existing.definition = definition
+      existing.usageCount++
+      existing.successWindow.push(true)
+      if (existing.successWindow.length > SUCCESS_WINDOW_SIZE) {
+        existing.successWindow = existing.successWindow.slice(-SUCCESS_WINDOW_SIZE)
+      }
+      const winSuccesses = existing.successWindow.filter(Boolean).length
+      existing.successRate = existing.successWindow.length > 0
+        ? winSuccesses / existing.successWindow.length
+        : 1.0
+      existing.lastUsed = new Date().toISOString()
+      existing.definition.quality.usageCount = existing.usageCount
+      existing.definition.quality.successRate = existing.successRate
+      existing.definition.audit.lastUsed = existing.lastUsed
+      existing.definition.audit.lastModified = existing.lastUsed
+      return existing
+    }
+
+    const record: SkillRecord = {
+      definition,
+      usageCount: 1,
+      successRate: 1.0,
+      successWindow: [true],
+      lastUsed: new Date().toISOString(),
+    }
+    this.skills.set(definition.meta.id, record)
+    return record
+  }
+
+  /**
    * Get count of skills in store.
    */
   get size(): number {

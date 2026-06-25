@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, cpSync
 import { execFileSync } from "node:child_process"
 import { join, dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { tmpdir } from "node:os"
+import { homedir, tmpdir } from "node:os"
 import { DomainRegistry, type DomainPack } from "./core/domain-registry.js"
 import { genericDomain } from "./core/domains/generic.js"
 import { codeDomain } from "./core/domains/code.js"
@@ -29,6 +29,8 @@ import type { AgentRole, AgentTask } from "./agents/coordinator.js"
 import { Orchestrator, type WorkflowPipeline } from "./agents/orchestrator.js"
 import { SkillStore } from "./memory/skill-store.js"
 import { EpisodicStore } from "./memory/episodic-store.js"
+import { MemoryOrchestrator } from "./memory/memory-orchestrator.js"
+import { ConsolidationScheduler } from "./memory/consolidation-scheduler.js"
 import { HallucinationGuard, type ClaimResult, type HallucinationCheck } from "./drift/hallucination-guard.js"
 import { ParallelExecutor } from "./core/parallel.js"
 import { Dashboard } from "./observability/dashboard.js"
@@ -71,6 +73,7 @@ void AttentionScheduler // available via import for direct usage
 import { WorldModel } from "./core/world-model.js"
 import { SimulationEngine, type SimulatedStep } from "./core/simulation-engine.js"
 import { MetaReasoner } from "./core/meta-reasoner.js"
+import { BlueprintParser, BlueprintResolver, type ModelSpecMap } from "./core/agent-blueprint.js"
 
 // ── Build-time version injected by esbuild define ──
 declare const __VERSION__: string
@@ -355,6 +358,11 @@ const createEngine: Plugin = async (input, _options) => {
   const parallelExec = new ParallelExecutor()
   const dashboard = new Dashboard()
   const sessionStore = new SessionStore()
+  const worldModel = new WorldModel()
+  const simulationEngine = new SimulationEngine()
+  const memoryOrchestrator = new MemoryOrchestrator(sessionStore, episodicStore, skillStore, undefined, undefined, worldModel, simulationEngine)
+  const consolidationScheduler = new ConsolidationScheduler(memoryOrchestrator, sessionStore)
+  consolidationScheduler.start()
   const traceLogger = new TraceLogger(worktree)
   const roleRegistry = new RoleRegistry()
   const schemaVersion = new MemorySchemaVersion()
@@ -443,6 +451,33 @@ const confidenceStore = new ConfidenceStore()
       if (capableModel) modelRegistry.registerAlias("capable", [capableModel])
     }
   })()
+
+  // ── Load models.json cache for BlueprintResolver ──
+  const blueprintParser = new BlueprintParser()
+  const modelsDb: ModelSpecMap = new Map()
+  const blueprintResolver = new BlueprintResolver(modelRegistry, modelsDb)
+  // Fire-and-forget: load models.json from OpenCode cache
+  ;(async () => {
+    try {
+      const modelsCachePath = join(homedir(), ".cache", "opencode", "models.json")
+      if (existsSync(modelsCachePath)) {
+        const raw = readFileSync(modelsCachePath, "utf-8")
+        const parsed = JSON.parse(raw)
+        for (const [, info] of Object.entries(parsed)) {
+          const pInfo = info as { models?: Record<string, Record<string, unknown>> }
+          if (pInfo.models) {
+            for (const [modelKey, spec] of Object.entries(pInfo.models)) {
+              modelsDb.set(modelKey, spec as import("./core/agent-blueprint.js").ModelSpec)
+            }
+          }
+        }
+        blueprintResolver.setModelsDb(modelsDb)
+      }
+    } catch {
+      // Silent — models.json cache gak wajib ada
+    }
+  })()
+
   llmEngine.setMemoryStores({
     searchEpisodes: (query: string) => episodicStore.search(query),
     findSkills: (query: string) => skillStore.find(query).map(s => ({ name: s.definition.meta.name, successRate: s.successRate })),
@@ -566,10 +601,6 @@ const confidenceStore = new ConfidenceStore()
   const skillImprover = new SkillImprover(skillStore, schemaValidator)
   void skillImprover // available via import for direct usage
 
-  // ── WorldModel (Comparison 19: Belief State) ──
-  const worldModel = new WorldModel()
-  // ── SimulationEngine (Comparison 20: Internal Simulation) ──
-  const simulationEngine = new SimulationEngine()
   // ── MetaReasoner (Comparison 22: Meta-Reasoning Strategy) ──
   const metaReasoner = new MetaReasoner()
 
@@ -1511,6 +1542,14 @@ const confidenceStore = new ConfidenceStore()
             const isPositive = args.feedback === "positive"
             response += `\n### 📝 Feedback Recorded\n`
             response += `${isPositive ? "✅ Positive — confidence increased" : "❌ Negative — adapting..."}\n`
+
+            // Record feedback ke model yang dipake — biar model selection makin pinter
+            const currentModel = llmEngine.getCurrentModel()
+            const taskType = sessionStore.getOrCreate(context.sessionID).currentTaskType
+            if (currentModel && taskType) {
+              modelRegistry.recordUserFeedback(currentModel, taskType, isPositive)
+              response += `  Model feedback: \`${currentModel}\` untuk task \`${taskType}\` → ${isPositive ? "✅" : "❌"}\n`
+            }
 
             // Update skill success rates based on feedback
             const session = sessionStore.getOrCreate(context.sessionID)
@@ -3190,16 +3229,42 @@ const confidenceStore = new ConfidenceStore()
       }),
 
       agentic_episodes: tool({
-        description: "Browse cross-session memory. Search past tasks and their outcomes to learn from previous sessions. Use before planning similar tasks to avoid repeating mistakes.",
+        description: "Browse cross-session memory. Search past tasks, patterns, and knowledge across all 4 memory levels (working/episodic/semantic/procedural). Use before planning similar tasks to avoid repeating mistakes.",
         args: {
           action: tool.schema.enum(["search", "recent", "stats"]).describe("'search' finds relevant past tasks; 'recent' shows latest; 'stats' shows summary"),
           query: tool.schema.string().optional().describe("Search query (for 'search' action)"),
+          levels: tool.schema.array(tool.schema.string()).optional().describe("Memory levels to search (default: all). E.g. ['episodic', 'semantic']"),
+          minImportance: tool.schema.number().optional().describe("Minimum importance threshold (0-1, default: 0)"),
         },
         async execute(args, _context) {
           if (args.action === "search") {
             if (!args.query) return { output: "Provide a search query." }
 
-            // Kumpulin episode dari current project + semua project lain (shared memory)
+            // Try MemoryOrchestrator cross-level search first (if levels specified or all)
+            const useOrchLevels = args.levels && args.levels.length > 0
+            if (useOrchLevels || args.minImportance !== undefined) {
+              const validLevels = (args.levels ?? []).filter(l =>
+                ["working", "episodic", "semantic", "procedural"].includes(l))
+              const result = memoryOrchestrator.query({
+                query: args.query,
+                levels: validLevels.length > 0 ? validLevels as any : undefined,
+                minImportance: args.minImportance ?? 0,
+                maxResults: 15,
+              })
+              if (result.entries.length === 0) return { output: `No results found for "${args.query}" across levels: ${(args.levels ?? ["all"]).join(", ")}.` }
+              let output = `## 🧠 Memory Search: "${args.query}"\n\n`
+              output += `*Searched levels: ${result.sources.join(", ")}* (${result.totalTime}ms)\n\n`
+              for (const entry of result.entries) {
+                const levelIcon = { working: "💼", episodic: "🧠", semantic: "📚", procedural: "🔧" }[entry.level] ?? "📄"
+                const impBar = "█".repeat(Math.round(entry.importance * 10)) + "░".repeat(Math.max(0, 10 - Math.round(entry.importance * 10)))
+                output += `${levelIcon} **${entry.level}** — ${entry.id}\n`
+                output += `  ${entry.content.slice(0, 120)}${entry.content.length > 120 ? "..." : ""}\n`
+                output += `  Importance: ${impBar} (${(entry.importance * 100).toFixed(0)}%) | Keywords: ${entry.keywords.slice(0, 5).join(", ")}\n`
+              }
+              return { output }
+            }
+
+            // Original path: episodic-only TF-IDF search (backward compat)
             const localEpisodes = episodicStore.getRecent(50)
             const allEpisodes = [...localEpisodes]
             const seenIds = new Set(localEpisodes.map(e => e.id))
@@ -3208,7 +3273,7 @@ const confidenceStore = new ConfidenceStore()
             try {
               const scopes = persistence.listScopes("episodes")
               for (const scope of scopes) {
-                if (scope === projectId) continue // udah di-load dari local
+                if (scope === projectId) continue
                 const globalEps = persistence.loadAll<{ planGoal: string; outcome: string; decisions: string[]; filesChanged: string[]; sessionId: string; timestamp: string; tags: string[]; projectId?: string }>("episodes", scope)
                 for (const ep of globalEps) {
                   if (!seenIds.has(ep.data.sessionId)) {
@@ -3610,6 +3675,7 @@ const confidenceStore = new ConfidenceStore()
           description: tool.schema.string().optional().describe("Description for the prompt change (for edit-prompt)"),
           format: tool.schema.enum(["openai", "instructions"]).optional().describe("Output format for training data (for export-training-data, default: openai)"),
           minSuccessRate: tool.schema.number().optional().describe("Minimum skill success rate to include (for export-training-data, default: 0.5)"),
+          spec: tool.schema.string().optional().describe("Blueprint YAML/JSON spec (for register-role). Overrides prompt/tools with blueprint fields. Contoh: `spec=\"\"\"\\nagent:\\n  identity: 'You are a...'\\n  model_tiers:\\n    default: capable\\n  tools: [read, edit]\\n\"\"\"`"),
         },
         async execute(args, _context) {
           switch (args.action) {
@@ -3639,8 +3705,49 @@ const confidenceStore = new ConfidenceStore()
             }
 
             case "register-role": {
+              // Blueprint mode: spec YAML/JSON → parse + register
+              if (args.spec) {
+                try {
+                  const blueprint = blueprintParser.parse(args.spec)
+                  const roleId = blueprint.metadata.name.toLowerCase().replace(/\s+/g, "-")
+
+                  // Resolve model tiers → actual model recommendations
+                  const allModels = modelRegistry.getAllScores().map(s => s.model)
+                  const resolvedTiers = blueprintResolver.resolveBlueprint(blueprint, allModels.length > 0 ? allModels : ["default"])
+
+                  const tierInfo = Object.entries(resolvedTiers)
+                    .map(([tier, model]) => `  - **${tier}** → \`${model}\``)
+                    .join("\n")
+
+                  roleRegistry.registerCustom({
+                    role: roleId,
+                    name: blueprint.metadata.name,
+                    prompt: blueprint.agent.identity,
+                    tools: blueprint.agent.tools ?? ["read", "edit", "write", "bash", "agentic_verify", "agentic_skill"],
+                  })
+
+                  persistence.save("evolution", "trend", continuousEvolution.toJSON(), projectId)
+
+                  let out = `### ✅ Blueprint Registered: **${blueprint.metadata.name}** (\`${roleId}\`)\n\n`
+                  out += `**Identity:** ${blueprint.agent.identity.slice(0, 100)}...\n`
+                  out += `\n**Model Tiers Resolved:**\n${tierInfo}\n`
+                  if (blueprint.agent.capabilities?.length) {
+                    out += `\n**Capabilities:** ${blueprint.agent.capabilities.join(", ")}\n`
+                  }
+                  if (blueprint.agent.safety?.max_steps) {
+                    out += `\n**Safety:** max_steps=${blueprint.agent.safety.max_steps}\n`
+                  }
+                  out += `\nPakai: \`agentic_delegate role=${roleId}\``
+                  out += `\nExport ke file: \`agentic_evolve export-blueprint name=${roleId}\``
+                  return { output: out }
+                } catch (e) {
+                  return { output: `❌ Blueprint parse error: ${(e as Error).message}\n\nGunakan format YAML atau JSON yang valid. Contoh:\n\`\`\`yaml\nagent:\n  identity: \"You are a developer\"\n  model_tiers:\n    default: capable\n\`\`\`` }
+                }
+              }
+
+              // Legacy mode: name + prompt + tools
               if (!args.name || !args.prompt) {
-                return { output: "Both `name` and `prompt` are required to register a custom role." }
+                return { output: "Both `name` and `prompt` are required to register a custom role.\n\nAtau gunakan `spec` parameter dengan blueprint format:\n`agentic_evolve register-role spec='{\"agent\":{\"identity\":\"...\",\"model_tiers\":{\"default\":\"capable\"}}}'`" }
               }
               const roleId = args.name.toLowerCase().replace(/\s+/g, "-")
               roleRegistry.registerCustom({
@@ -5504,6 +5611,14 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                 }
                 scorer.score(args.goal, absFiles, contents)
               } catch { /* non-fatal */ }
+
+              // Memory consolidation — archive working → episodic + pattern extraction
+              try {
+                const report = memoryOrchestrator.consolidate(sessionStore.getActiveSessions())
+                if (report.workingArchived > 0 || report.patternsExtracted > 0) {
+                  consolidationScheduler.onSessionEnd()
+                }
+              } catch { /* non-fatal */ }
             })().catch((err) => console.warn(`[agentic_auto] thorough post-processing error:`, err))
           }
 
@@ -5900,7 +6015,7 @@ export { episodeToTrainingExample, episodesToTrainingData, prepareFineTuningData
 export { ConfigLoader, validateConfig } from "./core/config.js"
 export { PersistenceLayer } from "./memory/persistence.js"
 export { EpisodicStore } from "./memory/episodic-store.js"
-export { SkillStore } from "./memory/skill-store.js"
+export { SkillStore, createSkillDefinition, inspectSkill, serializeSkill, deserializeSkill } from "./memory/skill-store.js"
 export { type SkillRecord } from "./memory/skill-store.js"
 export { STOP_WORDS, isStopWord, filterStopWords, getStopWordStats } from "./memory/stopwords.js"
 export { PromptTemplate, type KnowledgeEntry } from "./core/prompt-template.js"
@@ -5916,4 +6031,8 @@ export { AttentionScheduler, MAX_SCHEDULER_CYCLES, type AgentScheduleConfig, typ
 export { WorldModel, type WorldSnapshot, type Belief, type Entity, type Relation, type WorldModelConfig, type BeliefEvidence, type BeliefUpdateResult } from "./core/world-model.js"
 export { SimulationEngine, type SimulationInput, type SimulationResult, type SimulatedStep, type SimulatedStepResult, type SimulationConfig } from "./core/simulation-engine.js"
 export { MetaReasoner, createDefaultStrategy, type StrategyConfig, type StrategyParam, type PerformanceRecord, type StrategyVersion, type AdaptationResult, type MetaReasonerConfig } from "./core/meta-reasoner.js"
+export { DAGEngine, type DAGNode, type DAGPlan, type DAGNodeType, type NodeStatus, type DAGExecutionContext, type DAGResult, type ExecutionPhase, type RetryStrategy, type RecoveryStrategy, type NodeRunner, type DAGObserver } from "./core/dag-engine.js"
 export { buildAgentPrompt, buildAgenticSystemInstructions, buildGenericAgentPrompt } from "./core/prompt-builder.js"
+export { SessionStore } from "./memory/session-store.js"
+export { MemoryOrchestrator, type MemoryLevel, type MemoryEntry, type MemoryQuery, type MemoryQueryResult, type ConsolidationReport } from "./memory/memory-orchestrator.js"
+export { ConsolidationScheduler, type ConsolidationSchedule, type ConsolidationTrigger, type SchedulerStats, type ConsolidationCallback } from "./memory/consolidation-scheduler.js"

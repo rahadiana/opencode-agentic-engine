@@ -10,6 +10,8 @@ export interface ModelStats {
   consecutiveSuccesses: number
   quarantineUntil: number
   byTaskType?: Record<string, Omit<ModelStats, 'model' | 'byTaskType'>>
+  /** User satisfaction per task type — dari feedback positive/negative */
+  userFeedback?: Record<string, { positive: number; negative: number }>
 }
 
 export interface ModelScore {
@@ -117,6 +119,40 @@ export class ModelRegistry {
     this.addModel(model)
     const stat = this.stats.get(model)!
     stat.hallucinationCount++
+  }
+
+  /**
+   * Record user feedback (positive/negative) per model per task type.
+   * Ini yang bikin model selection makin pinter — bukan cuma technical reliability,
+   * tapi juga user satisfaction.
+   */
+  recordUserFeedback(model: string, taskType: string, positive: boolean): void {
+    this.addModel(model)
+    const stat = this.stats.get(model)!
+    if (!stat.userFeedback) stat.userFeedback = {}
+    if (!stat.userFeedback[taskType]) {
+      stat.userFeedback[taskType] = { positive: 0, negative: 0 }
+    }
+    if (positive) {
+      stat.userFeedback[taskType].positive++
+    } else {
+      stat.userFeedback[taskType].negative++
+    }
+  }
+
+  /**
+   * Get user satisfaction score for a model on a specific task type.
+   * Returns 0.0 - 1.0. Default 0.5 jika belum ada data.
+   */
+  getUserSatisfaction(model: string, taskType: string): number {
+    const stat = this.stats.get(model)
+    if (!stat?.userFeedback?.[taskType]) return 0.5
+
+    const fb = stat.userFeedback[taskType]
+    const total = fb.positive + fb.negative
+    if (total === 0) return 0.5
+
+    return fb.positive / total
   }
 
   getScore(model: string): ModelScore | null {
@@ -257,7 +293,7 @@ export class ModelRegistry {
     const scored = availableModels
       .map(model => {
         const resolvedModels = this.resolveAlias(model)
-        if (resolvedModels.length === 0) return { model, score: null, blocked: false }
+        if (resolvedModels.length === 0) return { model, score: null, blocked: false, userSat: 0.5 }
         
         const bestResolved = resolvedModels
           .map(m => {
@@ -267,25 +303,25 @@ export class ModelRegistry {
             return { 
               model: m, 
               score: this.getScoreByTaskType(m, taskType),
-              blocked: blockStatus.blocked && blockStatus.severity === "hard"
+              blocked: blockStatus.blocked && blockStatus.severity === "hard",
+              userSat: this.getUserSatisfaction(m, taskType),
             }
           })
           .filter(s => !s.blocked)
           .sort((a, b) => {
-            if (!a.score || !b.score) return 0
-            if (a.score.status === "healthy" && b.score.status !== "healthy") return -1
-            if (a.score.status !== "healthy" && b.score.status === "healthy") return 1
-            return b.score.reliability - a.score.reliability
+            // Pertimbangkan user satisfaction (60%) + technical reliability (40%)
+            const aScore = a.userSat * 0.6 + (a.score?.reliability ?? 0.5) * 0.4
+            const bScore = b.userSat * 0.6 + (b.score?.reliability ?? 0.5) * 0.4
+            return bScore - aScore
           })[0]
         
         return bestResolved
       })
       .filter(s => s && s.score !== null)
       .sort((a, b) => {
-        if (!a.score || !b.score) return 0
-        if (a.score.status === "healthy" && b.score.status !== "healthy") return -1
-        if (a.score.status !== "healthy" && b.score.status === "healthy") return 1
-        return b.score.reliability - a.score.reliability
+        const aScore = a.userSat * 0.6 + (a.score?.reliability ?? 0.5) * 0.4
+        const bScore = b.userSat * 0.6 + (b.score?.reliability ?? 0.5) * 0.4
+        return bScore - aScore
       })
 
     return scored.length > 0 ? scored[0].model : availableModels[0]
@@ -360,6 +396,7 @@ export class ModelRegistry {
     stat.consecutiveSuccesses = 0
     stat.quarantineUntil = 0
     stat.byTaskType = {}
+    stat.userFeedback = {}
   }
 
   resetStaleModels(staleDays: number = 7): string[] {

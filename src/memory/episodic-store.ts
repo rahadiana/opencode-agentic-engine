@@ -181,6 +181,19 @@ export class EpisodicStore {
           .slice(0, 10)
   }
 
+  /** Get all episodes (used by MemoryOrchestrator) */
+  getAll(): Episode[] {
+    return this.episodes
+  }
+
+  /** Remove a single episode by ID (used by MemoryOrchestrator) */
+  remove(id: string): boolean {
+    const idx = this.episodes.findIndex(e => e.id === id)
+    if (idx === -1) return false
+    this.episodes.splice(idx, 1)
+    return true
+  }
+
   getRecent(limit = 10): Episode[] {
     return [...this.episodes]
       .sort((a, b) => b.timestamp.localeCompare(a.timestamp))

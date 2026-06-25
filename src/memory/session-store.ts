@@ -207,6 +207,11 @@ export class SessionStore {
     return summary
   }
 
+  /** Get all active sessions (used by MemoryOrchestrator) */
+  getActiveSessions(): SessionState[] {
+    return [...this.sessions.values()]
+  }
+
   removeSession(sessionId: string): void {
     this.sessions.delete(sessionId)
     this.executorSnapshots.delete(sessionId)

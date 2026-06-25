@@ -79,7 +79,7 @@ export function createSkillDefinition(
   return {
     meta: {
       format: "agentic-skill/v1",
-      id: `skill-${Date.now()}`,
+      id: `skill-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       name,
       version: 1,
       author: author ?? "agent",

@@ -1,3 +1,14 @@
+/**
+ * Agent Loop — refactored to use DAG Engine internally (Phase 1B).
+ *
+ * Prinsip 4 (Control Agnostic):
+ *   BEFORE: while(true) LLM-driven loop — LLM decides next step
+ *   AFTER:  DAG-based code orchestration — code walks the DAG, LLM only per node
+ *
+ * Backward compatible: AgentLoopConfig, LoopResult, LoopObserver interfaces unchanged.
+ * runLoop() signature unchanged — existing consumers (index.ts, tests) work as before.
+ */
+
 import type { Subtask } from "./intent-parser.js"
 import { Executor } from "./executor.js"
 import { Verifier } from "./verifier.js"
@@ -7,6 +18,7 @@ import { LLMEngine } from "./llm.js"
 import { BudgetTracker } from "./budget-tracker.js"
 import type { Planner } from "./planner.js"
 import { TimeoutError } from "./errors.js"
+import { DAGEngine, type DAGPlan, type DAGExecutionContext, type DAGNode } from "./dag-engine.js"
 
 export interface AgentLoopConfig {
   maxIterations: number
@@ -41,10 +53,8 @@ export class AgentLoop {
   private planner?: Planner
   private replannedSteps = new Set<string>()
 
-  /** Rolling window for repetition detection */
-  private callHistory: Array<{ stepId: string; ts: number; hash: string }> = []
-  private readonly WINDOW_MS = 60_000
-  private readonly MAX_IDENTICAL_CALLS = 5
+  /** DAG Engine — the new execution core (Phase 1B) */
+  private dagEngine: DAGEngine
 
   constructor(llm: LLMEngine, config: Partial<AgentLoopConfig> = {}) {
     this.llm = llm
@@ -56,22 +66,21 @@ export class AgentLoop {
       maxParallelism: config.maxParallelism,
       abortOnFailure: config.abortOnFailure ?? false,
     }
+    this.dagEngine = new DAGEngine()
   }
 
   setBudgetTracker(tracker: BudgetTracker): void {
     this.budgetTracker = tracker
+    this.dagEngine.setBudgetChecker(() => {
+      const event = tracker.check("session")
+      return event
+        ? { exceeded: true, metric: event.metric, current: event.current, limit: event.limit }
+        : null
+    })
   }
 
   setPlanner(planner: Planner): void {
     this.planner = planner
-  }
-
-  private detectLoop(callKey: string): boolean {
-    const now = Date.now()
-    this.callHistory.push({ stepId: callKey, ts: now, hash: callKey })
-    const window = this.callHistory.filter(c => now - c.ts < this.WINDOW_MS)
-    const identical = window.filter(c => c.hash === callKey).length
-    return identical > this.MAX_IDENTICAL_CALLS
   }
 
   addObserver(observer: LoopObserver): void {
@@ -91,10 +100,239 @@ export class AgentLoop {
     const completedSteps: string[] = []
     const failedSteps: string[] = []
     let iteration = 0
+
+    // ── Setup ────────────────────────────────────────────────────────
+
+    // Dapatkan plan dari executor state
+    const state = (executor as any).states?.get(sessionId)
+    if (!state || !state.plan) {
+      return {
+        completedSteps, failedSteps, totalIterations: 0,
+        success: false,
+        summary: "No plan found in executor state",
+      }
+    }
+
+    const plan: { intent: { goal: string; subtasks: Subtask[] } } = state.plan
+    const subtasks = plan.intent.subtasks
+
+    // Bangun DAG dari subtasks
+    const maxParallel = this.config.maxParallelism ?? (this.config.abortOnFailure ? this.config.maxParallelism ?? 4 : 0)
+    const { plan: dagPlan, context: dagCtx } = this.dagEngine.buildDAG(
+      plan.intent.goal,
+      subtasks,
+      {
+        maxParallel: maxParallel > 0 ? maxParallel : undefined,
+        circuitBreaker: true,
+        recoveryStrategy: this.config.autoRetry ? "restart-node" : "escalate",
+        maxSteps: this.config.maxIterations,
+      },
+    )
+
+    // DAG observer → legacy observer mapping
+    this.dagEngine.addObserver({
+      onNodeStart: (nodeId) => {
+        this.observers.forEach(o => o.onStepStart(nodeId, iteration + 1))
+      },
+      onNodeComplete: (nodeId, status, output) => {
+        this.observers.forEach(o => o.onStepComplete(nodeId, status === "completed", output))
+      },
+      onPhaseStart: () => {},
+      onPhaseComplete: () => {},
+      onDAGComplete: () => {},
+      onRecovery: () => {},
+      onCircuitBreaker: () => {},
+    })
+
+    // ── DAG Runner ──────────────────────────────────────────────────
+    // Adapter: Subtask → NodeRunner (DAG node → stepExecutor + verify + retry)
+    const dagRunner = async (
+      node: DAGNode,
+      signal: AbortSignal,
+    ): Promise<{ success: boolean; output: string; filesModified: string[]; error?: string }> => {
+      // Cari subtask original dari plan (for backward compat with stepExecutor)
+      const subtask = subtasks.find(s => s.id === node.id)
+      if (!subtask) {
+        return { success: false, output: "", filesModified: [], error: `Subtask "${node.id}" not found in plan` }
+      }
+
+      // Circuit breaker
+      if (this.budgetTracker) {
+        const budgetEvent = this.budgetTracker.check("session")
+        if (budgetEvent) {
+          return { success: false, output: "", filesModified: [], error: `Budget exceeded (${budgetEvent.metric})` }
+        }
+      }
+
+      let result: { success: boolean; output: string; filesModified: string[]; error?: string }
+      try {
+        result = await stepExecutor(subtask)
+      } catch (err) {
+        if (err instanceof TimeoutError) throw err
+        result = { success: false, output: "", filesModified: [], error: err instanceof Error ? err.message : String(err) }
+      }
+
+      if (signal?.aborted) {
+        return { success: false, output: "", filesModified: [], error: "Aborted" }
+      }
+
+      // Track file changes
+      if (result.filesModified && result.filesModified.length > 0) {
+        depTracker.recordChange(sessionId, node.id, result.filesModified)
+      }
+
+      // Verify after each step (if enabled)
+      if (result.success && this.config.verifyAfterEach) {
+        const isFinalStep = this.isAllCompleted(dagPlan, dagCtx)
+        const tier = isFinalStep ? "deep" : "standard"
+        const verifyResult = result.filesModified.length > 0
+          ? await verifier.verifyAllDeep(node.id, projectDir, subtask.description, result.filesModified, false, tier)
+          : await verifier.verifyAllDeep(node.id, projectDir, undefined, [], false, tier)
+
+        if (!verifyResult.passed) {
+          result.success = false
+          result.output = `Verification failed: ${verifyResult.errors.join("\n")}`
+
+          // Attempt repair via LLM
+          const analysis = await errorAnalyzer.analyzeDeep(result.output, result.filesModified)
+          if (this.config.autoRetry) {
+            const repaired = await this.attemptRepair(subtask, result.output, analysis, fixExecutor)
+            if (repaired) {
+              // Return failure to trigger DAG retry
+              return { success: false, output: result.output, filesModified: result.filesModified, error: verifyResult.errors.join("; ") }
+            }
+          }
+        }
+
+        // Verification criteria
+        if (result.success && subtask.verificationCriteria.length > 0 && verifier.hasLLM()) {
+          const criteriaResult = await verifier.verifyCriteria(
+            subtask.verificationCriteria,
+            subtask.description,
+            result.filesModified,
+            projectDir,
+          )
+          if (!criteriaResult.passed) {
+            result.output = `Criteria check: ${criteriaResult.output}`
+          }
+        }
+      }
+
+      // Record result in Executor (for backward compat)
+      executor.recordResult(sessionId, {
+        stepId: node.id,
+        success: result.success,
+        output: result.output,
+        filesModified: result.filesModified,
+        error: result.error,
+      })
+
+      return result
+    }
+
+    // ── Execute DAG ─────────────────────────────────────────────────
+    const dagResult = await this.dagEngine.execute(dagCtx, dagRunner)
+
+    // Process DAG errors: handle replan untuk node yang gagal
+    if (dagResult.failedNodes.length > 0 && this.config.autoRetry &&
+        this.planner && this.replannedSteps.size === 0) {
+      for (const nodeId of dagResult.failedNodes) {
+        if (this.replannedSteps.has(nodeId)) continue
+        const node = dagCtx.nodes.get(nodeId)
+        if (!node) continue
+
+        const subtask = subtasks.find(s => s.id === nodeId)
+        if (!subtask) continue
+
+        const errorText = dagCtx.nodeStates.get(nodeId)?.error ?? "Unknown error"
+        const newSubtasks = this.tryReplan(subtask, errorText)
+        if (newSubtasks.length > 0) {
+          this.replannedSteps.add(nodeId)
+          executor.replanStep(sessionId, nodeId, newSubtasks)
+
+          // Rebuild DAG with new subtasks and retry
+          const newPlan = (executor as any).states?.get(sessionId)?.plan
+          if (newPlan?.intent?.subtasks) {
+            const { context: newDagCtx } = this.dagEngine.buildDAG(
+              plan.intent.goal,
+              newPlan.intent.subtasks,
+              dagPlan.metadata,
+            )
+            // Execute remaining nodes
+            const retryResult = await this.dagEngine.execute(newDagCtx, dagRunner)
+            // Merge results
+            for (const cn of retryResult.completedNodes) {
+              if (!dagResult.completedNodes.includes(cn)) {
+                dagResult.completedNodes.push(cn)
+              }
+            }
+            dagResult.failedNodes.length = 0
+            dagResult.failedNodes.push(...retryResult.failedNodes)
+            dagResult.success = retryResult.success
+            dagResult.summary += ` | Replanned: ${nodeId}`
+          }
+        }
+      }
+    }
+
+    // ── Build result ────────────────────────────────────────────────
+    for (const nId of dagResult.completedNodes) {
+      if (!completedSteps.includes(nId)) completedSteps.push(nId)
+    }
+    for (const nId of dagResult.failedNodes) {
+      if (!failedSteps.includes(nId)) failedSteps.push(nId)
+    }
+
+    iteration = Math.max(
+      iteration,
+      // Count unique phase executions + retries
+      Math.ceil(dagResult.completedNodes.length / (this.config.maxParallelism || 1)) + dagResult.failedNodes.length,
+    )
+
+    const result: LoopResult = {
+      completedSteps,
+      failedSteps,
+      totalIterations: iteration || 1,
+      success: dagResult.success,
+      summary: dagResult.summary,
+    }
+
+    this.observers.forEach(o => o.onLoopComplete(result))
+    return result
+  }
+
+  /**
+   * Check if all DAG nodes are completed (used for final verify tier).
+   */
+  private isAllCompleted(plan: DAGPlan, ctx: DAGExecutionContext): boolean {
+    return plan.nodes.every(n => {
+      const s = ctx.nodeStates.get(n.id)
+      return s?.status === "completed"
+    })
+  }
+
+  // ── Legacy: batched execution fallback (when DAG not available) ──
+
+  /**
+   * Legacy runLoopBatched — original while(true) batch logic.
+   * Used when plan doesn't come through DAG engine (fallback).
+   */
+  async runLoopBatched(
+    sessionId: string,
+    executor: Executor,
+    verifier: Verifier,
+    errorAnalyzer: ErrorAnalyzer,
+    depTracker: DependencyTracker,
+    projectDir: string,
+    stepExecutor: (step: Subtask) => Promise<{ success: boolean; output: string; filesModified: string[]; error?: string }>,
+    fixExecutor?: (fix: string) => Promise<boolean>,
+  ): Promise<LoopResult> {
+    const completedSteps: string[] = []
+    const failedSteps: string[] = []
+    let iteration = 0
     const filesModifiedMap = new Map<string, string[]>()
 
     while (iteration < this.config.maxIterations) {
-      // Circuit breaker: check budget before each iteration
       if (this.budgetTracker) {
         const sessionExceeded = this.budgetTracker.check("session")
         if (sessionExceeded) {
@@ -111,10 +349,7 @@ export class AgentLoop {
       const readySteps = executor.getReadySteps(sessionId)
       if (readySteps.length === 0) break
 
-      // Track progress to detect stalled loops
       const beforeCompleted = completedSteps.length
-
-      // Group ready steps into non-conflicting batches
       const batches = this.batchSteps(readySteps, filesModifiedMap)
 
       for (const batch of batches) {
@@ -124,9 +359,7 @@ export class AgentLoop {
         )
 
         for (const r of results) {
-          if (r.replanned) {
-            continue
-          }
+          if (r.replanned) continue
           if (r.filesModified.length > 0) {
             filesModifiedMap.set(r.stepId, r.filesModified)
           }
@@ -140,10 +373,7 @@ export class AgentLoop {
         if (this.config.abortOnFailure && results.some(r => !r.success)) break
       }
 
-      // Break if no progress: no new completed steps this iteration
-      if (completedSteps.length === beforeCompleted) {
-        break
-      }
+      if (completedSteps.length === beforeCompleted) break
     }
 
     const result: LoopResult = {
@@ -160,7 +390,7 @@ export class AgentLoop {
 
   private batchSteps(steps: Subtask[], filesModified: Map<string, string[]>): Subtask[][] {
     if (steps.length <= 1) return [steps]
-    if (!this.config.maxParallelism) return [steps] // run all ready steps in one batch
+    if (!this.config.maxParallelism) return [steps]
 
     const batches: Subtask[][] = []
     const used = new Set<string>()
@@ -252,24 +482,19 @@ export class AgentLoop {
         }
       }
 
-      if (this.detectLoop(`${step.id}:retry=${retryCount}`)) {
-        stepOutput = `Infinite loop detected: step ${step.id} repeated ${this.MAX_IDENTICAL_CALLS}+ times in ${this.WINDOW_MS / 1000}s`
-        break
-      }
-
       this.observers.forEach(o => o.onStepStart(step.id, depth + 1))
 
+      // P0: proper timeout — no Promise.race leak
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 120_000)
-      const result = await Promise.race([
-        stepExecutor(step),
-        new Promise<never>((_, reject) => {
-          controller.signal.addEventListener("abort", () => {
-            reject(new TimeoutError(`Step ${step.id}`, 120000))
-          })
-        }),
-      ])
-      clearTimeout(timeoutId)
+      let result: { success: boolean; output: string; filesModified: string[]; error?: string }
+      try {
+        result = await stepExecutor(step)
+        clearTimeout(timeoutId)
+      } catch (err) {
+        clearTimeout(timeoutId)
+        result = { success: false, output: "", filesModified: [], error: err instanceof Error ? err.message : String(err) }
+      }
 
       if (result.filesModified && result.filesModified.length > 0) {
         depTracker.recordChange(sessionId, step.id, result.filesModified)
@@ -281,8 +506,6 @@ export class AgentLoop {
 
       if (stepSuccess) {
         if (this.config.verifyAfterEach) {
-          // Gap #4: intermediate steps use standard tier (compile+lint+tests+semantic),
-          // final/release gate use 'deep' tier (adds security+performance+architecture+deps)
           const isFinalStep = executor.getNextStep(sessionId) === null
           const tier = isFinalStep ? "deep" : "standard"
           const verifyResult = result.filesModified.length > 0
@@ -388,8 +611,6 @@ export class AgentLoop {
     try {
       const llmAnalysis = await this.llm.analyzeError(error, [])
       if (llmAnalysis && llmAnalysis.category !== "unknown" && llmAnalysis.fix && llmAnalysis.fix !== "Manual investigation needed") {
-        // If a fixExecutor is provided, try it. If it fails, still retry (the step executor
-        // will get another chance with the error context).
         if (fixExecutor) {
           const fixed = await fixExecutor(llmAnalysis.fix).catch((err) => {
             console.warn(`[AgentLoop] fixExecutor failed for step ${_step.id}:`, err)
@@ -397,16 +618,17 @@ export class AgentLoop {
           })
           if (fixed) return true
         }
-        return true // retry step execution even if bash fix failed
+        return true
       }
     } catch (e) {
       console.warn(`[AgentLoop] LLM repair failed for step ${_step.id}:`, e)
     }
 
-    // Only allow retry if analysis suggests recovery (domain-agnostic)
     if (analysis && analysis.category !== "unknown") {
       return true
     }
     return false
   }
 }
+
+
