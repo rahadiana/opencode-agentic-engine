@@ -1772,19 +1772,6 @@
       ],
       "tfidfDocs": [
         {
-          "id": "ep-ses_110d5afe5ffeMyrtsLXbZ5W6Vd",
-          "category": "tech",
-          "title": "Debate: Analisis perbandingan komprehensif antara opencode-agentic-engine (plugin OpenCode dengan 29 tools, ",
-          "content": "Partially completed: Debate: Analisis perbandingan komprehensif antara opencode-agentic-engine (plugin OpenCode dengan 29 tools, \n0 rounds\nApproved: false\nSingle round (max rounds reached)",
-          "keywords": [
-            "rounds"
-          ],
-          "metadata": {
-            "type": "episode",
-            "episodeId": "ses_110d5afe5ffeMyrtsLXbZ5W6Vd"
-          }
-        },
-        {
           "id": "sk-skill-1782303867854",
           "category": "tech",
           "title": "Opencode Plugin API — Model Detection & Event Hook Structure",
@@ -1804,38 +1791,6 @@
           "metadata": {
             "type": "skill",
             "skillId": "skill-1782303867854"
-          }
-        },
-        {
-          "id": "ep-ses_106680572ffeYF8rKGmIbPFfV0",
-          "category": "tech",
-          "title": "Debate: 1+1 apakah =2 ?",
-          "content": "Partially completed: Debate: 1+1 apakah =2 ?\n0 rounds\nApproved: false\nSingle round (max rounds reached)",
-          "keywords": [
-            "rounds",
-            "debate:",
-            "approved:",
-            "false",
-            "single",
-            "(max",
-            "reached)"
-          ],
-          "metadata": {
-            "type": "episode",
-            "episodeId": "ses_106680572ffeYF8rKGmIbPFfV0"
-          }
-        },
-        {
-          "id": "ep-ses_105d52052ffejfaid7RrizMn3h",
-          "category": "tech",
-          "title": "Debate: Bandingkan `chat.params` hook vs `experimental.chat.system.transform` untuk model detection di OpenC",
-          "content": "Partially completed: Debate: Bandingkan `chat.params` hook vs `experimental.chat.system.transform` untuk model detection di OpenC\n0 rounds\nApproved: false\nSingle round (max rounds reached)",
-          "keywords": [
-            "rounds"
-          ],
-          "metadata": {
-            "type": "episode",
-            "episodeId": "ses_105d52052ffejfaid7RrizMn3h"
           }
         },
         {
@@ -2028,10 +1983,76 @@
           ],
           "score": 0.5,
           "usageCount": 0
+        },
+        {
+          "id": "ses_110d5afe5ffeMyrtsLXbZ5W6Vd",
+          "sessionId": "ses_110d5afe5ffeMyrtsLXbZ5W6Vd",
+          "planGoal": "Debate: Analisis perbandingan komprehensif antara opencode-agentic-engine (plugin OpenCode dengan 29 tools, ",
+          "summary": "Partially completed: Debate: Analisis perbandingan komprehensif antara opencode-agentic-engine (plugin OpenCode dengan 29 tools, ",
+          "outcome": "partial",
+          "decisions": [
+            "0 rounds",
+            "Approved: false",
+            "Single round (max rounds reached)"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-22T11:58:58.403Z",
+          "tags": [
+            "rounds"
+          ],
+          "projectId": "opencode-agentic-engine",
+          "score": 0.5,
+          "usageCount": 0
+        },
+        {
+          "id": "ses_105d52052ffejfaid7RrizMn3h",
+          "sessionId": "ses_105d52052ffejfaid7RrizMn3h",
+          "planGoal": "Debate: Bandingkan `chat.params` hook vs `experimental.chat.system.transform` untuk model detection di OpenC",
+          "summary": "Partially completed: Debate: Bandingkan `chat.params` hook vs `experimental.chat.system.transform` untuk model detection di OpenC",
+          "outcome": "partial",
+          "decisions": [
+            "0 rounds",
+            "Approved: false",
+            "Single round (max rounds reached)"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T15:09:20.348Z",
+          "tags": [
+            "rounds"
+          ],
+          "projectId": "opencode-agentic-engine",
+          "score": 0.5,
+          "usageCount": 0
         }
       ],
       "skills": [],
       "tfidfDocs": [
+        {
+          "id": "ep-ses_110d5afe5ffeMyrtsLXbZ5W6Vd",
+          "category": "general",
+          "title": "Debate: Analisis perbandingan komprehensif antara opencode-agentic-engine (plugin OpenCode dengan 29 tools, ",
+          "content": "Partially completed: Debate: Analisis perbandingan komprehensif antara opencode-agentic-engine (plugin OpenCode dengan 29 tools, \n0 rounds\nApproved: false\nSingle round (max rounds reached)",
+          "keywords": [
+            "rounds"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "ses_110d5afe5ffeMyrtsLXbZ5W6Vd"
+          }
+        },
+        {
+          "id": "ep-ses_105d52052ffejfaid7RrizMn3h",
+          "category": "general",
+          "title": "Debate: Bandingkan `chat.params` hook vs `experimental.chat.system.transform` untuk model detection di OpenC",
+          "content": "Partially completed: Debate: Bandingkan `chat.params` hook vs `experimental.chat.system.transform` untuk model detection di OpenC\n0 rounds\nApproved: false\nSingle round (max rounds reached)",
+          "keywords": [
+            "rounds"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "ses_105d52052ffejfaid7RrizMn3h"
+          }
+        },
         {
           "id": "ep-ses_1050779c9ffev5Oi8XvGnv4bgg",
           "category": "general",
@@ -2052,8 +2073,8 @@
         {
           "id": "ep-ses_1050b5714ffeLwJVlaOXUmYEFy",
           "category": "general",
-          "title": "Debate: Apa kelebihan dan kekurangan todo app sederhana?",
-          "content": "Partially completed: Debate: Apa kelebihan dan kekurangan todo app sederhana?\n0 rounds\nApproved: false\nSingle round (max rounds reached)",
+          "title": "Debate: Analisis kelebihan dan kekurangan arsitektur todo app di /tmp/opencode/test-todo-app",
+          "content": "Partially completed: Debate: Analisis kelebihan dan kekurangan arsitektur todo app di /tmp/opencode/test-todo-app\n0 rounds\nApproved: false\nSingle round (max rounds reached)",
           "keywords": [
             "rounds"
           ],
@@ -3707,10 +3728,55 @@
           ],
           "score": 0.5,
           "usageCount": 0
+        },
+        {
+          "id": "ses_106680572ffeYF8rKGmIbPFfV0",
+          "sessionId": "ses_106680572ffeYF8rKGmIbPFfV0",
+          "planGoal": "Debate: 1+1 apakah =2 ?",
+          "summary": "Partially completed: Debate: 1+1 apakah =2 ?",
+          "outcome": "partial",
+          "decisions": [
+            "0 rounds",
+            "Approved: false",
+            "Single round (max rounds reached)"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-24T15:16:05.278Z",
+          "tags": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "single",
+            "(max",
+            "reached)"
+          ],
+          "projectId": "opencode-agentic-engine",
+          "score": 0.5,
+          "usageCount": 0
         }
       ],
       "skills": [],
       "tfidfDocs": [
+        {
+          "id": "ep-ses_106680572ffeYF8rKGmIbPFfV0",
+          "category": "knowledge-tech",
+          "title": "Debate: 1+1 apakah =2 ?",
+          "content": "Partially completed: Debate: 1+1 apakah =2 ?\n0 rounds\nApproved: false\nSingle round (max rounds reached)",
+          "keywords": [
+            "rounds",
+            "debate:",
+            "approved:",
+            "false",
+            "single",
+            "(max",
+            "reached)"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "ses_106680572ffeYF8rKGmIbPFfV0"
+          }
+        },
         {
           "id": "ep-bootstrap-understand-opencode-agentic-engine-archi",
           "category": "knowledge-tech",
@@ -4258,5 +4324,5 @@
       ]
     }
   },
-  "updatedAt": "2026-06-24T21:34:29.960Z"
+  "updatedAt": "2026-06-25T13:08:20.816Z"
 }

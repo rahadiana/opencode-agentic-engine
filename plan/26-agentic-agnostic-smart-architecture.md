@@ -115,7 +115,7 @@ const engine = new LLMEngine({
 |------|--------|------------|
 | DAG-based execution | ✅ DONE | `DAGEngine` — Kahn's sort, parallel, circuit breaker |
 | PlanningLayer/ExecutionLayer/RecoveryLayer | ⚠️ PARTIAL | DAG engine ada, tapi layer belum terpisah eksplisit |
-| Immutable plan | ⚠️ PARTIAL | DAG plan immutable, tapi `replanStep()` masih mutate |
+| Immutable plan | ✅ DONE | `createPlanVersion()` — replan creates new version, v1 preserved immutably (v0.6.0) |
 | Strict escalation chain | ⚠️ PARTIAL | Recovery strategies ada (restart-node/plan/escalate), chaining otomatis belum |
 | Circuit breaker + loop detection | ✅ DONE | Hash-based + max steps + token budget |
 | Legacy while(true) fallback | ⚠️ PARTIAL | `runLoopBatched()` masih ada sebagai backward compat |
@@ -222,8 +222,8 @@ const engine = new LLMEngine({
 - [x] **DAG-based execution**: refactor agent loop (`dag-engine.ts`)
 
 ### Phase 2 — Control & Memory
-- [ ] Separation: PlanningLayer, ExecutionLayer, RecoveryLayer
-- [x] ~~Immutable plan~~ → DAG plan immutable, replan creates new plan
+- [x] ~~Separation: PlanningLayer, ExecutionLayer, RecoveryLayer~~
+- [x] ~~Immutable plan enforcement — replan creates new version via createPlanVersion()~~
 - [x] ~~Circuit breaker~~ → hash-based loop detection + rate limiting
 - [x] ~~Hierarchical memory~~ → working → episodic → semantic → procedural
 - [x] ~~Consolidation scheduler~~ → pruning + dedup otomatis
@@ -269,15 +269,17 @@ const engine = new LLMEngine({
 | 15 | **Confidence scoring signal wiring** | `execution-helpers.ts`, `agent-loop.ts` | v0.6.0 |
 | 16 | **Cost-aware routing** (weighting) | `model-registry.ts`, `llm.ts` | v0.6.0 |
 | 17 | **Working memory query** | `memory-orchestrator.ts` | v0.6.0 |
+| 18 | **Graph Harness 3-layer separation** | `planning-layer.ts`, `execution-layer.ts`, `recovery-layer.ts` | v0.6.0 |
+| 19 | **Immutable plan enforcement** | `planning-layer.ts` `createPlanVersion()` | v0.6.0 |
 
-### ⚠️ PARTIAL (7 item)
+### ⚠️ PARTIAL (5 item)
 
 | # | Fitur | Keterangan |
 |---|-------|------------|
 | 1 | Protocol adapter | MCP + A2A ada, unified gateway belum |
-| 2 | Layer separation | DAG engine ada, 3-layer terpisah belum |
-| 3 | Immutable plan | DAG immutable, replan masih mutate |
-| 4 | Strict escalation | Recovery strategies ada, chaining belum |
+| 2 | Layer separation | ✅ DONE | 3-layer: Planning/Execution/Recovery (v0.6.0) |
+| 3 | Immutable plan | ✅ DONE | `createPlanVersion()` — new version per replan, v1 preserved (v0.6.0) |
+| 4 | Strict escalation | ⚠️ PARTIAL | Recovery strategies ada, chaining belum |
 | 5 | Procedural depth | Store ada, execution tracking belum |
 | 6 | Auto-trigger evolution | Trigger di feedback path, belum di semua step |
 | 7 | Cost-aware auto-switch | Cost weighting ada, threshold-based switch belum |
@@ -299,7 +301,7 @@ const engine = new LLMEngine({
 | Dimensi | Sekarang | Target (Agnostic Smart) |
 |---------|----------|------------------------|
 | **LLM Provider** | Multi-provider fallback ✅ | Optimal per-task routing |
-| **Control Flow** | DAG-based ✅ | 3-layer terpisah |
+| **Control Flow** | 3-layer Graph Harness ✅ | 3-layer terpisah |
 | **Agent Spec** | Blueprint interface ✅ | Multi-env deployment |
 | **Memory** | 4-level hierarchical ✅ | + Working query + Procedural depth |
 | **Tools** | MCP + A2A ✅ | MCP-first + dynamic discovery |
@@ -331,4 +333,5 @@ const engine = new LLMEngine({
 | 2026-06-20 | `v0.4.8` | Gap #7 semantic cache |
 | 2026-06-24 | `v0.5.3` | P0-P3 reliability hardening |
 | 2026-06-25 | `7df6472` | ConstraintManifold (Phase 4C) + Skill Lifecycle (Phase 4A) |
+| 2026-06-25 | `6035995` | Graph Harness 3-layer: PlanningLayer, ExecutionLayer, RecoveryLayer + Immutable plan enforcement (createPlanVersion) + Export layers + 47 PL/EL/RL tests |
 | 2026-06-25 | `982d664` | Multi-provider auto fallback for LLM calls (Phase 3B) |

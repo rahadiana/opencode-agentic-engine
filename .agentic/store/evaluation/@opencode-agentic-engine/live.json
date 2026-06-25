@@ -150,6 +150,11 @@
         "query": "Saya mau nambahin fitur login JWT ke todo app",
         "resultsCount": 1,
         "focused": true
+      },
+      {
+        "query": "seluruh struktur project opencode-agentic-engine",
+        "resultsCount": 52,
+        "focused": false
       }
     ],
     "delegations": [
@@ -184,5 +189,5 @@
       }
     ]
   },
-  "updatedAt": "2026-06-24T19:12:23.864Z"
+  "updatedAt": "2026-06-25T12:57:28.245Z"
 }

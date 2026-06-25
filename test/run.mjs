@@ -7553,6 +7553,103 @@ const { DAGEngine } = await import(pluginDist)
   pl_assert(stats.totalVersions >= 2, "PL-5b totalVersions >= 2")
 }
 
+// PL-6: createPlanVersion — creates new version with incremented number
+{
+  const pll = new PlanningLayer(new DAGEngine())
+  const original = pll.createPlan("replan goal", [
+    { id: "a", description: "step a", dependsOn: [], verificationCriteria: [] },
+    { id: "b", description: "step b", dependsOn: ["a"], verificationCriteria: [] },
+  ])
+  pl_assert(original.version.version === 1, "PL-6a initial version = 1")
+
+  const replan = pll.createPlanVersion("replan goal",
+    [
+      { id: "a", description: "step a", dependsOn: [], verificationCriteria: [] },
+      { id: "b", description: "step b", dependsOn: ["a"], verificationCriteria: [] },
+    ],
+    "b",
+    [
+      { id: "b1", description: "step b part 1", dependsOn: ["a"], verificationCriteria: [] },
+      { id: "b2", description: "step b part 2", dependsOn: ["b1"], verificationCriteria: [] },
+    ],
+  )
+  pl_assert(replan.version.version === 2, "PL-6b replan version = 2")
+  pl_assert(replan.context.nodes.size === 3, "PL-6c replan has 3 nodes (a + b1 + b2)")
+  pl_assert(replan.plan.nodes.length === 3, "PL-6d DAGPlan has 3 nodes")
+  pl_assert(replan.version.changeSummary.includes("Replan"), "PL-6e summary mentions Replan")
+  pl_assert(replan.version.changeSummary.includes("b"), "PL-6f summary mentions failed step id")
+
+  // Original version preserved immutably
+  const versions = pll.getVersions("replan goal")
+  pl_assert(versions.length === 2, "PL-6g two versions preserved")
+  pl_assert(versions[0].version === 1, "PL-6h version 1 unchanged")
+  pl_assert(versions[1].version === 2, "PL-6i version 2 exists")
+  pl_assert(versions[0].plan.nodes.length === 2, "PL-6j v1 still has 2 nodes (original preserved)")
+}
+
+// PL-7: createPlanVersion — rewires dependencies correctly
+{
+  const pll = new PlanningLayer(new DAGEngine())
+  const original = pll.createPlan("dep goal", [
+    { id: "s1", description: "setup", dependsOn: [], verificationCriteria: [] },
+    { id: "s2", description: "impl", dependsOn: ["s1"], verificationCriteria: [] },
+    { id: "s3", description: "verify", dependsOn: ["s2"], verificationCriteria: [] },
+  ])
+  pl_assert(original.version.version === 1, "PL-7a initial version = 1")
+
+  // Replan s2 (impl) → [s2a, s2b]
+  const replan = pll.createPlanVersion("dep goal",
+    [
+      { id: "s1", description: "setup", dependsOn: [], verificationCriteria: [] },
+      { id: "s2", description: "impl", dependsOn: ["s1"], verificationCriteria: [] },
+      { id: "s3", description: "verify", dependsOn: ["s2"], verificationCriteria: [] },
+    ],
+    "s2",
+    [
+      { id: "s2a", description: "impl part 1", dependsOn: ["s1"], verificationCriteria: [] },
+      { id: "s2b", description: "impl part 2", dependsOn: ["s2a"], verificationCriteria: [] },
+    ],
+  )
+  pl_assert(replan.plan.nodes.length === 4, "PL-7b 4 nodes after replan (s1 + s2a + s2b + s3)")
+
+  // s3 should now depend on s2b (last replan subtask) instead of s2
+  const s3node = replan.plan.nodes.find(n => n.id === "s3")
+  pl_assert(!!s3node, "PL-7c s3 exists in replan")
+  pl_assert(s3node.deps.includes("s2b"), "PL-7d s3 depends on s2b (rewired)")
+  pl_assert(!s3node.deps.includes("s2"), "PL-7e s3 no longer depends on s2 (removed)")
+
+  // Version 1 preserved unchanged
+  const versions = pll.getVersions("dep goal")
+  pl_assert(versions.length === 2, "PL-7f two versions")
+  pl_assert(versions[0].plan.nodes.length === 3, "PL-7g v1 still has 3 nodes")
+}
+
+// PL-8: createPlanVersion — auto-deduplicates ID conflicts
+{
+  const pll = new PlanningLayer(new DAGEngine())
+  pll.createPlan("dedup goal", [
+    { id: "x", description: "existing x", dependsOn: [], verificationCriteria: [] },
+    { id: "y", description: "existing y", dependsOn: ["x"], verificationCriteria: [] },
+  ])
+
+  // New subtask has id "x" which conflicts with existing (non-failed) step
+  const replan = pll.createPlanVersion("dedup goal",
+    [
+      { id: "x", description: "existing x", dependsOn: [], verificationCriteria: [] },
+      { id: "y", description: "existing y", dependsOn: ["x"], verificationCriteria: [] },
+    ],
+    "y",
+    [
+      { id: "x", description: "replacement for y", dependsOn: [], verificationCriteria: [] },
+    ],
+  )
+  // The replacement subtask should have been renamed to "y-replan-1" to avoid conflict
+  const nodes = replan.plan.nodes
+  pl_assert(nodes.length === 2, "PL-8a replan has 2 nodes (x + renamed)")
+  pl_assert(nodes.some(n => n.id === "x"), "PL-8b original x preserved")
+  pl_assert(nodes.some(n => n.id.includes("replan")), "PL-8c new node renamed with replan suffix")
+}
+
 console.log(`  PL: ${pl} passed, ${plf} failed`)
 passed += pl; failed += plf
 

@@ -75,7 +75,7 @@ export class PlanningLayer {
 
   /**
    * Create a DAG plan from a goal and subtasks.
-   * Returns an immutable plan version.
+   * Returns an immutable plan version (v1).
    */
   createPlan(
     goal: string,
@@ -89,7 +89,73 @@ export class PlanningLayer {
       maxSteps: overrides?.maxSteps ?? this.config.maxSteps,
     })
 
-    const version = this.incrementVersion(goal, plan)
+    const version = this.incrementVersion(goal, plan, "Initial plan")
+    return { plan, context, version }
+  }
+
+  /**
+   * Create a NEW plan version from modified subtasks (immutable replan).
+   *
+   * Graph Harness Commitment 1: "Execution plans are immutable within a plan version."
+   * Instead of mutating the existing plan (via executor.replanStep), this method:
+   *   1. Replaces the failed step with new subtasks
+   *   2. Rewires dependencies: subtasks that depended on the failed step now depend on the last new subtask
+   *   3. Creates a new PlanVersion (version N+1), preserving version N immutably
+   *   4. Returns the new DAGPlan + DAGExecutionContext + PlanVersion
+   *
+   * @param goal - Original plan goal
+   * @param originalSubtasks - Original subtask list (from the executor state)
+   * @param failedStepId - ID of the step that failed and needs replacement
+   * @param newSubtasks - Replacement subtasks (will have IDs like `${failedStepId}-replan-{i+1}` if duplicate)
+   * @param overrides - Optional DAGPlan metadata overrides
+   * @returns New plan version with its own DAGPlan and execution context
+   */
+  createPlanVersion(
+    goal: string,
+    originalSubtasks: Subtask[],
+    failedStepId: string,
+    newSubtasks: Subtask[],
+    overrides?: Partial<DAGPlan["metadata"]>,
+  ): { plan: DAGPlan; context: DAGExecutionContext; version: PlanVersion } {
+    // 1. Build modified subtask list: remove failed step, add new subtasks
+    const dedupedSubtasks = newSubtasks.map((s, i) => {
+      // Auto-rename if ID conflicts with existing subtask
+      if (originalSubtasks.some(orig => orig.id === s.id && orig.id !== failedStepId)) {
+        return { ...s, id: `${failedStepId}-replan-${i + 1}` }
+      }
+      return s
+    })
+
+    // 2. Remove failed step from deps of all surviving subtasks
+    //    Then wire them to depend on the LAST new subtask (sequential dependency)
+    const lastReplanId = dedupedSubtasks[dedupedSubtasks.length - 1]?.id || `${failedStepId}-replan-${dedupedSubtasks.length}`
+    const modifiedSubtasks: Subtask[] = originalSubtasks
+      .filter(s => s.id !== failedStepId)
+      .map(s => ({
+        ...s,
+        dependsOn: s.dependsOn
+          .filter(d => d !== failedStepId)       // remove dep on failed step
+          .concat(dedupedSubtasks.length > 0 && s.dependsOn.includes(failedStepId) ? [lastReplanId] : []), // add dep on last replan step
+      }))
+
+    // 3. Ensure new subtasks don't depend on the failed step
+    const cleanNewSubtasks = dedupedSubtasks.map(s => ({
+      ...s,
+      dependsOn: s.dependsOn.filter(d => d !== failedStepId),
+    }))
+
+    modifiedSubtasks.push(...cleanNewSubtasks)
+
+    // 4. Create new DAG and version
+    const changeSummary = `Replan v${(this.currentVersion.get(this.goalKey(goal)) ?? 0) + 1}: replaced "${failedStepId}" with ${newSubtasks.length} subtask(s)`
+    const { plan, context } = this.dagEngine.buildDAG(goal, modifiedSubtasks, {
+      maxParallel: overrides?.maxParallel ?? this.config.maxParallel,
+      circuitBreaker: overrides?.circuitBreaker ?? this.config.circuitBreaker,
+      recoveryStrategy: overrides?.recoveryStrategy ?? this.config.recoveryStrategy,
+      maxSteps: overrides?.maxSteps ?? this.config.maxSteps,
+    })
+
+    const version = this.incrementVersion(goal, plan, changeSummary)
     return { plan, context, version }
   }
 
@@ -203,7 +269,7 @@ export class PlanningLayer {
     return goal.trim().toLowerCase().slice(0, 64)
   }
 
-  private incrementVersion(goal: string, plan: DAGPlan): PlanVersion {
+  private incrementVersion(goal: string, plan: DAGPlan, changeSummary?: string): PlanVersion {
     const key = this.goalKey(goal)
     const versions = this.planVersions.get(key) ?? []
     const versionNumber = versions.length + 1
@@ -211,9 +277,9 @@ export class PlanningLayer {
       version: versionNumber,
       plan,
       createdAt: Date.now(),
-      changeSummary: versionNumber === 1
+      changeSummary: changeSummary ?? (versionNumber === 1
         ? `Initial plan: ${goal.slice(0, 80)}`
-        : `Revision ${versionNumber}: ${goal.slice(0, 80)}`,
+        : `Revision ${versionNumber}: ${goal.slice(0, 80)}`),
     }
     versions.push(version)
     this.planVersions.set(key, versions)

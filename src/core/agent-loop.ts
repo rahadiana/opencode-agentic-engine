@@ -344,28 +344,39 @@ export class AgentLoop {
             (_desc, err) => this.tryReplan(subtask, err))
           if (replanResult.newSubtasks.length > 0) {
             this.replannedSteps.add(nodeId)
-            executor.replanStep(sessionId, nodeId, replanResult.newSubtasks)
 
-            // Rebuild DAG with new subtasks via PlanningLayer
-            const newPlan = (executor as any).states?.get(sessionId)?.plan
-            if (newPlan?.intent?.subtasks) {
-              const { context: newDagCtx } = this.planningLayer.createPlan(
-                plan.intent.goal,
-                newPlan.intent.subtasks,
-                dagPlan.metadata,
-              )
-              // Execute remaining nodes
-              const retryResult = await this.executionLayer.execute(newDagCtx, dagRunner)
-              for (const cn of retryResult.completedNodes) {
-                if (!dagResult.completedNodes.includes(cn)) {
-                  dagResult.completedNodes.push(cn)
-                }
+            // Immutable plan enforcement: create NEW plan version via PlanningLayer
+            // instead of mutating executor's plan (Commitment 1: Graph Harness)
+            const planVersionResult = this.planningLayer.createPlanVersion(
+              plan.intent.goal,
+              subtasks,
+              nodeId,
+              replanResult.newSubtasks,
+              dagPlan.metadata,
+            )
+
+            // Update executor state: remove the old stepId from tracking,
+            // add new subtasks for getReadySteps/getNextStep compatibility
+            const newSubtasks = planVersionResult.plan.nodes.map((n: DAGNode) => ({
+              id: n.id,
+              description: n.description,
+              dependsOn: n.deps,
+              verificationCriteria: n.verificationCriteria ?? [],
+            }))
+            executor.replanStep(sessionId, nodeId, newSubtasks)
+
+            // Execute the new plan version
+            const { context: newDagCtx, version: newVersion } = planVersionResult
+            const retryResult = await this.executionLayer.execute(newDagCtx, dagRunner)
+            for (const cn of retryResult.completedNodes) {
+              if (!dagResult.completedNodes.includes(cn)) {
+                dagResult.completedNodes.push(cn)
               }
-              dagResult.failedNodes.length = 0
-              dagResult.failedNodes.push(...retryResult.failedNodes)
-              dagResult.success = retryResult.success
-              dagResult.summary += ` | Replanned: ${nodeId} (${replanResult.summary})`
             }
+            dagResult.failedNodes.length = 0
+            dagResult.failedNodes.push(...retryResult.failedNodes)
+            dagResult.success = retryResult.success
+            dagResult.summary += ` | Replanned: ${nodeId} → v${newVersion.version} (${replanResult.summary})`
           }
         }
         // decision.action === "escalate" or "skip" → leave as failed
