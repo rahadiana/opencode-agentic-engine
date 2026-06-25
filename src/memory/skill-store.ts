@@ -5,12 +5,20 @@ import type { VectorStore, TfIdfDoc } from "./vector-store.js"
 
 export { type SkillDefinition, type SkillStep, type SkillMeta, inspectSkill, serializeSkill, deserializeSkill, createSkillDefinition }
 
+export type SkillLifecycleStage = "raw" | "validated" | "compiled" | "evolved"
+
+export interface MaturationCriteria {
+  minUsageCount: number
+  minSuccessRate: number
+}
+
 export interface SkillRecord {
   definition: SkillDefinition
   usageCount: number
   successRate: number
   successWindow: boolean[]  // sliding window of last N outcomes (true=success)
   lastUsed: string
+  lifecycle?: SkillLifecycleStage
 }
 
 // Action verb prefixes for step validation — filters non-action lines
@@ -809,6 +817,79 @@ export class SkillStore {
 
     this.skills.set(variantId, variantRecord)
     return variantId
+  }
+
+  // ── Skill Lifecycle (Phase 4A) ─────────────────────────────────
+
+  /** Lifecycle stages with their maturation criteria */
+  private static readonly LIFECYCLE_ORDER: SkillLifecycleStage[] = ["raw", "validated", "compiled", "evolved"]
+
+  private static readonly MATURATION_CRITERIA: Record<string, MaturationCriteria> = {
+    raw:       { minUsageCount: 3,  minSuccessRate: 0.7 },
+    validated: { minUsageCount: 10, minSuccessRate: 0.85 },
+    compiled:  { minUsageCount: 25, minSuccessRate: 0.95 },
+    evolved:   { minUsageCount: Infinity, minSuccessRate: Infinity }, // terminal stage
+  }
+
+  /** Get the lifecycle stage of a skill */
+  getLifecycle(skillId: string): SkillLifecycleStage {
+    const record = this.skills.get(skillId)
+    return record?.lifecycle ?? "raw"
+  }
+
+  /** Get the next lifecycle stage, or null if at terminal stage */
+  getNextStage(skillId: string): SkillLifecycleStage | null {
+    const current = this.getLifecycle(skillId)
+    const idx = SkillStore.LIFECYCLE_ORDER.indexOf(current)
+    if (idx < 0 || idx >= SkillStore.LIFECYCLE_ORDER.length - 1) return null
+    return SkillStore.LIFECYCLE_ORDER[idx + 1]
+  }
+
+  /** Check if a skill meets criteria to advance to the next lifecycle stage */
+  canMature(skillId: string): boolean {
+    const current = this.getLifecycle(skillId)
+    const next = this.getNextStage(skillId)
+    if (!next) return false
+    const criteria = SkillStore.MATURATION_CRITERIA[current]
+    const record = this.skills.get(skillId)
+    if (!record) return false
+    return record.usageCount >= criteria.minUsageCount && record.successRate >= criteria.minSuccessRate
+  }
+
+  /** Advance a skill to the next lifecycle stage if criteria are met */
+  mature(skillId: string): SkillLifecycleStage | null {
+    if (!this.canMature(skillId)) return this.getLifecycle(skillId)
+    const next = this.getNextStage(skillId)
+    if (!next) return null
+    const record = this.skills.get(skillId)
+    if (record) {
+      record.lifecycle = next
+      record.definition.audit.lastModified = new Date().toISOString()
+    }
+    return next
+  }
+
+  /** Auto-mature all eligible skills in bulk. Returns count of promotions per stage. */
+  autoMature(): Record<string, number> {
+    const summary: Record<string, number> = {}
+    for (const [id, record] of this.skills) {
+      const before = record.lifecycle ?? "raw"
+      const after = this.mature(id)
+      if (after && after !== before) {
+        summary[`${before}->${after}`] = (summary[`${before}->${after}`] ?? 0) + 1
+      }
+    }
+    return summary
+  }
+
+  /** Get lifecycle distribution statistics */
+  getLifecycleStats(): { raw: number; validated: number; compiled: number; evolved: number } {
+    const stats = { raw: 0, validated: 0, compiled: 0, evolved: 0 }
+    for (const record of this.skills.values()) {
+      const stage = record.lifecycle ?? "raw"
+      stats[stage]++
+    }
+    return stats
   }
 
   evaluateMutation(mutationId: string, parentId: string): boolean {
