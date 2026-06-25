@@ -239,7 +239,7 @@ const engine = new LLMEngine({
 
 ### Phase 4 — Evolution & Safety
 - [x] ~~Constraint manifold~~ → ConstraintManifold (Phase 4C)
-- [ ] Auto-trigger evolution (in-context → SFT → RL)
+- [x] Auto-trigger evolution (in-context → SFT → RL)
 - [ ] Feedback loop: user rating → policy update
 - [x] ~~Skill maturation lifecycle~~ → raw → validated → compiled → evolved
 - [ ] Formal verification: POMDP-based execution model
@@ -248,7 +248,7 @@ const engine = new LLMEngine({
 
 ## 📊 Status Summary
 
-### ✅ SUDAH SELESAI (17 item)
+### ✅ SUDAH SELESAI (23 item)
 
 | # | Fitur | File | Versi |
 |---|-------|------|-------|
@@ -274,13 +274,13 @@ const engine = new LLMEngine({
 | 20 | **Strict escalation chain** | `agent-loop.ts` recovery while-loop | v0.6.0 |
 | 21 | **Cost-aware auto-switch (enhanced)** | `llm.ts` budget-aware + tracking + all categories | v0.6.0 |
 | 22 | **Procedural memory depth** | `memory-orchestrator.ts` trace query + pattern extraction + pruning | v0.6.0 |
+| 23 | **Auto-trigger evolution** | `continuous-evolution.ts`, `index.ts` EventBus wiring | v0.6.0 |
 
-### ⚠️ PARTIAL (2 item)
+### ⚠️ PARTIAL (1 item)
 
 | # | Fitur | Keterangan |
 |---|-------|------------|
 | 1 | Protocol adapter | MCP + A2A ada, unified gateway belum |
-| 2 | Auto-trigger evolution | Trigger di feedback path, belum di semua step |
 
 ### ❌ BELUM (5 item)
 

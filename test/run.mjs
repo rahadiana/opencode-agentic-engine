@@ -8046,6 +8046,182 @@ console.log("\n[ESC] Strict Escalation Chain — Graph Harness §3.3")
 let esc = 0, escf = 0
 const esc_assert = (c, m) => { if (c) { esc++; console.log(`  PASS: ${m}`) } else { escf++; console.log(`  FAIL: ${m}`) } }
 
+// AT: Auto-trigger evolution — ContinuousEvolution.shouldEvolve edge cases
+console.log("\n[AT] Auto-trigger evolution")
+let atPassed = 0, atFailed = 0
+function at_assert(cond, msg) { if (cond) { atPassed++ } else { console.error(`  ❌ ${msg}`); atFailed++ } }
+
+// AT-1: shouldEvolve returns trigger on sustained degradation (3 decreasing buckets) + severe rate (<40%)
+{
+  const ceAt1 = new mod.ContinuousEvolution(10, 5)
+  // Feed 10 successes → stable start
+  for (let i = 0; i < 10; i++) {
+    ceAt1.feedStepResult({ stepId: `ok${i}`, success: true, output: "ok", sessionId: "sess-at1", timestamp: Date.now() })
+  }
+  // Feed 10 failures → severe degradation (0% success rate < 40%)
+  for (let i = 0; i < 10; i++) {
+    ceAt1.feedStepResult({ stepId: `fail${i}`, success: false, output: "fail", sessionId: "sess-at1", timestamp: Date.now() })
+  }
+  const t1 = ceAt1.shouldEvolve("sess-at1")
+  at_assert(t1 !== null, "AT-1a severe degradation → shouldEvolve returns trigger")
+  if (t1) {
+    at_assert(t1.type === "degradation", "AT-1b trigger type is degradation")
+    at_assert(t1.metrics.recentRate < 0.4, "AT-1c degradation rate < 40%")
+  }
+}
+
+// AT-2: shouldEvolve respects maxEvolvePerSession cap
+{
+  const ceAt2 = new mod.ContinuousEvolution(10, 2) // max 2 per session
+  // Feed enough data: 3 successes + 7 failures (recentRate=30% < 40% → severe)
+  for (let i = 0; i < 3; i++) {
+    ceAt2.feedStepResult({ stepId: `ok${i}`, success: true, output: "ok", sessionId: "sess-at2", timestamp: Date.now() })
+  }
+  for (let i = 0; i < 7; i++) {
+    ceAt2.feedStepResult({ stepId: `fail${i}`, success: false, output: "fail", sessionId: "sess-at2", timestamp: Date.now() })
+  }
+
+  // Verify degradation is detected
+  const trend2 = ceAt2.getTrend()
+  at_assert(trend2.degradationDetected === true, "AT-2a degradation detected (recentRate=" + trend2.rolling.successRate + ")")
+  at_assert(trend2.rolling.successRate < 0.4, "AT-2b recent rate < 40% (" + trend2.rolling.successRate + ")")
+
+  // First evolution should trigger (severe rate < 40%)
+  const t1 = ceAt2.shouldEvolve("sess-at2")
+  at_assert(t1 !== null, "AT-2c first evolution triggers")
+
+  // Second evolution should trigger (different sessionId bypasses per-session cooldown)
+  const t2 = ceAt2.shouldEvolve("sess-at2-different")
+  at_assert(t2 !== null, "AT-2d second evolution triggers (different session)")
+
+  // Third evolution should be capped by maxEvolvePerSession=2
+  const t3 = ceAt2.shouldEvolve("sess-at2-another")
+  at_assert(t3 === null, "AT-2e third evolution capped at maxEvolvePerSession=2")
+}
+
+// AT-3: shouldEvolve returns null when data insufficient
+{
+  const ceAt3 = new mod.ContinuousEvolution(10)
+  // Only 5 results → below minimum 10
+  for (let i = 0; i < 5; i++) {
+    ceAt3.feedStepResult({ stepId: `s${i}`, success: false, output: "err", sessionId: "sess-at3", timestamp: Date.now() })
+  }
+  at_assert(ceAt3.shouldEvolve("sess-at3") === null, "AT-3 no trigger with <10 data points")
+}
+
+// AT-4: shouldEvolve returns null on stable performance
+{
+  const ceAt4 = new mod.ContinuousEvolution(10)
+  // All successes — stable, no degradation
+  for (let i = 0; i < 20; i++) {
+    ceAt4.feedStepResult({ stepId: `s${i}`, success: true, output: "ok", sessionId: "sess-at4", timestamp: Date.now() })
+  }
+  at_assert(ceAt4.shouldEvolve("sess-at4") === null, "AT-4 no trigger on stable 100% success rate")
+}
+
+// AT-5: shouldEvolve returns null on single dip (not sustained, not severe)
+{
+  const ceAt5 = new mod.ContinuousEvolution(10)
+  // 9 successes + 1 failure = 90% rate, not sustained degradation
+  for (let i = 0; i < 9; i++) {
+    ceAt5.feedStepResult({ stepId: `ok${i}`, success: true, output: "ok", sessionId: "sess-at5", timestamp: Date.now() })
+  }
+  ceAt5.feedStepResult({ stepId: "fail1", success: false, output: "err", sessionId: "sess-at5", timestamp: Date.now() })
+  at_assert(ceAt5.shouldEvolve("sess-at5") === null, "AT-5 no trigger on single dip (not sustained/severe)")
+}
+
+// AT-6: shouldEvolve returns null after reset
+{
+  const ceAt6 = new mod.ContinuousEvolution(10)
+  // Feed enough to trigger
+  for (let i = 0; i < 10; i++) {
+    ceAt6.feedStepResult({ stepId: `s${i}`, success: false, output: "err", sessionId: "sess-at6", timestamp: Date.now() })
+  }
+  const t1 = ceAt6.shouldEvolve("sess-at6")
+  at_assert(t1 !== null, "AT-6a trigger before reset")
+
+  ceAt6.reset()
+  at_assert(ceAt6.shouldEvolve("sess-at6-reset") === null, "AT-6b no trigger after reset (no data)")
+}
+
+// AT-7: shouldEvolve cooldown — same session within 2 minutes returns null
+{
+  const ceAt7 = new mod.ContinuousEvolution(10)
+  for (let i = 0; i < 10; i++) {
+    ceAt7.feedStepResult({ stepId: `s${i}`, success: false, output: "err", sessionId: "sess-at7", timestamp: Date.now() })
+  }
+  const t1 = ceAt7.shouldEvolve("sess-at7")
+  at_assert(t1 !== null, "AT-7a first trigger works")
+
+  // Immediate re-check same session → should be blocked by cooldown
+  const t2 = ceAt7.shouldEvolve("sess-at7")
+  at_assert(t2 === null, "AT-7b cooldown blocks same session re-trigger")
+}
+
+// AT-8: shouldEvolve at milestone (every 100 steps)
+{
+  const ceAt8 = new mod.ContinuousEvolution(10, 10)
+  // Feed 99 successes (not at milestone yet)
+  for (let i = 0; i < 99; i++) {
+    ceAt8.feedStepResult({ stepId: `s${i}`, success: true, output: "ok", sessionId: "sess-at8", timestamp: Date.now() })
+  }
+  // cumulativeResults counters pruning — milestone uses cumulative, not pruned window
+  const stats8a = ceAt8.getStats()
+  at_assert(stats8a.cumulativeResults === 99, "AT-8a cumulative=99 before milestone")
+  at_assert(stats8a.totalResults <= 30, "AT-8b window pruned to ≤30")
+
+  // Not at milestone yet — should return null (no degradation, cumulative=99 not divisible by 100)
+  const pre = ceAt8.shouldEvolve("sess-at8")
+  at_assert(pre === null, "AT-8c no milestone trigger at cumulative=99")
+
+  // Feed 1 more to reach 100
+  ceAt8.feedStepResult({ stepId: "s100", success: true, output: "ok", sessionId: "sess-at8", timestamp: Date.now() })
+  const stats8b = ceAt8.getStats()
+  at_assert(stats8b.cumulativeResults === 100, "AT-8d cumulative=100 after milestone feed")
+
+  const tMilestone = ceAt8.shouldEvolve("sess-at8-milestone")
+  at_assert(tMilestone !== null, "AT-8e milestone trigger at cumulative=100")
+  if (tMilestone) {
+    at_assert(tMilestone.type === "milestone", "AT-8f milestone trigger type")
+  }
+}
+
+// AT-9: getStats returns correct counts
+{
+  const ceAt9 = new mod.ContinuousEvolution(10, 3)
+  // Trigger 1 evolution
+  for (let i = 0; i < 10; i++) {
+    ceAt9.feedStepResult({ stepId: `s${i}`, success: false, output: "err", sessionId: "sess-at9", timestamp: Date.now() })
+  }
+  ceAt9.shouldEvolve("sess-at9") // +1 evolveCount
+
+  const stats = ceAt9.getStats()
+  at_assert(stats.totalResults >= 10, "AT-9a getStats totalResults >= 10")
+  at_assert(stats.evolveCount === 1, "AT-9b getStats evolveCount is 1")
+  at_assert(stats.windowSize === 10, "AT-9c getStats windowSize matches")
+}
+
+// AT-10: toJSON/fromJSON round-trip preserves evolveCount
+{
+  const ceAt10 = new mod.ContinuousEvolution(10, 5)
+  for (let i = 0; i < 10; i++) {
+    ceAt10.feedStepResult({ stepId: `s${i}`, success: false, output: "err", sessionId: "sess-at10", timestamp: Date.now() })
+  }
+  ceAt10.shouldEvolve("sess-at10") // +1 evolveCount
+
+  const json = ceAt10.toJSON()
+  const ceAt10b = new mod.ContinuousEvolution(10, 5)
+  ceAt10b.fromJSON(json)
+  const stats2 = ceAt10b.getStats()
+  at_assert(stats2.totalResults === json.results.length, "AT-10a round-trip preserves totalResults")
+  at_assert(stats2.evolveCount === json.evolveCount, "AT-10b round-trip preserves evolveCount")
+  at_assert(stats2.windowSize === json.windowSize, "AT-10c round-trip preserves windowSize")
+  at_assert(stats2.cumulativeResults === json.cumulativeResults, "AT-10d round-trip preserves cumulativeResults")
+}
+
+console.log(`  AT: ${atPassed} passed, ${atFailed} failed`)
+passed += atPassed; failed += atFailed
+
 // ESC-1: RecoveryLayer automatically escalates retry → replan → escalate across successive calls
 {
   const escRl = new RecoveryLayer({ maxRetries: 1, maxReplans: 1 })

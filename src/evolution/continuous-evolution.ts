@@ -60,6 +60,8 @@ export class ContinuousEvolution {
   private evolveCount = 0
   private maxEvolvePerSession: number
   private trendCache: { key: string; trend: PerformanceTrend } | null = null
+  /** Cumulative results fed (never pruned) — used for milestone triggers */
+  private cumulativeResults = 0
 
   constructor(windowSize = 30, maxEvolvePerSession = 10) {
     this.windowSize = windowSize
@@ -69,6 +71,7 @@ export class ContinuousEvolution {
   /** Feed a step result into the rolling window */
   feedStepResult(result: StepResult): void {
     this.results.push(result)
+    this.cumulativeResults++
     this.trendCache = null
     if (this.results.length > this.windowSize * 2 + 10) {
       this.results = this.results.slice(-this.windowSize * 2)
@@ -78,6 +81,7 @@ export class ContinuousEvolution {
   /** Feed multiple results at once (e.g. after a session completes) */
   feedBatch(results: StepResult[]): void {
     this.results.push(...results)
+    this.cumulativeResults += results.length
     this.trendCache = null
     if (this.results.length > this.windowSize * 2 + 10) {
       this.results = this.results.slice(-this.windowSize * 2)
@@ -305,8 +309,8 @@ export class ContinuousEvolution {
       return null
     }
 
-    // Trigger 2: Milestone — every 100 completed steps (up from 50)
-    if (this.results.length > 0 && this.results.length % 100 === 0 && this.results.length >= 100) {
+    // Trigger 2: Milestone — every 100 completed steps (uses cumulative counter, not pruned window)
+    if (this.cumulativeResults > 0 && this.cumulativeResults % 100 === 0 && this.cumulativeResults >= 100) {
       this.lastEvolveSession = sessionId
       this.lastEvolveTime = Date.now()
       this.evolveCount++
@@ -331,32 +335,36 @@ export class ContinuousEvolution {
     this.lastEvolveTime = 0
     this.evolveCount = 0
     this.trendCache = null
+    this.cumulativeResults = 0
   }
 
   /** Get raw counts */
-  getStats(): { totalResults: number; evolveCount: number; windowSize: number } {
+  getStats(): { totalResults: number; cumulativeResults: number; evolveCount: number; windowSize: number } {
     return {
       totalResults: this.results.length,
+      cumulativeResults: this.cumulativeResults,
       evolveCount: this.evolveCount,
       windowSize: this.windowSize,
     }
   }
 
   /** Serialize for persistence */
-  toJSON(): { results: StepResult[]; evolveCount: number; windowSize: number; lastEvolveSession: string | null } {
+  toJSON(): { results: StepResult[]; evolveCount: number; windowSize: number; lastEvolveSession: string | null; cumulativeResults: number } {
     return {
       results: this.results,
       evolveCount: this.evolveCount,
       windowSize: this.windowSize,
       lastEvolveSession: this.lastEvolveSession,
+      cumulativeResults: this.cumulativeResults,
     }
   }
 
   /** Restore from persisted state */
-  fromJSON(data: { results: StepResult[]; evolveCount: number; windowSize: number; lastEvolveSession?: string | null }): void {
+  fromJSON(data: { results: StepResult[]; evolveCount: number; windowSize: number; lastEvolveSession?: string | null; cumulativeResults?: number }): void {
     this.results = data.results || []
     this.evolveCount = data.evolveCount || 0
     this.windowSize = Math.max(1, data.windowSize ?? this.windowSize)
     this.lastEvolveSession = data.lastEvolveSession ?? null
+    this.cumulativeResults = data.cumulativeResults ?? this.results.length
   }
 }

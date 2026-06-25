@@ -849,6 +849,19 @@ const confidenceStore = new ConfidenceStore()
   // ────────────────────────────────────────────────────────────────
 
   // LiveEvaluator: track step outcomes untuk scoring real-time
+  // Auto-evolution: setiap step completion/failure → check apakah perlu evolve
+  function checkAutoEvolve(sessionId: string): void {
+    try {
+      const trigger = continuousEvolution.shouldEvolve(sessionId)
+      if (trigger) {
+        console.debug(`[auto-evolve] Triggered: ${trigger.reason}`)
+        runAutoEvolve().catch((err) => console.warn(`[auto-evolve] Fire-and-forget evolution error:`, (err as Error).message))
+      }
+    } catch {
+      // Non-fatal — don't let evolution errors affect step execution
+    }
+  }
+
   eventBus.on("step.completed", (ev: any) => {
     liveEvaluator.feedStepResult({ stepId: ev.payload.stepId, success: true, sessionId: ev.payload.sessionID })
     continuousEvolution.feedStepResult({
@@ -858,6 +871,8 @@ const confidenceStore = new ConfidenceStore()
       sessionId: ev.payload.sessionID,
       timestamp: Date.now(),
     })
+    // Auto-evolve check on every successful step
+    checkAutoEvolve(ev.payload.sessionID)
   })
   eventBus.on("step.failed", (ev: any) => {
     liveEvaluator.feedStepResult({ stepId: ev.payload.stepId, success: false, sessionId: ev.payload.sessionID })
@@ -869,6 +884,8 @@ const confidenceStore = new ConfidenceStore()
       timestamp: Date.now(),
       category: ev.payload.errorCategory,
     })
+    // Auto-evolve check on every failed step
+    checkAutoEvolve(ev.payload.sessionID)
   })
   eventBus.on("task.delegated", (ev: any) => {
     liveEvaluator.feedDelegation(ev.payload.taskId, ev.payload.role, true)
