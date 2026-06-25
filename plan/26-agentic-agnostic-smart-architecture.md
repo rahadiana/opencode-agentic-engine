@@ -228,7 +228,7 @@ const engine = new LLMEngine({
 - [x] ~~Hierarchical memory~~ → working → episodic → semantic → procedural
 - [x] ~~Consolidation scheduler~~ → pruning + dedup otomatis
 - [ ] Working memory query (level 1)
-- [ ] Procedural memory depth (execution tracking)
+- [x] ~~Procedural memory depth — execution tracking, trace pattern extraction, pruning~~
 
 ### Phase 3 — Provider & Protocol
 - [x] ~~Task-based model routing~~ → TOOL_COMPLEXITY + agentic_model tool
@@ -273,14 +273,14 @@ const engine = new LLMEngine({
 | 19 | **Immutable plan enforcement** | `planning-layer.ts` `createPlanVersion()` | v0.6.0 |
 | 20 | **Strict escalation chain** | `agent-loop.ts` recovery while-loop | v0.6.0 |
 | 21 | **Cost-aware auto-switch (enhanced)** | `llm.ts` budget-aware + tracking + all categories | v0.6.0 |
+| 22 | **Procedural memory depth** | `memory-orchestrator.ts` trace query + pattern extraction + pruning | v0.6.0 |
 
-### ⚠️ PARTIAL (3 item)
+### ⚠️ PARTIAL (2 item)
 
 | # | Fitur | Keterangan |
 |---|-------|------------|
 | 1 | Protocol adapter | MCP + A2A ada, unified gateway belum |
-| 2 | Procedural depth | Store ada, execution tracking belum |
-| 3 | Auto-trigger evolution | Trigger di feedback path, belum di semua step |
+| 2 | Auto-trigger evolution | Trigger di feedback path, belum di semua step |
 
 ### ❌ BELUM (5 item)
 
@@ -301,7 +301,7 @@ const engine = new LLMEngine({
 | **LLM Provider** | Multi-provider fallback ✅ | Optimal per-task routing |
 | **Control Flow** | 3-layer Graph Harness ✅ | 3-layer terpisah |
 | **Agent Spec** | Blueprint interface ✅ | Multi-env deployment |
-| **Memory** | 4-level hierarchical ✅ | + Working query + Procedural depth |
+| **Memory** | 4-level + procedural depth ✅ | + Working query + Procedural depth |
 | **Tools** | MCP + A2A ✅ | MCP-first + dynamic discovery |
 | **Protocol** | MCP + A2A ✅ | Unified gateway |
 | **Evolution** | Auto-trigger partial ⚠️ | Full auto (in-context → SFT → RL) |
