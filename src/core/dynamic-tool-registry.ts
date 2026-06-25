@@ -113,6 +113,28 @@ export class DynamicToolRegistry {
     }
   }
 
+  /**
+   * Register a tool from pre-built components (used by registryTool helper).
+   * This is a convenience wrapper over register() for tools that already have
+   * parameters in JSON Schema format.
+   */
+  registerFromTool(
+    name: string,
+    description: string,
+    parameters: Record<string, unknown>,
+    execute: (args: Record<string, unknown>, context?: any) => Promise<unknown>,
+    metadata?: { category?: string; keywords?: string[] },
+  ): void {
+    this.register({
+      name,
+      description,
+      parameters,
+      execute,
+      metadata,
+      registeredAt: Date.now(),
+    })
+  }
+
   getStats(): { total: number; byCategory: Record<string, number> } {
     const byCategory: Record<string, number> = {}
     for (const tool of this.tools.values()) {

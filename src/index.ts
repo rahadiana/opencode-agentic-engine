@@ -329,6 +329,32 @@ const createEngine: Plugin = async (input, _options) => {
   }
   const dynamicToolRegistry = new DynamicToolRegistry()
   const mcpServer = new MCPServer(dynamicToolRegistry, { port: 0 })
+
+  /**
+   * Helper: register a tool in both DynamicToolRegistry AND OpenCode hooks.tool.
+   * Converts Zod args schema → JSON Schema using Zod 4's built-in toJSONSchema().
+   */
+  function registryTool(
+    name: string,
+    def: { description: string; args: any; execute: (args: any, context: any) => Promise<any> },
+  ) {
+    try {
+      const zodObj = tool.schema.object(def.args)
+      const jsonSchema = tool.schema.toJSONSchema(zodObj, { target: "draft-7", unrepresentable: "any" })
+      dynamicToolRegistry.registerFromTool(
+        name,
+        def.description,
+        jsonSchema as Record<string, unknown>,
+        def.execute as (args: Record<string, unknown>, context?: any) => Promise<unknown>,
+      )
+    } catch (e) {
+      // Non-fatal: registry registration is best-effort
+      const errMsg = e instanceof Error ? e.message : String(e)
+      console.warn(`[registryTool] Failed to register "${name}": ${errMsg}`)
+    }
+    return tool({ description: def.description, args: def.args, execute: def.execute as any })
+  }
+
   const navigator = new CodebaseNavigator()
   const depTracker = new DependencyTracker()
   // Build initial file-level dependency graph from project source
@@ -928,7 +954,7 @@ const confidenceStore = new ConfidenceStore()
 
   return {
     tool: {
-      agentic_plan: tool({
+      agentic_plan: registryTool("agentic_plan", {
         description: "Create a structured execution plan. Can auto-decompose feature requests using built-in templates (create/implement, fix/bug, refactor, test, deploy, migrate, doc, perf). Use `llmDecompose: true` for AI-powered decomposition. Call this FIRST for any multi-step task.",
         args: {
           goal: tool.schema.string().describe("The overall goal of the task"),
@@ -1016,7 +1042,7 @@ const confidenceStore = new ConfidenceStore()
               relevantFiles: args.relevantFiles ?? [],
               dependencies: [],
             },
-            subtasks: subtasks.map(s => ({
+            subtasks: subtasks.map((s: { id: string; description: string; dependsOn?: string[]; verificationCriteria?: string[] }) => ({
               id: s.id,
               description: s.description,
               dependsOn: s.dependsOn ?? [],
@@ -1665,10 +1691,10 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_reflect: tool({
+      agentic_reflect: registryTool("agentic_reflect", {
         description: "Analyze a failed step. Diagnoses the error category, traces error propagation across the step chain, and suggests a recovery plan.",
         args: {
-            stepId: tool.schema.string().describe("The ID of the failed step to analyze (in ID chain: sessionID ⊃ stepId)"),
+          stepId: tool.schema.string().describe("The ID of the failed step to analyze (in ID chain: sessionID ⊃ stepId)"),
           errorDetails: tool.schema.string().optional().describe("Additional error context (full stack trace, test output, etc.)"),
           attemptedFix: tool.schema.string().optional().describe("What you tried to fix the error (if any)"),
         },
@@ -1744,12 +1770,12 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_verify: tool({
+      agentic_verify: registryTool("agentic_verify", {
         description: "Run deep verification: compile + lint + test + semantic + security + performance + architecture + dependency audit. Gap #4 multi-dimensional.",
         args: {
           stepId: tool.schema.string().optional().describe("Label for this verification"),
           projectDir: tool.schema.string().optional().describe("Project directory (default: worktree)"),
-          tier: tool.schema.string().optional().describe("Verification tier: 'fast', 'standard', or 'deep' (default: 'deep')"),
+          tier: tool.schema.enum(["fast", "standard", "deep"]).optional().describe("Verification tier: 'fast', 'standard', or 'deep' (default: 'deep')"),
         },
         async execute(args, context) {
           llmEngine.setSessionId(context.sessionID)
@@ -1785,7 +1811,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_status: tool({
+      agentic_status: registryTool("agentic_status", {
         description: "Show execution dashboard: progress bar, health, blocked steps, dependency graph, retry history, and file change summary.",
         args: {},
         async execute(_args, context) {
@@ -5736,7 +5762,7 @@ const confidenceStore = new ConfidenceStore()
       // ── Stage V: Autonomous Mode — fast orchestrator ──
       // Fast path: LLM call + file write + compile check (return immediately).
       // Thorough path (+async): memory + skills + guard + post-processing (fire-and-forget after return).
-      agentic_auto: tool({
+      agentic_auto: registryTool("agentic_auto", {
         description: "Fully autonomous engineering orchestrator. One call handles: memory + skills → architecture → code → guard check → verify → score → learn.",
         args: {
           goal: tool.schema.string().describe("The overall goal / task description"),

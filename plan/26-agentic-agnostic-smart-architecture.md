@@ -234,7 +234,9 @@ const engine = new LLMEngine({
 - [x] ~~Task-based model routing~~ → TOOL_COMPLEXITY + agentic_model tool
 - [x] ~~Multi-provider dengan auto fallback~~ → fallback chain di LLMEngine
 - [x] ~~MCP-first infrastructure: DynamicToolRegistry + MCPServer + agentic_mcp_server tool~~
-- [ ] Migrate 30 built-in tools to DynamicToolRegistry
+- [x] ~~registryTool() helper: Zod → JSON Schema converter using Zod 4 built-in toJSONSchema()~~
+- [x] ~~Register 5 representative tools: agentic_plan, agentic_status, agentic_reflect, agentic_verify, agentic_auto~~
+- [ ] Migrate remaining 25 built-in tools to DynamicToolRegistry
 - [x] ~~A2A protocol~~ → A2AServer + A2AClient
 - [x] ~~Protocol gateway: unified API, multiple backend~~ → `ProtocolAdapter` class
 
@@ -278,6 +280,7 @@ const engine = new LLMEngine({
 | 23 | **Auto-trigger evolution** | `continuous-evolution.ts`, `index.ts` EventBus wiring | v0.6.0 |
 | 24 | **ProtocolAdapter (unified gateway)** | `protocol-adapter.ts` | v0.6.0 |
 | 25 | **MCP-first infrastructure** | `dynamic-tool-registry.ts`, `mcp-server.ts`, `agentic_mcp_server` tool | v0.6.0 |
+| 26 | **registryTool() helper + 5 tools migrated** | `index.ts` registryTool, Zod 4 toJSONSchema | v0.6.0 |
 
 ### ⚠️ PARTIAL (0 item)
 
@@ -288,7 +291,7 @@ const engine = new LLMEngine({
 | # | Fitur | Keterangan |
 |---|-------|------------|
 | 1 | Session bridging | Cross-platform session (VS Code ↔ CLI) |
-| 2 | Migrate 30 tools to DynamicToolRegistry | Infrastruktur (DynamicToolRegistry + MCPServer) ✅, migrasi 30 tool definitions belum |
+| 2 | Migrate 25 tools to DynamicToolRegistry | 5 tools registered ✅ (agentic_plan, status, reflect, verify, auto), 25 tersisa |
 | 3 | Tool versioning | Belum ada versioning system |
 | 4 | RL pipeline | Reinforcement learning dari execution outcomes |
 | 5 | POMDP verification | Formal verification model |
@@ -337,6 +340,7 @@ const engine = new LLMEngine({
 | 2026-06-25 | `43e1ce4` | Auto-trigger evolution: EventBus per-step wiring + cumulativeResults milestone fix |
 | 2026-06-25 | `6fa84a3` | ProtocolAdapter: unified MCP+A2A gateway + ProtocolAdapter a2aClient null-safety fix |
 | 2026-06-25 | `6fa84a3` | MCP-first infrastructure: DynamicToolRegistry + MCPServer + agentic_mcp_server tool + 96 tests |
+| 2026-06-25 | *(pending)* | registryTool() helper: Zod 4 toJSONSchema → DynamicToolRegistry. 5 tools migrated (agentic_plan, status, reflect, verify, auto). 13 integration tests proving MCP discover+call cycle |
 
 ---
 

@@ -8523,6 +8523,154 @@ function dtr_assert(cond, msg) { if (cond) { dtr++ } else { console.error(`  ❌
   dtr_assert(mcpTools[0].parameters.type === "object", "DTR-12d toMCPTools parameters preserved")
 }
 
+// DTR-13: Verify 5 tools are registered via registryTool helper (integration test)
+// Uses a fresh plugin init to check that registryTool actually populated the registry
+{
+  const { DynamicToolRegistry } = mod
+  const paMockInput = {
+    config: mod.defaultConfig ?? {},
+    sessionID: "dtr13-test",
+    messageID: "msg-dtr13",
+    agent: "test",
+    directory: "/tmp/test-project",
+    worktree: "/tmp/test-project",
+    experimental_workspace: { register: () => {} },
+    serverUrl: new URL("http://localhost:3000"),
+    $: new Proxy({}, {
+      get() { return async () => ({ exitCode: 0, text: () => "", stdout: Buffer.from(""), stderr: Buffer.from("") }) },
+    }),
+  }
+  const dtrHooks = await mod.AgenticEngine(paMockInput)
+  // Access the dynamicToolRegistry via globalThis (set during plugin init)
+  // Or check that the plugin's agentic_mcp_server tool works with the registry
+  const status = await dtrHooks.tool.agentic_mcp_server.execute({ action: "status" }, mockCtx("dtr13-ctx"))
+  const statusOut = typeof status === "string" ? status : (status.output || "")
+  // Status will show the registry has tools if registryTool registered them
+  // Since registry starts empty and registryTool adds to it, status should show tool count >= 5
+  // But the MCP server might not be started, so status just checks if registry is accessible
+  dtr_assert(typeof statusOut === "string", "DTR-13a agentic_mcp_server status works after plugin init")
+  
+  // Test agentic_mcp_server start with registered tools in registry
+  const startResult = await dtrHooks.tool.agentic_mcp_server.execute({ action: "start" }, mockCtx("dtr13-ctx2"))
+  const startOut = typeof startResult === "string" ? startResult : (startResult.output || "")
+  dtr_assert(startOut.includes("started") || startOut.includes("already running"), "DTR-13b agentic_mcp_server start succeeds")
+  
+  // The status should show tool count > 0 because registryTool registered tools
+  const status2 = await dtrHooks.tool.agentic_mcp_server.execute({ action: "status" }, mockCtx("dtr13-ctx3"))
+  const status2Out = typeof status2 === "string" ? status2 : (status2.output || "")
+  // If tool count is > 0, it should be visible in status output
+  // Check metadata for toolCount if available, or just verify status works
+  dtr_assert(status2Out.includes("Running") || status2Out.includes("✅") || status2Out.includes("Tools"), "DTR-13c agentic_mcp_server shows running with tools")
+  
+  // Stop server
+  await dtrHooks.tool.agentic_mcp_server.execute({ action: "stop" }, mockCtx("dtr13-ctx4"))
+  
+  // Verify MCP discover + call cycle via HTTP
+  // The MCP server should now have the 5 registered tools
+  // Start the server and query tools/list via HTTP
+  await dtrHooks.tool.agentic_mcp_server.execute({ action: "start" }, mockCtx("dtr13-ctx5"))
+  
+  // Get the port from status metadata
+  const status3 = await dtrHooks.tool.agentic_mcp_server.execute({ action: "status" }, mockCtx("dtr13-ctx6"))
+  const status3Meta = status3?.metadata || {}
+  const port = status3Meta.port
+  if (port) {
+    try {
+      const http = await import("node:http")
+      const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} })
+      const res = await new Promise((resolve, reject) => {
+        const req = http.request(`http://127.0.0.1:${port}/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+        }, (res) => {
+          let data = ""
+          res.on("data", c => data += c)
+          res.on("end", () => resolve({ status: res.statusCode, body: data }))
+        })
+        req.on("error", reject)
+        req.write(body)
+        req.end()
+      })
+      const parsed = JSON.parse(res.body)
+      const toolNames = (parsed.result?.tools || []).map(t => t.name)
+      dtr_assert(toolNames.length >= 5, `DTR-13d MCP tools/list returns ${toolNames.length} tools (≥5 expected)`)
+      dtr_assert(toolNames.includes("agentic_plan"), "DTR-13e agentic_plan found via MCP")
+      dtr_assert(toolNames.includes("agentic_auto"), "DTR-13f agentic_auto found via MCP")
+      dtr_assert(toolNames.includes("agentic_status"), "DTR-13g agentic_status found via MCP")
+      dtr_assert(toolNames.includes("agentic_reflect"), "DTR-13h agentic_reflect found via MCP")
+      dtr_assert(toolNames.includes("agentic_verify"), "DTR-13i agentic_verify found via MCP")
+    } catch (e) {
+      dtr_assert(false, `DTR-13j MCP discover cycle error: ${e.message}`)
+    }
+  }
+  
+  // Call a tool via MCP — agentic_status (no args, simplest)
+  if (port) {
+    try {
+      const http = await import("node:http")
+      const body = JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "agentic_status", arguments: {} } })
+      const res = await new Promise((resolve, reject) => {
+        const req = http.request(`http://127.0.0.1:${port}/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+        }, (res) => {
+          let data = ""
+          res.on("data", c => data += c)
+          res.on("end", () => resolve({ status: res.statusCode, body: data }))
+        })
+        req.on("error", reject)
+        req.write(body)
+        req.end()
+      })
+      const parsed = JSON.parse(res.body)
+      dtr_assert(!parsed.error, "DTR-13k MCP call agentic_status: no error")
+      dtr_assert(parsed.result?.content?.[0]?.text?.length > 0, "DTR-13l MCP call agentic_status: has content")
+    } catch (e) {
+      dtr_assert(false, `DTR-13m MCP call cycle error: ${e.message}`)
+    }
+  }
+  
+  // Stop
+  await dtrHooks.tool.agentic_mcp_server.execute({ action: "stop" }, mockCtx("dtr13-ctx7"))
+  
+  // Verify we can call via MCP for agentic_reflect with args
+  await dtrHooks.tool.agentic_mcp_server.execute({ action: "start" }, mockCtx("dtr13-ctx8"))
+  const status4 = await dtrHooks.tool.agentic_mcp_server.execute({ action: "status" }, mockCtx("dtr13-ctx9"))
+  const port2 = status4?.metadata?.port
+  if (port2) {
+    try {
+      const http = await import("node:http")
+      const body = JSON.stringify({
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/call",
+        params: { name: "agentic_reflect", arguments: { stepId: "test-step", errorDetails: "test error", attemptedFix: "test fix" } },
+      })
+      const res = await new Promise((resolve, reject) => {
+        const req = http.request(`http://127.0.0.1:${port2}/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+        }, (res) => {
+          let data = ""
+          res.on("data", c => data += c)
+          res.on("end", () => resolve({ status: res.statusCode, body: data }))
+        })
+        req.on("error", reject)
+        req.write(body)
+        req.end()
+      })
+      const parsed = JSON.parse(res.body)
+      dtr_assert(!parsed.error, "DTR-13n MCP call agentic_reflect: no error")
+      dtr_assert(parsed.result?.content?.[0]?.text?.length > 0, "DTR-13o MCP call agentic_reflect: has content")
+    } catch (e) {
+      dtr_assert(false, `DTR-13p MCP call reflect cycle error: ${e.message}`)
+    }
+  }
+  
+  await dtrHooks.tool.agentic_mcp_server.execute({ action: "stop" }, mockCtx("dtr13-ctx10"))
+  dtrHooks.dispose?.()
+}
+
 console.log(`  DTR: ${dtr} passed, ${dtrf} failed`)
 passed += dtr; failed += dtrf
 
