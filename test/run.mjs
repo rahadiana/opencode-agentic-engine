@@ -8981,6 +8981,50 @@ function ss_assert(cond, msg) { if (cond) { ss++ } else { console.error(`  ❌ $
   const bulkEntries = bulkAll.filter(e => e.key.startsWith("bulk-"))
   ss_assert(bulkEntries.length === 100, "SS-15a 100 bulk entries stored")
 
+  // SS-16: Scope isolation
+  store.set("episodes", "ep-1", { project: "alpha" }, "project-alpha")
+  store.set("episodes", "ep-1", { project: "beta" }, "project-beta")
+  const alphaEp = store.get("episodes", "ep-1", "project-alpha")
+  const betaEp = store.get("episodes", "ep-1", "project-beta")
+  ss_assert(alphaEp?.project === "alpha", "SS-16a scope alpha isolated")
+  ss_assert(betaEp?.project === "beta", "SS-16b scope beta isolated")
+  ss_assert(store.get("episodes", "ep-1") === null, "SS-16c unscoped has no entry")
+  // Unscoped namespace still works
+  store.set("session", "unscoped-key", { ok: true })
+  ss_assert(store.get("session", "unscoped-key")?.ok === true, "SS-16d unscoped still works")
+
+  // SS-17: Scope persistence across instances
+  const storeScope2 = new StateStore({ worktree: tmpDir, globalDir: tmpGlobalDir })
+  const alphaEp2 = storeScope2.get("episodes", "ep-1", "project-alpha")
+  ss_assert(alphaEp2?.project === "alpha", "SS-17a scope persists across instances")
+
+  // SS-18: getAll with scope
+  store.set("episodes", "a2", { id: "a2" }, "scope-2")
+  store.set("episodes", "b2", { id: "b2" }, "scope-2")
+  const allScope2 = store.getAll("episodes", "scope-2")
+  ss_assert(allScope2.length >= 2, "SS-18a getAll with scope returns entries")
+  const idsScope2 = allScope2.map(e => e.data.id)
+  ss_assert(idsScope2.includes("a2") && idsScope2.includes("b2"), "SS-18b correct entries in scope")
+
+  // SS-19: Scope isolation from other namespaces
+  store.set("skills", "sk-scope-test", { name: "scope-skill" }, "scope-2")
+  ss_assert(store.get("skills", "sk-scope-test", "scope-2")?.name === "scope-skill", "SS-19a skills+scope works")
+  ss_assert(store.get("episodes", "sk-scope-test", "scope-2") === null, "SS-19b no cross-ns leak with scope")
+
+  // SS-20: reload with scope
+  store.set("episodes", "reload-scope", { v: 1 }, "scope-r")
+  // Direct file write (simulate external change)
+  const scopeRDir = `${tmpDir}/.agentic/store/episodes/@scope-r`
+  const scopeRFile = `${scopeRDir}/reload-scope.json`
+  const rawScope = fsMod.readFileSync(scopeRFile, "utf8")
+  const parsedScope = JSON.parse(rawScope)
+  parsedScope.data.v = 99
+  fsMod.writeFileSync(scopeRFile, JSON.stringify(parsedScope))
+  ss_assert(store.get("episodes", "reload-scope", "scope-r")?.v === 1, "SS-20a cache before reload")
+  store.reload("episodes", "scope-r")
+  ss_assert(store.get("episodes", "reload-scope", "scope-r")?.v === 99, "SS-20b after reload")
+  store.reload() // reload all
+
   // Cleanup: remove temp dir
   try {
     fsMod.rmSync(tmpDir, { recursive: true, force: true })

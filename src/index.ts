@@ -47,7 +47,7 @@ import { SelfEvolver } from "./evolution/self-evolver.js"
 import { ContinuousEvolution } from "./evolution/continuous-evolution.js"
 import { LLMEngine } from "./core/llm.js"
 import { AgentLoop } from "./core/agent-loop.js"
-import { PersistenceLayer } from "./memory/persistence.js"
+import { StateStore } from "./core/state-store.js"
 import { SQLitePersistence } from "./memory/sqlite-persistence.js"
 import { ModelRegistry } from "./core/model-registry.js"
 import { ConfigLoader } from "./core/config.js"
@@ -528,7 +528,7 @@ const confidenceStore = new ConfidenceStore()
     findSkills: (query: string) => skillStore.find(query).map(s => ({ name: s.definition.meta.name, successRate: s.successRate })),
   })
   new AgentLoop(llmEngine, { maxIterations: 10, autoRetry: true, maxRetries: 2, verifyAfterEach: false })
-  const persistence = new PersistenceLayer(worktree)
+  const stateStore = new StateStore({ worktree })
   // SQLite backend — lebih cepat dari file JSON, support structured queries
   // Graceful fallback: jika better-sqlite3 (Node) atau bun:sqlite (Bun) gak available
   let sqliteDB: SQLitePersistence | null = null
@@ -545,14 +545,14 @@ const confidenceStore = new ConfidenceStore()
   }
   const multiIndexRAG = new MultiIndexRAG(undefined, ragConfig)
 
-  // Load persisted RAG data from disk (global, unscoped — shared across all projects)
-  const savedRAG = persistence.loadAll("rag")
+  // Load persisted RAG data from disk via StateStore
+  const savedRAG = stateStore.getAll("rag")
   for (const item of savedRAG) {
     multiIndexRAG.importAll(item.data as import("./memory/multi-index-rag.js").IndexData)
   }
-  // Auto-persist RAG every time data is stored (via indexEpisode/indexSkill)
+  // Auto-persist RAG via StateStore every time data is stored
   multiIndexRAG.setPersistCallback((data) => {
-    persistence.save("rag", "global", data)
+    stateStore.set("rag", "global", data)
   })
 
   const debateLoop = new DebateLoop(llmEngine)
@@ -568,28 +568,28 @@ const confidenceStore = new ConfidenceStore()
   contextCompressor.setLLM(llmEngine)
   verifier.detectLanguage(worktree)
 
-  // Restore persisted model stats
-  const savedModels = persistence.loadAll<Record<string, import("./core/model-registry.js").ModelStats>>("models")
+  // Restore persisted model stats via StateStore
+  const savedModels = stateStore.getAll<Record<string, import("./core/model-registry.js").ModelStats>>("models")
   for (const m of savedModels) {
     modelRegistry.fromJSON(m.data)
   }
 
-  // Restore persisted evolution trend + evaluator score (scoped per project)
-  const savedEvo = persistence.load<{ results: any[]; evolveCount: number; windowSize: number }>("evolution", "trend", projectId)
+  // Restore persisted evolution trend + evaluator score (scoped per project) via StateStore
+  const savedEvo = stateStore.get<{ results: any[]; evolveCount: number; windowSize: number }>("evolution", "trend", projectId)
   if (savedEvo) continuousEvolution.fromJSON(savedEvo)
-  const savedEval = persistence.load<Record<string, unknown>>("evaluation", "live", projectId)
+  const savedEval = stateStore.get<Record<string, unknown>>("evaluation", "live", projectId)
   if (savedEval) liveEvaluator.fromJSON(savedEval)
 
-  // Restore persisted episodes (scoped per project)
-  const savedEpisodes = persistence.loadAll<{ planGoal: string; outcome: string; decisions: string[]; filesChanged: string[]; sessionId: string; timestamp: string; tags: string[]; projectId?: string }>("episodes", projectId)
+  // Restore persisted episodes (scoped per project) via StateStore
+  const savedEpisodes = stateStore.getAll<{ planGoal: string; outcome: string; decisions: string[]; filesChanged: string[]; sessionId: string; timestamp: string; tags: string[]; projectId?: string }>("episodes", projectId)
   for (const ep of savedEpisodes) {
     episodicStore.record(ep.data.sessionId, ep.data.planGoal, ep.data.outcome as "success" | "partial" | "failed", ep.data.decisions, ep.data.filesChanged, undefined, projectId)
   }
-  // Auto-save episodes when recorded (scoped per project)
+  // Auto-save episodes to StateStore when recorded
   episodicStore.setPersistenceCallback((episode) => {
-    persistence.save("episodes", episode.sessionId, episode, projectId)
+    stateStore.set("episodes", episode.sessionId, episode, projectId)
   })
-  const savedSkills = persistence.loadAll<import("./memory/skill-format.js").SkillDefinition>("skills") // global — shared across projects
+  const savedSkills = stateStore.getAll<import("./memory/skill-format.js").SkillDefinition>("skills")
   for (const sk of savedSkills) {
     skillStore.importFromEnvelope(JSON.stringify(createMemoryEnvelope(sk.data, "skill")))
   }
@@ -667,7 +667,7 @@ const confidenceStore = new ConfidenceStore()
   } catch { /* knowledge.json may not exist yet — first session */ }
 
   // Restore persisted prompt states (Stage IV: versioned prompt history) — global
-  const savedPrompts = persistence.loadAll<Array<{ role: string; history: PromptEntry[] }>>("prompts") // global
+  const savedPrompts = stateStore.getAll<Array<{ role: string; history: PromptEntry[] }>>("prompts")
   if (savedPrompts.length > 0) {
     // Find the latest state and pass to RoleRegistry constructor
     const latest = savedPrompts.reduce((a, b) => {
@@ -849,7 +849,7 @@ const confidenceStore = new ConfidenceStore()
         def.audit.lastModified = new Date().toISOString()
         def.audit.modifiedBy = "system"
         def.meta.version++
-        persistence.save("skills", def.meta.id, def)
+        stateStore.set("skills", def.meta.id, def)
         patchedSkills.push(patch.skillName)
       }
     }
@@ -862,7 +862,7 @@ const confidenceStore = new ConfidenceStore()
         if (existingPrompt && !existingPrompt.includes(patch.instruction.slice(0, 40))) {
           const newPrompt = existingPrompt + `\n\n## Auto-Patched Instruction (from ${patch.errorCategory} errors)\n${patch.instruction}`
           roleRegistry.updatePrompt(patch.role as "architect" | "developer" | "qa" | "coordinator" | "pm", newPrompt, "auto-evolve", `Patch from ${patch.errorCategory} errors (${patch.occurrences}x)`)
-          persistence.save("prompts", "state", roleRegistry.getAllPromptStates())
+          stateStore.set("prompts", "state", roleRegistry.getAllPromptStates())
           appliedPatches.push(`${patch.role}: "${patch.instruction.slice(0, 60)}..."`)
         }
       } catch { /* non-fatal */ }
@@ -1657,7 +1657,7 @@ const confidenceStore = new ConfidenceStore()
             if (currentModel && taskType) {
               modelRegistry.recordUserFeedback(currentModel, taskType, isPositive)
               // Persist immediately so feedback survives restart
-              persistence.save("models", "registry", modelRegistry.toJSON())
+              stateStore.set("models", "registry", modelRegistry.toJSON())
               response += `  Model feedback: \`${currentModel}\` untuk task \`${taskType}\` → ${isPositive ? "✅" : "❌"}\n`
             }
 
@@ -1670,7 +1670,7 @@ const confidenceStore = new ConfidenceStore()
                 // Boost: record success
                 skill.usageCount++
                 skill.successRate = Math.min(1, skill.successRate + 0.05)
-                persistence.save("skills", skill.definition.meta.id, skill.definition)
+                stateStore.set("skills", skill.definition.meta.id, skill.definition)
               } else {
                 // Penalize: report failure
                 skillStore.reportFailure(skill.definition.meta.id)
@@ -2882,7 +2882,7 @@ const confidenceStore = new ConfidenceStore()
 
             if (!skill) return { output: `Could not extract a skill from step "${stepId}". The output pattern is not recognized.` }
 
-            persistence.save("skills", skill.definition.meta.id, skill.definition)
+            stateStore.set("skills", skill.definition.meta.id, skill.definition)
 
             let out = `## 🧠 Skill Extracted\n\n**Name:** ${skill.definition.meta.name}\n**Pattern:** \`${skill.definition.trigger.pattern}\`\n**Steps:** ${skill.definition.workflow.steps.length}\n**Success rate:** ${(skill.successRate * 100).toFixed(0)}%\n`
             if (skill.definition.trigger.capability) out += `**Capability:** \`${skill.definition.trigger.capability}\`\n`
@@ -3400,10 +3400,10 @@ const confidenceStore = new ConfidenceStore()
 
             // Load episode dari project lain dari global store
             try {
-              const scopes = persistence.listScopes("episodes")
+              const scopes = stateStore.listScopes("episodes")
               for (const scope of scopes) {
                 if (scope === projectId) continue
-                const globalEps = persistence.loadAll<{ planGoal: string; outcome: string; decisions: string[]; filesChanged: string[]; sessionId: string; timestamp: string; tags: string[]; projectId?: string }>("episodes", scope)
+                const globalEps = stateStore.getAll<{ planGoal: string; outcome: string; decisions: string[]; filesChanged: string[]; sessionId: string; timestamp: string; tags: string[]; projectId?: string }>("episodes", scope)
                 for (const ep of globalEps) {
                   if (!seenIds.has(ep.data.sessionId)) {
                     seenIds.add(ep.data.sessionId)
@@ -3870,7 +3870,7 @@ const confidenceStore = new ConfidenceStore()
                     tools: blueprint.agent.tools ?? ["read", "edit", "write", "bash", "agentic_verify", "agentic_skill"],
                   })
 
-                  persistence.save("evolution", "trend", continuousEvolution.toJSON(), projectId)
+                  stateStore.set("evolution", "trend", continuousEvolution.toJSON(), projectId)
 
                   let out = `### ✅ Blueprint Registered: **${blueprint.metadata.name}** (\`${roleId}\`)\n\n`
                   out += `**Identity:** ${blueprint.agent.identity.slice(0, 100)}...\n`
@@ -3901,7 +3901,7 @@ const confidenceStore = new ConfidenceStore()
                 tools: args.tools ?? ["read", "edit", "write", "bash"],
               })
               // Auto-save evolution trend after role registration
-              persistence.save("evolution", "trend", continuousEvolution.toJSON(), projectId)
+              stateStore.set("evolution", "trend", continuousEvolution.toJSON(), projectId)
               return { output: `Custom role "${args.name}" registered as \`${roleId}\`. Available via \`agentic_delegate role=${roleId}\`.` }
             }
 
@@ -4051,7 +4051,7 @@ const confidenceStore = new ConfidenceStore()
                   def.audit.lastModified = new Date().toISOString()
                   def.audit.modifiedBy = "system"
                   def.meta.version++
-                  persistence.save("skills", def.meta.id, def)
+                  stateStore.set("skills", def.meta.id, def)
                   patchedSkills.push(patch.skillName)
                 }
               }
@@ -4079,7 +4079,7 @@ const confidenceStore = new ConfidenceStore()
                   if (existingPrompt && !existingPrompt.includes(patch.instruction.slice(0, 40))) {
                     const newPrompt = existingPrompt + `\n\n## Auto-Patched Instruction (from ${patch.errorCategory} errors)\n${patch.instruction}`
                     roleRegistry.updatePrompt(patch.role as "architect" | "developer" | "qa" | "coordinator" | "pm", newPrompt, "auto-evolve", `Patch from ${patch.errorCategory} errors (${patch.occurrences}x)`)
-                    persistence.save("prompts", "state", roleRegistry.getAllPromptStates())
+                    stateStore.set("prompts", "state", roleRegistry.getAllPromptStates())
                     appliedPatches.push(`${patch.role}: "${patch.instruction.slice(0, 60)}..."`)
                   }
                 } catch { /* non-fatal */ }
@@ -4220,8 +4220,8 @@ const confidenceStore = new ConfidenceStore()
               }
 
               // Auto-save evolution trend after evolve run
-              persistence.save("evolution", "trend", continuousEvolution.toJSON(), projectId)
-              persistence.save("evaluation", "live", liveEvaluator.toJSON(), projectId)
+              stateStore.set("evolution", "trend", continuousEvolution.toJSON(), projectId)
+              stateStore.set("evaluation", "live", liveEvaluator.toJSON(), projectId)
               return { output: out }
             }
 
@@ -4244,7 +4244,7 @@ const confidenceStore = new ConfidenceStore()
               const newPrompt = existingPrompt + `\n\n## Self-Patched Instruction (agent-driven)\n${args.prompt}`
               const updated = roleRegistry.updatePrompt(targetRole as "architect" | "developer" | "qa" | "coordinator" | "pm", newPrompt, "agent-self", args.description ?? "Agent self-modification")
               if (!updated) return { output: `Failed to update prompt for role "${targetRole}". Only built-in roles can be edited.` }
-              persistence.save("prompts", "state", roleRegistry.getAllPromptStates())
+              stateStore.set("prompts", "state", roleRegistry.getAllPromptStates())
               return {
                 output: `✅ Prompt for \`${targetRole}\` updated (v${roleRegistry.getPromptState(targetRole)?.currentVersion}). New instruction appended at the end.`,
               }
@@ -4274,7 +4274,7 @@ const confidenceStore = new ConfidenceStore()
               if (!target) return { output: `Version ${version} not found for "${targetRole}". Available versions: ${history.map(e => `v${e.version}`).join(", ")}` }
               const ok = roleRegistry.rollbackPrompt(targetRole, version)
               if (!ok) return { output: `Failed to rollback prompt for "${targetRole}".` }
-              persistence.save("prompts", "state", roleRegistry.getAllPromptStates())
+              stateStore.set("prompts", "state", roleRegistry.getAllPromptStates())
               return {
                 output: `✅ Prompt for \`${targetRole}\` rolled back to v${version} (from ${target.timestamp}).`,
               }
@@ -4632,7 +4632,7 @@ const confidenceStore = new ConfidenceStore()
 
                 // Also persist to SkillStore (disk-backed, survives restart)
                 skillStore.importFromEnvelope(JSON.stringify(createMemoryEnvelope(def, "skill")))
-                persistence.save("skills", def.meta.id, def)
+                stateStore.set("skills", def.meta.id, def)
 
                 return {
                   output: `## ✅ Stored as Skill (agentic-skill/v1)\n\n**Category:** ${cat}\n**Title:** ${title}\n**Steps:** ${steps.length}\n**Keywords:** ${keywords.join(", ")}\n\nSkill saved to both RAG (in-session) and SkillStore (disk-persistent).`,
@@ -5769,7 +5769,7 @@ const confidenceStore = new ConfidenceStore()
 
               for (const ns of namespaces) {
                 try {
-                  const items = persistence.loadAll(ns)
+                  const items = stateStore.getAll(ns as import("./core/state-store.js").StateNamespace)
                   if (items.length === 0) {
                     skipped.push(`${ns} (empty)`)
                     continue
@@ -5778,7 +5778,7 @@ const confidenceStore = new ConfidenceStore()
                     // Detect scope from key pattern
                     if (ns === "episodes" && item.key.includes("-")) {
                       // episodes have scope from projectId
-                      const loaded = persistence.load(ns, item.key)
+                      const loaded = stateStore.get(ns as import("./core/state-store.js").StateNamespace, item.key)
                       if (loaded) sqliteDB.save(ns, item.key, loaded)
                     } else {
                       sqliteDB.save(ns, item.key, item.data)
@@ -6577,10 +6577,10 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
 
     dispose: async () => {
       configLoader.stopWatch()
-      persistence.save("models", "registry", modelRegistry.toJSON())
-      persistence.save("prompts", "state", roleRegistry.getAllPromptStates())
-      persistence.save("evolution", "trend", continuousEvolution.toJSON(), projectId)
-      persistence.save("evaluation", "live", liveEvaluator.toJSON(), projectId)
+      stateStore.set("models", "registry", modelRegistry.toJSON())
+      stateStore.set("prompts", "state", roleRegistry.getAllPromptStates())
+      stateStore.set("evolution", "trend", continuousEvolution.toJSON(), projectId)
+      stateStore.set("evaluation", "live", liveEvaluator.toJSON(), projectId)
       await traceLogger.dispose()
     },
   }
