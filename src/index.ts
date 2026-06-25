@@ -38,6 +38,7 @@ import { CheckpointSystem } from "./drift/checkpoints.js"
 import { SessionStore } from "./memory/session-store.js"
 import { TraceLogger } from "./observability/trace-logger.js"
 import { RoleRegistry, type PromptEntry } from "./agents/role-registry.js"
+
 import { MemorySchemaVersion, createMemoryEnvelope } from "./memory/schema-version.js"
 import { createSkillDefinition, inspectSkill, serializeSkill } from "./memory/skill-format.js"
 import { detectTaskType } from "./core/task-classifier.js"
@@ -220,6 +221,7 @@ const createEngine: Plugin = async (input, _options) => {
     { name: "agentic_clean", description: "Strip debate artifacts and reformat raw text to clean markdown/JSON. Use after debate or multi-step analysis. Key: `format` (markdown/json/text), `schema` (validation)." },
     { name: "agentic_rag", description: "Store, search, and retrieve knowledge across category-segregated indexes. Use with agentic_router for scoped search. Key: `action` (search/store/stats/categories), `query`." },
     { name: "agentic_mcp", description: "Connect to external servers (DB, APIs) via stdio/HTTP to call remote tools. Use when task needs real-world data (weather, DB, API). Key: `action` (connect/list/call/disconnect)." },
+    { name: "agentic_a2a", description: "Agent-to-Agent protocol: discover remote agents, delegate tasks, start/stop A2A server. Google A2A standard for cross-framework interoperability. Key: `action` (serve/discover/delegate/list/ping/stats)." },
     { name: "agentic_finetune", description: "End-to-end pipeline: prepare training data from skills → upload to OpenAI → create/monitor jobs. Use to fine-tune models from agent experience. Key: `action` (prepare/save/upload/create-job/status)." },
     { name: "agentic_db", description: "SQLite database backend untuk persistence — query, save, load, stats. Lebih cepat dari file JSON. Support structured queries dengan WHERE, JOIN, GROUP BY." },
   ]
@@ -4682,6 +4684,256 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
+      // ── A2A Protocol: Agent-to-Agent Interop ──
+      agentic_a2a: tool({
+        description: "A2A (Agent-to-Agent) protocol: discover remote agents, delegate tasks, serve Agent Card. Google A2A standard for cross-framework interoperability.",
+        args: {
+          action: tool.schema.string().describe("Action: serve, stop, discover, delegate, list, ping, stats, status"),
+          url: tool.schema.string().optional().describe("Remote agent URL (for discover/delegate/ping)"),
+          agentName: tool.schema.string().optional().describe("Agent name for Agent Card (for serve action)"),
+          port: tool.schema.number().optional().describe("Port for A2A server (default: 4123)"),
+          serverUrl: tool.schema.string().optional().describe("A2A server URL for task delegation"),
+          taskDescription: tool.schema.string().optional().describe("Task description (for delegate action)"),
+          instructions: tool.schema.string().optional().describe("Additional instructions for delegated task"),
+        },
+        async execute(args: Record<string, unknown>, _context: any) {
+          const action = (args.action as string) || "status"
+          const g = globalThis as {
+            __opencode_a2aClient?: import("./agents/a2a-client.js").A2AClient
+            __opencode_a2aServer?: import("./agents/a2a-server.js").A2AServer
+          }
+
+          // Lazy-init A2A client (shared across calls)
+          if (!g.__opencode_a2aClient) {
+            const { A2AClient } = await import("./agents/a2a-client.js")
+            g.__opencode_a2aClient = new A2AClient()
+          }
+          const a2aClient: import("./agents/a2a-client.js").A2AClient = g.__opencode_a2aClient
+
+          switch (action) {
+            case "serve": {
+              // Start A2A server
+              const name = (args.agentName as string) || "opencode-agentic-engine"
+              const port = (args.port as number) || 4123
+
+              // Build AgentCard from skill store
+              const allSkills = skillStore.getAll()
+              const capabilities: Array<{
+                id: string; name: string; description: string
+                skillId?: string; estimatedSuccessRate?: number
+              }> = allSkills.slice(0, 50).map(s => ({
+                id: s.definition.trigger.capability ?? s.definition.meta.name.toLowerCase().replace(/\s+/g, "."),
+                name: s.definition.meta.name,
+                description: `${s.definition.workflow.steps.length} steps, ${(s.successRate * 100).toFixed(0)}% success`,
+                skillId: s.definition.meta.id,
+                estimatedSuccessRate: s.successRate,
+              }))
+
+              // Add built-in capabilities
+              capabilities.push(
+                { id: "plan", name: "Task Planning", description: "Auto-decompose goals into subtasks", estimatedSuccessRate: 0.9 },
+                { id: "code.execute", name: "Code Execution", description: "Read, write, edit source code", estimatedSuccessRate: 0.85 },
+                { id: "code.verify", name: "Code Verification", description: "Compile, lint, test, security audit", estimatedSuccessRate: 0.8 },
+                { id: "nav.search", name: "Codebase Navigation", description: "Search and analyze codebase", estimatedSuccessRate: 0.9 },
+              )
+
+              const agentCard = {
+                protocolVersion: "1.0",
+                name,
+                description: `OpenCode Agentic Engine — ${capabilities.length} capabilities, ${allSkills.length} skills`,
+                url: `http://127.0.0.1:${port}`,
+                capabilities,
+              }
+
+              // Stop existing server if running
+              if (g.__opencode_a2aServer) {
+                try { await g.__opencode_a2aServer.stop() } catch { /* ignore */ }
+              }
+
+              const { A2AServer } = await import("./agents/a2a-server.js")
+              const server = new A2AServer({
+                port,
+                host: "127.0.0.1",
+                agentCard,
+              })
+              await server.start()
+              g.__opencode_a2aServer = server
+
+              const actualPort = server.port
+              return {
+                output: [
+                  `## 🤖 A2A Server Started`,
+                  ``,
+                  `**Agent:** ${name}`,
+                  `**Endpoint:** http://127.0.0.1:${actualPort}/a2a`,
+                  `**Card:** http://127.0.0.1:${actualPort}/a2a/card`,
+                  `**Capabilities:** ${capabilities.length}`,
+                  `**Skills exported:** ${allSkills.length}`,
+                  ``,
+                  `> Other agents can discover this agent via \`agentic_a2a action=discover url=http://127.0.0.1:${actualPort}\``,
+                  `> Or delegate tasks via \`agentic_a2a action=delegate serverUrl=http://127.0.0.1:${actualPort} taskDescription="..."\``,
+                ].join("\n"),
+                metadata: { port: actualPort, agentName: name, capabilities: capabilities.length },
+              }
+            }
+
+            case "stop": {
+              if (!g.__opencode_a2aServer) {
+                return { output: "⚠️ No A2A server running" }
+              }
+              const status = g.__opencode_a2aServer.getStatus()
+              await g.__opencode_a2aServer.stop()
+              g.__opencode_a2aServer = undefined
+              return {
+                output: [
+                  `## 🛑 A2A Server Stopped`,
+                  ``,
+                  `**Agent:** ${status.agentName}`,
+                  `**Uptime:** ${(status.uptimeMs / 1000).toFixed(0)}s`,
+                  `**Tasks processed:** ${status.totalTasks}`,
+                ].join("\n"),
+              }
+            }
+
+            case "discover": {
+              const url = args.url as string
+              if (!url) return { output: "Parameter 'url' diperlukan untuk discover" }
+
+              const card = await a2aClient.discover(url)
+              if (!card) {
+                return { output: `❌ Could not discover agent at ${url}` }
+              }
+
+              return {
+                output: [
+                  `## 🧭 Remote Agent Discovered`,
+                  ``,
+                  `**Name:** ${card.name}`,
+                  `**Description:** ${card.description}`,
+                  `**URL:** ${card.url}`,
+                  `**Protocol:** ${card.protocolVersion}`,
+                  `**Capabilities (${card.capabilities.length}):`,
+                  ...card.capabilities.map(c => `  - **${c.name}** (\`${c.id}\`)${c.estimatedSuccessRate ? ` — ${(c.estimatedSuccessRate * 100).toFixed(0)}% success` : ""}`),
+                ].join("\n"),
+                metadata: { card },
+              }
+            }
+
+            case "delegate": {
+              const serverUrl = (args.serverUrl || args.url) as string
+              if (!serverUrl) return { output: "Parameter 'serverUrl' diperlukan untuk delegate" }
+
+              const taskDesc = (args.taskDescription || args.taskDescription || "Task from A2A client") as string
+              const instructions = args.instructions as string || taskDesc
+
+              const taskId = { id: `a2a-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }
+              const messages = [
+                { role: "user" as const, parts: [{ type: "text" as const, text: taskDesc }], id: "msg-1", timestamp: new Date().toISOString() },
+              ]
+
+              const result = await a2aClient.taskSend(serverUrl, taskId, messages, instructions)
+
+              if (!result) {
+                return { output: `❌ Failed to delegate task to ${serverUrl}` }
+              }
+
+              const task = result.task
+              return {
+                output: [
+                  `## 📤 Task Delegated`,
+                  ``,
+                  `**To:** ${serverUrl}`,
+                  `**Task ID:** ${task.id.id}`,
+                  `**Status:** ${task.status}`,
+                  task.statusDescription ? `**Description:** ${task.statusDescription}` : "",
+                  ``,
+                  `**Messages (${task.messages.length}):`,
+                  ...task.messages.map(m => `  - [${m.role}] ${m.parts.map(p => p.type === "text" ? p.text.slice(0, 100) : `[${p.type}]`).join(", ")}`),
+                  ``,
+                  task.artifacts.length > 0 ? `**Artifacts (${task.artifacts.length}):` : "",
+                  ...task.artifacts.map(a => `  - ${a.name}: ${a.parts.length} part(s)`),
+                ].filter(Boolean).join("\n"),
+                metadata: { task },
+              }
+            }
+
+            case "list": {
+              const agents = a2aClient.listDiscoveredAgents()
+              if (agents.length === 0) {
+                return { output: "No remote agents discovered yet. Use `agentic_a2a action=discover url=...` first." }
+              }
+              return {
+                output: [
+                  `## 🌐 Discovered Agents (${agents.length})`,
+                  ``,
+                  ...agents.map(a => [
+                    `### ${a.card.name}`,
+                    `- URL: ${a.card.url}`,
+                    `- Capabilities: ${a.card.capabilities.length}`,
+                    `- Discovered: ${new Date(a.discoveredAt).toLocaleTimeString()}`,
+                  ].join("\n")),
+                ].join("\n\n"),
+                metadata: { agents: agents.map(a => ({ name: a.card.name, url: a.card.url, capabilities: a.card.capabilities.length })) },
+              }
+            }
+
+            case "ping": {
+              const url = args.url as string
+              if (!url) return { output: "Parameter 'url' diperlukan untuk ping" }
+
+              const card = await a2aClient.discover(url)
+              if (!card) {
+                return { output: `❌ Agent at ${url} unreachable` }
+              }
+              return {
+                output: `✅ Agent **${card.name}** reachable at ${url} — ${card.capabilities.length} capabilities`,
+                metadata: { reachable: true, card },
+              }
+            }
+
+            case "stats":
+            case "status": {
+              const stats = a2aClient.getStats()
+              const lines = [
+                `## 📊 A2A Protocol Status`,
+                ``,
+                `### Client`,
+                `| Metric | Value |`,
+                `|--------|-------|`,
+                `| Cached agents | ${stats.cachedCards} |`,
+                `| Tasks sent | ${stats.tasksSent} |`,
+                `| Tasks completed | ${stats.tasksCompleted} |`,
+                `| Tasks failed | ${stats.tasksFailed} |`,
+                `| Avg latency | ${stats.averageLatencyMs}ms |`,
+                ``,
+              ]
+
+              if (g.__opencode_a2aServer) {
+                const srv = g.__opencode_a2aServer.getStatus()
+                lines.push(
+                  `### Server`,
+                  `| Metric | Value |`,
+                  `|--------|-------|`,
+                  `| Running | ✅ Yes on port ${srv.port} |`,
+                  `| Agent | ${srv.agentName} |`,
+                  `| Capabilities | ${srv.capabilities} |`,
+                  `| Active tasks | ${srv.activeTasks} |`,
+                  `| Total tasks | ${srv.totalTasks} |`,
+                  `| Uptime | ${(srv.uptimeMs / 1000).toFixed(0)}s |`,
+                )
+              } else {
+                lines.push(`### Server\n\n⚠️ Not running. Use \`agentic_a2a action=serve\` to start.`)
+              }
+
+              return { output: lines.join("\n") }
+            }
+
+            default:
+              return { output: "Unknown action. Use: serve, stop, discover, delegate, list, ping, stats" }
+          }
+        },
+      }),
+
       // ── Stage III: Fine-Tuning Pipeline ──
       agentic_finetune: tool({
         description: "End-to-end fine-tuning pipeline: prepare dataset, save file, upload to OpenAI, create and monitor fine-tuning job.",
@@ -6040,6 +6292,31 @@ export default pluginModule
 
 // Re-export key classes so tests can construct them directly
 export { Dashboard } from "./observability/dashboard.js"
+export { A2AServer } from "./agents/a2a-server.js"
+export { A2AClient, type DiscoveredAgent } from "./agents/a2a-client.js"
+export {
+  A2A_METHODS,
+  A2A_PROTOCOL_VERSION,
+  createTaskId,
+  createTextMessage,
+  createJsonRpcRequest,
+  createJsonRpcResult,
+  createJsonRpcError,
+  type AgentCard,
+  type AgentCardCapability,
+  type Task,
+  type TaskId,
+  type TaskStatus,
+  type A2AMessage,
+  type Artifact,
+  type Part,
+  type TextPart,
+  type FilePart,
+  type DataPart,
+  type MessageRole,
+  type JsonRpcRequest,
+  type JsonRpcResponse,
+} from "./agents/a2a-types.js"
 
 export { ErrorAnalyzer } from "./core/error-analyzer.js"
 export { RoleRegistry } from "./agents/role-registry.js"
