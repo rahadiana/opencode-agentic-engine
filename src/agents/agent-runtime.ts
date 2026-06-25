@@ -37,6 +37,8 @@ export class AgentRuntime {
   private opencodeClient: unknown = null
   private modelRegistry?: ModelRegistry
   private roleRegistry: RoleRegistry
+  /** Chat mode flag — propagated to sub-engines so they use temp child sessions instead of hanging. */
+  private _chatMode: boolean = false
 
   constructor() {
     this.roleRegistry = new RoleRegistry()
@@ -61,6 +63,12 @@ export class AgentRuntime {
     this.modelRegistry = registry
   }
 
+  /** Set chat mode flag (called from index.ts during initialization).
+   *  When true, sub-engines use temp child sessions instead of hanging. */
+  setChatMode(chat: boolean): void {
+    this._chatMode = chat
+  }
+
   getRoleRegistry(): RoleRegistry {
     return this.roleRegistry
   }
@@ -80,6 +88,7 @@ export class AgentRuntime {
       const engine = new LLMEngine()
       engine.setOpencodeClient(this.opencodeClient)
       engine.setSessionId(`${parentSessionId}-${role}`)
+      if (this._chatMode) engine.setChatMode(true)
       if (this.modelRegistry) engine.setModelRegistry(this.modelRegistry)
       this.engines.set(key, engine)
     }

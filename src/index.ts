@@ -6259,6 +6259,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
       // Set flag so LLMEngine can skip session.prompt() immediately
       // instead of hanging for 120s waiting for user input.
       llmEngine.setChatMode(true)
+      agentRuntime.setChatMode(true)
 
       // ── Model tracking for chat mode ──
       // Each chat turn uses the model from _input.model (OpenCode auto-resolve).
