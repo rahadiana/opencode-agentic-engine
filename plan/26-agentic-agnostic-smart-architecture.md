@@ -233,7 +233,8 @@ const engine = new LLMEngine({
 ### Phase 3 — Provider & Protocol
 - [x] ~~Task-based model routing~~ → TOOL_COMPLEXITY + agentic_model tool
 - [x] ~~Multi-provider dengan auto fallback~~ → fallback chain di LLMEngine
-- [ ] MCP-first: semua tool lewat MCP
+- [x] ~~MCP-first infrastructure: DynamicToolRegistry + MCPServer + agentic_mcp_server tool~~
+- [ ] Migrate 30 built-in tools to DynamicToolRegistry
 - [x] ~~A2A protocol~~ → A2AServer + A2AClient
 - [x] ~~Protocol gateway: unified API, multiple backend~~ → `ProtocolAdapter` class
 
@@ -248,7 +249,7 @@ const engine = new LLMEngine({
 
 ## 📊 Status Summary
 
-### ✅ SUDAH SELESAI (24 item)
+### ✅ SUDAH SELESAI (25 item)
 
 | # | Fitur | File | Versi |
 |---|-------|------|-------|
@@ -276,6 +277,7 @@ const engine = new LLMEngine({
 | 22 | **Procedural memory depth** | `memory-orchestrator.ts` trace query + pattern extraction + pruning | v0.6.0 |
 | 23 | **Auto-trigger evolution** | `continuous-evolution.ts`, `index.ts` EventBus wiring | v0.6.0 |
 | 24 | **ProtocolAdapter (unified gateway)** | `protocol-adapter.ts` | v0.6.0 |
+| 25 | **MCP-first infrastructure** | `dynamic-tool-registry.ts`, `mcp-server.ts`, `agentic_mcp_server` tool | v0.6.0 |
 
 ### ⚠️ PARTIAL (0 item)
 
@@ -286,7 +288,7 @@ const engine = new LLMEngine({
 | # | Fitur | Keterangan |
 |---|-------|------------|
 | 1 | Session bridging | Cross-platform session (VS Code ↔ CLI) |
-| 2 | MCP-first tools | 30 tools masih hardcoded, harusnya via MCP |
+| 2 | Migrate 30 tools to DynamicToolRegistry | Infrastruktur (DynamicToolRegistry + MCPServer) ✅, migrasi 30 tool definitions belum |
 | 3 | Tool versioning | Belum ada versioning system |
 | 4 | RL pipeline | Reinforcement learning dari execution outcomes |
 | 5 | POMDP verification | Formal verification model |
@@ -301,7 +303,7 @@ const engine = new LLMEngine({
 | **Control Flow** | 3-layer Graph Harness ✅ | 3-layer terpisah |
 | **Agent Spec** | Blueprint interface ✅ | Multi-env deployment |
 | **Memory** | 4-level + procedural depth ✅ | + Working query + Procedural depth |
-| **Tools** | MCP + A2A ✅ | MCP-first + dynamic discovery |
+| **Tools** | DynamicToolRegistry + MCPServer ✅ | MCP-first + dynamic discovery |
 | **Protocol** | Unified gateway ✅ | Unified gateway |
 | **Evolution** | Auto-trigger ✅ | Full auto (in-context → SFT → RL) |
 | **Safety** | ConstraintManifold ✅ | + POMDP verification |
@@ -333,7 +335,8 @@ const engine = new LLMEngine({
 | 2026-06-25 | `6035995` | Graph Harness 3-layer: PlanningLayer, ExecutionLayer, RecoveryLayer + Immutable plan enforcement (createPlanVersion) + Export layers + 47 PL/EL/RL tests |
 | 2026-06-25 | `982d664` | Multi-provider auto fallback for LLM calls (Phase 3B) |
 | 2026-06-25 | `43e1ce4` | Auto-trigger evolution: EventBus per-step wiring + cumulativeResults milestone fix |
-| 2026-06-25 | *(pending)* | ProtocolAdapter: unified MCP+A2A gateway (findTools, call, listAll, getStats) + agentic_tools tool |
+| 2026-06-25 | `6fa84a3` | ProtocolAdapter: unified MCP+A2A gateway + ProtocolAdapter a2aClient null-safety fix |
+| 2026-06-25 | `6fa84a3` | MCP-first infrastructure: DynamicToolRegistry + MCPServer + agentic_mcp_server tool + 96 tests |
 
 ---
 
@@ -364,6 +367,7 @@ Prioritas berdasarkan dampak vs effort:
 
 ### 📋 Rekomendasi Immediate
 
-1. **MCP-first tools** — karena semua PARTIAL/BELUM lainnya bergantung pada arsitektur tools: tool versioning perlu MCP-first, session bridging perlu tool serialization, RL pipeline butuh tool metrics. **Ini bottleneck-nya.**
-2. Setelah MCP-first selesai, lanjut **Session bridging** (memory persist lintas env).
-3. Barengan: **Feedback loop** (low effort, high UX impact).
+1. **✅ MCP-first infrastructure** (DynamicToolRegistry + MCPServer + agentic_mcp_server) — SELESAI.
+2. **Migrate 30 built-in tools to DynamicToolRegistry** — langkah selanjutnya. Setiap tool perlu didaftarkan ke registry agar bisa di-discover via MCP. Butuh bantuan auto-converter dari Zod schema → JSON Schema.
+3. Setelah migrasi 30 tool selesai, lanjut **Session bridging** (memory persist lintas env).
+4. Barengan: **Feedback loop** (low effort, high UX impact).
