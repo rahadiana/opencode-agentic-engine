@@ -35,6 +35,54 @@ export interface LLMConfig {
    * Prevents infinite fallback loops. Default: 3.
    */
   maxFallbackAttempts?: number
+  /**
+   * Cost-aware auto-switch configuration.
+   * When enabled, cheap models are automatically selected for quick/simple tasks,
+   * saving cost while maintaining minimum reliability thresholds.
+   */
+  costAutoSwitch?: CostAutoSwitchConfig
+}
+
+/**
+ * Cost-aware auto-switch configuration.
+ * Controls when the engine automatically switches to cheaper models.
+ */
+export interface CostAutoSwitchConfig {
+  /** Enable cost-aware auto-switch (default: true) */
+  enabled: boolean
+  /**
+   * Minimum absolute reliability threshold (0.0-1.0).
+   * Auto-switch will only select models with reliability >= this value.
+   * Default: 0.5
+   */
+  minReliability: number
+  /**
+   * Maximum cost per call in USD before forced switch.
+   * If the primary model's avgCostPerCall exceeds this, switch to cheaper.
+   * Default: 0.01 ($0.01)
+   */
+  maxCostPerCall: number
+  /**
+   * Multiplier applied to minReliability when budget utilization > 80%.
+   * Lower = more aggressive switching when budget is tight.
+   * Default: 0.5 (relax threshold by 50%)
+   */
+  budgetTightMultiplier: number
+  /**
+   * Tool categories eligible for cost switching.
+   * Default: ["quick", "unspecified-low"]
+   */
+  categories?: string[]
+}
+
+/** Event emitted when a cost-aware switch occurs. */
+export interface CostSwitchEvent {
+  fromModel: string
+  toModel: string
+  reason: string
+  category: string
+  estimatedSavingsUsd: number
+  timestamp: number
 }
 
 export interface LLMRequest {
@@ -133,6 +181,10 @@ export class LLMEngine {
    *  Allows getCurrentModel() to return the actual model instead of undefined.
    *  Format: "providerID/modelID" (e.g. "opencode/deepseek-v4-flash-free") */
   private _lastKnownModel?: string
+  /** Cost auto-switch tracking */
+  private costSwitchStats = { totalSwitches: 0, totalSavingsUsd: 0, switches: [] as CostSwitchEvent[] }
+  /** Cost auto-switch observer callback */
+  private _onCostSwitch?: (event: CostSwitchEvent) => void
 
   constructor(config: Partial<LLMConfig> = {}) {
     this.config = {
@@ -140,6 +192,13 @@ export class LLMEngine {
       temperature: config.temperature ?? 0.3,
       fallbackModels: config.fallbackModels ?? [],
       maxFallbackAttempts: config.maxFallbackAttempts ?? 3,
+      costAutoSwitch: config.costAutoSwitch ?? {
+        enabled: true,
+        minReliability: 0.5,
+        maxCostPerCall: 0.01,
+        budgetTightMultiplier: 0.5,
+        categories: ["quick", "unspecified-low"],
+      },
     }
     this.sessionReader = new SessionReader()
   }
@@ -200,6 +259,20 @@ export class LLMEngine {
 
   setEventBus(bus: import("./event-bus.js").EventBus): void {
     this.eventBus = bus
+  }
+
+  /** Set callback for cost switch events (for dashboard/logging). */
+  setOnCostSwitch(callback: (event: CostSwitchEvent) => void): void {
+    this._onCostSwitch = callback
+  }
+
+  /** Get cost switch statistics for dashboard. */
+  getCostSwitchStats(): { totalSwitches: number; totalSavingsUsd: number; recentSwitches: CostSwitchEvent[] } {
+    return {
+      totalSwitches: this.costSwitchStats.totalSwitches,
+      totalSavingsUsd: this.costSwitchStats.totalSavingsUsd,
+      recentSwitches: [...this.costSwitchStats.switches].reverse().slice(0, 20),
+    }
   }
 
   setSessionStore(store: import("../memory/session-store.js").SessionStore): void {
@@ -441,34 +514,92 @@ export class LLMEngine {
     // Priority 3: NO fallback — kalo gak ada override, SDK pake session default
 
     // ── Cost-Aware Auto-Switch (Gap #8) ──
-    // Untuk task "quick" atau "unspecified-low", auto-switch ke model termurah
-    // yang punya reliability >= 70% dari primary model (threshold-based).
-    if (req.model && effectiveToolName) {
+    // Auto-switch to cheapest model that meets minimum reliability threshold.
+    // Supports all tool categories (default: quick + unspecified-low).
+    // Budget-aware: tightens threshold when budget > 80% utilized.
+    if (req.model && effectiveToolName && this.modelRegistry) {
       const category = TOOL_COMPLEXITY[effectiveToolName]
-      const isQuick = category === "quick" || category === "unspecified-low"
-      if (isQuick && this.modelRegistry) {
+      const costCfg = this.config.costAutoSwitch ?? { enabled: true, minReliability: 0.5, maxCostPerCall: 0.01, budgetTightMultiplier: 0.5, categories: ["quick", "unspecified-low"] }
+      const eligibleCategories = costCfg.categories ?? ["quick", "unspecified-low"]
+      const isEligible = !category || eligibleCategories.includes(category)
+
+      if (isEligible && costCfg.enabled) {
         const currentModelStr = `${req.model.providerID}/${req.model.modelID}`
         const currentScore = this.modelRegistry.getScore(currentModelStr)
         const currentReliability = currentScore?.reliability ?? 0.5
-        const minRequiredReliability = currentReliability * 0.7 // >= 70% of primary
+
+        // Budget-aware threshold: tighten when budget is tight
+        let budgetMultiplier = 1.0
+        if (this.budgetTracker) {
+          try {
+            const states = this.budgetTracker.getState(["session"])
+            if (states.length > 0) {
+              const s = states[0]
+              if (s.limits?.maxCostUsd != null && s.limits.maxCostUsd > 0) {
+                const utilization = (s.usage?.totalCostUsd ?? 0) / s.limits.maxCostUsd
+                if (utilization > 0.8) {
+                  budgetMultiplier = costCfg.budgetTightMultiplier
+                }
+              }
+            }
+          } catch {
+            // budget tracker getState failed — proceed with default multiplier
+          }
+        }
+
+        // Use absolute threshold (with budget adjustment), fall back to relative threshold
+        const minRequiredReliability = Math.min(
+          Math.max(costCfg.minReliability * budgetMultiplier, 0.2), // absolute, clamped 0.2-0.95
+          Math.max(currentReliability * 0.7 * budgetMultiplier, 0.2),
+        )
+
+        // Check if current model exceeds max cost → force switch
+        const forceSwitch = currentScore?.avgCostPerCall != null && currentScore.avgCostPerCall > costCfg.maxCostPerCall
 
         // Gather available models from fallback chain + current
         const availableModels = [currentModelStr, ...(this.config.fallbackModels ?? [])]
-        const scored = availableModels
+        const getOpenCodeModels = availableModels
           .map(m => ({ model: m, score: this.modelRegistry!.getScore(m) }))
           .filter(s => s.score && s.score.totalCalls >= 3) // only models with sufficient data
           .sort((a, b) => (a.score?.avgCostPerCall ?? Infinity) - (b.score?.avgCostPerCall ?? Infinity))
 
-        // Pick cheapest that meets reliability threshold
-        for (const candidate of scored) {
+        // Pick cheapest that meets reliability threshold (or force switch)
+        const originalModel = { ...req.model }
+        for (const candidate of getOpenCodeModels) {
           const candidateReliability = candidate.score?.reliability ?? 0
-          if (candidateReliability >= minRequiredReliability) {
+          const meetsThreshold = candidateReliability >= minRequiredReliability
+          const isCheaper = (candidate.score?.avgCostPerCall ?? Infinity) < (currentScore?.avgCostPerCall ?? Infinity)
+          const isDifferent = candidate.model !== currentModelStr
+
+          if (isDifferent && (meetsThreshold || forceSwitch) && isCheaper) {
             const parsed = this.parseModelForSDK(candidate.model)
-            if (parsed && (parsed.providerID !== req.model.providerID || parsed.modelID !== req.model.modelID)) {
+            if (parsed) {
               req.model = parsed
+              break
             }
-            break // first (cheapest) match
           }
+        }
+
+        // Record switch event if model changed
+        const switchedModel = req.model
+        if (switchedModel && (switchedModel.providerID !== originalModel.providerID || switchedModel.modelID !== originalModel.modelID)) {
+          const estimatedSavings = (currentScore?.avgCostPerCall ?? 0) - (this.modelRegistry.getScore(`${switchedModel.providerID}/${switchedModel.modelID}`)?.avgCostPerCall ?? 0)
+          const event: CostSwitchEvent = {
+            fromModel: currentModelStr,
+            toModel: `${switchedModel.providerID}/${switchedModel.modelID}`,
+            reason: forceSwitch ? `Cost exceeded $${costCfg.maxCostPerCall}` : `Cheaper model meets reliability ≥ ${(minRequiredReliability * 100).toFixed(0)}%`,
+            category: category ?? "unknown",
+            estimatedSavingsUsd: Math.max(0, estimatedSavings),
+            timestamp: Date.now(),
+          }
+          this.costSwitchStats.totalSwitches++
+          this.costSwitchStats.totalSavingsUsd += event.estimatedSavingsUsd
+          this.costSwitchStats.switches.push(event)
+          // Trim history to prevent unbounded growth
+          if (this.costSwitchStats.switches.length > 200) {
+            this.costSwitchStats.switches.splice(0, this.costSwitchStats.switches.length - 200)
+          }
+          this._onCostSwitch?.(event)
         }
       }
     }

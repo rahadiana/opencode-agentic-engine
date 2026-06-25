@@ -271,15 +271,16 @@ const engine = new LLMEngine({
 | 17 | **Working memory query** | `memory-orchestrator.ts` | v0.6.0 |
 | 18 | **Graph Harness 3-layer separation** | `planning-layer.ts`, `execution-layer.ts`, `recovery-layer.ts` | v0.6.0 |
 | 19 | **Immutable plan enforcement** | `planning-layer.ts` `createPlanVersion()` | v0.6.0 |
+| 20 | **Strict escalation chain** | `agent-loop.ts` recovery while-loop | v0.6.0 |
+| 21 | **Cost-aware auto-switch (enhanced)** | `llm.ts` budget-aware + tracking + all categories | v0.6.0 |
 
-### ⚠️ PARTIAL (4 item)
+### ⚠️ PARTIAL (3 item)
 
 | # | Fitur | Keterangan |
 |---|-------|------------|
 | 1 | Protocol adapter | MCP + A2A ada, unified gateway belum |
 | 2 | Procedural depth | Store ada, execution tracking belum |
 | 3 | Auto-trigger evolution | Trigger di feedback path, belum di semua step |
-| 4 | Cost-aware auto-switch | Cost weighting ada, threshold-based switch belum |
 
 ### ❌ BELUM (5 item)
 
