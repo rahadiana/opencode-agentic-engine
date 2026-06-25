@@ -44,7 +44,7 @@
 | Task classifier → model routing | ✅ DONE | `TOOL_COMPLEXITY` mapping + `agentic_model set tool/category` |
 | Auto fallback saat model gagal | ✅ DONE | Multi-provider fallback chain di `LLMEngine.call()` |
 | Cache warm (semantic + exact) | ✅ DONE | Gap #7 SemanticCache (TF-IDF + cosine) |
-| Cost-aware routing | ⚠️ PARTIAL | Token tracking ada, auto-switch belum |
+| Cost-aware routing | ✅ DONE | Cost weighting di selectBestModel() + recordCall(costUsd) |
 
 **Contoh implementasi:**
 ```typescript
@@ -156,7 +156,7 @@ const engine = new LLMEngine({
 | Consolidation scheduler | ✅ DONE | `ConsolidationScheduler` — periodic pruning + dedup |
 | Importance-based forgetting | ⚠️ PARTIAL | Episodic decay ada, working/procedural belum |
 | Cross-level query | ⚠️ PARTIAL | Query ada tapi working memory query kosong |
-| Working memory query | ❌ BELUM | `return [] // Skip for now — too dynamic` |
+| Working memory query | ✅ DONE | `sessionToEntries()` — plan goals + recent turns |
 | Procedural memory depth | ⚠️ PARTIAL | Store ada tapi execution tracking belum |
 
 ### 7️⃣ Evolution Agnostic — Self-Evolving dari In-Context sampai RL
@@ -248,7 +248,7 @@ const engine = new LLMEngine({
 
 ## 📊 Status Summary
 
-### ✅ SUDAH SELESAI (14 item)
+### ✅ SUDAH SELESAI (17 item)
 
 | # | Fitur | File | Versi |
 |---|-------|------|-------|
@@ -266,19 +266,21 @@ const engine = new LLMEngine({
 | 12 | Meta-Reasoner | `meta-reasoner.ts` | v0.5.0 |
 | 13 | ConstraintManifold | `constraint-manifold.ts` | v0.6.0 |
 | 14 | Multi-Provider Auto Fallback | `llm.ts` | v0.6.0 |
+| 15 | **Confidence scoring signal wiring** | `execution-helpers.ts`, `agent-loop.ts` | v0.6.0 |
+| 16 | **Cost-aware routing** (weighting) | `model-registry.ts`, `llm.ts` | v0.6.0 |
+| 17 | **Working memory query** | `memory-orchestrator.ts` | v0.6.0 |
 
-### ⚠️ PARTIAL (8 item)
+### ⚠️ PARTIAL (7 item)
 
 | # | Fitur | Keterangan |
 |---|-------|------------|
-| 1 | Cost-aware routing | Token tracking ada, auto-switch belum |
-| 2 | Protocol adapter | MCP + A2A ada, unified gateway belum |
-| 3 | Layer separation | DAG engine ada, 3-layer terpisah belum |
-| 4 | Immutable plan | DAG immutable, replan masih mutate |
-| 5 | Strict escalation | Recovery strategies ada, chaining belum |
-| 6 | Working memory query | Level 1 kosong |
-| 7 | Procedural depth | Store ada, execution tracking belum |
-| 8 | Auto-trigger evolution | Trigger di feedback path, belum di semua step |
+| 1 | Protocol adapter | MCP + A2A ada, unified gateway belum |
+| 2 | Layer separation | DAG engine ada, 3-layer terpisah belum |
+| 3 | Immutable plan | DAG immutable, replan masih mutate |
+| 4 | Strict escalation | Recovery strategies ada, chaining belum |
+| 5 | Procedural depth | Store ada, execution tracking belum |
+| 6 | Auto-trigger evolution | Trigger di feedback path, belum di semua step |
+| 7 | Cost-aware auto-switch | Cost weighting ada, threshold-based switch belum |
 
 ### ❌ BELUM (5 item)
 
