@@ -23,7 +23,7 @@ export interface ExecutorSnapshot {
 /**
  * SessionStore — NOT thread-safe. All access must be from a single event loop.
  * Uses in-memory Maps; modifications are not locked.
- * Auto-persists to disk every 30s via enableAutoSave().
+ * Persistence handled externally via StateStore in index.ts startup.
  */
 export class SessionStore {
   private sessions = new Map<string, SessionState>()
@@ -36,84 +36,6 @@ export class SessionStore {
   private categoryModelPreferences = new Map<string, Map<string, string>>()
   /** TTL in days for session expiry (0 = never expire). Config-hot-reloadable. */
   private forgetAfterDays = 30
-  private persistLayer?: import("./persistence.js").PersistenceLayer
-  private persistNs = "sessions"
-  private persistInterval?: ReturnType<typeof setInterval>
-  private pruneInterval?: ReturnType<typeof setInterval>
-
-  /** Enable auto-save to disk every 30s */
-  enableAutoSave(layer: import("./persistence.js").PersistenceLayer, namespace = "sessions"): void {
-    this.persistLayer = layer
-    this.persistNs = namespace
-    if (this.persistInterval) clearInterval(this.persistInterval)
-    this.persistInterval = setInterval(() => this.persistAll(), 30000)
-    this.persistInterval.unref()
-    // Also prune every 60s with batch limit
-    if (this.pruneInterval) clearInterval(this.pruneInterval)
-    this.pruneInterval = setInterval(() => this.pruneExpiredBatched(), 60000)
-    this.pruneInterval.unref()
-  }
-
-  disableAutoSave(): void {
-    if (this.persistInterval) {
-      clearInterval(this.persistInterval)
-      this.persistInterval = undefined
-    }
-    if (this.pruneInterval) {
-      clearInterval(this.pruneInterval)
-      this.pruneInterval = undefined
-    }
-  }
-
-  private persistAll(): void {
-    if (!this.persistLayer) return
-    try {
-      const sessionsData = [...this.sessions.entries()].map(([id, s]) => ({
-        id,
-        turns: s.turns,
-        plan: s.plan,
-        artifacts: [...s.artifacts.entries()],
-        currentTaskType: s.currentTaskType,
-        currentDomain: s.currentDomain,
-      }))
-      this.persistLayer.save(this.persistNs, "sessions", sessionsData)
-      const snapshotsData = [...this.executorSnapshots.entries()].map(([id, s]) => ({
-        id,
-        completedSteps: s.completedSteps,
-        stepStates: [...s.stepStates.entries()],
-      }))
-      this.persistLayer.save(this.persistNs, "executorSnapshots", snapshotsData)
-    } catch (e) {
-      console.error("[SessionStore] auto-save failed:", e)
-    }
-  }
-
-  loadFromDisk(layer: import("./persistence.js").PersistenceLayer, namespace = "sessions"): void {
-    const sessionsData = layer.load<Array<{ id: string; turns: ConversationTurn[]; plan?: import("../core/intent-parser").Plan; artifacts: [string, string][]; currentTaskType?: string; currentDomain?: string }>>(namespace, "sessions")
-    if (Array.isArray(sessionsData)) {
-      for (const sd of sessionsData) {
-        const state: SessionState = {
-          sessionId: sd.id,
-          turns: sd.turns,
-          plan: sd.plan,
-          artifacts: new Map(sd.artifacts),
-          currentTaskType: sd.currentTaskType,
-          currentDomain: sd.currentDomain,
-        }
-        this.sessions.set(sd.id, state)
-      }
-    }
-    const snapshotsData = layer.load<Array<{ id: string; completedSteps: string[]; stepStates: [string, { id: string; success: boolean }][] }>>(namespace, "executorSnapshots")
-    if (Array.isArray(snapshotsData)) {
-      for (const sd of snapshotsData) {
-        const snap: ExecutorSnapshot = {
-          completedSteps: sd.completedSteps,
-          stepStates: new Map(sd.stepStates),
-        }
-        this.executorSnapshots.set(sd.id, snap)
-      }
-    }
-  }
 
   /** Set the TTL for session expiry — called on config hot-reload. */
   setForgetAfterDays(days: number): void {

@@ -33,9 +33,6 @@ export class EpisodicStore {
   private migrator = new MemorySchemaVersion()
   private onRecord?: (episode: Episode) => void
   private maxEpisodes: number
-  private persistLayer?: import("./persistence.js").PersistenceLayer
-  private persistNs = "episodes"
-  private persistInterval?: ReturnType<typeof setInterval>
 
   constructor(maxEpisodes = 1000) {
     this.maxEpisodes = maxEpisodes
@@ -43,42 +40,6 @@ export class EpisodicStore {
 
   setPersistenceCallback(cb: (episode: Episode) => void): void {
     this.onRecord = cb
-  }
-
-  /** Enable auto-save to disk every 30s */
-  enableAutoSave(layer: import("./persistence.js").PersistenceLayer, namespace = "episodes"): void {
-    this.persistLayer = layer
-    this.persistNs = namespace
-    if (this.persistInterval) clearInterval(this.persistInterval)
-    this.persistInterval = setInterval(() => this.persistAll(), 30000)
-    this.persistInterval.unref()
-  }
-
-  disableAutoSave(): void {
-    if (this.persistInterval) {
-      clearInterval(this.persistInterval)
-      this.persistInterval = undefined
-    }
-  }
-
-  private persistAll(): void {
-    if (!this.persistLayer) return
-    try {
-      this.persistLayer.save(this.persistNs, "episodes", this.episodes)
-    } catch (e) {
-      console.error("[EpisodicStore] auto-save failed:", e)
-    }
-  }
-
-  loadFromDisk(layer: import("./persistence.js").PersistenceLayer, namespace = "episodes"): void {
-    const data = layer.load<Episode[]>(namespace, "episodes")
-    if (Array.isArray(data)) {
-      for (const ep of data) {
-        if (!this.episodes.some(e => e.id === ep.id)) {
-          this.episodes.push(ep)
-        }
-      }
-    }
   }
 
   record(sessionId: string, planGoal: string, outcome: Episode["outcome"], decisions: string[], filesChanged?: string[], domain?: string, projectId?: string, plan?: string[]): Episode {
