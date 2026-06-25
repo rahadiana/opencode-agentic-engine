@@ -1,7 +1,7 @@
 # 🤝 Collaboration Scenarios — OpenCode Agentic Engine
 
 > Panduan lengkap tool chaining patterns, multi-agent workflows, dan collaboration scenarios
-> untuk 29 agentic_* tools. Referensi utama untuk autonomous software engineering.
+> untuk 30 agentic_* tools. Referensi utama untuk autonomous software engineering.
 
 ---
 
@@ -361,6 +361,43 @@ Step 4: agentic_execute           — Execute with auto-parallel
     ["step-4"]            // batch 2: depends on step-2 + step-3
   ]
 }
+```
+
+### 2.6 Agent-to-Agent Protocol (A2A)
+
+```
+agentic_a2a serve  →  agentic_a2a discover  →  agentic_a2a delegate
+```
+
+**Use case**: Cross-framework agent interop via Google A2A standard. Discover remote agents and delegate tasks across different agent frameworks.
+
+```
+Step 1: agentic_a2a serve     — Start A2A server with Agent Card
+Step 2: agentic_a2a discover  — Discover remote agents by URL
+Step 3: agentic_a2a delegate  — Delegate task to remote agent
+Step 4: agentic_a2a ping      — Health check remote agents
+```
+
+**Pattern**:
+```json
+// Start A2A server
+{ "action": "serve", "port": 4000 }
+
+// Discover remote agents
+{ "action": "discover", "url": "http://127.0.0.1:4000" }
+
+// Delegate task to remote agent
+{ "action": "delegate", "serverUrl": "http://127.0.0.1:4000",
+  "taskDescription": "Implement JWT middleware" }
+
+// List connected agents
+{ "action": "list" }
+
+// Health check
+{ "action": "ping", "serverUrl": "http://127.0.0.1:4000" }
+
+// Stats
+{ "action": "stats" }
 ```
 
 ---
@@ -944,6 +981,7 @@ agentic_auto (single call replaces all of the above)
 | `agentic_clean` | debate, analysis | - | formatted output |
 | `agentic_rag` | router, store | - | plan, context |
 | `agentic_mcp` | any | - | external tools |
+| `agentic_a2a` | any | - | remote agents |
 | `agentic_finetune` | skill, episodes | - | fine-tuned model |
 | `agentic_model_reset` | any | - | model degradation recovery |
 
@@ -991,6 +1029,9 @@ agentic_auto (single call replaces all of the above)
 │                                                         │
 │ FINE-TUNE:                                              │
 │   skill(list) → evolve(export) → finetune(full)         │
+│                                                         │
+│ A2A (CROSS-FRAMEWORK):                                  │
+│   a2a(serve) → a2a(discover) → a2a(delegate)            │
 │                                                         │
 │ RECOVERY:                                               │
 │   status → budget → context(compress) → snapshot(restore)│

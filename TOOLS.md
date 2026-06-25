@@ -1,8 +1,8 @@
-# OpenCode Agentic Engine — 27 Tools Reference
+# OpenCode Agentic Engine — 30 Tools Reference
 
 > **Plugin**: opencode-agentic-engine  
-> **Version**: 0.4.4  
-> **Total Tools**: 28 (Stage I–V + Blueprint)
+> **Version**: 0.5.2  
+> **Total Tools**: 30 (Stage I–V + Blueprint)
 
 ---
 
@@ -406,6 +406,29 @@ Cek bahwa file yang direferensikan benar-benar ada, fungsi yang diklaim ada di k
 
 ---
 
+### agentic_finetune
+
+End-to-end fine-tuning pipeline: prepare, save, upload, create-job, status, list, cancel, full-pipeline.
+
+| Parameter | Tipe | Required | Deskripsi |
+|-----------|------|----------|-----------|
+| `action` | `"prepare" \| "save" \| "upload" \| "create-job" \| "status" \| "list" \| "cancel" \| "full-pipeline"` | ✅ | Operasi fine-tuning |
+| `source` | `"skills" \| "episodes" \| "combined"` | ❌ | Data source (default: `"combined"`) |
+| `format` | `"openai" \| "instructions"` | ❌ | Output format (default: `"openai"`) |
+| `minQuality` | `number` | ❌ | Minimum quality/success rate filter (default: 0.5) |
+| `outputPath` | `string` | ❌ | File path untuk save dataset |
+| `model` | `string` | ❌ | Base model untuk fine-tuning (e.g., `gpt-4o-mini-2024-07-18`) |
+| `epochs` | `number` | ❌ | Jumlah training epochs |
+| `suffix` | `string` | ❌ | Custom suffix untuk fine-tuned model name |
+| `jobId` | `string` | ❌ | Fine-tuning job ID (untuk status/cancel) |
+
+**Deskripsi**:  
+Pipeline lengkap: convert skills/episodes → training data (JSONL) → upload ke OpenAI → create fine-tuning job → monitor status. Gunakan `full-pipeline` untuk satu langkah atau step-by-step dengan action individual.
+
+**Stage**: III
+
+---
+
 ## 📋 Stage IV — Evolution
 
 Tool untuk meng-inspect dan meng-extend agent system itu sendiri.
@@ -565,18 +588,34 @@ Konek ke external servers (databases, APIs, tools) via stdio atau HTTP. Temukan 
 
 ---
 
+### agentic_a2a
+
+A2A (Agent-to-Agent) protocol — discover, delegate, dan berinteraksi dengan agent lain.
+
+| Parameter | Tipe | Required | Deskripsi |
+|-----------|------|----------|-----------|
+| `action` | `"serve" \| "stop" \| "discover" \| "delegate" \| "list" \| "ping" \| "stats"` | ✅ | Operasi A2A |
+| `agentUrl` | `string` | ❌ | URL target agent (untuk delegate/ping) |
+| `task` | `string` | ❌ | Task description untuk delegasi |
+| `agentCard` | `object` | ❌ | Agent Card untuk serve (name, description, capabilities) |
+
+**Deskripsi**:  
+Implementasi standar Google A2A protocol untuk cross-framework interoperability. `serve` untuk expose Agent Card, `discover` untuk mencari remote agents, `delegate` untuk mengirim task ke agent lain, `list` untuk melihat agent yang terhubung, `ping` untuk health check, dan `stats` untuk melihat statistik interaksi.
+
+---
+
 ## 📂 Klasifikasi per Stage
 
 ```
-Stage I    Foundation     [5 tools]  plan, execute, reflect, verify, status
-Stage II   Discovery      [7 tools]  nav, context, snapshot, pr, score, model, model_reset
-Stage III  Multi-Agent    [9 tools]  delegate, pipeline, message, parallel, skill,
-                                      episodes, dashboard, guard, model_reset
-Stage IV   Evolution      [1 tool]   evolve (10 sub-actions)
-Stage V    Autonomous     [1 tool]   auto
-Blueprint  Experimental   [5 tools]  debate, router, clean, rag, mcp
+Stage I    Foundation     [5 tools]   plan, execute, reflect, verify, status
+Stage II   Discovery      [7 tools]   nav, context, snapshot, pr, score, model, budget
+Stage III  Multi-Agent    [10 tools]  delegate, pipeline, message, parallel, skill,
+                                      episodes, dashboard, guard, model_reset, finetune
+Stage IV   Evolution      [1 tool]    evolve
+Stage V    Autonomous     [1 tool]    auto
+Blueprint  Experimental   [6 tools]   debate, router, clean, rag, mcp, a2a
 ───────────────────────────────────────────────────
-Total                    [28 tools]  (27 named + model_reset sebagai tool terpisah)
+Total                    [30 tools]
 ```
 
 ---
@@ -624,6 +663,16 @@ agentic_nav → agentic_episodes search → agentic_skill find → agentic_plan 
 ### Pattern 6: Debate + Clean
 ```
 agentic_debate → agentic_clean → agentic_rag store
+```
+
+### Pattern 7: Fine-tuning Pipeline (Stage III)
+```
+agentic_skill extract → agentic_evolve export-training-data → agentic_finetune full-pipeline
+```
+
+### Pattern 8: Agent-to-Agent Delegation (Blueprint)
+```
+agentic_a2a discover → agentic_a2a delegate → agentic_a2a list
 ```
 
 ---

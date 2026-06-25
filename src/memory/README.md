@@ -1,6 +1,6 @@
 # `src/memory` — Modul Sistem Memori & Persistent Storage
 
-> Menyediakan sistem penyimpanan memori lintas-sesi, ekstraksi skill, pencarian RAG, embedding vektor lokal, serta konversi skill ke training data untuk fine-tuning.
+> Menyediakan sistem penyimpanan memori lintas-sesi, ekstraksi skill, pencarian RAG, embedding vektor lokal, konversi skill ke training data untuk fine-tuning, hierarchical memory orchestration (working/episodic/semantic/procedural), periodic consolidation scheduling, dan multilingual stop word filtering (58 bahasa).
 
 ---
 
@@ -172,6 +172,63 @@ Sparse Vector Store (TF-IDF) tanpa dependensi eksternal. Inverted index per kate
 | `VectorStore.size` (getter) | — | `number` | Total dokumen terindex |
 | `VectorStore.categories` (getter) | — | `string[]` | Daftar kategori |
 | `VectorStore.docCountOf` | `category: string` | `number` | Jumlah dokumen per kategori |
+
+### 11. `stopwords.ts`
+
+Modul stop word terpusat multi-bahasa. Menggunakan `stopwords-iso` (58 bahasa, 21K+ kata) sebagai sumber utama, dengan fallback minimal (EN+ID) jika package tidak tersedia. Termasuk domain-specific stop words untuk software engineering (step, task, code, function, dll).
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `STOP_WORDS` (const) | — | `ReadonlySet<string>` | Set gabungan: 58 bahasa dari stopwords-iso + SE domain stop words |
+| `isStopWord` | `word: string` | `boolean` | Cek apakah kata adalah stop word (case-insensitive) |
+| `filterStopWords` | `words: string[]`, `minLength?` | `string[]` | Filter array token, buang stop words + kata terpendek |
+| `getStopWordStats` | — | `{totalUnique, languages, source}` | Statistik: total unique words, jumlah bahasa, sumber (stopwords-iso/fallback) |
+| `loadStopWords` (private) | — | `Set<string>` | Load stopwords-iso + merge semua bahasa; fallback ke minimal set |
+| `FALLBACK_STOP_WORDS` (private) | — | `Set<string>` | Fallback minimal: ~80 kata EN + ~40 kata ID |
+
+### 12. `memory-orchestrator.ts`
+
+Orkestrator memori hierarkis 4 level: working (session aktif) → episodic (riwayat task) → semantic (pengetahuan umum) → procedural (skill/formula). Consolidation otomatis antar level, importance-based forgetting, cross-level query, dan auto-konversi pattern ke skill definitions.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `MemoryLevel` (type) | — | `"working" \| "episodic" \| "semantic" \| "procedural"` | Level hierarki memori |
+| `MemoryEntry` (interface) | `id`, `level`, `content`, `keywords[]`, `importance`, `createdAt`, `lastAccessed`, `accessCount`, `sourceSession?`, `metadata?` | — | Entri memori universal di semua level |
+| `MemoryQuery` (interface) | `query`, `levels?`, `maxResults?`, `minImportance?` | — | Parameter query lintas level |
+| `MemoryQueryResult` (interface) | `entries[]`, `totalTime`, `sources[]` | — | Hasil query + sumber level |
+| `ConsolidationReport` (interface) | `workingArchived`, `episodicPruned`, `semanticDeduplicated`, `patternsExtracted`, `skillsConverted`, `timestamp` | — | Laporan hasil konsolidasi |
+| **MemoryOrchestrator** (class) | — | — | Orkestrator utama: store, query, consolidate, convert |
+| `constructor` | `workingMem: SessionStore`, `episodicStore: EpisodicStore`, `skillStore?`, `_vectorStore?`, `maxImportanceEntries?`, `worldModel?`, `simulationEngine?` | — | Inisialisasi dengan store-store yang ada + optional WorldModel/SimulationEngine |
+| `store` | `level`, `{id, content, keywords?, importance?, sourceSession?, metadata?}` | `void` | Simpan data di level yang sesuai (working=index only, episodic=EpisodicStore, semantic/procedural=in-memory) |
+| `query` | `opts: MemoryQuery` | `MemoryQueryResult` | Query lintas level: keyword match + importance ranking + recency bonus + access tracking |
+| `consolidate` | `sessions?: SessionState[]` | `ConsolidationReport` | Consolidation penuh: archive working→episodic, prune episodic (importance decay), dedup semantic, extract patterns, convert patterns→skills |
+| `getStats` | — | `{working, episodic, semantic, procedural, totalIndexed}` | Statistik jumlah entri per level |
+| `convertPatternsToSkills` (private) | `report` | `number` | Konversi pattern semantic ke SkillDefinition formal + simulasi + WorldModel tracking |
+| `importanceIndex` (private) | — | `Map<string, ...>` | Index importance per entri: id → {importance, level, lastAccessed, accessCount} |
+| `scoreRelevance` (private) | `entry`, `query` | `number` | Skor relevansi: keyword match + content match + recency decay |
+| `pruneImportanceIndex` (private) | — | `void` | LRU prune jika index > maxImportanceEntries |
+
+### 13. `consolidation-scheduler.ts`
+
+Scheduler periodik untuk konsolidasi memory. Timer-based dengan configurable interval, threshold minimum session baru, auto-prune episodic, dan callback hooks. Trigger: interval, session_end, atau manual.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `ConsolidationTrigger` (type) | — | `"interval" \| "session_end" \| "manual"` | Jenis trigger konsolidasi |
+| `ConsolidationSchedule` (interface) | `intervalMs`, `onSessionEnd`, `minNewSessions`, `pruneThreshold` | — | Jadwal konsolidasi (interval 5 menit default, min 1 session baru) |
+| `SchedulerStats` (interface) | `totalRuns`, `lastRun`, `lastReport`, `isRunning`, `nextRun` | — | Statistik scheduler |
+| `ConsolidationCallback` (type) | `(report: ConsolidationReport) => void` | — | Callback setelah konsolidasi |
+| **ConsolidationScheduler** (class) | — | — | Scheduler utama |
+| `constructor` | `orchestrator: MemoryOrchestrator`, `sessionStore: SessionStore`, `schedule?` | — | Inisialisasi dengan orchestrator + session store + optional schedule override |
+| `start` | — | `void` | Mulai timer periodik (unref agar tidak keep process alive) |
+| `stop` | — | `void` | Hentikan timer |
+| `onSessionEnd` | — | `void` | Trigger konsolidasi saat session berakhir |
+| `runManual` | — | `ConsolidationReport` | Jalankan konsolidasi manual (abaikan schedule) |
+| `onConsolidation` | `cb: ConsolidationCallback` | `void` | Daftarkan callback |
+| `removeCallback` | `cb: ConsolidationCallback` | `void` | Hapus callback |
+| `getStats` | — | `SchedulerStats` | Statistik: total runs, last run, next run, is running |
+| `getSchedule` | — | `ConsolidationSchedule` | Jadwal aktif |
+| `updateSchedule` | `partial: Partial<ConsolidationSchedule>` | `void` | Update jadwal runtime (restart timer jika running) |
 
 ---
 ### File Knowledge Lintas-Sesi

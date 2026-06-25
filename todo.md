@@ -6,7 +6,7 @@ Plugin OpenCode yang mengimplementasikan agentic software engineering workflow �
 Berdasarkan paper **arXiv:2606.05608** — "The End of Software Engineering".
 
 ## Key Files
-- `src/index.ts`: 4921 lines, 29 tool({}) registrations
+- `src/index.ts`: 4921 lines, 30 tool({}) registrations
 - `src/core/formal-model.ts`: Formal model A=(M,T,M,Π)
 - `src/core/llm.ts`: LLMEngine with 4 providers + response cache (TTL 30s, exact match)
 - `src/agents/orchestrator.ts`: Pipeline orchestration (PM→Arch→Dev→QA), 806 lines
@@ -22,11 +22,11 @@ Berdasarkan paper **arXiv:2606.05608** — "The End of Software Engineering".
 - `src/memory/skill-store.ts`: Auto-extraction, sliding window success rate
 - `src/evolution/self-evolver.ts`: Skill patch generation, role suggestion
 - `src/evolution/continuous-evolution.ts`: Self-evolution pipeline
-- `test/run.mjs`: 663 unit tests
+- `test/run.mjs`: 1291+ unit tests
 
 ## Plugin Stats
 - `@ts-expect-error` / `@ts-ignore`: 0
-- `as any`: 17 across 22,019 LOC (0.08%)
+- `as any`: 3 across 22,019 LOC (0.01%)
 - Empty catch blocks: 1 (skill-training.ts:243)
 - 1 external dependency: `stopwords-iso`
 - ESLint: `typescript-eslint/recommended` with `no-explicit-any: warn`
@@ -58,7 +58,7 @@ Re-evaluated after deep read. Initial assessment was too harsh. This is genuinel
 
 | # | Practice | Plugin | Status |
 |---|----------|--------|--------|
-| 1 | Tool Calls Over MCP | All 29 tools use `tool({})` from OpenCode SDK | ✅ Exact match |
+| 1 | Tool Calls Over MCP | All 30 tools use `tool({})` from OpenCode SDK | ✅ Exact match |
 | 2 | Direct Function Calls Over Tool Calls | `execution-helpers.ts` has `writeFiles()`, `parseFileEntries()` as pure functions | ✅ Exact match |
 | 3 | Avoid Overloading Agents With Many Tools | 9 agent roles with context-appropriate tool subsets | ✅ Exact match |
 | 4 | Single-Responsibility Agents | 9 roles + 6 domain packs, each with distinct prompts/tools | ✅ Exact match |
@@ -72,7 +72,7 @@ Re-evaluated after deep read. Initial assessment was too harsh. This is genuinel
 
 | Stage | Paper Definition | Plugin | Status |
 |-------|-----------------|--------|--------|
-| I: Tool-Augmented (2023-2025) | Code completion, single-issue fixes | 29 tools, plan/execute/verify | ✅ |
+| I: Tool-Augmented (2023-2025) | Code completion, single-issue fixes | 30 tools, plan/execute/verify | ✅ |
 | II: Single-Task Autonomous (2025-2027) | End-to-end feature building | `agentic_auto`, `agentic_plan` auto-decompose | ✅ |
 | III: Multi-Agent Teams (2026-2029) | Coordinated swarms, shared memory | `agentic_delegate/pipeline/message/parallel` + coordinator/orchestrator | ✅ |
 | IV: Self-Evolving (2028+) | Autonomous discovery, learning | `self-evolver.ts`, `continuous-evolution.ts`, `agentic_evolve` | ✅ |
@@ -83,14 +83,14 @@ Re-evaluated after deep read. Initial assessment was too harsh. This is genuinel
 Paper:  A = (M, T, M, Π)
 Plugin: formal-model.ts — FormalModel A=(M,T,M,Π)
         llm.ts — LLMEngine (M)
-        index.ts — 29 tool definitions (T)
+        index.ts — 30 tool definitions (T)
         episodic-store.ts + skill-store.ts + session-store.ts — Memory (M)
         planner.ts — Template + LLM decomposition (Π)
 ```
 
 ## GAPS Identified from Research
 
-### Gap 1: Replan Loop (VMAO — arXiv:2603.11445)
+### ✅ Gap 1: Replan Loop (VMAO — arXiv:2603.11445)
 **Current**: Plan → Execute → Verify (linear, fail → retry with same plan)
 **Paper**: Plan → Execute → Verify → **Replan** (verifier output feeds back to planner for restructuring)
 
@@ -127,10 +127,10 @@ VeriMAP (arXiv:2510.17109) also relevant: verification functions created at plan
 **Paper**: Generate code WITH formal specs (F*, Dafny, Verus) for automatic verification
 
 ### Gap 6: Agent-Computer Interface (ACI) Design Emphasis
-**Current**: Good ACI with 29 tools
+**Current**: Good ACI with 30 tools
 **Paper (Bhati '26 + SWE-agent)**: ACI design quality matters as much as model capability. SWE-agent's ACI lifted resolution from 2% to 12.5% with same model.
 
-### Gap 7: Semantic Caching (not from papers, from prior discussion)
+### ✅ Gap 7: Semantic Caching (not from papers, from prior discussion)
 **Current**: `llm.ts` has exact-match response cache (TTL 30s)
 **Could**: Add similarity-based cache using existing `local-embedder.ts` + `vector-store.ts`
 - Hit for "refactor executor.ts" ≈ "refactor src/core/executor.ts"

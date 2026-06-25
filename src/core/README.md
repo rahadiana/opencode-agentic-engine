@@ -493,6 +493,300 @@ Verifikasi multi-language (TypeScript, JavaScript, Python, Go, Rust). Compile ch
 
 ---
 
+### 30. `agent-blueprint.ts`
+Declarative agent specification system — model-agnostic cognitive blueprint (JSON/YAML). BlueprintParser mengonversi YAML/JSON ke AgentBlueprint, BlueprintResolver mengonversi abstract model tiers ke actual models berdasarkan classification + reliability dari ModelRegistry.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `BlueprintParser` | — | `BlueprintParser` | Parser YAML/JSON → AgentBlueprint |
+| `parse` | `(input: string)` | `AgentBlueprint` | Parse YAML/JSON string ke blueprint |
+| `validate` | `(data: Record<string, unknown>)` | `AgentBlueprint` | Validasi required fields + cross-field rules |
+| `toFrontmatter` | `(blueprint: AgentBlueprint)` | `string` | Konversi ke YAML frontmatter |
+| `BlueprintResolver` | `(modelRegistry, modelsDb?)` | `BlueprintResolver` | Resolver tier → actual model |
+| `classify` | `(availableModels: string[])` | `TierClassification` | Classify models ke tier (fast/capable/reasoning/code) |
+| `resolveTier` | `(tier, availableModels, taskType?)` | `string` | Resolve tier name → best model |
+| `resolveBlueprint` | `(blueprint, availableModels, taskType?)` | `Record<string, string>` | Resolve semua tiers dalam blueprint |
+
+---
+
+### 31. `attention-scheduler.ts`
+Priority-based agent scheduling dengan attention mechanism. Setiap agent hanya melihat focus slice dari shared state (bukan full blackboard). Dynamic priority dengan stagnation boost, urgency boost, dan consecutive penalty untuk mencegah starvation.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `AttentionScheduler` | — | `AttentionScheduler` | Scheduler multi-agent |
+| `registerAgent` | `(config: AgentScheduleConfig)` | `void` | Daftarkan agent dengan scheduling config |
+| `unregisterAgent` | `(agentId: string)` | `boolean` | Hapus agent |
+| `setAttention` | `(agentId, focusKeys)` | `boolean` | Set attention focus keys agent |
+| `canRun` | `(agentId: string)` | `boolean` | Cek eligibility (enabled + cooldown 0 + maxConsecutive) |
+| `computePriority` | `(agentId: string)` | `number` | Hitung dynamic priority (base + stagnation + urgency - penalty) |
+| `getFocusSlice` | `(agentId, state: SharedState)` | `Record<string, unknown>` | Dapatkan focus slice dari shared state |
+| `runCycle` | `(state: SharedState)` | `CycleResult` | Jalankan satu scheduling cycle |
+| `runAll` | `(state: SharedState)` | `CycleResult[]` | Jalankan semua cycles sampai max atau eligible |
+
+---
+
+### 32. `bootstrap-knowledge.ts`
+Seed RAG index dengan high-confidence documentation tentang plugin itu sendiri. Memastikan agent punya pengetahuan reliable saat bekerja di codebase ini (architecture, tools, workflow, testing).
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `bootstrapKnowledge` | `(rag: MultiIndexRAG, projectId: string)` | `void` | Seed RAG dengan 10 bootstrap entries (idempotent, sekali saja per plugin instance) |
+
+---
+
+### 33. `code-sandbox.ts`
+Code execution sandbox — LLM generates JavaScript module, divalidasi dengan banned tokens checker (prevent fs/process/eval/child_process access), dieksekusi dalam Node.js VM sandbox dengan timeout, dan didaftarkan sebagai reusable CodeModule. Fallback chain: code gagal → fallback ke DSL.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `checkBannedTokens` | `(code, customTokens?)` | `BannedTokenIssue[]` | Cek kode untuk banned tokens (15 patterns) |
+| `hasBannedTokenErrors` | `(issues)` | `boolean` | Cek apakah ada error-severity issues |
+| `createSandboxContext` | — | `Record<string, unknown>` | Buat safe context (whitelisted globals saja) |
+| `sandboxExecute` | `(code, input?, timeout?)` | `SandboxExecutionResult` | Eksekusi kode dalam VM sandbox |
+| `runSandboxTests` | `(code, testCases, timeout?)` | `SandboxTestResult` | Jalankan test cases terhadap kode |
+| `CodeModuleRegistry` | — | `CodeModuleRegistry` | Registry reusable code modules |
+| `register` | `(module)` | `CodeModule` | Daftarkan module baru |
+| `find` | `(query: string)` | `CodeModule[]` | Cari module by name/code |
+| `recordSuccess` | `(id: string)` | `void` | Catat execution berhasil |
+| `recordFailure` | `(id: string)` | `void` | Catat execution gagal |
+| `CodeSandbox` | `(registry?)` | `CodeSandbox` | Orchestrator utama |
+| `processCode` | `(code, name, input?, testCases?, language?)` | `CodeGenerationResult` | Full pipeline: validate → execute → test → register |
+
+---
+
+### 34. `constraint-manifold.ts`
+Safety-by-design constraint validation engine. Validasi action proposal SEBELUM eksekusi — block file deletion, protect .env/ssh keys, detect dangerous shell commands, enforce concurrent modification limits, circuit breaker untuk consecutive violations.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `ConstraintManifold` | `(config?)` | `ConstraintManifold` | Safety engine |
+| `validate` | `(action: ActionProposal)` | `ConstraintCheck` | Validasi action terhadap semua constraints |
+| `beginModification` | `(file: string)` | `void` | Mulai tracking file modification |
+| `endModification` | `(file: string)` | `void` | Akhiri tracking file modification |
+| `getRecentViolations` | — | `Array<{category, severity, message}>` | Violations terbaru |
+| `setCategoryEnabled` | `(category, enabled)` | `void` | Toggle constraint category |
+| `snapshot` | — | `Snapshot` | Dapatkan state snapshot |
+| `reset` | — | `void` | Reset semua state |
+
+---
+
+### 35. `dag-engine.ts`
+DAG-based execution engine — topological sort dengan Kahn's algorithm, parallel execution per phase dengan concurrency limit, circuit breaker (loop detection + budget check), recovery strategies (restart-node/restart-plan/escalate), dan observer pattern untuk monitoring.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `DAGEngine` | — | `DAGEngine` | DAG execution engine |
+| `buildDAG` | `(goal, subtasks, overrides?)` | `{plan, context}` | Bangun DAGPlan + context dari subtasks |
+| `toSubtasks` | `(plan: DAGPlan)` | `Subtask[]` | Konversi DAGPlan → Subtask[] (backward compat) |
+| `computePhases` | `(context)` | `ExecutionPhase[]` | Hitung topological phases (Kahn's algorithm) |
+| `getReadyNodes` | `(context)` | `DAGNode[]` | Dapatkan nodes yang siap dieksekusi |
+| `canRetry` | `(context, nodeId)` | `boolean` | Cek apakah node bisa di-retry |
+| `getProgress` | `(context)` | `{completed, total, failed, running, pending}` | Progress eksekusi |
+| `execute` | `(context, runner, signal?)` | `Promise<DAGResult>` | Jalankan full DAG (topological parallel) |
+| `executeNode` | `(context, node, runner, signal?)` | `Promise<NodeResult>` | Eksekusi node tunggal dengan retry |
+| `addObserver` | `(observer: Partial<DAGObserver>)` | `void` | Tambah DAG execution observer |
+
+---
+
+### 36. `dsl-executor.ts`
+Deterministic DSL interpreter untuk agent workflows. Pure interpreter — NO eval/new Function. Supported ops: get, set, add, mcp_call, compare, if/then/else, call_skill (recursive, max depth 3), map, filter, reduce, sum, avg, count, min, max, jump. Context-based execution: {input, output, memory}.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `resolvePath` | `(context, path)` | `{found, value}` | Resolve path expression ("input.x.y", "memory.temp") |
+| `setPath` | `(target, path, value)` | `boolean` | Set value di path (auto-create intermediate objects) |
+| `resolveValue` | `(context, value)` | `unknown` | Resolve value: path → context, atau literal |
+| `validateDSL` | `(instructions, nesting?)` | `DslValidationError[]` | Pre-validate DSL sebelum eksekusi |
+| `DslExecutor` | — | `DslExecutor` | DSL executor |
+| `setMCPClient` | `(client)` | `void` | Set MCP client untuk mcp_call |
+| `setSkillResolver` | `(resolver)` | `void` | Set resolver untuk call_skill |
+| `validate` | `(instructions)` | `DslValidationError[]` | Validasi instructions |
+| `execute` | `(instructions, initialInput?)` | `DslFullResult` | Jalankan DSL program |
+| `executeBlock` | `(instructions, context, trace)` | `void` | Eksekusi block (support branching) |
+| `getPendingMCPCalls` | `(result)` | `DslInstruction[]` | Dapatkan MCP calls yang pending |
+| `completeMCPCall` | `(context, instructionId, result)` | `void` | Inject MCP result ke context |
+
+---
+
+### 37. `errors.ts`
+Custom error classes untuk agentic engine. Memungkinkan `catch (e instanceof SessionNotFoundError)` alih-alih parsing error strings.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `AgenticError` | `(message, code)` | `AgenticError` | Base error class dengan code string |
+| `SessionNotFoundError` | `(sessionId: string)` | `SessionNotFoundError` | Session ID tidak ditemukan |
+| `BudgetExceededError` | `(limit, value, max)` | `BudgetExceededError` | Budget (token/steps/time/cost) terlampaui |
+| `LLMError` | `(message)` | `LLMError` | LLM call gagal (timeout, API error) |
+| `TimeoutError` | `(operation, ms)` | `TimeoutError` | Operasi timeout |
+| `ValidationError` | `(message)` | `ValidationError` | Input validation gagal |
+| `NotFoundError` | `(resourceType, resourceId)` | `NotFoundError` | Resource (file/tool) tidak ditemukan |
+
+---
+
+### 38. `meta-reasoner.ts`
+Meta-reasoning + strategy adaptation engine. Record performance → sliding window analysis → auto-tune strategy params (exploration_rate, beam_width, max_depth, reuse_threshold) → versioned history dengan rollback saat performance degradation.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `createDefaultStrategy` | `(label?)` | `StrategyConfig` | Buat default strategy (balanced) |
+| `MetaReasoner` | `(initialConfig?, options?)` | `MetaReasoner` | Meta-reasoner engine |
+| `recordExecution` | `(record: PerformanceRecord)` | `void` | Record hasil eksekusi |
+| `getCurrentPerformance` | — | `{successRate, avgRetries, avgCriticScore, totalRuns}` | Performance saat ini |
+| `adapt` | — | `AdaptationResult` | Analisis + adapt strategy |
+| `rollback` | `(version?)` | `AdaptationResult` | Rollback ke versi strategy sebelumnya |
+| `getCurrentConfig` | — | `StrategyConfig` | Strategy config saat ini |
+| `getVersionHistory` | — | `StrategyVersion[]` | Semua versi strategy |
+| `getParam` | `(name: string)` | `number \| undefined` | Dapatkan param value |
+| `setParam` | `(name, value)` | `boolean` | Set param value (clamped) |
+| `getAdaptationStats` | — | `{adaptationCount, totalRuns, versionCount}` | Adaptation statistics |
+
+---
+
+### 39. `planner-critic.ts`
+PlannerCritic self-reflection loop untuk plan refinement. Generate 2-4 candidate plans via LLM → Critic evaluate (score 0-1, issues, suggestions) → Refine best plan (max 3 iterations) → Accept jika score ≥ 0.85.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `PlannerCritic` | `(llmEngine: LLMEngine)` | `PlannerCritic` | Planner + Critic loop |
+| `refinePlan` | `(goal, codebaseSummary)` | `Promise<CriticResult>` | Full loop: generate → evaluate → refine |
+| `generateCandidates` | `(goal, codebaseSummary)` | `Promise<CandidatePlan[]>` | Generate 2-4 candidate plans |
+| `evaluatePlan` | `(candidate, goal)` | `Promise<CriticScore>` | Evaluate plan (score + issues + suggestions) |
+| `refineCandidate` | `(goal, candidate, issues, suggestions)` | `Promise<CandidatePlan \| null>` | Refine plan berdasarkan critic feedback |
+
+---
+
+### 40. `planner-tree-search.ts`
+Beam search plan exploration. Explore multiple plan candidates secara paralel, keep top-K (beam width) di setiap depth level. Template-based expansion (create/fix/refactor/generic), diversity bonus untuk menghindari duplicate plans, early stop jika score > 0.9.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `defaultExpansion` | `(goal, currentSteps, depth)` | `Array<{label, nextSteps}>` | Default expansion templates (9 patterns) |
+| `scoreState` | `(state, goal)` | `number` | Score plan state (completeness-based) |
+| `diversityBonus` | `(planA, planB)` | `number` | Hitung diversity bonus (Jaccard word similarity) |
+| `scoreWithDiversity` | `(plan, goal, existingCandidates)` | `number` | Score + diversity bonus |
+| `TreeSearchPlanner` | `(beamWidth?, maxDepth?, expansionFn?)` | `TreeSearchPlanner` | Beam search planner |
+| `configure` | `(params: {beamWidth?, maxDepth?})` | `void` | Configure beam search params |
+| `search` | `(goal: string)` | `TreeSearchResult` | Jalankan beam search → best plan |
+| `searchBest` | `(goal: string)` | `Promise<Subtask[]>` | Convenience: return best plan only |
+
+---
+
+### 41. `semantic-cache.ts`
+Gap #7 — TF-IDF + cosine similarity LLM response cache. Berbeda dari exact-match cache (30s TTL, hash-based), cache ini menemukan response dari query yang semantically mirip (misal "fix type error in auth.ts" ≈ "fix type error in auth.js").
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `SemanticCache` | `(config?)` | `SemanticCache` | Semantic similarity cache |
+| `get` | `(query: string)` | `LLMResponse \| null` | Lookup cache (TF-IDF + cosine similarity) |
+| `set` | `(query, response)` | `void` | Cache response untuk lookup masa depan |
+| `prune` | — | `number` | Hapus expired entries, return jumlah dihapus |
+| `clear` | — | `void` | Hapus semua entries |
+| `stats` | — | `{size, hits, misses, hitRate}` | Cache statistics |
+| `getConfig` | — | `Required<SemanticCacheConfig>` | Dapatkan config |
+| `updateConfig` | `(partial)` | `void` | Update config runtime |
+
+---
+
+### 42. `session-reader.ts`
+Membaca session info (cost + model) langsung dari OpenCode SDK (source of truth). Cache 5 detik, sync cost + model ke BudgetTracker setelah setiap LLM call. List semua model tersedia dari SDK.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `SessionReader` | — | `SessionReader` | Reader session info dari OpenCode |
+| `setOpencodeClient` | `(client)` | `void` | Set OpenCode SDK client |
+| `setSessionId` | `(id: string)` | `void` | Set session ID |
+| `setBudgetTracker` | `(tracker)` | `void` | Set BudgetTracker untuk sync |
+| `readSessionInfo` | — | `Promise<OpenCodeSessionInfo \| null>` | Baca session info (cached 5s) |
+| `invalidateCache` | — | `void` | Invalidate cache |
+| `syncToBudgetTracker` | — | `Promise<void>` | Sync cost + model ke BudgetTracker |
+| `getCurrentModel` | — | `Promise<string \| null>` | Model string saat ini ("providerID/modelID") |
+| `listModels` | — | `Promise<Array<{id, providerID, providerName}>>` | List semua model dari SDK |
+
+---
+
+### 43. `simulation-engine.ts`
+Pre-execution simulation + imagination engine. Simulate rencana SEBELUM eksekusi — cycle detection, complexity analysis, dependency depth analysis, token estimation. Scoring: completeness×0.4 + success×0.4 + efficiency×0.2. Cache hasil simulation.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `SimulationEngine` | `(config?)` | `SimulationEngine` | Simulation engine |
+| `simulate` | `(input: SimulationInput)` | `SimulationResult` | Simulate rencana (pure computation, no side-effects) |
+| `imagine` | `(candidates: SimulationInput[])` | `SimulationResult[]` | Simulate multiple candidates → sorted by score |
+| `getBestPlan` | `(candidates)` | `SimulationResult \| null` | Dapatkan best plan (score ≥ threshold) |
+| `clearCache` | — | `void` | Bersihkan simulation cache |
+| `getStats` | — | `{cacheSize, simulationsRun}` | Statistik |
+
+---
+
+### 44. `skill-improver.ts`
+Self-improvement loop untuk skills. Pipeline: generate → test → evaluate (4 dimensions: correctness×0.4, schema×0.2, reusability×0.2, efficiency×0.2) → improve (mutate weakest dimension) → store. Max 3 iterations, accept threshold 0.6.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `SkillImprover` | `(skillStore, schemaValidator?, codeSandbox?, dslExecutor?)` | `SkillImprover` | Skill improvement engine |
+| `improve` | `(goal, capability, options?)` | `Promise<ImprovementResult>` | Full improvement cycle |
+| `autoGenerateTests` | `(skill, inputSchema, outputSchema?)` | `SkillTestCase[]` | Auto-generate test cases |
+| `evaluate` | `(skill, testCases)` | `Promise<EvaluationScore>` | Evaluate 4 dimensions |
+
+---
+
+### 45. `skill-schema.ts`
+Schema validation untuk skill input/output. Lightweight JSON Schema-like validator — zero external deps. Mendukung string, number, boolean, array, object types. Nested validation, constraints (min/max/enum/pattern), auto-infer schema dari sample data.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `SchemaValidator` | — | `SchemaValidator` | Schema validator |
+| `validate` | `(schema, data, options?)` | `SchemaValidationResult` | Validasi data terhadap schema |
+| `toJSONSchema` | `(schema)` | `Record<string, unknown>` | Konversi ke JSON Schema format |
+| `parseOrThrow` | `(schema, data, label?)` | `Record<string, unknown>` | Parse + throw on failure |
+| `inferField` | `(value: unknown)` | `SchemaField` | Infer schema dari sample value |
+| `inferSchema` | `(data: Record<string, unknown>)` | `Record<string, SchemaField>` | Infer full schema dari sample data |
+
+---
+
+### 46. `tool-router.ts`
+Tool routing dan dispatch engine. Keyword-based scoring + colocation bonus + anti-keyword penalty + transition probability (AutoTool-inspired). Colocation groups: plan→execute→verify, delegate→message→pipeline. Consolidation hints untuk overlapping tools.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `ToolRouter` | — | `ToolRouter` | Tool routing engine |
+| `setDescriptions` | `(entries: ToolEntry[])` | `void` | Update tool descriptions |
+| `recordCall` | `(name, success, latencyMs)` | `void` | Record tool call result (adaptive routing) |
+| `getTransitionProbability` | `(from, to)` | `number` | Transition probability antar tools |
+| `getConsolidationMap` | — | `Record<string, {primary[], note}>` | Consolidation hints |
+| `getStats` | — | `Record<string, {count, successRate, avgLatency}>` | Tool usage statistics |
+| `selectTools` | `(context, topK?)` | `{selected, reasons}` | Select top-K tools untuk context |
+| `buildToolList` | `(selected: ToolMeta[])` | `string` | Build tool listing untuk prompt injection |
+| `buildAlwaysExposeHint` | — | `string` | Built-in tools reminder |
+| `setAllocatedToolCount` | `(n: number)` | `void` | Set jumlah agentic tools yang ditampilkan |
+
+---
+
+### 47. `world-model.ts`
+BDI world model dengan entities, relations, belief state. Externalized belief state (BDI/BeliefMem) — beliefs disimpan di luar LLM context. Confidence scoring [0-1], belief decay (×0.98 per cycle) untuk mencegah stale beliefs, conflict resolution, evidence provenance tracking.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `WorldModel` | `(config?)` | `WorldModel` | World model + belief state |
+| `addEntity` | `(type, name, properties?)` | `Entity` | Tambah/update entity |
+| `removeEntity` | `(entityId)` | `boolean` | Hapus entity + relasi-nya |
+| `getEntity` | `(entityId)` | `Entity \| undefined` | Dapatkan entity |
+| `findEntities` | `(type: string)` | `Entity[]` | Cari entities by type |
+| `addRelation` | `(source, target, type, properties?)` | `Relation` | Tambah relasi antar entities |
+| `getEntityRelations` | `(entityId)` | `Relation[]` | Relasi suatu entity |
+| `observe` | `(key, fact, confidence, source, category?)` | `BeliefUpdateResult` | Observe fakta → update belief (Bayesian-inspired) |
+| `getBelief` | `(key)` | `Belief \| undefined` | Dapatkan belief |
+| `isReliable` | `(key)` | `boolean` | Cek apakah belief reliable (confidence ≥ threshold) |
+| `getBeliefsByCategory` | `(category)` | `Belief[]` | Beliefs per kategori |
+| `getUncertainBeliefs` | — | `Belief[]` | Beliefs dengan confidence rendah |
+| `applyDecay` | — | `void` | Apply belief decay (confidence × 0.98) |
+| `snapshot` | — | `WorldSnapshot` | Snapshot seluruh world state |
+| `restore` | `(snapshot)` | `void` | Restore dari snapshot |
+| `getStats` | — | `{entities, relations, beliefs, cycles}` | World model statistics |
+
+---
+
 ## Subfolder: `src/core/domains/`
 
 ### `code.ts`

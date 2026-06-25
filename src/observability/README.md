@@ -4,7 +4,18 @@
 
 ## Daftar File
 
-### 1. `trace-logger.ts`
+### 1. `logger.ts`
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `createLogger(source)` | `source: string` | `Logger` | Membuat logger dengan source prefix. Set `AGENTIC_LOG_JSON=1` untuk JSON output, `AGENTIC_LOG_LEVEL` untuk filter level |
+| `Logger.debug(msg, meta?)` | `msg: string`, `meta?: Record<string, unknown>` | `void` | Log level debug |
+| `Logger.info(msg, meta?)` | `msg: string`, `meta?: Record<string, unknown>` | `void` | Log level info |
+| `Logger.warn(msg, meta?)` | `msg: string`, `meta?: Record<string, unknown>` | `void` | Log level warn |
+| `Logger.error(msg, meta?)` | `msg: string \| Error`, `meta?: Record<string, unknown>` | `void` | Log level error — menerima string atau Error object |
+| `LogSeverity` | — | `type` | `"debug" \| "info" \| "warn" \| "error"` |
+| `LogEntry` | — | `interface` | `{timestamp, severity, source, message, meta?}` |
+
+### 2. `trace-logger.ts`
 | Fungsi/Kelas | Parameter | Return | Deskripsi |
 |---|---|---|---|
 | `TraceLogger(worktree)` | `worktree: string` | `TraceLogger` | Membuat instance logger dengan path log di `.agentic/trace.jsonl` |
@@ -16,7 +27,7 @@
 | `dispose()` | — | `Promise<void>` | Membersihkan interval flush dan menulis sisa buffer |
 | `TraceEntry` | — | `interface` | `{timestamp, step, input, output, toolUsed, success, durationMs, metadata?}` |
 
-### 2. `dashboard.ts`
+### 3. `dashboard.ts`
 | Fungsi/Kelas | Parameter | Return | Deskripsi |
 |---|---|---|---|
 | `Dashboard()` | — | `Dashboard` | Membuat instance dashboard untuk generate laporan observability |

@@ -17,7 +17,7 @@ Berdasarkan konsep dari paper **"The End of Software Engineering"** (arXiv:2606.
 | — | **Model Registry** | Auto-discover model dari provider, tracking reliability & hallucination rate |
 | — | **Dashboard** | Timeline, anomaly detection, model reliability stats |
 
-### 29 Tools
+### 30 Tools
 
 | Tool | Stage | Description | Teknik Kunci |
 |---|---|---|---|
@@ -50,6 +50,7 @@ Berdasarkan konsep dari paper **"The End of Software Engineering"** (arXiv:2606.
 | `agentic_clean` | 🏗 Blueprint | Strip debate artifacts, reformat to markdown/json, validate against schema. Post-processing for debate/analysis output | Regex stripping, LLM-based reformatting, schema validation |
 | `agentic_rag` | 🏗 Blueprint | Multi-index RAG: store/search knowledge in category-segregated indices. Hybrid search (TF-IDF + Vector) | Per-category indexes, auto-category, vector enrichment via cosine similarity |
 | `agentic_mcp` | 🏗 Blueprint | MCP client: connect to external servers (DB, APIs) via stdio or HTTP(S). Auto-discover tools via `tools/list`, call via JSON-RPC | JSON-RPC protocol, tool discovery, connection lifecycle management |
+| `agentic_a2a` | 🏗 Blueprint | Agent-to-Agent protocol: discover remote agents, delegate tasks, start/stop A2A server. Google A2A standard for cross-framework interoperability | A2A Agent Card, JSON-RPC task delegation, HTTP transport |
 
 ## Quick Start
 
@@ -221,27 +222,48 @@ File ini di-watch — perubahan langsung diterapkan tanpa restart plugin.
 
 ```
 src/
-├── index.ts                 # Plugin entry: registers 29 tools + hooks
+├── index.ts                 # Plugin entry: registers 30 tools + 6 hooks
 ├── core/
 │   ├── domain-registry.ts   # Domain pack system: tools, verifiers, error matchers
 │   ├── domains/             # Built-in domain packs (generic, code)
 │   │   ├── generic.ts
 │   │   └── code.ts
 │   ├── planner.ts           # Domain-aware auto-decompose (generic + code templates)
+│   ├── planner-critic.ts    # PlannerCritic self-reflection loop for plan refinement
+│   ├── planner-tree-search.ts # Tree search for optimal plan selection
 │   ├── executor.ts          # Step execution, domain-aware error categorization
 │   ├── verifier.ts          # Compile + test + Gap #4: multi-dimensional (security, perf, arch, deps) with 3-tier system
 │   ├── semantic-cache.ts    # Gap #7: TF-IDF + cosine similarity LLM response cache
 │   ├── error-analyzer.ts    # Error categorization
+│   ├── errors.ts            # Custom error classes (TimeoutError, LLMError, etc.)
+│   ├── bootstrap-knowledge.ts # Seeds RAG with high-confidence plugin docs
+│   ├── model-registry.ts    # Per-role LLM model preferences + reliability tracking
 │   ├── navigator.ts         # Multi-language codebase scanning (TS/JS/Py/PHP/Go/Rust/Java)
 │   ├── prompt-builder.ts    # Dynamic agent prompt per active domain
 │   ├── intent-parser.ts     # Parses user intent → Plan structure
 │   ├── git.ts               # Git commit, history, PR description generation
 │   ├── tech-debt-scorer.ts  # Coupling/size/scope/patterns analysis
-│   └── parallel.ts          # Dependency-based concurrency + conflict detection
+│   ├── parallel.ts          # Dependency-based concurrency + conflict detection
+│   ├── agent-blueprint.ts   # Agent blueprint definitions
+│   ├── dag-engine.ts        # DAG-based execution engine
+│   ├── constraint-manifold.ts # Constraint propagation and satisfaction
+│   ├── session-reader.ts    # Session state reader
+│   ├── code-sandbox.ts      # Sandboxed code execution
+│   ├── dsl-executor.ts      # DSL execution engine
+│   ├── skill-schema.ts      # Skill schema definitions
+│   ├── skill-improver.ts    # Skill improvement suggestions
+│   ├── attention-scheduler.ts # Attention/scheduling logic
+│   ├── meta-reasoner.ts     # Meta-reasoning engine
+│   ├── simulation-engine.ts # Simulation engine
+│   ├── world-model.ts       # World model state tracking
+│   └── tool-router.ts       # Tool routing and classification
 ├── agents/                  # Multi-agent system
 │   ├── coordinator.ts       # Delegates to agent roles, auto-suggests role, message bus
 │   ├── orchestrator.ts      # Multi-agent workflow pipelines + cross-validation
-│   └── role-registry.ts     # Built-in + custom agent definitions (extensible)
+│   ├── role-registry.ts     # Built-in + custom agent definitions (extensible)
+│   ├── a2a-server.ts        # A2A (Agent-to-Agent) HTTP server
+│   ├── a2a-client.ts        # A2A client for remote agent communication
+│   └── a2a-types.ts         # A2A protocol type definitions
 ├── drift/                   # Context & safety
 │   ├── dependency-tracker.ts     # Per-session file change + error propagation
 │   ├── context-compressor.ts     # Sliding window + key info extraction
@@ -256,7 +278,10 @@ src/
 │   ├── skill-training.ts    # Skill → training data conversion (JSONL/instructions)
 │   ├── vector-store.ts      # Sparse retrieval (TF-IDF)
 │   ├── local-embedder.ts    # Local embedding for vector search
-│   └── persistence.ts       # Model stats persistence
+│   ├── persistence.ts       # Model stats persistence
+│   ├── memory-orchestrator.ts # Cross-memory coordination
+│   ├── consolidation-scheduler.ts # Memory consolidation scheduling
+│   └── stopwords.ts         # Stop word list for text processing
 ├── evaluation/
 │   └── live-evaluator.ts    # 5-dimensi real-time scoring dari tool hooks
 ├── evolution/
@@ -273,7 +298,7 @@ src/
 
 Berikut teknik-teknik engineering yang digunakan di setiap modul, berdasarkan studi kode sumber:
 
-### `core/` — Inti Engine (29 file)
+### `core/` — Inti Engine (44 file)
 
 | Kategori | Teknik | Detail |
 |----------|--------|--------|
@@ -304,7 +329,7 @@ Berikut teknik-teknik engineering yang digunakan di setiap modul, berdasarkan st
 | **Domain** | Domain Registry | Auto-detect domain, activate/deactivate, per-domain error matchers + verifier strategies |
 | **Domain** | 6 domain packs | code (SE), data-science (ML), devops (infra), generic (fallback), mobile (Android/iOS), security (vuln) |
 
-### `agents/` — Multi-Agent System (4 file)
+### `agents/` — Multi-Agent System (6 file)
 
 | Kategori | Teknik | Detail |
 |----------|--------|--------|
@@ -320,6 +345,8 @@ Berikut teknik-teknik engineering yang digunakan di setiap modul, berdasarkan st
 | **Role Registry** | Versioned prompt history | Setiap role punya riwayat perubahan prompt dengan version tracking |
 | **Role Registry** | Rollback support | `rollbackPrompt(role, version)` — revert ke versi prompt sebelumnya |
 | **Role Registry** | 9 built-in roles | 5 engineering (architect, developer, qa, pm, coordinator) + 4 generic (analyst, builder, reviewer, planner) |
+| **A2A Server** | Agent-to-Agent HTTP server | Google A2A standard — Agent Card discovery, JSON-RPC task delegation |
+| **A2A Client** | Remote agent communication | Discover and delegate tasks to remote A2A-compatible agents |
 
 ### `drift/` — Error Detection & Recovery (5 file)
 
@@ -337,7 +364,7 @@ Berikut teknik-teknik engineering yang digunakan di setiap modul, berdasarkan st
 | **Pattern Discovery** | Cross-session pattern analysis | Analisis error patterns, file changes, session outcomes, skill effectiveness |
 | **Pattern Discovery** | Trend computation | Bandingkan first-half vs second-half success rate untuk deteksi improving/degrading |
 
-### `memory/` — Memory & Skill System (10 file)
+### `memory/` — Memory & Skill System (13 file)
 
 | Kategori | Teknik | Detail |
 |----------|--------|--------|
@@ -414,7 +441,7 @@ Format canonical: `run-{sessionID}-{pipelineId}`. Setiap level di-track dengan n
 ## Testing
 
 ```bash
-# Unit tests (544 tests, mock-based, no LLM needed)
+# Unit tests (1291 tests, mock-based, no LLM needed)
 node test/run.mjs
 
 # Simulates opencode auto-discovery
@@ -435,7 +462,7 @@ node test/e2e-llm.mjs
 # SWE-bench mock mode (no LLM)
 LLM_OFF=true node test/swebench-harness.mjs
 
-# Docker pipeline (7 layers, 544 unit + E2E tests)
+# Docker pipeline (7 layers, 1291 unit + E2E tests)
 ./test-container.sh
 ```
 
@@ -451,7 +478,7 @@ agentic_dashboard → Model Reliability
 
 - Setiap panggilan LLM dicatat (success/fail)
 - HallucinationGuard mendeteksi klaim palsu
-- Model otomatis terdegradasi jika `consecutiveFailures >= 3`
+- Model otomatis terdegradasi jika `consecutiveFailures >= 5`
 - Stats persist lintas session
 
 ## Logging

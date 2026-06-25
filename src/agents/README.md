@@ -1,6 +1,6 @@
 # src/agents — Multi-Agent System
 
-> Modul ini mengelola eksekusi multi-agent terisolasi, koordinasi delegasi tugas, pipeline workflow, dan registrasi peran agent. Terdiri dari 4 file: runtime LLM terisolasi per role, coordinator dengan shared memory & message bus, orchestrator pipeline multi-tahap dengan validasi kontrak, dan registry untuk definisi peran bawaan & kustom.
+> Modul ini mengelola eksekusi multi-agent terisolasi, koordinasi delegasi tugas, pipeline workflow, registrasi peran agent, dan protokol Agent-to-Agent (A2A). Terdiri dari 7 file: runtime LLM terisolasi per role, coordinator dengan shared memory & message bus, orchestrator pipeline multi-tahap dengan validasi kontrak, registry untuk definisi peran bawaan & kustom, serta A2A protocol server, client, dan types untuk interop agent lintas-framework.
 
 ---
 
@@ -127,3 +127,86 @@ Registry untuk mendefinisikan, mendaftarkan, dan mengelola peran agent (built-in
 | `listRoles()` | — | `string[]` | Daftar semua nama role (built-in + custom) |
 | `suggestModel(role, complexity?)` | `role: string`, `complexity?: TaskComplexity` | `string` | Rekomendasikan model (`"fast"` / `"capable"`) berdasarkan role + kompleksitas |
 | `setModel(role, model)` | `role, model: string` | `void` | Set model khusus untuk role tertentu |
+
+---
+
+### 5. `a2a-types.ts`
+
+Tipe data standar untuk protokol A2A (Agent-to-Agent) berdasarkan spesifikasi Google A2A (April 2025). Mencakup Agent Card (discovery), Task (work unit), Message, Part (content unit), Artifact, dan JSON-RPC 2.0 request/response.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `AgentCardCapability` (interface) | `id`, `name`, `description`, `skillId?`, `estimatedSuccessRate?` | — | Kapabilitas yang ditawarkan agent |
+| `AgentCardAuthentication` (interface) | `scheme`, `credentials?` | — | Skema autentikasi: none, bearer, api-key, oauth2 |
+| `AgentCard` (interface) | `protocolVersion`, `name`, `description`, `url`, `capabilities[]`, `authentication?`, `metadata?` | — | Kartu identitas agent untuk discovery |
+| `TaskStatus` (type) | — | `"submitted" \| "working" \| "input-required" \| "completed" \| "failed" \| "canceled"` | Status lifecycle task |
+| `TaskId` (interface) | `id`, `sessionId?` | — | Identifier unik task + session opsional |
+| `TaskInput` (interface) | `messages[]`, `instructions?` | — | Input task berupa pesan + instruksi |
+| `Task` (interface) | `id`, `status`, `input?`, `messages[]`, `artifacts[]`, `statusDescription?`, `createdAt?`, `updatedAt?` | — | Representasi task utama |
+| `A2AMessage` (interface) | `role`, `parts[]`, `id?`, `timestamp?`, `metadata?` | — | Pesan antar agent (role: agent/user) |
+| `Part` (type) | — | `TextPart \| FilePart \| DataPart` | Union type untuk konten pesan |
+| `TextPart` (interface) | `type: "text"`, `text` | — | Bagian teks |
+| `FilePart` (interface) | `type: "file"`, `mimeType`, `data`, `name?` | — | Bagian file (base64) |
+| `DataPart` (interface) | `type: "data"`, `data` | — | Bagian data terstruktur (JSON) |
+| `Artifact` (interface) | `name`, `parts[]`, `description?`, `index?`, `append?`, `timestamp?` | — | Output artifact dari task |
+| `JsonRpcRequest` (interface) | `jsonrpc`, `id`, `method`, `params?` | — | Request JSON-RPC 2.0 |
+| `JsonRpcResponse` (interface) | `jsonrpc`, `id`, `result?`, `error?` | — | Response JSON-RPC 2.0 |
+| `JsonRpcError` (interface) | `code`, `message`, `data?` | — | Error dalam response JSON-RPC |
+| `A2A_METHODS` (const) | — | `{ GET_CARD, TASK_SEND, TASK_GET, TASK_CANCEL }` | Nama method A2A bawaan |
+| `A2A_PROTOCOL_VERSION` (const) | — | `"1.0"` | Versi protokol A2A |
+| `A2A_CONTENT_TYPE` (const) | — | `"application/json"` | Content type JSON |
+| `A2A_SSE_CONTENT_TYPE` (const) | — | `"text/event-stream"` | Content type SSE streaming |
+| `createTaskId` | `prefix?` | `TaskId` | Generate TaskId unik dengan prefix + timestamp + random |
+| `createTextMessage` | `role`, `text` | `A2AMessage` | Buat pesan teks dengan ID + timestamp |
+| `createJsonRpcRequest` | `method`, `params?`, `id?` | `JsonRpcRequest` | Buat JSON-RPC request |
+| `createJsonRpcError` | `code`, `message`, `data?` | `JsonRpcResponse` | Buat JSON-RPC error response |
+| `createJsonRpcResult` | `id`, `result` | `JsonRpcResponse` | Buat JSON-RPC success response |
+
+---
+
+### 6. `a2a-client.ts`
+
+Client A2A untuk discover remote agent, delegasi task, polling status, dan cancel task. Menggunakan `fetch()` (Node 18+) dengan card caching TTL, timeout abort, dan statistik performa.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `A2AClientConfig` (interface) | `cardCacheTtlMs?`, `requestTimeout?`, `defaultHeaders?` | — | Konfigurasi client (cache TTL, timeout, headers) |
+| `DiscoveredAgent` (interface) | `card`, `discoveredAt`, `lastUsed` | — | Agent yang sudah di-discover + metadata cache |
+| `TaskSendResult` (interface) | `task`, `serverUrl` | — | Hasil task delegation |
+| `A2AClientStats` (interface) | `cachedCards`, `tasksSent`, `tasksCompleted`, `tasksFailed`, `averageLatencyMs` | — | Statistik performa client |
+| **A2AClient** (class) | — | — | Client A2A utama |
+| `constructor` | `config?` | — | Inisialisasi dengan optional config |
+| `discover` | `url: string` | `Promise<AgentCard \| null>` | Discover agent via POST /a2a (JSON-RPC) atau GET /a2a/card. Cache hasilnya |
+| `getCachedAgent` | `url: string` | `AgentCard \| null` | Ambil agent card dari cache tanpa network call |
+| `listDiscoveredAgents` | — | `DiscoveredAgent[]` | Daftar semua agent yang sudah di-discover (belum expired) |
+| `clearCache` | — | `void` | Hapus semua card cache |
+| `taskSend` | `serverUrl`, `taskId`, `messages[]`, `instructions?` | `Promise<TaskSendResult \| null>` | Kirim task ke remote agent via JSON-RPC, tunggu hasil |
+| `taskGet` | `serverUrl`, `taskId` | `Promise<Task \| null>` | Poll status task remote |
+| `taskCancel` | `serverUrl`, `taskId` | `Promise<boolean>` | Batalkan task remote |
+| `getStats` | — | `A2AClientStats` | Statistik: cards cached, tasks sent/completed/failed, avg latency |
+
+---
+
+### 7. `a2a-server.ts`
+
+Server A2A (JSON-RPC 2.0) untuk menerima task dari agent lain. Menyediakan endpoint discovery (`GET /a2a/card`), JSON-RPC handler (`POST /a2a`), dan SSE streaming (`POST /a2a/stream`). Integrasi dengan skill-store untuk capabilities dan coordinator untuk eksekusi task.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `A2AServerConfig` (interface) | `port?`, `host?`, `agentCard`, `taskExecutor?`, `requestTimeout?` | — | Konfigurasi server |
+| `A2ATaskExecutor` (interface) | — | — | Interface custom executor: `executeTask({taskId, messages[], instructions?})` → `{status, messages[], artifacts[], statusDescription?}` |
+| `A2AServerStatus` (interface) | — | — | Status server: running, port, host, agentName, capabilities, activeTasks, totalTasks, uptimeMs |
+| **A2AServer** (class) | — | — | Server A2A utama berbasis `node:http` |
+| `constructor` | `config: A2AServerConfig` | — | Inisialisasi dengan Agent Card + optional executor |
+| `start` | — | `Promise<void>` | Start HTTP server |
+| `stop` | — | `Promise<void>` | Stop server + bersihkan active tasks |
+| `port` (getter) | — | `number` | Port aktual (berguna saat port=0) |
+| `getStatus` | — | `A2AServerStatus` | Status server lengkap |
+| `getCard` | — | `AgentCard` | Ambil Agent Card |
+| `updateCard` | `card: AgentCard` | `void` | Update Agent Card runtime (saat skills berubah) |
+| `getActiveTasks` | — | `Task[]` | Semua task aktif (untuk monitoring) |
+| `handleRequest` (private) | `req`, `res` | — | Router: GET /a2a/card, POST /a2a, POST /a2a/stream, GET /health |
+| `handleJsonRpc` (private) | `req`, `res` | — | JSON-RPC handler dengan timeout + error handling |
+| `handleStream` (private) | `req`, `res` | — | SSE streaming handler untuk `tasks/sendSubscribe` |
+| `executeMethod` (private) | `req: JsonRpcRequest` | `Promise<JsonRpcResponse>` | Dispatcher: agent/getCard, tasks/send, tasks/get, tasks/cancel |
+| `defaultExecutor` (private) | — | `A2ATaskExecutor` | Default echo executor untuk testing |
