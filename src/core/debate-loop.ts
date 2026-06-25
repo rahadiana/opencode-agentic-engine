@@ -217,7 +217,7 @@ export class DebateLoop {
           const issueLines = review
             .split("\n")
             .filter(l => /^\d+[.)]/.test(l.trim()) || /^(?:-|\*)\s+(?:Issue|Problem|Error|Missing|Fix)/i.test(l.trim()))
-            .map(l => l.trim().replace(/^[-\*\d.)\s]+/, ""))
+            .map(l => l.trim().replace(/^[-*\d.)\s]+/, ""))
             .filter(l => l.length > 10)
           issues = issueLines.length > 0 ? issueLines : (review.length > 50 ? [review.slice(0, 500)] : [])
         }

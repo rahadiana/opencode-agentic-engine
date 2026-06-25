@@ -70,7 +70,7 @@ const FUNCTION_PATTERNS: LangPatterns[] = [
     functionPattern: /(?:async\s+)?def\s+(\w+)\s*\(/g,
     classPattern: /class\s+(\w+)/g,
     methodPattern: /(?:async\s+)?def\s+(\w+)\s*\(/g,
-    commentPattern: /#\s*(.*)|(?:\"\"\"[\s\S]*?\"\"\")/g,
+    commentPattern: /#\s*(.*)|(?:"""[\s\S]*?""")/g,
   },
   {
     name: "go",
@@ -138,7 +138,7 @@ function inferIntentFromName(name: string): string {
   // Fallback: split camelCase/PascalCase into words
   const words = name
     .replace(/([A-Z])/g, " $1")
-    .replace(/[_\-]/g, " ")
+    .replace(/[-_]/g, " ")
     .toLowerCase()
     .trim()
   return words ? `Operation: ${words}` : "Unknown function"

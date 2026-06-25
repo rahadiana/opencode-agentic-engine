@@ -18,6 +18,8 @@ import { createSkillDefinition } from "./skill-format.js"
 import type { WorldModel } from "../core/world-model.js"
 import type { SimulationEngine } from "../core/simulation-engine.js"
 import type { SimulationInput } from "../core/simulation-engine.js"
+import { ImportanceIndex } from "./importance-index.js"
+import { ExecutionTracer } from "./execution-tracer.js"
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -106,24 +108,15 @@ export class MemoryOrchestrator {
   private simulationEngine?: SimulationEngine
 
   /** Entries importance index: id → { importance, level, lastAccessed, accessCount } */
-  private importanceIndex = new Map<string, {
-    importance: number
-    level: MemoryLevel
-    lastAccessed: number
-    accessCount: number
-  }>()
+  private importanceIndex: ImportanceIndex
 
   /** Semantic/procedural entries gak disimpan di session/episodic store — di sini */
   private semanticEntries: MemoryEntry[] = []
   private proceduralEntries: MemoryEntry[] = []
   /** Working entries stored via store() calls (transient, merged with session-derived entries) */
   private workingEntries: MemoryEntry[] = []
-  /** Execution traces — structured step-by-step records (Procedural depth) */
-  private executionTraces: ExecutionTrace[] = []
-  /** Max execution traces kept (LRU eviction) */
-  private readonly maxExecutionTraces = 200
-
-  private maxImportanceEntries: number
+  /** Execution traces — delegated to ExecutionTracer for standalone management */
+  private executionTracer: ExecutionTracer
 
   constructor(
     workingMem: SessionStore,
@@ -140,9 +133,10 @@ export class MemoryOrchestrator {
     this.workingMem = workingMem
     this.episodicStore = episodicStore
     this.skillStore = skillStore ?? new SkillStore()
-    this.maxImportanceEntries = maxImportanceEntries
+    this.importanceIndex = new ImportanceIndex(maxImportanceEntries)
     this.worldModel = worldModel
     this.simulationEngine = simulationEngine
+    this.executionTracer = new ExecutionTracer(200)
   }
 
   // ── Store ────────────────────────────────────────────────────────
@@ -161,7 +155,7 @@ export class MemoryOrchestrator {
       level,
       content: data.content,
       keywords: data.keywords ?? [],
-      importance: data.importance ?? this.computeDefaultImportance(level),
+      importance: data.importance ?? this.importanceIndex.computeDefaultImportance(level),
       createdAt: Date.now(),
       lastAccessed: Date.now(),
       accessCount: 0,
@@ -186,28 +180,18 @@ export class MemoryOrchestrator {
         break
     }
 
-    this.indexImportance(entry.id, level, entry.importance)
+    this.importanceIndex.indexImportance([{ id: entry.id, level, importance: entry.importance }])
   }
 
   // ── Execution Tracing (Procedural depth) ─────────────────────────
+  //
+  // Delegated to ExecutionTracer for standalone trace storage/retrieval.
+  // Procedural memory store() calls remain here to keep the orchestrator's
+  // storage layer intact.
 
-  /**
-   * Record or update an execution trace.
-   * If a trace with the same ID already exists, updates it (for multi-step flows).
-   * Also stores a summary entry in procedural memory for cross-level querying.
-   *
-   * Paper ref: arXiv:2604.11378 (Graph Harness) — DAG execution tracking
-   * Paper ref: arXiv:2602.23720 (Auton) — Procedural memory for execution patterns
-   */
+  /** Record or update an execution trace + store procedural summary. */
   trackExecution(trace: ExecutionTrace): void {
-    const existing = this.executionTraces.findIndex(t => t.id === trace.id)
-    if (existing >= 0) {
-      this.executionTraces[existing] = trace
-    } else {
-      this.executionTraces.push(trace)
-    }
-
-    // Store a summary entry in procedural memory for cross-level querying
+    this.executionTracer.trackExecution(trace)
     const stepSummary = trace.steps.map(s =>
       `${s.stepId}:${s.status}${s.confidence !== undefined ? `@${(s.confidence * 100).toFixed(0)}%` : ""}`
     ).join(", ")
@@ -226,93 +210,26 @@ export class MemoryOrchestrator {
         modelUsed: trace.modelUsed,
       },
     })
-
-    // LRU eviction if over limit
-    if (this.executionTraces.length > this.maxExecutionTraces) {
-      const sorted = [...this.executionTraces].sort((a, b) =>
-        (a.completedAt ?? a.startedAt) - (b.completedAt ?? b.startedAt)
-      )
-      this.executionTraces = sorted.slice(-this.maxExecutionTraces)
-    }
   }
 
-  /** Get a specific execution trace by ID. */
   getExecutionTrace(id: string): ExecutionTrace | undefined {
-    return this.executionTraces.find(t => t.id === id)
+    return this.executionTracer.getExecutionTrace(id)
   }
 
-  /** Get all execution traces for a session. */
   getSessionTraces(sessionId: string): ExecutionTrace[] {
-    return this.executionTraces.filter(t => t.sessionId === sessionId)
+    return this.executionTracer.getSessionTraces(sessionId)
   }
 
-  /** Get all execution traces. */
   getAllTraces(): ExecutionTrace[] {
-    return [...this.executionTraces]
-  }
-
-  /**
-   * Convert execution traces to procedural memory entries (for search).
-   * Returns virtual MemoryEntry objects from execution traces without
-   * storing them in proceduralEntries (they're already in executionTraces).
-   */
-  private tracesToProceduralEntries(): MemoryEntry[] {
-    return this.executionTraces.map(trace => ({
-      id: `trace-${trace.id}`,
-      level: "procedural" as MemoryLevel,
-      content: `Execution: ${trace.goal} — ${trace.outcome} (${trace.steps.filter(s => s.status === "success").length}/${trace.steps.length} steps, ${trace.steps.length} total)`,
-      keywords: [
-        ...trace.goal.split(/\s+/).filter(w => w.length > 3),
-        trace.outcome,
-        "execution_trace",
-        ...trace.steps.map(s => s.description.split(/\s+/).filter(w => w.length > 3)).flat().slice(0, 5),
-      ],
-      importance: trace.outcome === "success" ? 0.9 : trace.outcome === "partial" ? 0.6 : 0.3,
-      createdAt: trace.startedAt,
-      lastAccessed: trace.completedAt ?? trace.startedAt,
-      accessCount: 0,
-      sourceSession: trace.sessionId,
-      metadata: {
-        type: "execution_trace",
-        stepCount: trace.steps.length,
-        outcome: trace.outcome,
-        tokensUsed: trace.tokensUsed,
-        costUsd: trace.costUsd,
-        modelUsed: trace.modelUsed,
-        stepStatuses: trace.steps.map(s => `${s.stepId}:${s.status}`).join(","),
-      },
-    }))
+    return this.executionTracer.getAllTraces()
   }
 
   /** Create a new step within a trace. If trace doesn't exist, creates it. */
   beginStep(traceId: string, sessionId: string, goal: string, stepId: string, description: string): void {
-    let trace = this.executionTraces.find(t => t.id === traceId)
-    if (!trace) {
-      trace = {
-        id: traceId,
-        sessionId,
-        goal,
-        steps: [],
-        startedAt: Date.now(),
-        outcome: "running",
-      }
-      this.executionTraces.push(trace)
-    }
-    // Remove old step with same ID if exists (re-run)
-    const existingIdx = trace.steps.findIndex(s => s.stepId === stepId)
-    if (existingIdx >= 0) {
-      trace.steps.splice(existingIdx, 1)
-    }
-    trace.steps.push({
-      stepId,
-      description,
-      status: "running",
-      startedAt: Date.now(),
-      retries: 0,
-    })
+    this.executionTracer.beginStep(traceId, sessionId, goal, stepId, description)
   }
 
-  /** Complete a step within a trace. */
+  /** Complete a step within a trace + store procedural summary on completion. */
   completeStep(
     traceId: string,
     stepId: string,
@@ -320,43 +237,23 @@ export class MemoryOrchestrator {
     error?: string,
     confidence?: number,
   ): void {
-    const trace = this.executionTraces.find(t => t.id === traceId)
-    if (!trace) return
-
-    const step = trace.steps.find(s => s.stepId === stepId)
-    if (!step) return
-
-    step.status = status
-    step.completedAt = Date.now()
-    if (error) step.error = error
-    if (confidence !== undefined) step.confidence = confidence
-
-    // Update trace outcome
-    const allDone = trace.steps.every(s => s.status === "success" || s.status === "failed")
-    if (allDone) {
-      trace.completedAt = Date.now()
-      const successCount = trace.steps.filter(s => s.status === "success").length
-      if (successCount === trace.steps.length) {
-        trace.outcome = "success"
-      } else if (successCount > 0) {
-        trace.outcome = "partial"
-      } else {
-        trace.outcome = "failed"
-      }
-      // Re-store summary with final outcome
+    const result = this.executionTracer.completeStep(traceId, stepId, status, error, confidence)
+    if (result.justCompleted && result.trace) {
+      const t = result.trace
+      const successCount = t.steps.filter(s => s.status === "success").length
       this.store("procedural", {
-        id: `exec-${trace.id}`,
-        content: `Execution: ${trace.goal} — ${trace.outcome} (${successCount}/${trace.steps.length} steps)`,
-        keywords: [...trace.goal.split(/\s+/).filter(w => w.length > 3), trace.outcome, "execution_trace"],
-        importance: trace.outcome === "success" ? 0.9 : trace.outcome === "partial" ? 0.6 : 0.3,
-        sourceSession: trace.sessionId,
+        id: `exec-${t.id}`,
+        content: `Execution: ${t.goal} — ${t.outcome} (${successCount}/${t.steps.length} steps)`,
+        keywords: [...t.goal.split(/\s+/).filter(w => w.length > 3), t.outcome, "execution_trace"],
+        importance: t.outcome === "success" ? 0.9 : t.outcome === "partial" ? 0.6 : 0.3,
+        sourceSession: t.sessionId,
         metadata: {
           type: "execution_trace",
-          stepCount: trace.steps.length,
-          outcome: trace.outcome,
-          tokensUsed: trace.tokensUsed,
-          costUsd: trace.costUsd,
-          modelUsed: trace.modelUsed,
+          stepCount: t.steps.length,
+          outcome: t.outcome,
+          tokensUsed: t.tokensUsed,
+          costUsd: t.costUsd,
+          modelUsed: t.modelUsed,
         },
       })
     }
@@ -384,13 +281,8 @@ export class MemoryOrchestrator {
         const relevance = this.scoreRelevance(entry, queryStr)
         if (relevance > 0) {
           results.push(entry)
-          // Update access
-          if (imp) {
-            imp.lastAccessed = Date.now()
-            imp.accessCount++
-            entry.lastAccessed = Date.now()
-            entry.accessCount++
-          }
+          entry.lastAccessed = Date.now()
+          entry.accessCount++
         }
       }
     }
@@ -533,7 +425,7 @@ export class MemoryOrchestrator {
     report.skillsConverted = this.convertPatternsToSkills(report)
 
     // Prune importance index if too large
-    this.pruneImportanceIndex()
+    this.importanceIndex.pruneImportanceIndex()
 
     return report
   }
@@ -556,7 +448,7 @@ export class MemoryOrchestrator {
     ]
 
     // Only process successful/partial traces with at least 2 steps
-    const processableTraces = this.executionTraces.filter(t =>
+    const processableTraces = this.executionTracer.getAllTraces().filter(t =>
       (t.outcome === "success" || t.outcome === "partial") && t.steps.length >= 2
     )
 
@@ -832,7 +724,7 @@ export class MemoryOrchestrator {
       case "semantic":
         return this.semanticEntries
       case "procedural":
-        return [...this.proceduralEntries, ...this.tracesToProceduralEntries()]
+        return [...this.proceduralEntries, ...this.executionTracer.tracesToProceduralEntries()]
     }
   }
 
@@ -917,39 +809,6 @@ export class MemoryOrchestrator {
     return score
   }
 
-  /** Default importance based on memory level */
-  private computeDefaultImportance(level: MemoryLevel): number {
-    switch (level) {
-      case "working": return 1.0
-      case "episodic": return 0.7
-      case "semantic": return 0.9
-      case "procedural": return 0.95
-    }
-  }
-
-  /** Track importance in the index */
-  private indexImportance(id: string, level: MemoryLevel, importance: number): void {
-    this.importanceIndex.set(id, {
-      importance,
-      level,
-      lastAccessed: Date.now(),
-      accessCount: 0,
-    })
-  }
-
-  /** Prune importance index when too large (LRU-based) */
-  private pruneImportanceIndex(): void {
-    if (this.importanceIndex.size <= this.maxImportanceEntries) return
-
-    const sorted = [...this.importanceIndex.entries()]
-      .sort(([, a], [, b]) => a.lastAccessed - b.lastAccessed)
-
-    const toRemove = sorted.slice(0, sorted.length - this.maxImportanceEntries)
-    for (const [id] of toRemove) {
-      this.importanceIndex.delete(id)
-    }
-  }
-
   // ── Stats ────────────────────────────────────────────────────────
 
   getStats(): {
@@ -967,7 +826,7 @@ export class MemoryOrchestrator {
       semantic: this.semanticEntries.length,
       procedural: this.proceduralEntries.length,
       totalIndexed: this.importanceIndex.size,
-      executionTraces: this.executionTraces.length,
+      executionTraces: this.executionTracer.getAllTraces().length,
       tracePatterns: this.semanticEntries.filter(e => e.id.startsWith("trace-pattern-")).length,
     }
   }

@@ -324,19 +324,19 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolL
   // ═══════════════════════════════════════════════════════════
 
   const guardrailItems: string[] = [
-    "🔴 **ALWAYS use \`agentic_*\` tools** for structured work — jangan panggil tool non-existent seperti `plan`, `execute`, `verify` tanpa prefix",
-    "🔬 **Research FIRST** — jangan andalkan internal knowledge. Cek <knowledge-context>, pakai \`agentic_nav\`, \`agentic_skill\`, \`webfetch\`",
-    "📋 **Plan before doing** — always call \`agentic_plan\` first for multi-step tasks. Jangan langsung edit file tanpa rencana",
-    "✅ **Verify after implement** — \`agentic_verify\` sebelum menyelesaikan task. Jangan claim success tanpa verify",
-    "🔄 **If a step fails** — call \`agentic_reflect\` to diagnose error category + propagation, THEN retry",
+    "🔴 **ALWAYS use `agentic_*` tools** for structured work — jangan panggil tool non-existent seperti `plan`, `execute`, `verify` tanpa prefix",
+    "🔬 **Research FIRST** — jangan andalkan internal knowledge. Cek <knowledge-context>, pakai `agentic_nav`, `agentic_skill`, `webfetch`",
+    "📋 **Plan before doing** — always call `agentic_plan` first for multi-step tasks. Jangan langsung edit file tanpa rencana",
+    "✅ **Verify after implement** — `agentic_verify` sebelum menyelesaikan task. Jangan claim success tanpa verify",
+    "🔄 **If a step fails** — call `agentic_reflect` to diagnose error category + propagation, THEN retry",
     '🚫 **Never ask "should I..."** — just call the tool directly. You are autonomous',
     "📝 **Cite sources** — setiap klaim harus cantumkan URL / arXiv ID / RAG entry ID",
-    "🔍 **Prefer \`agentic_*\` over built-in** — untuk research: \`agentic_nav\` > \`grep\`/glob. Untuk status: \`agentic_status\` > manual tracking. Untuk context: \`agentic_context compress\` > manual summarization",
+    "🔍 **Prefer `agentic_*` over built-in** — untuk research: `agentic_nav` > `grep`/glob. Untuk status: `agentic_status` > manual tracking. Untuk context: `agentic_context compress` > manual summarization",
   ]
-  if (hasDebate) guardrailItems.push("💬 **Deep analysis**: pakai \`agentic_debate\` (executor ↔ critic multi-round) untuk validasi data atau ketika ragu")
-  if (hasRouter && hasRag) guardrailItems.push("🧭 **Knowledge query**: \`agentic_router\` untuk klasifikasi intent → \`agentic_rag\` untuk search di index yang tepat")
-  if (hasDb) guardrailItems.push("🗄️ **Data query**: \`agentic_db\` untuk data terstruktur (filter WHERE, GROUP BY, COUNT). \`agentic_rag\` untuk semantic search bebas (TF-IDF)")
-  let rules = guardrailItems.map((item, i) => `${i + 1}. ${item}`).join("\n")
+  if (hasDebate) guardrailItems.push("💬 **Deep analysis**: pakai `agentic_debate` (executor ↔ critic multi-round) untuk validasi data atau ketika ragu")
+  if (hasRouter && hasRag) guardrailItems.push("🧭 **Knowledge query**: `agentic_router` untuk klasifikasi intent → `agentic_rag` untuk search di index yang tepat")
+  if (hasDb) guardrailItems.push("🗄️ **Data query**: `agentic_db` untuk data terstruktur (filter WHERE, GROUP BY, COUNT). `agentic_rag` untuk semantic search bebas (TF-IDF)")
+  const rules = guardrailItems.map((item, i) => `${i + 1}. ${item}`).join("\n")
   t.guardrails(rules)
 
   return t

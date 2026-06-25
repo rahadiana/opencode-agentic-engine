@@ -293,7 +293,7 @@ export class Dashboard {
     // Model registry stats
     let modelCount = 0
     let totalModelCalls = 0
-    let totalModelLatency = 0
+    const totalModelLatency = 0
     if (ctx?.modelRegistry) {
       const scores = ctx.modelRegistry.getAllScores()
       modelCount = scores.length

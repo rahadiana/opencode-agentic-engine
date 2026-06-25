@@ -25,7 +25,7 @@
 import type { PersistentState } from "./persistence.js"
 import { resolve } from "node:path"
 import { homedir } from "node:os"
-import { existsSync, mkdirSync } from "node:fs"
+import { existsSync, mkdirSync, statSync } from "node:fs"
 
 export interface SQLiteConfig {
   /** Path ke file database (default: ~/.config/opencode/agentic-store/agentic.db) */
@@ -322,8 +322,7 @@ export class SQLitePersistence {
 
     let fileSize = 0
     try {
-      const fs = require("node:fs") as typeof import("node:fs")
-      fileSize = fs.statSync(this.dbPath).size
+      fileSize = statSync(this.dbPath).size
     } catch { /* ignore */ }
 
     return {

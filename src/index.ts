@@ -3885,7 +3885,7 @@ const confidenceStore = new ConfidenceStore()
                   out += `\nExport ke file: \`agentic_evolve export-blueprint name=${roleId}\``
                   return { output: out }
                 } catch (e) {
-                  return { output: `❌ Blueprint parse error: ${(e as Error).message}\n\nGunakan format YAML atau JSON yang valid. Contoh:\n\`\`\`yaml\nagent:\n  identity: \"You are a developer\"\n  model_tiers:\n    default: capable\n\`\`\`` }
+                  return { output: `❌ Blueprint parse error: ${(e as Error).message}\n\nGunakan format YAML atau JSON yang valid. Contoh:\n\`\`\`yaml\nagent:\n  identity: "You are a developer"\n  model_tiers:\n    default: capable\n\`\`\`` }
                 }
               }
 
@@ -6645,13 +6645,13 @@ export { STOP_WORDS, isStopWord, filterStopWords, getStopWordStats } from "./mem
 export { PromptTemplate, type KnowledgeEntry } from "./core/prompt-template.js"
 export { ToolRouter } from "./core/tool-router.js"
 export { SemanticCache } from "./core/semantic-cache.js"
-export { DslExecutor, validateDSL, resolvePath, setPath, resolveValue, type DslInstruction, type DslOp, type CompareOp, type DslContext, type DslResult, type DslFullResult, type DslStepResult, type DslTrace, type DslValidationError, type SkillDef, MAX_DSL_INSTRUCTIONS, MAX_DSL_NESTING, DSL_OP_WHITELIST } from "./core/dsl-executor.js"
+export { DslExecutor, validateDSL, resolvePath, setPath, resolveValue, type DslInstruction, type DslOp, type CompareOp, type DslContext, type DslResult, type DslFullResult, type DslStepResult, type DslTrace, type DslValidationError, type SkillDef } from "./core/dsl-executor.js"
 export { SchemaValidator, type SchemaField, type SchemaFieldType, type SkillSchema, type SchemaValidationResult, type SchemaValidationError, type SchemaErrorCode } from "./core/skill-schema.js"
-export { CodeSandbox, CodeModuleRegistry, checkBannedTokens, sandboxExecute, runSandboxTests, type BannedToken, type BannedTokenIssue, type CodeModule, type SandboxExecutionResult, type SandboxTestCase, type SandboxTestResult, type CodeGenerationResult, type SandboxSchemaField, DEFAULT_BANNED_TOKENS } from "./core/code-sandbox.js"
-export { TreeSearchPlanner, defaultExpansion, scoreState, diversityBonus, scoreWithDiversity, DEFAULT_BEAM_WIDTH, DEFAULT_MAX_DEPTH, EARLY_STOP_THRESHOLD, DIVERSITY_WEIGHT, type PlanState, type TreeSearchResult, type TreeSearchConfig, type ExpansionFn } from "./core/planner-tree-search.js"
+export { CodeSandbox, CodeModuleRegistry, checkBannedTokens, sandboxExecute, runSandboxTests, type BannedToken, type BannedTokenIssue, type CodeModule, type SandboxExecutionResult, type SandboxTestCase, type SandboxTestResult, type CodeGenerationResult, type SandboxSchemaField } from "./core/code-sandbox.js"
+export { TreeSearchPlanner, defaultExpansion, scoreState, diversityBonus, scoreWithDiversity, type PlanState, type TreeSearchResult, type TreeSearchConfig, type ExpansionFn } from "./core/planner-tree-search.js"
 export { Planner, type MacroPhase, type MicroStep, type HierarchicalPlan, type PhaseContextMapping, type PhaseErrorContext } from "./core/planner.js"
 export { SkillImprover, type SkillTestCase, type EvaluationScore, type ImprovementResult } from "./core/skill-improver.js"
-export { AttentionScheduler, MAX_SCHEDULER_CYCLES, type AgentScheduleConfig, type AgentScheduleState, type SharedState, type CycleResult, type SchedulerMetrics } from "./core/attention-scheduler.js"
+export { AttentionScheduler, type AgentScheduleConfig, type AgentScheduleState, type SharedState, type CycleResult, type SchedulerMetrics } from "./core/attention-scheduler.js"
 export { WorldModel, type WorldSnapshot, type Belief, type Entity, type Relation, type WorldModelConfig, type BeliefEvidence, type BeliefUpdateResult } from "./core/world-model.js"
 export { SimulationEngine, type SimulationInput, type SimulationResult, type SimulatedStep, type SimulatedStepResult, type SimulationConfig } from "./core/simulation-engine.js"
 export { MetaReasoner, createDefaultStrategy, type StrategyConfig, type StrategyParam, type PerformanceRecord, type StrategyVersion, type AdaptationResult, type MetaReasonerConfig } from "./core/meta-reasoner.js"
@@ -6665,7 +6665,8 @@ export { MemoryOrchestrator, type MemoryLevel, type MemoryEntry, type MemoryQuer
 export { ConsolidationScheduler, type ConsolidationSchedule, type ConsolidationTrigger, type SchedulerStats, type ConsolidationCallback } from "./memory/consolidation-scheduler.js"
 export { ConstraintManifold, type ConstraintViolation, type ConstraintCheck, type SafetyPolicy, type ActionProposal, type ConstraintCategory, type ConstraintSeverity, type ConstraintConfig } from "./core/constraint-manifold.js"
 export { type SkillLifecycleStage, type MaturationCriteria } from "./memory/skill-store.js"
-export { LLMEngine, type LLMConfig, type LLMRequest, type LLMResponse, TOOL_COMPLEXITY, type CostAutoSwitchConfig, type CostSwitchEvent } from "./core/llm.js"
+export { LLMEngine } from "./core/llm.js"
+export { type LLMConfig, type LLMRequest, type LLMResponse, TOOL_COMPLEXITY, type CostAutoSwitchConfig, type CostSwitchEvent } from "./core/llm-types.js"
 export { MCPClient, type MCPConfig, type MCPConnection, type MCPCallResult } from "./core/mcp-client.js"
 export { ModelRegistry, type ModelStats, type ModelScore } from "./core/model-registry.js"
 export { ProtocolAdapter, type Protocol, type ToolDescriptor, type ProtocolCallResult, type ProtocolAdapterStats } from "./core/protocol-adapter.js"

@@ -1,4 +1,5 @@
-import { LLMEngine, type LLMResponse } from "../core/llm.js"
+import { LLMEngine } from "../core/llm.js"
+import type { LLMResponse } from "../core/llm-types.js"
 import type { ModelRegistry } from "../core/model-registry.js"
 import type { AgentRole } from "./coordinator.js"
 import { RoleRegistry } from "./role-registry.js"

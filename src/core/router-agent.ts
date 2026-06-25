@@ -201,7 +201,7 @@ export class RouterAgent {
     for (const cat of this.categories) {
       if (cat.keywords.length === 0) continue
       let score = 0
-      let matches: string[] = []
+      const matches: string[] = []
       for (const kw of cat.keywords) {
         if (normalized.includes(kw.toLowerCase())) {
           score++

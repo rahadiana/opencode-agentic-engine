@@ -91,6 +91,7 @@ export function validateOpenAIJSONL(jsonl: string): { valid: boolean; errors: st
     if (line.length > 150000) {
       errors.push(`Line ${i + 1}: too long (${line.length} chars, max 150000)`)
     }
+    // eslint-disable-next-line no-control-regex
     if (/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(line)) {
       errors.push(`Line ${i + 1}: contains unescaped control characters`)
     }
@@ -240,7 +241,7 @@ export function saveTrainingDataToFile(
   outputPath: string,
 ): string {
   const dir = dirname(outputPath)
-  try { mkdirSync(dir, { recursive: true }) } catch {}
+  try { mkdirSync(dir, { recursive: true }) } catch { /* dir may already exist */ }
 
   const content = dataset.format === "openai" || dataset.format === "instructions"
     ? dataset.data + "\n"

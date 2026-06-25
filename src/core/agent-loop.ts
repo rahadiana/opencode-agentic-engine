@@ -648,7 +648,7 @@ export class AgentLoop {
     let stepSuccess = false
     let stepOutput = ""
     let filesModified: string[] = []
-    let preservedFiles: string[] = []
+    const preservedFiles: string[] = []
 
     while (retryCount <= this.config.maxRetries) {
       if (this.budgetTracker) {

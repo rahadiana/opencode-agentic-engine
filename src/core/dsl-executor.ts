@@ -133,8 +133,7 @@ export const DSL_OP_WHITELIST: ReadonlySet<DslOp> = new Set([
   "sum", "avg", "count", "min", "max",
 ])
 
-// ── Module-level executor reference for depth tracking ──
-let _currentExecutor: DslExecutor | null = null
+// ── Module-level call depth tracking ──
 let _callDepth = 0
 
 // ── Path Resolution ───────────────────────────────────────────────
@@ -199,6 +198,28 @@ export function resolveValue(context: DslContext, value: unknown): unknown {
     return found ? resolved : value // fallback to literal string if path not found
   }
   return value
+}
+
+// ── Scope Resolution Helpers ──────────────────────────────────────
+
+/** Resolve a target path to its context scope object */
+function resolveScope(target: string, context: DslContext): Record<string, unknown> | null {
+  if (target.startsWith("memory.")) return context.memory
+  if (target.startsWith("output.")) return context.output
+  return null
+}
+
+type AggregateOp = "sum" | "avg" | "count" | "min" | "max"
+
+function aggregateArray(source: number[], op: AggregateOp): number {
+  if (source.length === 0) return 0
+  switch (op) {
+    case "sum": return source.reduce((a, b) => a + b, 0)
+    case "avg": return source.reduce((a, b) => a + b, 0) / source.length
+    case "count": return source.length
+    case "min": return Math.min(...source)
+    case "max": return Math.max(...source)
+  }
 }
 
 // ── Schema Validation ─────────────────────────────────────────────
@@ -395,6 +416,7 @@ function resolveArraySource(context: DslContext, source?: string): unknown[] | n
 function executeInstruction(
   instr: DslInstruction,
   context: DslContext,
+  executor: DslExecutor,
 ): DslStepResult {
   try {
     switch (instr.op) {
@@ -406,15 +428,13 @@ function executeInstruction(
         if (!found) {
           return { instructionId: instr.id, op: instr.op, success: false, error: `Path not found: ${instr.source}` }
         }
-        if (instr.target) {
-          const scope = instr.target.startsWith("memory.") ? context.memory
-            : instr.target.startsWith("output.") ? context.output
-            : null
-          if (scope) {
-            const path = instr.target.replace(/^(memory|output)\./, "")
-            setPath(scope, path, value)
+          if (instr.target) {
+            const scope = resolveScope(instr.target, context)
+            if (scope) {
+              const path = instr.target.replace(/^(memory|output)\./, "")
+              setPath(scope, path, value)
+            }
           }
-        }
         return { instructionId: instr.id, op: instr.op, success: true, value }
       }
 
@@ -431,9 +451,7 @@ function executeInstruction(
           val = instr.value
         }
 
-        const scope = instr.target.startsWith("memory.") ? context.memory
-          : instr.target.startsWith("output.") ? context.output
-          : null
+        const scope = resolveScope(instr.target, context)
 
         if (!scope) {
           return { instructionId: instr.id, op: instr.op, success: false, error: `Invalid target scope: ${instr.target}` }
@@ -463,9 +481,7 @@ function executeInstruction(
         }
 
         if (instr.target) {
-          const scope = instr.target.startsWith("memory.") ? context.memory
-            : instr.target.startsWith("output.") ? context.output
-            : null
+          const scope = resolveScope(instr.target, context)
           if (scope) {
             const path = instr.target.replace(/^(memory|output)\./, "")
             setPath(scope, path, result)
@@ -492,9 +508,7 @@ function executeInstruction(
         }
 
         if (instr.target) {
-          const scope = instr.target.startsWith("memory.") ? context.memory
-            : instr.target.startsWith("output.") ? context.output
-            : null
+          const scope = resolveScope(instr.target, context)
           if (scope) {
             const path = instr.target.replace(/^(memory|output)\./, "")
             setPath(scope, path, result)
@@ -517,7 +531,7 @@ function executeInstruction(
         if (!instr.skill) {
           return { instructionId: instr.id, op: instr.op, success: false, error: "No skill capability specified" }
         }
-        const exec = _currentExecutor
+        const exec = executor
         if (!exec) {
           return { instructionId: instr.id, op: instr.op, success: false, error: "No executor context" }
         }
@@ -560,9 +574,7 @@ function executeInstruction(
           skillDef.level = hasCallSkill ? "composite" : "atomic"
 
           if (instr.target) {
-            const scope = instr.target.startsWith("memory.") ? context.memory
-              : instr.target.startsWith("output.") ? context.output
-              : null
+            const scope = resolveScope(instr.target, context)
             if (scope) {
               const path = instr.target.replace(/^(memory|output)\./, "")
 
@@ -605,7 +617,7 @@ function executeInstruction(
         for (let i = 0; i < arr.length; i++) {
           context.input[itemVar] = arr[i]
           context.input._index = i
-          _currentExecutor?.executeBlock(instr.instructions, context, childTrace)
+          executor.executeBlock(instr.instructions, context, childTrace)
           if (instr.target) {
             const targetVal = resolvePath(context, instr.target)
             results.push(targetVal.found ? targetVal.value : undefined)
@@ -614,7 +626,7 @@ function executeInstruction(
         delete context.input[itemVar]
         delete context.input._index
         if (instr.target) {
-          const scope = instr.target.startsWith("memory.") ? context.memory : context.output
+          const scope = resolveScope(instr.target, context) ?? context.output
           const path = instr.target.replace(/^(memory|output)\./, "")
           setPath(scope, path, results)
         }
@@ -642,7 +654,7 @@ function executeInstruction(
         }
         delete context.input[itemVar]
         if (instr.target) {
-          const scope = instr.target.startsWith("memory.") ? context.memory : context.output
+          const scope = resolveScope(instr.target, context) ?? context.output
           const path = instr.target.replace(/^(memory|output)\./, "")
           setPath(scope, path, filtered)
         }
@@ -669,7 +681,7 @@ function executeInstruction(
           context.input[itemVar] = arr[i]
           context.input._acc = acc
           context.input._index = i
-          _currentExecutor?.executeBlock(instr.instructions, context, childTrace)
+          executor.executeBlock(instr.instructions, context, childTrace)
           if (instr.target) {
             const resolvedAcc = resolvePath(context, instr.target)
             if (resolvedAcc.found) {
@@ -681,7 +693,7 @@ function executeInstruction(
         delete context.input._acc
         delete context.input._index
         if (instr.target) {
-          const scope = instr.target.startsWith("memory.") ? context.memory : context.output
+          const scope = resolveScope(instr.target, context) ?? context.output
           const path = instr.target.replace(/^(memory|output)\./, "")
           setPath(scope, path, acc)
         }
@@ -699,13 +711,13 @@ function executeInstruction(
         if (numbers.length === 0) {
           return { instructionId: instr.id, op: instr.op, success: false, error: "No numeric values in source array" }
         }
-        const sum = numbers.reduce((a, b) => a + b, 0)
+        const result = aggregateArray(numbers, "sum")
         if (instr.target) {
-          const scope = instr.target.startsWith("memory.") ? context.memory : context.output
+          const scope = resolveScope(instr.target, context) ?? context.output
           const path = instr.target.replace(/^(memory|output)\./, "")
-          setPath(scope, path, sum)
+          setPath(scope, path, result)
         }
-        return { instructionId: instr.id, op: instr.op, success: true, value: sum }
+        return { instructionId: instr.id, op: instr.op, success: true, value: result }
       }
 
       case "avg": {
@@ -717,13 +729,13 @@ function executeInstruction(
         if (numbers.length === 0) {
           return { instructionId: instr.id, op: instr.op, success: false, error: "No numeric values in source array" }
         }
-        const avg = numbers.reduce((a, b) => a + b, 0) / numbers.length
+        const result = aggregateArray(numbers, "avg")
         if (instr.target) {
-          const scope = instr.target.startsWith("memory.") ? context.memory : context.output
+          const scope = resolveScope(instr.target, context) ?? context.output
           const path = instr.target.replace(/^(memory|output)\./, "")
-          setPath(scope, path, avg)
+          setPath(scope, path, result)
         }
-        return { instructionId: instr.id, op: instr.op, success: true, value: avg }
+        return { instructionId: instr.id, op: instr.op, success: true, value: result }
       }
 
       case "count": {
@@ -731,13 +743,13 @@ function executeInstruction(
         if (!arr) {
           return { instructionId: instr.id, op: instr.op, success: false, error: `Source not found or not an array: ${instr.source}` }
         }
-        const count = arr.length
+        const result = aggregateArray(arr as unknown as number[], "count")
         if (instr.target) {
-          const scope = instr.target.startsWith("memory.") ? context.memory : context.output
+          const scope = resolveScope(instr.target, context) ?? context.output
           const path = instr.target.replace(/^(memory|output)\./, "")
-          setPath(scope, path, count)
+          setPath(scope, path, result)
         }
-        return { instructionId: instr.id, op: instr.op, success: true, value: count }
+        return { instructionId: instr.id, op: instr.op, success: true, value: result }
       }
 
       case "min": {
@@ -749,13 +761,13 @@ function executeInstruction(
         if (numbers.length === 0) {
           return { instructionId: instr.id, op: instr.op, success: false, error: "No numeric values in source array" }
         }
-        const min = Math.min(...numbers)
+        const result = aggregateArray(numbers, "min")
         if (instr.target) {
-          const scope = instr.target.startsWith("memory.") ? context.memory : context.output
+          const scope = resolveScope(instr.target, context) ?? context.output
           const path = instr.target.replace(/^(memory|output)\./, "")
-          setPath(scope, path, min)
+          setPath(scope, path, result)
         }
-        return { instructionId: instr.id, op: instr.op, success: true, value: min }
+        return { instructionId: instr.id, op: instr.op, success: true, value: result }
       }
 
       case "max": {
@@ -767,13 +779,13 @@ function executeInstruction(
         if (numbers.length === 0) {
           return { instructionId: instr.id, op: instr.op, success: false, error: "No numeric values in source array" }
         }
-        const max = Math.max(...numbers)
+        const result = aggregateArray(numbers, "max")
         if (instr.target) {
-          const scope = instr.target.startsWith("memory.") ? context.memory : context.output
+          const scope = resolveScope(instr.target, context) ?? context.output
           const path = instr.target.replace(/^(memory|output)\./, "")
-          setPath(scope, path, max)
+          setPath(scope, path, result)
         }
-        return { instructionId: instr.id, op: instr.op, success: true, value: max }
+        return { instructionId: instr.id, op: instr.op, success: true, value: result }
       }
 
       case "jump":
@@ -876,7 +888,6 @@ export class DslExecutor {
     const trace: DslStepResult[] = []
 
     try {
-      _currentExecutor = this
       _callDepth = 0
       this.executeBlock(instructions, context, trace)
       const durationMs = Date.now() - startTime
@@ -896,8 +907,6 @@ export class DslExecutor {
         error: err instanceof Error ? err.message : String(err),
         trace: { steps: trace, durationMs },
       }
-    } finally {
-      _currentExecutor = null
     }
   }
 
@@ -933,7 +942,7 @@ export class DslExecutor {
         this.executeIf(instr, context, trace)
       } else if (instr.op === "jump") {
         // Jump to target index (unconditional)
-        const result = executeInstruction(instr, context)
+        const result = executeInstruction(instr, context, this)
         trace.push(result)
         if (result.success && typeof instr.to === "number") {
           ip = instr.to // set IP to jump target
@@ -943,7 +952,7 @@ export class DslExecutor {
           return
         }
       } else {
-        const result = executeInstruction(instr, context)
+        const result = executeInstruction(instr, context, this)
         trace.push(result)
         if (!result.success) {
           // Short-circuit on failure
