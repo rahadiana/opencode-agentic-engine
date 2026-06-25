@@ -22,6 +22,7 @@ export interface MCPTool {
   name: string
   description: string
   parameters: Record<string, unknown>
+  version?: string
 }
 
 export interface MCPCallResult {

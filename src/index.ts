@@ -337,6 +337,7 @@ const createEngine: Plugin = async (input, _options) => {
   function registryTool(
     name: string,
     def: { description: string; args: any; execute: (args: any, context: any) => Promise<any> },
+    registryMeta?: { version?: string; category?: string; keywords?: string[] },
   ) {
     try {
       const zodObj = tool.schema.object(def.args)
@@ -346,6 +347,7 @@ const createEngine: Plugin = async (input, _options) => {
         def.description,
         jsonSchema as Record<string, unknown>,
         def.execute as (args: Record<string, unknown>, context?: any) => Promise<unknown>,
+        registryMeta,
       )
     } catch (e) {
       // Non-fatal: registry registration is best-effort

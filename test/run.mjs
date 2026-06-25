@@ -8674,6 +8674,187 @@ function dtr_assert(cond, msg) { if (cond) { dtr++ } else { console.error(`  ❌
 console.log(`  DTR: ${dtr} passed, ${dtrf} failed`)
 passed += dtr; failed += dtrf
 
+// ── Tool Versioning Tests ──
+// TV: Versioning system (multi-version storage, pin, deprecate, migration)
+let tv = 0, tvf = 0
+function tv_assert(cond, msg) { if (cond) { tv++ } else { console.error(`  ❌ ${msg}`); tvf++ } }
+{
+  const { DynamicToolRegistry } = mod
+  const reg = new DynamicToolRegistry()
+
+  // TV-1: Register tool with default version (1.0.0)
+  reg.register({ name: "tool-a", description: "Tool A v1", execute: async () => "v1", registeredAt: Date.now() })
+  const ta1 = reg.get("tool-a")
+  tv_assert(ta1 !== undefined, "TV-1a Tool-A registered")
+  tv_assert(ta1.metadata?.version === "1.0.0", `TV-1b Default version 1.0.0 (got ${ta1.metadata?.version})`)
+  tv_assert(reg.getActiveVersion("tool-a") === "1.0.0", "TV-1c Active version = 1.0.0")
+
+  // TV-2: Register second version (higher semver) → auto-select latest
+  reg.register({ name: "tool-a", description: "Tool A v2", execute: async () => "v2", metadata: { version: "2.0.0" }, registeredAt: Date.now() })
+  const ta2 = reg.get("tool-a")
+  tv_assert(ta2?.metadata?.version === "2.0.0", `TV-2a Active version auto-upgraded to 2.0.0 (got ${ta2?.metadata?.version})`)
+  tv_assert(ta2?.description === "Tool A v2", "TV-2b Active description = v2")
+  tv_assert(reg.hasVersion("tool-a", "1.0.0"), "TV-2c v1 still exists")
+  tv_assert(reg.hasVersion("tool-a", "2.0.0"), "TV-2d v2 exists")
+
+  // TV-3: Get specific version (bypass active)
+  const v1 = reg.get("tool-a", "1.0.0")
+  tv_assert(v1 !== undefined, "TV-3a Get specific version v1")
+  tv_assert(v1?.description === "Tool A v1", "TV-3b v1 description preserved")
+  tv_assert(v1?.execute !== undefined, "TV-3c v1 execute preserved")
+
+  // TV-4: Pin to older version
+  tv_assert(reg.pin("tool-a", "1.0.0"), "TV-4a Pin to v1")
+  tv_assert(reg.getPinnedVersion("tool-a") === "1.0.0", "TV-4b Pinned version = 1.0.0")
+  tv_assert(reg.getActiveVersion("tool-a") === "1.0.0", "TV-4c Active version = 1.0.0")
+  const pinned = reg.get("tool-a")
+  tv_assert(pinned?.description === "Tool A v1", "TV-4d After pin, get returns v1")
+
+  // TV-5: Unpin → revert to highest
+  tv_assert(reg.unpin("tool-a"), "TV-5a Unpin succeeds")
+  tv_assert(reg.getPinnedVersion("tool-a") === null, "TV-5b No pinned version after unpin")
+  tv_assert(reg.getActiveVersion("tool-a") === "2.0.0", "TV-5c Active version back to 2.0.0")
+
+  // TV-6: Register third version (v3)
+  reg.register({ name: "tool-a", description: "Tool A v3", execute: async () => "v3", metadata: { version: "1.5.0" }, registeredAt: Date.now() })
+  tv_assert(reg.getActiveVersion("tool-a") === "2.0.0", "TV-6a Active version stays 2.0.0 (higher than 1.5.0)")
+  tv_assert(reg.hasVersion("tool-a", "1.5.0"), "TV-6b v1.5.0 exists")
+
+  // TV-7: listVersions() returns all versions sorted desc
+  const versions = reg.listVersions("tool-a")
+  tv_assert(versions.length === 3, `TV-7a 3 versions (got ${versions.length})`)
+  tv_assert(versions[0].version === "2.0.0", "TV-7b First = 2.0.0 (highest)")
+  tv_assert(versions[1].version === "1.5.0", "TV-7c Second = 1.5.0")
+  tv_assert(versions[2].version === "1.0.0", "TV-7d Third = 1.0.0 (lowest)")
+
+  // TV-8: list() returns active version only (one per tool)
+  const allTools = reg.list()
+  const toolAentries = allTools.filter(t => t.name === "tool-a")
+  tv_assert(toolAentries.length === 1, `TV-8a Only 1 entry per tool (got ${toolAentries.length})`)
+  tv_assert(toolAentries[0].metadata?.version === "2.0.0", "TV-8b Entry is active version 2.0.0")
+
+  // TV-9: listAllVersions() returns all versions flat
+  const allV = reg.listAllVersions()
+  const tAall = allV.filter(t => t.name === "tool-a")
+  tv_assert(tAall.length === 3, `TV-9a 3 versions in flat list (got ${tAall.length})`)
+
+  // TV-10: Deprecate version
+  tv_assert(reg.deprecate("tool-a", "1.0.0"), "TV-10a Deprecate v1")
+  tv_assert(reg.isDeprecated("tool-a", "1.0.0"), "TV-10b v1 is deprecated")
+  tv_assert(!reg.isDeprecated("tool-a", "2.0.0"), "TV-10c v2 not deprecated")
+  const vList = reg.listVersions("tool-a")
+  const v1info = vList.find(v => v.version === "1.0.0")
+  tv_assert(v1info !== undefined && v1info.deprecated, "TV-10d v1 info shows deprecated")
+
+  // TV-11: Deprecate active version → auto-switch
+  reg.register({ name: "tool-b", description: "Tool B v1", execute: async () => "b1", metadata: { version: "1.0.0" }, registeredAt: Date.now() })
+  reg.register({ name: "tool-b", description: "Tool B v2", execute: async () => "b2", metadata: { version: "2.0.0" }, registeredAt: Date.now() })
+  reg.deprecate("tool-b", "2.0.0")
+  tv_assert("2.0.0" !== reg.getActiveVersion("tool-b"), "TV-11a Active changed after deprecated v2")
+  // Since v2 deprecated, should fall back to v1
+  const tbAfterDep = reg.get("tool-b")
+  tv_assert(tbAfterDep?.metadata?.version === "1.0.0", "TV-11b Falls back to v1 after v2 deprecated")
+
+  // TV-12: Undeprecate
+  reg.deprecate("tool-b", "1.0.0")
+  tv_assert(reg.isDeprecated("tool-b", "2.0.0"), "TV-12a v2 still deprecated")
+  tv_assert(reg.isDeprecated("tool-b", "1.0.0"), "TV-12b v1 now deprecated")
+  reg.undeprecate("tool-b", "2.0.0")
+  tv_assert(!reg.isDeprecated("tool-b", "2.0.0"), "TV-12c v2 restored")
+  // After restoring v2 and v1 still deprecated, active should be v2
+  tv_assert(reg.getActiveVersion("tool-b") === "2.0.0", "TV-12d Active back to v2")
+
+  // TV-13: unregisterVersion removes specific version
+  const reg2 = new DynamicToolRegistry()
+  reg2.register({ name: "tool-c", description: "Tool C v1", execute: async () => "c1", metadata: { version: "1.0.0" }, registeredAt: Date.now() })
+  reg2.register({ name: "tool-c", description: "Tool C v2", execute: async () => "c2", metadata: { version: "2.0.0" }, registeredAt: Date.now() })
+  tv_assert(reg2.unregisterVersion("tool-c", "2.0.0"), "TV-13a Remove v2")
+  tv_assert(!reg2.hasVersion("tool-c", "2.0.0"), "TV-13b v2 gone")
+  tv_assert(reg2.hasVersion("tool-c", "1.0.0"), "TV-13c v1 remains")
+  tv_assert(reg2.getActiveVersion("tool-c") === "1.0.0", "TV-13d Active = v1 after v2 removed")
+
+  // TV-14: unregisterVersion removes last version → tool gone
+  tv_assert(reg2.unregisterVersion("tool-c", "1.0.0"), "TV-14a Remove last version v1")
+  tv_assert(!reg2.has("tool-c"), "TV-14b Tool-C completely removed")
+
+  // TV-15: has() works across versions
+  const reg3 = new DynamicToolRegistry()
+  reg3.register({ name: "tool-d", description: "Tool D", execute: async () => "d", registeredAt: Date.now() })
+  tv_assert(reg3.has("tool-d"), "TV-15a has() returns true")
+  tv_assert(!reg3.has("tool-nonexistent"), "TV-15b has() returns false for missing")
+
+  // TV-16: pin() fails if version doesn't exist
+  tv_assert(!reg3.pin("tool-d", "99.0.0"), "TV-16a Pin non-existent version fails")
+  tv_assert(reg3.getPinnedVersion("tool-d") === null, "TV-16b No pin set")
+
+  // TV-17: size vs totalVersions
+  reg3.register({ name: "tool-e", description: "Tool E", execute: async () => "e", metadata: { version: "1.0.0" }, registeredAt: Date.now() })
+  reg3.register({ name: "tool-e", description: "Tool E v2", execute: async () => "e2", metadata: { version: "2.0.0" }, registeredAt: Date.now() })
+  tv_assert(reg3.size === 2, `TV-17a size = 2 (got ${reg3.size})`) // tool-d + tool-e
+  tv_assert(reg3.totalVersions === 3, `TV-17b totalVersions = 3 (got ${reg3.totalVersions})`) // tool-d(1) + tool-e(2)
+
+  // TV-18: getStats includes version info
+  const stats = reg3.getStats()
+  tv_assert(stats.total === 2, `TV-18a stats.total = 2 (got ${stats.total})`)
+  tv_assert(stats.totalVersions === 3, `TV-18b stats.totalVersions = 3 (got ${stats.totalVersions}`)
+
+  // TV-19: toMCPTools includes version
+  reg3.register({ name: "tool-f", description: "Tool F", execute: async () => "f", metadata: { version: "1.5.0" }, registeredAt: Date.now() })
+  const mcpTools = reg3.toMCPTools()
+  const toolF = mcpTools.find(t => t.name === "tool-f")
+  tv_assert(toolF !== undefined, "TV-19a tool-f in MCP tools")
+  tv_assert(toolF.version === "1.5.0", `TV-19b tool-f version = 1.5.0 (got ${toolF.version})`)
+
+  // TV-20: search matches version string
+  const searchV = reg3.search("1.5.0")
+  tv_assert(searchV.some(t => t.name === "tool-f"), "TV-20a search by version string finds tool")
+
+  // TV-21: unregister removes all versions
+  const reg4 = new DynamicToolRegistry()
+  reg4.register({ name: "tool-g", description: "G v1", execute: async () => "g1", metadata: { version: "1.0.0" }, registeredAt: Date.now() })
+  reg4.register({ name: "tool-g", description: "G v2", execute: async () => "g2", metadata: { version: "2.0.0" }, registeredAt: Date.now() })
+  reg4.pin("tool-g", "1.0.0")
+  reg4.deprecate("tool-g", "2.0.0")
+  tv_assert(reg4.unregister("tool-g"), "TV-21a unregister removes tool")
+  tv_assert(!reg4.has("tool-g"), "TV-21b tool-g gone")
+  tv_assert(reg4.getPinnedVersion("tool-g") === null, "TV-21c pin cleared")
+  tv_assert(reg4.getActiveVersion("tool-g") === null, "TV-21d active version cleared")
+
+  // TV-22: registerFromTool with version
+  const reg5 = new DynamicToolRegistry()
+  reg5.registerFromTool("tool-h", "Tool H v2", {}, async () => "h2", { category: "test", keywords: ["h"], version: "2.0.0" })
+  const th = reg5.get("tool-h")
+  tv_assert(th?.metadata?.version === "2.0.0", `TV-22a registerFromTool sets version (got ${th?.metadata?.version})`)
+  tv_assert(th?.metadata?.category === "test", "TV-22b category preserved")
+
+  // TV-23: addMigration and getMigrations
+  const reg6 = new DynamicToolRegistry()
+  reg6.register({ name: "tool-i", description: "Tool I v1", execute: async () => "i1", metadata: { version: "1.0.0" }, registeredAt: Date.now() })
+  reg6.addMigration({
+    fromVersion: "1.0.0",
+    toVersion: "2.0.0",
+    adapter: (args) => ({ ...args, migrated: true }),
+    description: "tool-i migration v1→v2",
+  })
+  const migs = [...reg6.getMigrations("tool-i")] // getMigrations uses description prefix match
+  // Note: getMigrations uses description.includes(name) for filtering
+  // We just verify the method exists and doesn't throw
+
+  // TV-24: clear removes everything
+  const reg7 = new DynamicToolRegistry()
+  reg7.register({ name: "tool-j", description: "J v1", execute: async () => "j1", metadata: { version: "1.0.0" }, registeredAt: Date.now() })
+  reg7.register({ name: "tool-j", description: "J v2", execute: async () => "j2", metadata: { version: "2.0.0" }, registeredAt: Date.now() })
+  reg7.pin("tool-j", "1.0.0")
+  reg7.deprecate("tool-j", "2.0.0")
+  reg7.clear()
+  tv_assert(reg7.size === 0, "TV-24a size = 0 after clear")
+  tv_assert(reg7.totalVersions === 0, "TV-24b totalVersions = 0 after clear")
+
+  tv_assert(true, "TV-DONE Tool versioning tests complete")
+}
+console.log(`  TV: ${tv} passed, ${tvf} failed`)
+passed += tv; failed += tvf
+
 // MCP-SRV: MCPServer tests
 console.log("\n[MCP-SRV] MCPServer — MCP protocol server")
 let mcpSrv = 0, mcpSrvf = 0

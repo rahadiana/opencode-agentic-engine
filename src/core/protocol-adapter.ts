@@ -29,6 +29,8 @@ export interface ToolDescriptor {
   source: string
   /** Protocol-specific parameters schema */
   parameters?: Record<string, unknown>
+  /** Tool version (MCP only) */
+  version?: string
 }
 
 export interface ProtocolCallResult {
@@ -233,9 +235,12 @@ export class ProtocolAdapter {
           results.push({
             protocol: "mcp",
             name: tool.name,
-            description: tool.description,
+            description: tool.version
+              ? `${tool.description} (v${tool.version})`
+              : tool.description,
             source: conn.name,
             parameters: tool.parameters as Record<string, unknown> | undefined,
+            version: tool.version,
           })
         }
       }
