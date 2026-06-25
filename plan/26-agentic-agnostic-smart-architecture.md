@@ -2,9 +2,9 @@
 
 > **Tujuan**: Menerapkan 7 prinsip agentic agnostic dari riset terbaru (2026) ke opencode-agentic-engine — biar plugin ini gak cuma "tool caller" tapi smart agentic system yang vendor-agnostic, protocol-agnostic, dan self-evolving.
 
-**Terakhir diperbarui**: 2026-06-25 (sesi 3)
+**Terakhir diperbarui**: 2026-06-25 (sesi 4)
 
-> **Sesi 3**: All 33 tools migrated to `registryTool()` — DynamicToolRegistry fully populated. 1628 tests pass.
+> **Sesi 4**: Feedback loop (user rating → model selection) + Tool versioning (multi-version, pin, deprecate, migration, MCP exposure). 1690 tests pass.
 
 ---
 
@@ -139,7 +139,7 @@ const engine = new LLMEngine({
 | Dynamic tool discovery | ✅ DONE | `listTools()` via MCP |
 | MCP-first (all tools via MCP) | ✅ DONE | All 33 tools in DynamicToolRegistry, discoverable via MCP |
 | Tool sandbox | ⚠️ PARTIAL | CodeSandbox ada untuk code execution |
-| Tool versioning | ❌ BELUM | Belum ada versioning system |
+| ~~Tool versioning~~ | ✅ DONE | Multi-version storage, pin, deprecate, migration, MCP version exposure |
 
 ### 6️⃣ Memory Agnostic — Hierarchical + Consolidation
 
@@ -179,7 +179,7 @@ const engine = new LLMEngine({
 | Skill maturation lifecycle | ✅ DONE | raw → validated → compiled → evolved |
 | Fine-tuning pipeline | ✅ DONE | `agentic_finetune` — prepare/upload/create-job |
 | Auto-trigger evolution | ✅ DONE | EventBus per-step wiring + `cumulativeResults` counter (milestone fix) |
-| Feedback loop (user rating → policy) | ⚠️ PARTIAL | User feedback tracking ada, policy update belum |
+| ~~Feedback loop (user rating → policy)~~ | ✅ DONE | User satisfaction (30%) + reliability (35%) + cost (35%) wired into cost-aware auto-switch |
 | RL from execution outcomes | ❌ BELUM | Belum ada RL pipeline |
 | Architecture search (RAAS-style) | ❌ BELUM | Belum ada workflow optimization |
 
@@ -253,7 +253,7 @@ const engine = new LLMEngine({
 
 ## 📊 Status Summary
 
-### ✅ SUDAH SELESAI (25 item)
+### ✅ SUDAH SELESAI (29 item)
 
 | # | Fitur | File | Versi |
 |---|-------|------|-------|
@@ -351,6 +351,7 @@ const engine = new LLMEngine({
 | 2026-06-25 | `78e9242` | registryTool() helper: Zod 4 toJSONSchema → DynamicToolRegistry. 5 tools migrated (agentic_plan, status, reflect, verify, auto). 13 integration tests proving MCP discover+call cycle |
 | 2026-06-25 | `78e9242` | Batch migrate 28 tools to DynamicToolRegistry. All 33 tools now in registry. Fix 12 type inference errors from registryTool lazy typing. 1628 tests pass. |
 | 2026-06-25 | `803e148` | **Feedback loop**: wire user satisfaction (30%) + reliability (35%) + cost (35%) into cost-aware auto-switch. Persist user feedback cross-session. Composite scoring replaces simple cheapest-threshold logic. |
+| 2026-06-25 | `a9ef969` | **Tool versioning**: multi-version registry, pin, deprecate, migration, MCP exposure. 62 tests, 1690 total. |
 
 ---
 
