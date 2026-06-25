@@ -6032,6 +6032,108 @@ memOk("Mem-3a getStats returns correct shape", () => {
   if (typeof stats.semantic !== "number") throw new Error("Expected semantic count")
   if (typeof stats.procedural !== "number") throw new Error("Expected procedural count")
   if (typeof stats.totalIndexed !== "number") throw new Error("Expected totalIndexed")
+  if (typeof stats.executionTraces !== "number") throw new Error("Expected executionTraces count")
+})
+
+// PD-1: Procedural depth — query includes execution traces
+memOk("PD-1a procedural query includes execution traces", () => {
+  const orch = mkOrch()
+  orch.trackExecution({
+    id: "trace-1", sessionId: "sess-1", goal: "Fix login bug",
+    steps: [
+      { stepId: "s1", description: "Debug login component", status: "success", retries: 0, startedAt: Date.now() - 5000, completedAt: Date.now() - 4000 },
+      { stepId: "s2", description: "Fix authentication token", status: "success", retries: 0, startedAt: Date.now() - 4000, completedAt: Date.now() - 2000 },
+    ],
+    startedAt: Date.now() - 5000, completedAt: Date.now() - 1000, outcome: "success",
+  })
+  const result = orch.query({ query: "Fix login bug", levels: ["procedural"] })
+  if (result.entries.length === 0) throw new Error("Expected at least 1 procedural entry from trace")
+  const traceEntry = result.entries.find(e => e.id && e.id.includes("trace-"))
+  if (!traceEntry) throw new Error("Expected trace-derived entry in results")
+  if (!traceEntry.content.includes("Fix login bug")) throw new Error(`Expected goal in content, got: ${traceEntry.content}`)
+})
+
+memOk("PD-1b trace entry has correct metadata", () => {
+  const orch = mkOrch()
+  orch.trackExecution({
+    id: "trace-2", sessionId: "sess-2", goal: "Add API endpoint",
+    steps: [
+      { stepId: "s1", description: "Create route handler", status: "success", retries: 0, startedAt: Date.now() - 3000, completedAt: Date.now() - 2000 },
+      { stepId: "s2", description: "Add validation", status: "failed", retries: 2, error: "Validation error", startedAt: Date.now() - 2000, completedAt: Date.now() - 1000 },
+    ],
+    startedAt: Date.now() - 3000, completedAt: Date.now() - 1000, outcome: "partial",
+    tokensUsed: 1500, costUsd: 0.03, modelUsed: "gpt-4o",
+  })
+  const result = orch.query({ query: "API endpoint", levels: ["procedural"] })
+  const traceEntry = result.entries.find(e => e.id && e.id.includes("trace-"))
+  if (!traceEntry) throw new Error("Expected trace entry in results")
+  if (traceEntry.metadata?.outcome !== "partial") throw new Error(`Expected partial outcome, got ${traceEntry.metadata?.outcome}`)
+  if (traceEntry.metadata?.stepCount !== 2) throw new Error(`Expected 2 steps, got ${traceEntry.metadata?.stepCount}`)
+  if (traceEntry.metadata?.tokensUsed !== 1500) throw new Error(`Expected 1500 tokens, got ${traceEntry.metadata?.tokensUsed}`)
+})
+
+// PD-2: trace-to-semantic pattern extraction
+memOk("PD-2a extractTracePatterns creates semantic entries for success traces", () => {
+  const orch = mkOrch()
+  orch.trackExecution({
+    id: "tp-1", sessionId: "sess-1", goal: "Refactor user service module",
+    steps: [
+      { stepId: "s1", description: "Analyze current structure", status: "success", retries: 0, startedAt: Date.now() - 10000, completedAt: Date.now() - 8000 },
+      { stepId: "s2", description: "Extract database layer", status: "success", retries: 0, startedAt: Date.now() - 8000, completedAt: Date.now() - 4000 },
+      { stepId: "s3", description: "Verify no regression", status: "success", retries: 0, startedAt: Date.now() - 4000, completedAt: Date.now() - 1000 },
+    ],
+    startedAt: Date.now() - 10000, completedAt: Date.now() - 1000, outcome: "success",
+  })
+
+  // consolidate should extract trace patterns
+  const report = orch.consolidate()
+  // trace patterns extracted
+  const stats = orch.getStats()
+  if (stats.tracePatterns === undefined) throw new Error("Expected tracePatterns in stats")
+})
+
+memOk("PD-2b getStats includes tracePatterns", () => {
+  const orch = mkOrch()
+  const baseStats = orch.getStats()
+  if (typeof baseStats.tracePatterns !== "number") throw new Error("Expected tracePatterns as number")
+  if (baseStats.tracePatterns < 0) throw new Error("tracePatterns should be >= 0")
+})
+
+// PD-3: getStats returns executionTraces count
+memOk("PD-3a getStats tracks executionTraces count", () => {
+  const orch = mkOrch()
+  const empty = orch.getStats()
+  if (empty.executionTraces !== 0) throw new Error(`Expected 0 traces, got ${empty.executionTraces}`)
+
+  orch.trackExecution({
+    id: "stats-t1", sessionId: "s", goal: "Task A",
+    steps: [{ stepId: "s1", description: "Do A", status: "success", retries: 0 }],
+    startedAt: Date.now(), completedAt: Date.now(), outcome: "success",
+  })
+  const after = orch.getStats()
+  if (after.executionTraces !== 1) throw new Error(`Expected 1 trace, got ${after.executionTraces}`)
+})
+
+// PD-4: Consolidation report includes trace patterns in patternsExtracted
+memOk("PD-4a consolidate extracts patterns from execution traces", () => {
+  const orch = mkOrch()
+  // Track a trace matching the "testing" pattern
+  orch.trackExecution({
+    id: "t4-1", sessionId: "s", goal: "Write unit tests for auth module",
+    steps: [
+      { stepId: "s1", description: "Write login tests", status: "success", retries: 0, startedAt: Date.now() - 5000, completedAt: Date.now() - 3000 },
+      { stepId: "s2", description: "Write logout tests", status: "success", retries: 0, startedAt: Date.now() - 3000, completedAt: Date.now() - 1000 },
+    ],
+    startedAt: Date.now() - 5000, completedAt: Date.now() - 1000, outcome: "success",
+  })
+  const report = orch.consolidate()
+  // patternsExtracted should include the trace pattern
+  if (report.patternsExtracted < 1) throw new Error(`Expected at least 1 trace pattern extracted, got ${report.patternsExtracted}`)
+
+  // Verify trace pattern is now queryable as semantic
+  const semResult = orch.query({ query: "testing", levels: ["semantic"] })
+  const tracePattern = semResult.entries.find(e => e.id && e.id.startsWith("trace-pattern-"))
+  if (!tracePattern) throw new Error("Expected trace-pattern- entry in semantic results")
 })
 
 console.log(`  MemoryOrchestrator: ${mem} passed, ${memf} failed`)

@@ -251,6 +251,39 @@ export class MemoryOrchestrator {
     return [...this.executionTraces]
   }
 
+  /**
+   * Convert execution traces to procedural memory entries (for search).
+   * Returns virtual MemoryEntry objects from execution traces without
+   * storing them in proceduralEntries (they're already in executionTraces).
+   */
+  private tracesToProceduralEntries(): MemoryEntry[] {
+    return this.executionTraces.map(trace => ({
+      id: `trace-${trace.id}`,
+      level: "procedural" as MemoryLevel,
+      content: `Execution: ${trace.goal} — ${trace.outcome} (${trace.steps.filter(s => s.status === "success").length}/${trace.steps.length} steps, ${trace.steps.length} total)`,
+      keywords: [
+        ...trace.goal.split(/\s+/).filter(w => w.length > 3),
+        trace.outcome,
+        "execution_trace",
+        ...trace.steps.map(s => s.description.split(/\s+/).filter(w => w.length > 3)).flat().slice(0, 5),
+      ],
+      importance: trace.outcome === "success" ? 0.9 : trace.outcome === "partial" ? 0.6 : 0.3,
+      createdAt: trace.startedAt,
+      lastAccessed: trace.completedAt ?? trace.startedAt,
+      accessCount: 0,
+      sourceSession: trace.sessionId,
+      metadata: {
+        type: "execution_trace",
+        stepCount: trace.steps.length,
+        outcome: trace.outcome,
+        tokensUsed: trace.tokensUsed,
+        costUsd: trace.costUsd,
+        modelUsed: trace.modelUsed,
+        stepStatuses: trace.steps.map(s => `${s.stepId}:${s.status}`).join(","),
+      },
+    }))
+  }
+
   /** Create a new step within a trace. If trace doesn't exist, creates it. */
   beginStep(traceId: string, sessionId: string, goal: string, stepId: string, description: string): void {
     let trace = this.executionTraces.find(t => t.id === traceId)
@@ -489,6 +522,13 @@ export class MemoryOrchestrator {
       }
     }
 
+    // 4b. Procedural → Semantic: extract patterns from execution traces
+    const tracePatterns = this.extractTracePatterns()
+    report.patternsExtracted += tracePatterns
+
+    // 4c. Procedural: prune stale entries (LRU + importance-based)
+    this.pruneProceduralEntries()
+
     // 5. Pattern → Skill: convert high-confidence patterns to formal SkillDefinitions
     report.skillsConverted = this.convertPatternsToSkills(report)
 
@@ -496,6 +536,97 @@ export class MemoryOrchestrator {
     this.pruneImportanceIndex()
 
     return report
+  }
+
+  /**
+   * Extract semantic patterns from execution traces.
+   * Looks for high-success traces and creates pattern entries
+   * that can feed into the skill conversion pipeline.
+   * Returns number of patterns extracted.
+   */
+  private extractTracePatterns(): number {
+    let count = 0
+    const tracePatternKeywords = [
+      { pattern: /error|fail|timeout|crash/i, tag: "error_handling" },
+      { pattern: /test|verify|assert/i, tag: "testing" },
+      { pattern: /refactor|rewrite|migrate|upgrade/i, tag: "refactoring" },
+      { pattern: /security|auth|injection|xss/i, tag: "security" },
+      { pattern: /config|setup|install|init/i, tag: "configuration" },
+      { pattern: /deploy|build|ci|pipeline/i, tag: "deployment" },
+    ]
+
+    // Only process successful/partial traces with at least 2 steps
+    const processableTraces = this.executionTraces.filter(t =>
+      (t.outcome === "success" || t.outcome === "partial") && t.steps.length >= 2
+    )
+
+    for (const trace of processableTraces) {
+      const successRate = trace.steps.filter(s => s.status === "success").length / trace.steps.length
+      if (successRate < 0.5) continue // skip low-success traces
+
+      // Check if this trace matches any pattern keyword
+      for (const { pattern, tag } of tracePatternKeywords) {
+        if (!pattern.test(trace.goal)) continue
+
+        // Check for duplicate pattern
+        const patternId = `trace-pattern-${tag}-${trace.id}`
+        const exists = this.semanticEntries.some(e => e.id === patternId)
+        if (exists) continue
+
+        // Create step descriptions from the trace
+        const stepDescriptions = trace.steps
+          .map((s, i) => `${i + 1}. ${s.description}`)
+          .join(" | ")
+
+        this.semanticEntries.push({
+          id: patternId,
+          level: "semantic",
+          content: `Trace pattern "${tag}" from: ${trace.goal} — Steps: ${stepDescriptions}`,
+          keywords: [tag, `trace_pattern`, `success_${trace.outcome}`,
+            ...trace.goal.split(/\s+/).filter(w => w.length > 3)],
+          importance: Math.min(1, successRate * 0.9),
+          createdAt: Date.now(),
+          lastAccessed: Date.now(),
+          accessCount: 0,
+          sourceSession: trace.sessionId,
+          metadata: {
+            patternType: tag,
+            sourceTrace: trace.id,
+            traceOutcome: trace.outcome,
+            stepCount: trace.steps.length,
+            successRate,
+          },
+        })
+        count++
+      }
+    }
+
+    return count
+  }
+
+  /**
+   * Prune stale procedural entries.
+   * Removes duplicates (same content) and low-importance old entries.
+   */
+  private pruneProceduralEntries(): void {
+    // Dedup by content prefix (first 120 chars)
+    const seenContent = new Set<string>()
+    const deduped: MemoryEntry[] = []
+    for (const entry of this.proceduralEntries) {
+      const key = entry.content.slice(0, 120).toLowerCase()
+      if (seenContent.has(key)) continue
+      seenContent.add(key)
+      deduped.push(entry)
+    }
+    this.proceduralEntries = deduped
+
+    // Prune low-importance old entries (importance < 0.2, age > 7 days)
+    const now = Date.now()
+    const sevenDays = 7 * 86400_000
+    this.proceduralEntries = this.proceduralEntries.filter(e => {
+      if (e.importance >= 0.2) return true
+      return (now - e.createdAt) < sevenDays
+    })
   }
 
   /**
@@ -701,7 +832,7 @@ export class MemoryOrchestrator {
       case "semantic":
         return this.semanticEntries
       case "procedural":
-        return this.proceduralEntries
+        return [...this.proceduralEntries, ...this.tracesToProceduralEntries()]
     }
   }
 
@@ -828,6 +959,7 @@ export class MemoryOrchestrator {
     procedural: number
     totalIndexed: number
     executionTraces: number
+    tracePatterns: number
   } {
     return {
       working: this.workingMem.getActiveSessions().length,
@@ -836,6 +968,7 @@ export class MemoryOrchestrator {
       procedural: this.proceduralEntries.length,
       totalIndexed: this.importanceIndex.size,
       executionTraces: this.executionTraces.length,
+      tracePatterns: this.semanticEntries.filter(e => e.id.startsWith("trace-pattern-")).length,
     }
   }
 }
