@@ -7484,6 +7484,264 @@ const cg_assert = (c, m) => { if (c) { cg++; console.log(`  PASS: ${m}`) } else 
 console.log(`  CG: ${cg} passed, ${cgf} failed`)
 passed += cg; failed += cgf
 
+// ── PlanningLayer Tests (PL) ──
+console.log("\n[PL] PlanningLayer — Graph Harness §3.1")
+let pl = 0, plf = 0
+const pl_assert = (c, m) => { if (c) { pl++; console.log(`  PASS: ${m}`) } else { plf++; console.log(`  FAIL: ${m}`) } }
+
+const { PlanningLayer, ExecutionLayer: ExecLayer, RecoveryLayer } = await import(pluginDist)
+const { DAGEngine } = await import(pluginDist)
+
+// PL-1: PlanningLayer constructs and creates plan
+{
+  const pll = new PlanningLayer(new DAGEngine())
+  const { plan, context, version } = pll.createPlan("test goal", [
+    { id: "step-1", description: "first step", dependsOn: [], verificationCriteria: [] },
+    { id: "step-2", description: "second step", dependsOn: ["step-1"], verificationCriteria: [] },
+  ])
+  pl_assert(plan.nodes.length === 2, "PL-1a plan has 2 nodes")
+  pl_assert(context.nodes.size === 2, "PL-1b context has 2 nodes")
+  pl_assert(version.version === 1, "PL-1c version = 1")
+  pl_assert(version.changeSummary.includes("Initial"), "PL-1d version summary mentions Initial")
+}
+
+// PL-2: Plan validation — valid plan
+{
+  const pll = new PlanningLayer(new DAGEngine())
+  const { plan } = pll.createPlan("test", [
+    { id: "a", description: "step a", dependsOn: [], verificationCriteria: [] },
+    { id: "b", description: "step b", dependsOn: ["a"], verificationCriteria: [] },
+  ])
+  const result = pll.validate("test", plan)
+  pl_assert(result.valid, "PL-2a valid plan is valid")
+  pl_assert(result.errors.length === 0, "PL-2b no errors")
+  pl_assert(result.nodeCount === 2, "PL-2c nodeCount = 2")
+}
+
+// PL-3: Plan validation — empty plan
+{
+  const pll = new PlanningLayer(new DAGEngine())
+  const { plan } = pll.createPlan("empty", [])
+  const result = pll.validate("empty", plan)
+  pl_assert(!result.valid, "PL-3a empty plan invalid")
+  pl_assert(result.errors.some(e => e.includes("zero")), "PL-3b error mentions zero nodes")
+}
+
+// PL-4: Plan versioning — multiple versions for same goal
+{
+  const pll = new PlanningLayer(new DAGEngine())
+  pll.createPlan("versioned goal", [
+    { id: "s1", description: "s1", dependsOn: [], verificationCriteria: [] },
+  ])
+  pll.createPlan("versioned goal", [
+    { id: "s1", description: "s1 revised", dependsOn: [], verificationCriteria: [] },
+    { id: "s2", description: "s2", dependsOn: ["s1"], verificationCriteria: [] },
+  ])
+  const versions = pll.getVersions("versioned goal")
+  pl_assert(versions.length === 2, "PL-4a two versions")
+  pl_assert(versions[0].version === 1, "PL-4b first version = 1")
+  pl_assert(versions[1].version === 2, "PL-4c second version = 2")
+}
+
+// PL-5: Plan version stats
+{
+  const pll = new PlanningLayer(new DAGEngine())
+  pll.createPlan("goal a", [{ id: "a1", description: "a1", dependsOn: [], verificationCriteria: [] }])
+  pll.createPlan("goal b", [{ id: "b1", description: "b1", dependsOn: [], verificationCriteria: [] }])
+  const stats = pll.getVersionStats()
+  pl_assert(stats.totalPlans >= 2, "PL-5a totalPlans >= 2")
+  pl_assert(stats.totalVersions >= 2, "PL-5b totalVersions >= 2")
+}
+
+console.log(`  PL: ${pl} passed, ${plf} failed`)
+passed += pl; failed += plf
+
+// ── ExecutionLayer Tests (EL) ──
+console.log("\n[EL] ExecutionLayer — Graph Harness §3.2")
+let el = 0, elf = 0
+const el_assert = (c, m) => { if (c) { el++; console.log(`  PASS: ${m}`) } else { elf++; console.log(`  FAIL: ${m}`) } }
+
+// EL-1: ExecutionLayer constructs
+{
+  const execLayer = new ExecLayer(new DAGEngine())
+  el_assert(typeof execLayer.execute === "function", "EL-1a execute is function")
+  el_assert(typeof execLayer.executeNode === "function", "EL-1b executeNode is function")
+  el_assert(typeof execLayer.getReadyNodes === "function", "EL-1c getReadyNodes is function")
+}
+
+// EL-2: computePhases for simple DAG
+{
+  const pll = new PlanningLayer(new DAGEngine())
+  const execLayer = new ExecLayer(new DAGEngine())
+  const { context } = pll.createPlan("test", [
+    { id: "a", description: "a", dependsOn: [], verificationCriteria: [] },
+    { id: "b", description: "b", dependsOn: ["a"], verificationCriteria: [] },
+    { id: "c", description: "c", dependsOn: ["a"], verificationCriteria: [] },
+  ])
+  const phases = execLayer.computePhases(context)
+  el_assert(phases.length >= 2, "EL-2a at least 2 phases")
+  el_assert(phases[0].nodeIds.includes("a"), "EL-2b phase 0 has root node a")
+}
+
+// EL-3: snapshot shows progress
+{
+  const pll = new PlanningLayer(new DAGEngine())
+  const execLayer = new ExecLayer(new DAGEngine())
+  const { context } = pll.createPlan("test", [
+    { id: "x", description: "x", dependsOn: [], verificationCriteria: [] },
+  ])
+  const snap = execLayer.snapshot(context)
+  el_assert(snap.totalNodes === 1, "EL-3a totalNodes = 1")
+  el_assert(snap.pendingCount === 1, "EL-3b pendingCount = 1")
+  el_assert(snap.completedCount === 0, "EL-3c completedCount = 0")
+}
+
+// EL-4: toSubtasks roundtrip
+{
+  const pll = new PlanningLayer(new DAGEngine())
+  const execLayer = new ExecLayer(new DAGEngine())
+  const { plan } = pll.createPlan("test", [
+    { id: "a", description: "step a", dependsOn: [], verificationCriteria: [] },
+  ])
+  const subtasks = execLayer.toSubtasks(plan)
+  el_assert(subtasks.length === 1, "EL-4a one subtask")
+  el_assert(subtasks[0].id === "a", "EL-4b id matches")
+  el_assert(subtasks[0].description === "step a", "EL-4c description matches")
+}
+
+// EL-5: isPermanentlyFailed
+{
+  const pll = new PlanningLayer(new DAGEngine())
+  const execLayer = new ExecLayer(new DAGEngine())
+  const { plan, context } = pll.createPlan("test", [
+    { id: "a", description: "a", dependsOn: [], verificationCriteria: [] },
+  ])
+  // Initially, none failed
+  el_assert(!execLayer.isPermanentlyFailed(context, "a"), "EL-5a not failed initially")
+  // Mark as failed with exhausted retries
+  const nodeA = context.nodes.get("a") || { id: "a", type: "execute", description: "", llmRequired: false, deps: [], config: { maxRetries: 3, timeout: 120000, retryStrategy: "none" }, verificationCriteria: [] }
+  context.nodeStates.set("a", { nodeId: "a", status: "failed", retryCount: (nodeA.config.maxRetries || 3) + 1 })
+  el_assert(execLayer.isPermanentlyFailed(context, "a"), "EL-5b permanently failed after max retries")
+}
+
+console.log(`  EL: ${el} passed, ${elf} failed`)
+passed += el; failed += elf
+
+// ── RecoveryLayer Tests (RL) ──
+console.log("\n[RL] RecoveryLayer — Graph Harness §3.3")
+let rl = 0, rlf = 0
+const rl_assert = (c, m) => { if (c) { rl++; console.log(`  PASS: ${m}`) } else { rlf++; console.log(`  FAIL: ${m}`) } }
+
+// RL-1: RecoveryLayer constructs
+{
+  const rl = new RecoveryLayer()
+  rl_assert(typeof rl.decide === "function", "RL-1a decide is function")
+  rl_assert(typeof rl.generateReplan === "function", "RL-1b generateReplan is function")
+  rl_assert(typeof rl.getStats === "function", "RL-1c getStats is function")
+}
+
+// RL-2: First retry decision
+{
+  const rl = new RecoveryLayer({ maxRetries: 3, maxReplans: 2 })
+  const dagEngine = new DAGEngine()
+  const pll = new PlanningLayer(dagEngine)
+  const { plan, context } = pll.createPlan("test", [
+    { id: "a", description: "a", dependsOn: [], verificationCriteria: [] },
+  ])
+  // Mark node as failed (retryCount = 1)
+  const nodeA = plan.nodes[0]
+  context.nodeStates.set("a", { nodeId: "a", status: "failed", retryCount: 1 })
+
+  const decision = rl.decide(nodeA, context, "compile error")
+  rl_assert(decision.level === "retry", `RL-2a first retry (got ${decision.level})`)
+  rl_assert(decision.action === "retry", "RL-2b action = retry")
+  rl_assert(decision.delayMs > 0, "RL-2c has backoff delay")
+}
+
+// RL-3: Replan after retries exhausted
+{
+  const rl = new RecoveryLayer({ maxRetries: 1, maxReplans: 2 })
+  const dagEngine = new DAGEngine()
+  const pll = new PlanningLayer(dagEngine)
+  const { plan, context } = pll.createPlan("test", [
+    { id: "a", description: "a", dependsOn: [], verificationCriteria: [] },
+    // DAG config: default maxRetries = 3 (from DAGNode definition)
+  ])
+  const nodeA = plan.nodes[0]
+  // retryCount > maxRetries → should go to replan
+  context.nodeStates.set("a", { nodeId: "a", status: "failed", retryCount: 5 })
+
+  const decision = rl.decide(nodeA, context, "persistent error")
+  rl_assert(decision.level === "replan", `RL-3a replan after retries exhausted (got ${decision.level})`)
+  rl_assert(decision.action === "replan", "RL-3b action = replan")
+}
+
+// RL-4: Escalate after replan exhausted
+{
+  const rl = new RecoveryLayer({ maxRetries: 1, maxReplans: 0 })
+  const dagEngine = new DAGEngine()
+  const pll = new PlanningLayer(dagEngine)
+  const { plan, context } = pll.createPlan("test", [
+    { id: "a", description: "a", dependsOn: [], verificationCriteria: [] },
+  ])
+  const nodeA = plan.nodes[0]
+  // retryCount > maxRetries, no replans available → escalate
+  context.nodeStates.set("a", { nodeId: "a", status: "failed", retryCount: 5 })
+
+  const decision = rl.decide(nodeA, context, "fatal error")
+  rl_assert(decision.level === "escalate", `RL-4a escalate when all exhausted (got ${decision.level})`)
+  rl_assert(decision.action === "escalate", "RL-4b action = escalate")
+}
+
+// RL-5: generateReplan splits into diagnose → fix → verify
+{
+  const rl = new RecoveryLayer()
+  const result = rl.generateReplan(
+    { id: "compile-fix", description: "Fix compile errors in src/main.ts", dependsOn: [], verificationCriteria: [] },
+    "TypeScript error: Type 'string' is not assignable to type 'number'",
+  )
+  rl_assert(result.newSubtasks.length >= 2, "RL-5a at least 2 replan subtasks")
+  rl_assert(result.newSubtasks[0].id.includes("diagnose"), "RL-5b first is diagnose")
+  rl_assert(result.newSubtasks[1].dependsOn.includes(result.newSubtasks[0].id), "RL-5c second depends on first")
+}
+
+// RL-6: Recovery history tracking
+{
+  const rl = new RecoveryLayer()
+  const dagEngine = new DAGEngine()
+  const pll = new PlanningLayer(dagEngine)
+  const { plan, context } = pll.createPlan("test", [
+    { id: "a", description: "a", dependsOn: [], verificationCriteria: [] },
+  ])
+  const nodeA = plan.nodes[0]
+  context.nodeStates.set("a", { nodeId: "a", status: "failed", retryCount: 1 })
+  rl.decide(nodeA, context, "error 1")
+  rl.decide(nodeA, context, "error 2")
+  const recoveries = rl.getRecoveries("a")
+  rl_assert(recoveries.length === 2, "RL-6a two recovery records for node a")
+  rl_assert(recoveries[0].nodeId === "a", "RL-6b nodeId matches")
+  rl_assert(recoveries[0].error.includes("error"), "RL-6c error stored")
+}
+
+// RL-7: Recovery stats
+{
+  const rl = new RecoveryLayer()
+  const stats = rl.getStats()
+  rl_assert(typeof stats.totalRecoveries === "number", "RL-7a totalRecoveries is number")
+  rl_assert(typeof stats.byLevel === "object", "RL-7b byLevel is object")
+  rl_assert(typeof stats.byStatus === "object", "RL-7c byStatus is object")
+}
+
+// RL-8: getRecoveries returns empty for unknown node
+{
+  const rl = new RecoveryLayer()
+  const recoveries = rl.getRecoveries("nonexistent")
+  rl_assert(recoveries.length === 0, "RL-8 unknown node returns empty")
+}
+
+console.log(`  RL: ${rl} passed, ${rlf} failed`)
+passed += rl; failed += rlf
+
 console.log(`Results: ${passed} passed, ${failed} failed`)
 if (failed === 0) console.log("ALL TESTS PASSED")
 process.exit(failed > 0 ? 1 : 0)

@@ -1,9 +1,11 @@
 /**
- * Agent Loop — refactored to use DAG Engine internally (Phase 1B).
+ * Agent Loop — using 3-layer Graph Harness architecture:
+ *   PlanningLayer → ExecutionLayer → RecoveryLayer
  *
- * Prinsip 4 (Control Agnostic):
- *   BEFORE: while(true) LLM-driven loop — LLM decides next step
- *   AFTER:  DAG-based code orchestration — code walks the DAG, LLM only per node
+ * Paper ref: arXiv:2604.11378 (Graph Harness)
+ *   Commitment 1: Execution plans are immutable within a plan version
+ *   Commitment 2: Planning, execution, and recovery are separated into three layers
+ *   Commitment 3: Recovery follows a strict escalation protocol
  *
  * Backward compatible: AgentLoopConfig, LoopResult, LoopObserver interfaces unchanged.
  * runLoop() signature unchanged — existing consumers (index.ts, tests) work as before.
@@ -20,6 +22,9 @@ import type { Planner } from "./planner.js"
 import { TimeoutError } from "./errors.js"
 import { DAGEngine, type DAGPlan, type DAGExecutionContext, type DAGNode } from "./dag-engine.js"
 import { ConfidenceScorer, ConfidenceStore, type ScoringSignals } from "./confidence-scorer.js"
+import { PlanningLayer } from "./planning-layer.js"
+import { ExecutionLayer } from "./execution-layer.js"
+import { RecoveryLayer, type RecoveryDecision } from "./recovery-layer.js"
 
 export interface AgentLoopConfig {
   maxIterations: number
@@ -57,8 +62,10 @@ export class AgentLoop {
   private confidenceScorer?: ConfidenceScorer
   private confidenceStore?: ConfidenceStore
 
-  /** DAG Engine — the new execution core (Phase 1B) */
-  private dagEngine: DAGEngine
+  /** Graph Harness 3 layers */
+  private planningLayer: PlanningLayer
+  private executionLayer: ExecutionLayer
+  private recoveryLayer: RecoveryLayer
 
   constructor(llm: LLMEngine, config: Partial<AgentLoopConfig> = {}) {
     this.llm = llm
@@ -70,12 +77,25 @@ export class AgentLoop {
       maxParallelism: config.maxParallelism,
       abortOnFailure: config.abortOnFailure ?? false,
     }
-    this.dagEngine = new DAGEngine()
+    const dagEngine = new DAGEngine()
+    this.planningLayer = new PlanningLayer(dagEngine)
+    this.executionLayer = new ExecutionLayer(dagEngine)
+    this.recoveryLayer = new RecoveryLayer({
+      maxRetries: config.maxRetries ?? 3,
+      maxReplans: 2,
+      autoReplan: true,
+      autoEscalate: true,
+    })
   }
+
+  /** Access to layers for external configuration */
+  getPlanningLayer(): PlanningLayer { return this.planningLayer }
+  getExecutionLayer(): ExecutionLayer { return this.executionLayer }
+  getRecoveryLayer(): RecoveryLayer { return this.recoveryLayer }
 
   setBudgetTracker(tracker: BudgetTracker): void {
     this.budgetTracker = tracker
-    this.dagEngine.setBudgetChecker(() => {
+    this.executionLayer.setBudgetChecker(() => {
       const event = tracker.check("session")
       return event
         ? { exceeded: true, metric: event.metric, current: event.current, limit: event.limit }
@@ -125,9 +145,9 @@ export class AgentLoop {
     const plan: { intent: { goal: string; subtasks: Subtask[] } } = state.plan
     const subtasks = plan.intent.subtasks
 
-    // Bangun DAG dari subtasks
+    // Graph Harness §3.1: PlanningLayer — create and validate immutable DAG plan
     const maxParallel = this.config.maxParallelism ?? (this.config.abortOnFailure ? this.config.maxParallelism ?? 4 : 0)
-    const { plan: dagPlan, context: dagCtx } = this.dagEngine.buildDAG(
+    const { plan: dagPlan, context: dagCtx } = this.planningLayer.createPlan(
       plan.intent.goal,
       subtasks,
       {
@@ -138,8 +158,14 @@ export class AgentLoop {
       },
     )
 
+    // Validate plan before execution
+    const validation = this.planningLayer.validate(plan.intent.goal, dagPlan)
+    if (!validation.valid) {
+      console.warn(`[AgentLoop] Plan validation warnings: ${validation.warnings.join(", ")}`)
+    }
+
     // DAG observer → legacy observer mapping
-    this.dagEngine.addObserver({
+    this.executionLayer.addObserver({
       onNodeStart: (nodeId) => {
         this.observers.forEach(o => o.onStepStart(nodeId, iteration + 1))
       },
@@ -284,12 +310,11 @@ export class AgentLoop {
       return result
     }
 
-    // ── Execute DAG ─────────────────────────────────────────────────
-    const dagResult = await this.dagEngine.execute(dagCtx, dagRunner)
+    // ── Execute DAG via ExecutionLayer ───────────────────────────────
+    const dagResult = await this.executionLayer.execute(dagCtx, dagRunner)
 
-    // Process DAG errors: handle replan untuk node yang gagal
-    if (dagResult.failedNodes.length > 0 && this.config.autoRetry &&
-        this.planner && this.replannedSteps.size === 0) {
+    // Graph Harness §3.3: RecoveryLayer — strict escalation for failures
+    if (dagResult.failedNodes.length > 0 && this.config.autoRetry) {
       for (const nodeId of dagResult.failedNodes) {
         if (this.replannedSteps.has(nodeId)) continue
         const node = dagCtx.nodes.get(nodeId)
@@ -299,33 +324,51 @@ export class AgentLoop {
         if (!subtask) continue
 
         const errorText = dagCtx.nodeStates.get(nodeId)?.error ?? "Unknown error"
-        const newSubtasks = this.tryReplan(subtask, errorText)
-        if (newSubtasks.length > 0) {
-          this.replannedSteps.add(nodeId)
-          executor.replanStep(sessionId, nodeId, newSubtasks)
 
-          // Rebuild DAG with new subtasks and retry
-          const newPlan = (executor as any).states?.get(sessionId)?.plan
-          if (newPlan?.intent?.subtasks) {
-            const { context: newDagCtx } = this.dagEngine.buildDAG(
-              plan.intent.goal,
-              newPlan.intent.subtasks,
-              dagPlan.metadata,
-            )
-            // Execute remaining nodes
-            const retryResult = await this.dagEngine.execute(newDagCtx, dagRunner)
-            // Merge results
-            for (const cn of retryResult.completedNodes) {
-              if (!dagResult.completedNodes.includes(cn)) {
-                dagResult.completedNodes.push(cn)
-              }
+        // Recovery decision via RecoveryLayer
+        const decision: RecoveryDecision = this.recoveryLayer.decide(node, dagCtx, errorText)
+
+        if (decision.action === "retry") {
+          // Reset node state and retry via ExecutionLayer
+          this.executionLayer.resetNode(dagCtx, nodeId)
+          const retryResult = await this.executionLayer.executeNode(dagCtx, node, dagRunner)
+          if (retryResult.success) {
+            dagResult.failedNodes = dagResult.failedNodes.filter(id => id !== nodeId)
+            if (!dagResult.completedNodes.includes(nodeId)) {
+              dagResult.completedNodes.push(nodeId)
             }
-            dagResult.failedNodes.length = 0
-            dagResult.failedNodes.push(...retryResult.failedNodes)
-            dagResult.success = retryResult.success
-            dagResult.summary += ` | Replanned: ${nodeId}`
+            dagResult.summary += ` | Retried: ${nodeId} (success after ${decision.level})`
+          }
+        } else if (decision.action === "replan" && this.planner) {
+          const replanResult = this.recoveryLayer.generateReplan(subtask, errorText, 
+            (_desc, err) => this.tryReplan(subtask, err))
+          if (replanResult.newSubtasks.length > 0) {
+            this.replannedSteps.add(nodeId)
+            executor.replanStep(sessionId, nodeId, replanResult.newSubtasks)
+
+            // Rebuild DAG with new subtasks via PlanningLayer
+            const newPlan = (executor as any).states?.get(sessionId)?.plan
+            if (newPlan?.intent?.subtasks) {
+              const { context: newDagCtx } = this.planningLayer.createPlan(
+                plan.intent.goal,
+                newPlan.intent.subtasks,
+                dagPlan.metadata,
+              )
+              // Execute remaining nodes
+              const retryResult = await this.executionLayer.execute(newDagCtx, dagRunner)
+              for (const cn of retryResult.completedNodes) {
+                if (!dagResult.completedNodes.includes(cn)) {
+                  dagResult.completedNodes.push(cn)
+                }
+              }
+              dagResult.failedNodes.length = 0
+              dagResult.failedNodes.push(...retryResult.failedNodes)
+              dagResult.success = retryResult.success
+              dagResult.summary += ` | Replanned: ${nodeId} (${replanResult.summary})`
+            }
           }
         }
+        // decision.action === "escalate" or "skip" → leave as failed
       }
     }
 
