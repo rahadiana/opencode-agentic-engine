@@ -18,6 +18,12 @@ export interface DebateConfig {
   cleanerModel?: { providerID: string; modelID: string }
   /** AbortSignal to cancel a long-running debate */
   signal?: AbortSignal
+  /**
+   * Total timeout for entire debate loop (default: 120000ms = 120s).
+   * Per Graph Harness §6.2 & Omnigent: every bounded process needs a total circuit breaker.
+   * Prevents 660s worst-case (3 rounds × (60s executor + 120s critic) + 120s cleaner).
+   */
+  totalTimeoutMs?: number
 }
 
 export interface DebateRound {
@@ -97,19 +103,30 @@ export class DebateLoop {
   async execute(config: DebateConfig): Promise<DebateResult> {
     const maxRounds = config.maxRounds ?? 2
     const format = config.format ?? "json"
+    const totalTimeoutMs = config.totalTimeoutMs ?? 120_000 // 120s total (Graph Harness §6.2)
     const rounds: DebateRound[] = []
     let currentDraft = ""
     let approved = false
     let approvalMessage = ""
 
-    for (let round = 1; round <= maxRounds; round++) {
-      // Check for cancellation between rounds
-      if (config.signal?.aborted) {
-        return {
-          task: config.task, totalRounds: round - 1, approved: false,
-          rounds, finalOutput: "", revisionSummary: "Debate cancelled via AbortSignal", aborted: true,
+    // ── Total timeout wrapper (Graph Harness §6.2, Omnigent) ──
+    // Prevents 660s worst-case by bounding the entire debate at totalTimeoutMs.
+    // Uses AbortController + clearTimeout pattern (P0 compliant).
+    const totalController = new AbortController()
+    const totalTimeoutId = setTimeout(() => totalController.abort(), totalTimeoutMs)
+    const effectiveSignal = config.signal
+      ? combinedAbort(config.signal, totalController.signal)
+      : totalController.signal
+
+    try {
+      for (let round = 1; round <= maxRounds; round++) {
+        // Check for cancellation between rounds
+        if (effectiveSignal.aborted) {
+          return {
+            task: config.task, totalRounds: round - 1, approved: false,
+            rounds, finalOutput: "", revisionSummary: `Debate cancelled (${config.signal?.aborted ? "external signal" : `total timeout ${totalTimeoutMs}ms exceeded`})`, aborted: true,
+          }
         }
-      }
 
       // ── Step 1: Executor produces draft (or revises based on feedback) ──
       let executorInput: string
@@ -170,15 +187,25 @@ export class DebateLoop {
       // ── Step 2: Critic reviews ──
       let review = ""
       try {
-        const criticResp = await this.llmEngine.call({
-          systemPrompt: CRITIC_PROMPT,
-          userPrompt: `Executor's output for task "${config.task}":\n\n${draft}\n\nReview this output. If APPROVED, respond with "APPROVED: (message)". Otherwise list all issues.`,
-          temperature: 0.2,
-          maxTokens: 2048,
-          bypassCache: round > 1, // Skip cache for revision rounds
-          model: config.criticModel,
-          toolName: 'debate-critic',
-        })
+        const criticController = new AbortController()
+        const criticTimeoutId = setTimeout(() => criticController.abort(), 45_000) // 45s timeout (STEM Agent §timeout)
+        const criticResp = await Promise.race([
+          this.llmEngine.call({
+            systemPrompt: CRITIC_PROMPT,
+            userPrompt: `Executor's output for task "${config.task}":\n\n${draft}\n\nReview this output. If APPROVED, respond with "APPROVED: (message)". Otherwise list all issues.`,
+            temperature: 0.2,
+            maxTokens: 2048,
+            bypassCache: round > 1, // Skip cache for revision rounds
+            model: config.criticModel,
+            toolName: 'debate-critic',
+          }),
+          new Promise<never>((_, reject) => {
+            criticController.signal.addEventListener("abort", () => {
+              reject(new TimeoutError("Critic LLM call", 45000))
+            })
+          }),
+        ])
+        clearTimeout(criticTimeoutId)
         review = criticResp.content
 
         // Check if approved
@@ -215,14 +242,24 @@ export class DebateLoop {
     // ── Step 3: Clean the final output ──
     let finalOutput = currentDraft
     try {
-      const cleanResp = await this.llmEngine.call({
-        systemPrompt: CLEANER_PROMPT,
-        userPrompt: `Format: ${format}\n\nTask: ${config.task}\n\nFinal analysis to clean:\n\n${currentDraft}\n\nOutput the cleaned version in ${format} format.`,
-        temperature: 0.1,
-        maxTokens: 4096,
-        model: config.cleanerModel,
-        toolName: 'debate-cleaner',
-      })
+      const cleanController = new AbortController()
+      const cleanTimeoutId = setTimeout(() => cleanController.abort(), 30_000) // 30s timeout (STEM Agent §timeout)
+      const cleanResp = await Promise.race([
+        this.llmEngine.call({
+          systemPrompt: CLEANER_PROMPT,
+          userPrompt: `Format: ${format}\n\nTask: ${config.task}\n\nFinal analysis to clean:\n\n${currentDraft}\n\nOutput the cleaned version in ${format} format.`,
+          temperature: 0.1,
+          maxTokens: 4096,
+          model: config.cleanerModel,
+          toolName: 'debate-cleaner',
+        }),
+        new Promise<never>((_, reject) => {
+          cleanController.signal.addEventListener("abort", () => {
+            reject(new TimeoutError("Cleaner LLM call", 30000))
+          })
+        }),
+      ])
+      clearTimeout(cleanTimeoutId)
       finalOutput = cleanResp.content
     } catch (error) {
       logParseError("cleaner call", error)
@@ -247,6 +284,22 @@ export class DebateLoop {
       finalOutput,
       revisionSummary,
     }
+      } catch (error) {
+        // Total timeout or unexpected error — return partial results
+        logParseError("debate execute", error)
+        clearTimeout(totalTimeoutId)
+        return {
+          task: config.task,
+          totalRounds: rounds.length,
+          approved: false,
+          rounds,
+          finalOutput: currentDraft,
+          revisionSummary: `Debate terminated: ${error instanceof Error ? error.message : String(error)}`,
+          aborted: true,
+        }
+      } finally {
+        clearTimeout(totalTimeoutId)
+      }
   }
 }
 
@@ -281,6 +334,16 @@ export function formatDebateResult(result: DebateResult): string {
   }
 
   return lines.join("\n")
+}
+
+/** Combine two AbortSignals into one (or-relationship) */
+function combinedAbort(sig1: AbortSignal, sig2: AbortSignal): AbortSignal {
+  if (sig1.aborted || sig2.aborted) return AbortSignal.abort()
+  const controller = new AbortController()
+  const onAbort = () => controller.abort()
+  sig1.addEventListener("abort", onAbort, { once: true })
+  sig2.addEventListener("abort", onAbort, { once: true })
+  return controller.signal
 }
 
 function levenshteinDistance(a: string, b: string): number {

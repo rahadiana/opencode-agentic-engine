@@ -171,8 +171,11 @@ export class DAGEngine {
         deps: s.dependsOn ?? [],
         config: {
           timeout: DEFAULT_TIMEOUT,
-          retryStrategy: type === "verify" ? "none" : "exponential",
-          maxRetries: type === "verify" ? 1 : 3,
+          // Graph Harness §5.3: Verify nodes need retry for transient compilation issues
+          // "none" → "linear" so verify failures get retried with backoff
+          // 1 → 2 retries to handle intermittent build artifacts or race conditions
+          retryStrategy: type === "verify" ? "linear" : "exponential",
+          maxRetries: type === "verify" ? 2 : 3,
         },
         verificationCriteria: s.verificationCriteria ?? [],
       }

@@ -181,7 +181,10 @@ export class AgentLoop {
         depTracker.recordChange(sessionId, node.id, result.filesModified)
       }
 
-      // Verify after each step (if enabled)
+      // Graph Harness §5.3: Verify intermediate steps NON-BLOCKING
+      // Verification failure on intermediate steps should NOT set result.success = false.
+      // Only the FINAL step uses verification as a blocking gate.
+      // This prevents cascade failure where a typo in 1 file blocks all downstream steps.
       if (result.success && this.config.verifyAfterEach) {
         const isFinalStep = this.isAllCompleted(dagPlan, dagCtx)
         const tier = isFinalStep ? "deep" : "standard"
@@ -190,17 +193,25 @@ export class AgentLoop {
           : await verifier.verifyAllDeep(node.id, projectDir, undefined, [], false, tier)
 
         if (!verifyResult.passed) {
-          result.success = false
-          result.output = `Verification failed: ${verifyResult.errors.join("\n")}`
+          if (isFinalStep) {
+            // Final step: blocking verify — step must pass to be considered successful
+            result.success = false
+            result.output = `Verification failed: ${verifyResult.errors.join("\n")}`
 
-          // Attempt repair via LLM
-          const analysis = await errorAnalyzer.analyzeDeep(result.output, result.filesModified)
-          if (this.config.autoRetry) {
-            const repaired = await this.attemptRepair(subtask, result.output, analysis, fixExecutor)
-            if (repaired) {
-              // Return failure to trigger DAG retry
-              return { success: false, output: result.output, filesModified: result.filesModified, error: verifyResult.errors.join("; ") }
+            // Attempt repair via LLM
+            const analysis = await errorAnalyzer.analyzeDeep(result.output, result.filesModified)
+            if (this.config.autoRetry) {
+              const repaired = await this.attemptRepair(subtask, result.output, analysis, fixExecutor)
+              if (repaired) {
+                // Return failure to trigger DAG retry
+                return { success: false, output: result.output, filesModified: result.filesModified, error: verifyResult.errors.join("; ") }
+              }
             }
+          } else {
+            // Intermediate step: NON-BLOCKING — warn only, keep success=true
+            // Per Graph Harness §5.3, this prevents cascading failure from minor issues
+            result.output = `[Verify Warning] ${verifyResult.errors.join("\n")}\n\n${result.output}`
+            console.warn(`[AgentLoop] Intermediate verify warning for step ${node.id}: ${verifyResult.errors.join("; ")}`)
           }
         }
 
@@ -513,16 +524,24 @@ export class AgentLoop {
             : await verifier.verifyAllDeep(step.id, projectDir, undefined, [], false, tier)
 
           if (!verifyResult.passed) {
-            stepSuccess = false
-            stepOutput = `Verification failed: ${verifyResult.errors.join("\n")}`
-            const analysis = await errorAnalyzer.analyzeDeep(stepOutput, result.filesModified)
-            this.observers.forEach(o => o.onStepComplete(step.id, false, analysis.suggestedFix))
+            if (isFinalStep) {
+              // Final step: blocking verify
+              stepSuccess = false
+              stepOutput = `Verification failed: ${verifyResult.errors.join("\n")}`
+              const analysis = await errorAnalyzer.analyzeDeep(stepOutput, result.filesModified)
+              this.observers.forEach(o => o.onStepComplete(step.id, false, analysis.suggestedFix))
 
-            if (!this.config.autoRetry) { retryCount++; break }
+              if (!this.config.autoRetry) { retryCount++; break }
 
-            const repairResult = await this.attemptRepair(step, stepOutput, analysis, fixExecutor)
-            if (!repairResult) { retryCount++; break }
-            continue
+              const repairResult = await this.attemptRepair(step, stepOutput, analysis, fixExecutor)
+              if (!repairResult) { retryCount++; break }
+              continue
+            } else {
+              // Intermediate step: NON-BLOCKING (Graph Harness §5.3)
+              // Keep stepSuccess=true, just append warning to output
+              stepOutput = `[Verify Warning] ${verifyResult.errors.join("\n")}\n\n${stepOutput}`
+              console.warn(`[AgentLoop] Intermediate verify warning for step ${step.id}: ${verifyResult.errors.join("; ")}`)
+            }
           }
 
           if (step.verificationCriteria.length > 0 && verifier.hasLLM()) {

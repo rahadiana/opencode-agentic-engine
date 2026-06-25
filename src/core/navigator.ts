@@ -129,7 +129,9 @@ export class CodebaseNavigator {
   private languages: LanguageConfig[] = [...BUILTIN_LANGUAGES]
   /** Cache untuk scan — hindari re-scan penuh dalam 30 detik */
   private scanCache: { root: string; timestamp: number } | null = null
-  private readonly scanCacheTTL = 30_000 // 30 detik
+  // Graph Harness §5.4: Cache TTL 30s → 300s (5 menit) untuk mengurangi filesystem walk
+  // yang tidak perlu. Setiap agentic_nav call sebelumnya memicu full scan karena TTL terlalu pendek.
+  private readonly scanCacheTTL = 300_000 // 5 menit
   setLanguages(langs: LanguageConfig[]): void {
     this.languages = langs
     this.index = null

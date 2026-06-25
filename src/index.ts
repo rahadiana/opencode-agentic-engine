@@ -6214,9 +6214,11 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
           }
           case "agentic_nav": {
             if (args.query) {
-              const outputText = _output?.output || ""
-              const fileMatches = (outputText.match(/\.ts/g) ?? []).length
-              liveEvaluator.feedNavigation(String(args.query), fileMatches)
+              // Gunakan metadata files array untuk akurasi (bukan regex .ts count)
+              // Fix: metadata.files adalah array dari navigator.findRelevantFiles()
+              const meta = _output?.metadata as { files?: string[] } | undefined
+              const fileCount = meta?.files?.length ?? 0
+              liveEvaluator.feedNavigation(String(args.query), fileCount)
             }
             break
           }
