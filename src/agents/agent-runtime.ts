@@ -15,6 +15,9 @@ export interface AgentContext {
   /** Per-role model preference (e.g. "deepseek-chat", "openai/gpt-4o").
    *  Applied to the engine before executing the LLM call. */
   modelPreference?: string
+  /** Reasoning effort untuk model yg support (OpenAI o-series, GPT-5).
+   *  Dikirim ke SDK → provider. Diabaikan kalo model gak support. */
+  reasoningEffort?: 'low' | 'medium' | 'high'
 }
 
 export interface AgentResult {
@@ -147,6 +150,7 @@ export class AgentRuntime {
           temperature: 0.3,
           maxTokens: 4096,
           model: modelOverride, // ← dikirim ke SDK langsung, bukan via config
+          ...(ctx.reasoningEffort ? { reasoningEffort: ctx.reasoningEffort } : {}),
         }),
         new Promise<LLMResponse>((_, reject) => {
           controller.signal.addEventListener("abort", () => {

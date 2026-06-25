@@ -115,6 +115,12 @@ export interface LLMRequest {
   }
   /** Tool name for auto model resolution (tool→category→default). */
   toolName?: string
+  /** Reasoning effort for supported models (OpenAI o-series, GPT-5).
+   *  'low' — fast, minimal reasoning
+   *  'medium' — balanced (default)
+   *  'high' — thorough reasoning
+   *  Ignored by providers/models that don't support it. */
+  reasoningEffort?: 'low' | 'medium' | 'high'
 }
 
 export interface LLMResponse {
@@ -1106,6 +1112,7 @@ export class LLMEngine {
     system: string
     noReply: false
     model?: { providerID: string; modelID: string }
+    reasoningEffort?: 'low' | 'medium' | 'high'
     parts: Array<{ type: 'text'; text: string }>
   } {
     const sdkModel = req.model ?? this.parseModelForSDK()
@@ -1115,6 +1122,7 @@ export class LLMEngine {
         : req.systemPrompt,
       noReply: false,
       ...(sdkModel ? { model: sdkModel } : {}),
+      ...(req.reasoningEffort ? { reasoningEffort: req.reasoningEffort } : {}),
       parts: [{ type: 'text' as const, text: req.userPrompt }],
     }
   }

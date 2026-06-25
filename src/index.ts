@@ -2500,6 +2500,7 @@ const confidenceStore = new ConfidenceStore()
           result: tool.schema.string().optional().describe("Task result (set when completing a task to trigger downstream stages and cross-validation)"),
           status: tool.schema.enum(["pending", "running", "done", "failed"]).optional().describe("Set the task status"),
           requestReview: tool.schema.boolean().optional().describe("Request review from a downstream role after completing this task"),
+          reasoningEffort: tool.schema.enum(["low", "medium", "high"]).optional().describe("Reasoning effort untuk model yg support (OpenAI o-series, GPT-5). low=cepat, medium=balance, high=mendalam."),
         },
         async execute(args, context) {
           const allTasks = coordinator.getTasks(context.sessionID)
@@ -2646,6 +2647,7 @@ const confidenceStore = new ConfidenceStore()
             pendingMessages: pendingMessages.length > 0 ? pendingMessages.map(m => ({ from: m.from, payload: m.payload })) : undefined,
             sharedMemory: coordinator.getAllSharedMemory().map(e => ({ key: e.key, value: e.value, writtenBy: e.writtenBy })),
             modelPreference: sessionModelPref || undefined,
+            reasoningEffort: args.reasoningEffort || undefined,
           }
           const agentResultObj = await agentRuntime.execute(agentCtx)
           const agentResult = agentResultObj.success ? agentResultObj.output : ""
