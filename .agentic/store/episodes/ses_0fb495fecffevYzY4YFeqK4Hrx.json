@@ -1,0 +1,24 @@
+{
+  "key": "ses_0fb495fecffevYzY4YFeqK4Hrx",
+  "data": {
+    "id": "ep-1782490598975-luey",
+    "sessionId": "ses_0fb495fecffevYzY4YFeqK4Hrx",
+    "planGoal": "Debate: What tools are available in the OpenCode Agentic Engine plugin? List all tool names and briefly desc",
+    "summary": "Partially completed: Debate: What tools are available in the OpenCode Agentic Engine plugin? List all tool names and briefly desc",
+    "outcome": "partial",
+    "decisions": [
+      "0 rounds",
+      "Approved: false",
+      "Single round (max rounds reached)"
+    ],
+    "filesChanged": [],
+    "domain": "generic",
+    "timestamp": "2026-06-26T16:16:38.975Z",
+    "tags": [
+      "rounds"
+    ],
+    "score": 1,
+    "usageCount": 0
+  },
+  "updatedAt": "2026-06-26T16:16:38.976Z"
+}

@@ -25,7 +25,32 @@
           "quarantineUntil": 0
         }
       }
+    },
+    "opencode/big-pickle": {
+      "model": "opencode/big-pickle",
+      "totalCalls": 56,
+      "successCalls": 56,
+      "failedCalls": 0,
+      "hallucinationCount": 0,
+      "avgLatencyMs": 0,
+      "lastUsed": 1782487208101,
+      "consecutiveFailures": 0,
+      "consecutiveSuccesses": 56,
+      "quarantineUntil": 0,
+      "byTaskType": {
+        "chat": {
+          "totalCalls": 56,
+          "successCalls": 56,
+          "failedCalls": 0,
+          "hallucinationCount": 0,
+          "avgLatencyMs": 0,
+          "lastUsed": 1782487208101,
+          "consecutiveFailures": 0,
+          "consecutiveSuccesses": 0,
+          "quarantineUntil": 0
+        }
+      }
     }
   },
-  "updatedAt": "2026-06-25T18:19:34.649Z"
+  "updatedAt": "2026-06-26T15:20:26.228Z"
 }

@@ -37,6 +37,7 @@ import { Dashboard } from "./observability/dashboard.js"
 import { createLogger, setGlobalLogClient } from "./observability/logger.js"
 import { CheckpointSystem } from "./drift/checkpoints.js"
 import { SessionStore } from "./memory/session-store.js"
+import { TOOL_COMPLEXITY } from "./core/llm-types.js"
 import { TraceLogger } from "./observability/trace-logger.js"
 import { RoleRegistry, type PromptEntry } from "./agents/role-registry.js"
 
@@ -2992,7 +2993,7 @@ const confidenceStore = new ConfidenceStore()
           role: tool.schema.string().optional().describe("Agent role (architect, developer, qa, coordinator, pm)"),
           tool: tool.schema.string().optional().describe("Tool name (e.g. 'agentic_plan')"),
           category: tool.schema.string().optional().describe("Complexity category (quick, unspecified-low, unspecified-high, deep)"),
-          model: tool.schema.string().optional().describe("Model name (e.g. 'gpt-4o', 'claude-sonnet-4-20250514')"),
+          model: tool.schema.string().optional().describe("Model name (e.g. 'gpt-4o', 'claude-sonnet-4-20250514') or 'auto' to auto-discover best model"),
         },
         async execute(args, context) {
           const projectDir = ctxDir(context)
@@ -3117,6 +3118,9 @@ const confidenceStore = new ConfidenceStore()
                 output += "Preferences are session-only (not yet persisted)"
               }
               output += "\n\n**Resolution priority:** per-tool override → category fallback → engine default"
+              if (projCount > 0) {
+                output += "\n> 💡 Models set via `auto` are saved as explicit model names — re-run `agentic_model set ... auto` to re-discover."
+              }
             }
 
             // Also show available models from OpenCode
@@ -3141,12 +3145,66 @@ const confidenceStore = new ConfidenceStore()
           }
 
           if (args.action === "set") {
-            if (!args.model) return { output: "Provide a `model` name (e.g. 'gpt-4o', 'claude-sonnet-4-20250514')." }
             if (!args.role && !args.tool && !args.category) {
               return { output: "Provide a `role`, `tool`, or `category` to assign the model to." }
             }
 
+            if (!args.model) return { output: "Provide a `model` name (e.g. 'gpt-4o') or 'auto' to auto-discover." }
+
+            // Auto-discover best model
+            let wasAuto = false
+            if (args.model === "auto") {
+              wasAuto = true
+              const ocModels = await llmEngine.listOpenCodeModels()
+              if (ocModels.length === 0) {
+                return { output: "No models available from OpenCode. Provide explicit `model` name (e.g. 'gpt-4o')." }
+              }
+
+              // Map target → tier heuristic
+              let wantsFast = false
+              if (args.category) {
+                const cat = args.category.toLowerCase()
+                wantsFast = cat === "quick" || cat === "unspecified-low"
+              } else if (args.tool) {
+                const cat = TOOL_COMPLEXITY[args.tool.toLowerCase()]
+                wantsFast = cat === "quick" || cat === "unspecified-low"
+              } else if (args.role) {
+                wantsFast = ["pm", "coordinator"].includes(args.role.toLowerCase())
+              }
+
+              // Score each available model
+              const taskType = sessionStore.getOrCreate(context.sessionID).currentTaskType
+              interface ScoredModel { model: string; reliability: number; userSat: number; score: number; isFast: boolean; isCapable: boolean }
+              const scored: ScoredModel[] = ocModels.map(m => {
+                const s = modelRegistry.getScore(m.id) || { reliability: 0.5 }
+                const us = taskType ? modelRegistry.getUserSatisfaction(m.id, taskType) : 0.5
+                return {
+                  model: m.id,
+                  reliability: (s as any).reliability ?? 0.5,
+                  userSat: us,
+                  score: us * 0.6 + ((s as any).reliability ?? 0.5) * 0.4,
+                  isFast: /flash|mini|small|light|nano|fast/.test(m.id),
+                  isCapable: /ultra|pro|reason|sonnet|opus|max|strong/.test(m.id),
+                }
+              })
+
+              // Filter candidates by tier
+              let candidates = scored
+              if (wantsFast) {
+                const fast = scored.filter(m => m.isFast)
+                if (fast.length > 0) candidates = fast
+              } else {
+                const capable = scored.filter(m => m.isCapable)
+                if (capable.length > 0) candidates = capable
+              }
+
+              candidates.sort((a, b) => b.score - a.score)
+              args.model = candidates[0].model
+            }
+
             modelRegistry.addModel(args.model)
+            const autoTag = wasAuto ? ` 🤖 auto-discovered` : ""
+            const changeHint = "\nTo change, use `agentic_model set ... model=...` or edit `.agentic/models.json`"
 
             if (args.tool) {
               const toolLower = args.tool.toLowerCase()
@@ -3156,7 +3214,7 @@ const confidenceStore = new ConfidenceStore()
               if (!persisted.tools) persisted.tools = {}
               persisted.tools[toolLower] = args.model
               writeProjectPrefs(persisted)
-              return { output: `✅ Tool model preference set: **${toolLower}** → \`${args.model}\`\nAll LLM calls from \`${toolLower}\` will use this model.\n💾 Persisted to \`.agentic/models.json\`` }
+              return { output: `✅ Tool model preference set: **${toolLower}** → \`${args.model}\`${autoTag}\nAll LLM calls from \`${toolLower}\` will use this model.\n💾 Persisted to \`.agentic/models.json\`${changeHint}` }
             }
 
             if (args.category) {
@@ -3167,7 +3225,7 @@ const confidenceStore = new ConfidenceStore()
               if (!persisted.categories) persisted.categories = {}
               persisted.categories[catLower] = args.model
               writeProjectPrefs(persisted)
-              return { output: `✅ Category model preference set: **${catLower}** → \`${args.model}\`\nAll tools in this category will use this model.\n💾 Persisted to \`.agentic/models.json\`` }
+              return { output: `✅ Category model preference set: **${catLower}** → \`${args.model}\`${autoTag}\nAll tools in this category will use this model.\n💾 Persisted to \`.agentic/models.json\`${changeHint}` }
             }
 
             if (args.role) {
@@ -3178,7 +3236,7 @@ const confidenceStore = new ConfidenceStore()
               const persisted = readProjectPrefs()
               persisted[roleLower] = args.model
               writeProjectPrefs(persisted)
-              return { output: `✅ Role model preference set: **${roleLower}** → \`${args.model}\`\nThis model will be used when delegating to the ${roleLower} role.\n💾 Persisted to \`.agentic/models.json\`` }
+              return { output: `✅ Role model preference set: **${roleLower}** → \`${args.model}\`${autoTag}\nThis model will be used when delegating to the ${roleLower} role.\n💾 Persisted to \`.agentic/models.json\`${changeHint}` }
             }
 
             return { output: "Unknown target. Use `role`, `tool`, or `category`." }
@@ -3195,7 +3253,8 @@ const confidenceStore = new ConfidenceStore()
               if (!model) return { output: `No model preference set for tool "${args.tool}". Uses category fallback or default.` }
               const persisted = readProjectPrefs()
               const isPersisted = persisted.tools?.[args.tool.toLowerCase()] === model
-              return { output: `**${args.tool}** → \`${model}\`${isPersisted ? " 💾 (persisted)" : ""}` }
+              const hint = isPersisted ? "\nTo change, use `agentic_model set tool=... model=...`" : ""
+              return { output: `**${args.tool}** → \`${model}\`${isPersisted ? " 💾 (persisted)" : ""}${hint}` }
             }
 
             if (args.category) {
@@ -3203,7 +3262,8 @@ const confidenceStore = new ConfidenceStore()
               if (!model) return { output: `No model preference set for category "${args.category}". Uses engine default.` }
               const persisted = readProjectPrefs()
               const isPersisted = persisted.categories?.[args.category.toLowerCase()] === model
-              return { output: `**${args.category}** → \`${model}\`${isPersisted ? " 💾 (persisted)" : ""}` }
+              const hint = isPersisted ? "\nTo change, use `agentic_model set category=... model=...`" : ""
+              return { output: `**${args.category}** → \`${model}\`${isPersisted ? " 💾 (persisted)" : ""}${hint}` }
             }
 
             if (args.role) {
@@ -3211,7 +3271,8 @@ const confidenceStore = new ConfidenceStore()
               if (!model) return { output: `No model preference set for role "${args.role}". Delegation will use default model selection.` }
               const persisted = readProjectPrefs()
               const isPersisted = persisted[args.role] === model
-              return { output: `**${args.role}** → \`${model}\`${isPersisted ? " 💾 (persisted)" : ""}` }
+              const hint = isPersisted ? "\nTo change, use `agentic_model set role=... model=...` or edit `.agentic/models.json`" : ""
+              return { output: `**${args.role}** → \`${model}\`${isPersisted ? " 💾 (persisted)" : ""}${hint}` }
             }
 
             return { output: "Unknown target." }

@@ -1,0 +1,5 @@
+[2026-06-26T15:36:17.426Z] [bash] tool output error:   Cannot read properties of undefined (reading 'sessionID')
+      at Object.execute (file:///home/runner/opencode-agentic-engine/dist/index.js:1052:263)
+      at Object.wrappedExecute [as execute] (file:///home/runner/opencode-agentic-engine/dist/index.js:838:505)
+      at Ts.call (file:///home/runn
+[2026-06-26T16:31:43.624Z] [agentic_finetune] tool output error: Error: OpenAI API key not configured.
