@@ -68,6 +68,23 @@ export type SectionSubscriptionCallback = (section: string, entry: SharedMemoryE
 
 type ResolveLock = () => void
 
+/** Status of the blackboard-driven agent cycle */
+export type AgentPhase = "idle" | "planning" | "executing" | "critic"
+
+// ── Phase Permission Table ──────────────────────────────────────────
+const PHASE_PERMISSIONS: Record<string, AgentPhase[]> = {
+  planner: ["planning"],
+  architect: ["planning", "executing"],
+  pm: ["planning"],
+  executor: ["executing"],
+  developer: ["executing", "critic"],
+  builder: ["executing"],
+  critic: ["critic"],
+  qa: ["critic"],
+  reviewer: ["critic"],
+  coordinator: ["planning", "executing", "critic"],
+}
+
 export class AgentCoordinator {
   private sharedMemory = new Map<string, SharedMemoryEntry>()
   private memoryListeners: SharedMemoryListener[] = []
@@ -148,6 +165,8 @@ export class AgentCoordinator {
     }
   }
 
+  // ── Shared Memory ──────────────────────────────────────────────
+
   async writeSharedMemory(key: string, value: string, agentRole: string): Promise<SharedMemoryEntry> {
     await this.acquire()
     try {
@@ -207,7 +226,7 @@ export class AgentCoordinator {
     this.registry.registerCustom(def)
   }
 
-  // --- Message Bus ---
+  // ── Message Bus ────────────────────────────────────────────────
 
   private pruneMessages(role: string): void {
     const inbox = this.messages.get(role)
@@ -252,7 +271,7 @@ export class AgentCoordinator {
     return all.sort((a, b) => a.timestamp - b.timestamp)
   }
 
-  // --- Task Management ---
+  // ── Task Management ────────────────────────────────────────────
 
   delegate(role: string, task: AgentTask, sessionId: string, parentDepth = 0, relevantSkills?: Array<{ name: string; successRate: number; steps: string }>): AgentTask {
     // Clone task to avoid mutating the caller's object
@@ -356,7 +375,7 @@ export class AgentCoordinator {
     return null
   }
 
-  // --- Pipeline Run Tracking ---
+  // ── Pipeline Run Tracking ──────────────────────────────────────
 
   async setPipelineRun(sessionId: string, pipelineId: string, taskIds: string[]): Promise<void> {
     this.pipelineRuns.set(sessionId, taskIds)
@@ -392,6 +411,8 @@ export class AgentCoordinator {
     if (d.includes("pm") || d.includes("product") || d.includes("requirement") || d.includes("spec") || d.includes("acceptance")) return "pm"
     return "developer"
   }
+
+  // ── Blackboard Section ─────────────────────────────────────────
 
   createSection(name: string, description: string): boolean {
     if (this.sections.has(name)) return false
@@ -524,7 +545,7 @@ export class AgentCoordinator {
     }
   }
 
-  // ── Phase Status System (Comp 17: Phase Lock) ──────────────────
+  // ── Phase Status System ────────────────────────────────────────
 
   /** Maximum blackboard agent cycles before forced stop */
   private static readonly MAX_BLACKBOARD_CYCLES = 10
@@ -573,19 +594,9 @@ export class AgentCoordinator {
    * Used as phase lock — prevents agents from running in wrong phase.
    */
   canAgentRunInPhase(role: string): boolean {
-    // Map agent roles to phases they're allowed in
-    switch (this.phaseStatus) {
-      case "planning":
-        return ["planner", "architect", "pm"].includes(role)
-      case "executing":
-        return ["executor", "developer", "builder"].includes(role)
-      case "critic":
-        return ["critic", "qa", "reviewer"].includes(role)
-      case "idle":
-        return false
-      default:
-        return true
-    }
+    if (this.phaseStatus === "idle") return false
+    const allowed = PHASE_PERMISSIONS[role]
+    return allowed ? allowed.includes(this.phaseStatus) : true
   }
 
   /**
@@ -595,6 +606,8 @@ export class AgentCoordinator {
     this.cycleCount = 0
     this.phaseStatus = "idle"
   }
+
+  // ── Cycle Runner ────────────────────────────────────────────────
 
   /**
    * Run one event-driven blackboard agent cycle:
@@ -724,30 +737,8 @@ export class AgentCoordinator {
       if (!needsRetry) break
 
       retries++
-      // Back to planning
-      this.setPhaseStatus("planning")
-      const rePlanResult = this.runBlackboardCycle(
-        [plannerRole],
-        (roles) => roles[0],
-        (role) => executor(role, "planning", `Retry #${retries}: ${critique}`),
-      )
-      results.push(rePlanResult)
-
-      this.setPhaseStatus("executing")
-      const reExecResult = this.runBlackboardCycle(
-        [executorRole],
-        (roles) => roles[0],
-        (role) => executor(role, "executing", rePlanResult.result ?? ""),
-      )
-      results.push(reExecResult)
-
-      this.setPhaseStatus("critic")
-      const reCriticResult = this.runBlackboardCycle(
-        [criticRole],
-        (roles) => roles[0],
-        (role) => executor(role, "critic", reExecResult.result ?? ""),
-      )
-      results.push(reCriticResult)
+      const retryResults = this.runRetryCycle(plannerRole, executorRole, criticRole, executor, critique, retries)
+      results.push(...retryResults)
     }
 
     // Done
@@ -778,12 +769,43 @@ export class AgentCoordinator {
     const lower = critique.toLowerCase().trim()
     return lower.startsWith("fail") || lower.startsWith("retry") || lower.startsWith("reject")
   }
+
+  /**
+   * Run one full retry cycle: planning → executing → critic.
+   * Extracted from runFullCritiqueLoop to reduce method size.
+   */
+  private runRetryCycle(
+    plannerRole: string,
+    executorRole: string,
+    criticRole: string,
+    executor: (role: string, phase: AgentPhase, input: string) => string,
+    critique: string,
+    retryNumber: number,
+  ): BlackboardCycleResult[] {
+    this.setPhaseStatus("planning")
+    const rePlanResult = this.runBlackboardCycle(
+      [plannerRole],
+      (roles) => roles[0],
+      (role) => executor(role, "planning", `Retry #${retryNumber}: ${critique}`),
+    )
+
+    this.setPhaseStatus("executing")
+    const reExecResult = this.runBlackboardCycle(
+      [executorRole],
+      (roles) => roles[0],
+      (role) => executor(role, "executing", rePlanResult.result ?? ""),
+    )
+
+    this.setPhaseStatus("critic")
+    const reCriticResult = this.runBlackboardCycle(
+      [criticRole],
+      (roles) => roles[0],
+      (role) => executor(role, "critic", reExecResult.result ?? ""),
+    )
+
+    return [rePlanResult, reExecResult, reCriticResult]
+  }
 }
-
-// ── Phase Status Type (Comparison 16/17) ───────────────────────────
-
-/** Status of the blackboard-driven agent cycle */
-export type AgentPhase = "idle" | "planning" | "executing" | "critic"
 
 /** Result of a single blackboard agent cycle */
 export interface BlackboardCycleResult {

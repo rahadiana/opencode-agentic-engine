@@ -13,14 +13,14 @@
 
 import type { Subtask } from "./intent-parser.js"
 import { Executor } from "./executor.js"
-import { Verifier } from "./verifier.js"
+import { Verifier, type VerificationTier } from "./verifier.js"
 import { ErrorAnalyzer } from "./error-analyzer.js"
 import { DependencyTracker } from "../drift/dependency-tracker.js"
 import { LLMEngine } from "./llm.js"
 import { BudgetTracker } from "./budget-tracker.js"
 import type { Planner } from "./planner.js"
 import { TimeoutError } from "./errors.js"
-import { DAGEngine, type DAGPlan, type DAGExecutionContext, type DAGNode } from "./dag-engine.js"
+import { DAGEngine, type DAGPlan, type DAGExecutionContext, type DAGNode, type NodeRunner } from "./dag-engine.js"
 import { ConfidenceScorer, ConfidenceStore, type ScoringSignals } from "./confidence-scorer.js"
 import { PlanningLayer } from "./planning-layer.js"
 import { ExecutionLayer } from "./execution-layer.js"
@@ -49,6 +49,10 @@ export interface LoopObserver {
   onStepStart(stepId: string, iteration: number): void
   onStepComplete(stepId: string, success: boolean, output: string): void
   onLoopComplete(result: LoopResult): void
+}
+
+interface ExecutorWithState {
+  states?: Map<string, { plan: { intent: { goal: string; subtasks: Subtask[] } } }>
 }
 
 export class AgentLoop {
@@ -133,7 +137,7 @@ export class AgentLoop {
     // ── Setup ────────────────────────────────────────────────────────
 
     // Dapatkan plan dari executor state
-    const state = (executor as any).states?.get(sessionId)
+    const state = (executor as unknown as ExecutorWithState).states?.get(sessionId)
     if (!state || !state.plan) {
       return {
         completedSteps, failedSteps, totalIterations: 0,
@@ -222,32 +226,29 @@ export class AgentLoop {
       // This prevents cascade failure where a typo in 1 file blocks all downstream steps.
       if (result.success && this.config.verifyAfterEach) {
         const isFinalStep = this.isAllCompleted(dagPlan, dagCtx)
-        const tier = isFinalStep ? "deep" : "standard"
-        const verifyResult = result.filesModified.length > 0
-          ? await verifier.verifyAllDeep(node.id, projectDir, subtask.description, result.filesModified, false, tier)
-          : await verifier.verifyAllDeep(node.id, projectDir, undefined, [], false, tier)
+        const { verified, output: verifyOutput } = await this.verifyStep(
+          verifier, projectDir, node.id, subtask.description, isFinalStep, result.filesModified,
+        )
 
-        if (!verifyResult.passed) {
-          if (isFinalStep) {
-            // Final step: blocking verify — step must pass to be considered successful
-            result.success = false
-            result.output = `Verification failed: ${verifyResult.errors.join("\n")}`
+        if (!verified) {
+          // Final step: blocking verify — step must pass to be considered successful
+          result.success = false
+          result.output = verifyOutput
 
-            // Attempt repair via LLM
-            const analysis = await errorAnalyzer.analyzeDeep(result.output, result.filesModified)
-            if (this.config.autoRetry) {
-              const repaired = await this.attemptRepair(subtask, result.output, analysis, fixExecutor)
-              if (repaired) {
-                // Return failure to trigger DAG retry
-                return { success: false, output: result.output, filesModified: result.filesModified, error: verifyResult.errors.join("; ") }
-              }
+          // Attempt repair via LLM
+          const analysis = await errorAnalyzer.analyzeDeep(result.output, result.filesModified)
+          if (this.config.autoRetry) {
+            const repaired = await this.attemptRepair(subtask, result.output, analysis, fixExecutor)
+            if (repaired) {
+              // Return failure to trigger DAG retry
+              return { success: false, output: result.output, filesModified: result.filesModified, error: verifyOutput }
             }
-          } else {
-            // Intermediate step: NON-BLOCKING — warn only, keep success=true
-            // Per Graph Harness §5.3, this prevents cascading failure from minor issues
-            result.output = `[Verify Warning] ${verifyResult.errors.join("\n")}\n\n${result.output}`
-            console.warn(`[AgentLoop] Intermediate verify warning for step ${node.id}: ${verifyResult.errors.join("; ")}`)
           }
+        } else if (verifyOutput && !verifyOutput.startsWith("✅")) {
+          // Intermediate step: NON-BLOCKING — warn only, keep success=true
+          // Per Graph Harness §5.3, this prevents cascading failure from minor issues
+          result.output = `${verifyOutput}\n\n${result.output}`
+          console.warn(`[AgentLoop] Intermediate verify warning for step ${node.id}`)
         }
 
         // Verification criteria
@@ -324,102 +325,10 @@ export class AgentLoop {
 
     while (pendingNodes.size > 0 && recoveryDepth < MAX_RECOVERY_DEPTH) {
       recoveryDepth++
-      const nodeId = [...pendingNodes][0]!
-      pendingNodes.delete(nodeId)
-
-      // Track which DAG context this node belongs to (original or replan)
-      const node = dagCtx.nodes.get(nodeId)
-      if (this.replannedSteps.has(nodeId)) continue
-      if (dagResult.completedNodes.includes(nodeId)) continue
-      if (!node) continue
-
-      const errorText = dagCtx.nodeStates.get(nodeId)?.error ?? "Unknown error"
-
-      // Recovery decision via RecoveryLayer — stateful, escalates internally
-      const decision: RecoveryDecision = this.recoveryLayer.decide(node, dagCtx, errorText)
-
-      if (decision.action === "retry") {
-        // Reset node state and retry via ExecutionLayer
-        // DAGEngine handles internal retries (backoff + maxRetries per node.config)
-        this.executionLayer.resetNode(dagCtx, nodeId)
-        const retryResult = await this.executionLayer.executeNode(dagCtx, node, dagRunner)
-        if (retryResult.success) {
-          // Retry succeeded — move from failed to completed
-          dagResult.failedNodes = dagResult.failedNodes.filter(id => id !== nodeId)
-          if (!dagResult.completedNodes.includes(nodeId)) {
-            dagResult.completedNodes.push(nodeId)
-          }
-          dagResult.summary += ` | Retried: ${nodeId} (success after ${decision.level})`
-          // ConfidenceGate: retry success does NOT mean overall success
-        } else {
-          // Retry failed — add back to pending for next level (replan/escalate)
-          pendingNodes.add(nodeId)
-        }
-      } else if (decision.action === "replan" && this.planner) {
-        const nodeSubtasks = subtasks.map(s => ({ ...s })) // Restore from original plan snapshot
-        const failingSubtask = nodeSubtasks.find(s => s.id === nodeId)
-        if (!failingSubtask) continue
-
-        const replanResult = this.recoveryLayer.generateReplan(failingSubtask, errorText, 
-          (_desc, err) => this.tryReplan(failingSubtask, err))
-        if (replanResult.newSubtasks.length > 0) {
-          this.replannedSteps.add(nodeId)
-
-          // Immutable plan: create NEW plan version (v2+) preserving v1
-          const planVersionResult = this.planningLayer.createPlanVersion(
-            plan.intent.goal,
-            nodeSubtasks,
-            nodeId,
-            replanResult.newSubtasks,
-            dagPlan.metadata,
-          )
-
-          // Update executor state for backward compat (getReadySteps etc.)
-          const newSubtasks = planVersionResult.plan.nodes.map((n: DAGNode) => ({
-            id: n.id,
-            description: n.description,
-            dependsOn: n.deps,
-            verificationCriteria: n.verificationCriteria ?? [],
-          }))
-          executor.replanStep(sessionId, nodeId, newSubtasks)
-
-          // Execute the new plan version DAG
-          const { context: newDagCtx, version: newVersion } = planVersionResult
-          const retryResult = await this.executionLayer.execute(newDagCtx, dagRunner)
-
-          // Merge results: completed nodes from new DAG
-          for (const cn of retryResult.completedNodes) {
-            if (!dagResult.completedNodes.includes(cn)) {
-              dagResult.completedNodes.push(cn)
-            }
-          }
-
-          if (retryResult.failedNodes.length === 0) {
-            // Replan fully succeeded — root cause resolved
-            dagResult.failedNodes = dagResult.failedNodes.filter(id => id !== nodeId)
-            dagResult.summary += ` | Replanned: ${nodeId} → v${newVersion.version} (${replanResult.summary})`
-          } else {
-            // Replan partially failed — escalate original + queue new failures
-            escalatedNodes.push({ nodeId, reason: `Replan v${newVersion.version} had ${retryResult.failedNodes.length} failure(s)` })
-            for (const fn of retryResult.failedNodes) {
-              if (!dagResult.failedNodes.includes(fn)) {
-                dagResult.failedNodes.push(fn)
-              }
-            }
-            // Rewire replan failures back to pending for their own recovery chain
-            for (const fn of retryResult.failedNodes) {
-              if (!dagResult.completedNodes.includes(fn)) {
-                pendingNodes.add(fn)
-              }
-            }
-            dagResult.summary += ` | Replanned: ${nodeId} → v${newVersion.version} (${replanResult.summary}, ${retryResult.failedNodes.length} new failure(s))`
-          }
-          dagResult.success = dagResult.failedNodes.length === 0
-        }
-      } else {
-        // decision.action === "escalate" or "skip" → leave as permanently failed
-        escalatedNodes.push({ nodeId, reason: decision.reason })
-      }
+      await this.recoverNode(
+        dagCtx, dagPlan, dagRunner, dagResult, subtasks,
+        sessionId, executor, originallyFailed, pendingNodes, escalatedNodes,
+      )
     }
 
     // Notify observers about escalated nodes
@@ -486,6 +395,150 @@ export class AgentLoop {
       const s = ctx.nodeStates.get(n.id)
       return s?.status === "completed"
     })
+  }
+
+  /**
+   * Shared verification logic for both DAG and legacy paths.
+   * Extracted to eliminate duplication between runLoop's dagRunner
+   * and executeStepWithRetry.
+   */
+  private async verifyStep(
+    verifier: Verifier,
+    projectDir: string,
+    stepId: string,
+    stepDescription: string | undefined,
+    isFinalStep: boolean,
+    filesModified: string[],
+  ): Promise<{ verified: boolean; tier: string; output: string }> {
+    const tier: VerificationTier = isFinalStep ? "deep" : "standard"
+    let output = ""
+
+    try {
+      const result = filesModified.length > 0
+        ? await verifier.verifyAllDeep(stepId, projectDir, stepDescription, filesModified, false, tier)
+        : await verifier.verifyAllDeep(stepId, projectDir, undefined, [], false, tier)
+      const failedChecks = result.checks.filter(c => !c.passed)
+
+      if (failedChecks.length > 0) {
+        output = `⚠️ Verification (${tier}) found ${failedChecks.length} issue(s):\n` +
+          failedChecks.map(c => `  - ${c.name}: ${c.output}`).join("\n")
+
+        if (isFinalStep) {
+          return { verified: false, tier, output }
+        }
+
+        // Intermediate steps: warn but don't block
+        return { verified: true, tier, output }
+      }
+
+      output = `✅ Verification (${tier}) passed`
+      return { verified: true, tier, output }
+    } catch (err) {
+      const msg = `Verification error: ${err instanceof Error ? err.message : String(err)}`
+      console.warn(msg)
+      output = msg
+      return { verified: isFinalStep ? false : true, tier, output }
+    }
+  }
+
+  /**
+   * Graph Harness §3.3: Recovery node — strict escalation chain.
+   * Extracted from runLoop's inline while loop.
+   * Auto-chaining: retry → replan → escalate per node.
+   */
+  private async recoverNode(
+    dagCtx: DAGExecutionContext,
+    dagPlan: DAGPlan,
+    dagRunner: NodeRunner,
+    dagResult: { failedNodes: string[]; completedNodes: string[]; summary: string; success: boolean; escalationRequired?: boolean },
+    subtasks: Subtask[],
+    sessionId: string,
+    executor: Executor,
+    _originallyFailed: Set<string>,
+    pendingNodes: Set<string>,
+    escalatedNodes: Array<{ nodeId: string; reason: string }>,
+  ): Promise<void> {
+    const nodeId = [...pendingNodes][0]!
+    pendingNodes.delete(nodeId)
+
+    const node = dagCtx.nodes.get(nodeId)
+    if (this.replannedSteps.has(nodeId)) return
+    if (dagResult.completedNodes.includes(nodeId)) return
+    if (!node) return
+
+    const errorText = dagCtx.nodeStates.get(nodeId)?.error ?? "Unknown error"
+
+    const decision: RecoveryDecision = this.recoveryLayer.decide(node, dagCtx, errorText)
+
+    if (decision.action === "retry") {
+      this.executionLayer.resetNode(dagCtx, nodeId)
+      const retryResult = await this.executionLayer.executeNode(dagCtx, node, dagRunner)
+      if (retryResult.success) {
+        dagResult.failedNodes = dagResult.failedNodes.filter(id => id !== nodeId)
+        if (!dagResult.completedNodes.includes(nodeId)) {
+          dagResult.completedNodes.push(nodeId)
+        }
+        dagResult.summary += ` | Retried: ${nodeId} (success after ${decision.level})`
+      } else {
+        pendingNodes.add(nodeId)
+      }
+    } else if (decision.action === "replan" && this.planner) {
+      const nodeSubtasks = subtasks.map(s => ({ ...s }))
+      const failingSubtask = nodeSubtasks.find(s => s.id === nodeId)
+      if (!failingSubtask) return
+
+      const replanResult = this.recoveryLayer.generateReplan(failingSubtask, errorText, 
+        (_desc, err) => this.tryReplan(failingSubtask, err))
+      if (replanResult.newSubtasks.length > 0) {
+        this.replannedSteps.add(nodeId)
+
+        const planVersionResult = this.planningLayer.createPlanVersion(
+          dagPlan.goal,
+          nodeSubtasks,
+          nodeId,
+          replanResult.newSubtasks,
+          dagPlan.metadata,
+        )
+
+        const newSubtasks = planVersionResult.plan.nodes.map((n: DAGNode) => ({
+          id: n.id,
+          description: n.description,
+          dependsOn: n.deps,
+          verificationCriteria: n.verificationCriteria ?? [],
+        }))
+        executor.replanStep(sessionId, nodeId, newSubtasks)
+
+        const { context: newDagCtx, version: newVersion } = planVersionResult
+        const retryResult = await this.executionLayer.execute(newDagCtx, dagRunner)
+
+        for (const cn of retryResult.completedNodes) {
+          if (!dagResult.completedNodes.includes(cn)) {
+            dagResult.completedNodes.push(cn)
+          }
+        }
+
+        if (retryResult.failedNodes.length === 0) {
+          dagResult.failedNodes = dagResult.failedNodes.filter(id => id !== nodeId)
+          dagResult.summary += ` | Replanned: ${nodeId} → v${newVersion.version} (${replanResult.summary})`
+        } else {
+          escalatedNodes.push({ nodeId, reason: `Replan v${newVersion.version} had ${retryResult.failedNodes.length} failure(s)` })
+          for (const fn of retryResult.failedNodes) {
+            if (!dagResult.failedNodes.includes(fn)) {
+              dagResult.failedNodes.push(fn)
+            }
+          }
+          for (const fn of retryResult.failedNodes) {
+            if (!dagResult.completedNodes.includes(fn)) {
+              pendingNodes.add(fn)
+            }
+          }
+          dagResult.summary += ` | Replanned: ${nodeId} → v${newVersion.version} (${replanResult.summary}, ${retryResult.failedNodes.length} new failure(s))`
+        }
+        dagResult.success = dagResult.failedNodes.length === 0
+      }
+    } else {
+      escalatedNodes.push({ nodeId, reason: decision.reason })
+    }
   }
 
   // ── Legacy: batched execution fallback (when DAG not available) ──
@@ -684,30 +737,27 @@ export class AgentLoop {
       if (stepSuccess) {
         if (this.config.verifyAfterEach) {
           const isFinalStep = executor.getNextStep(sessionId) === null
-          const tier = isFinalStep ? "deep" : "standard"
-          const verifyResult = result.filesModified.length > 0
-            ? await verifier.verifyAllDeep(step.id, projectDir, step.description, result.filesModified, false, tier)
-            : await verifier.verifyAllDeep(step.id, projectDir, undefined, [], false, tier)
+          const { verified, output: verifyOutput } = await this.verifyStep(
+            verifier, projectDir, step.id, step.description, isFinalStep, result.filesModified,
+          )
 
-          if (!verifyResult.passed) {
-            if (isFinalStep) {
-              // Final step: blocking verify
-              stepSuccess = false
-              stepOutput = `Verification failed: ${verifyResult.errors.join("\n")}`
-              const analysis = await errorAnalyzer.analyzeDeep(stepOutput, result.filesModified)
-              this.observers.forEach(o => o.onStepComplete(step.id, false, analysis.suggestedFix))
+          if (!verified) {
+            // Final step: blocking verify
+            stepSuccess = false
+            stepOutput = verifyOutput
+            const analysis = await errorAnalyzer.analyzeDeep(stepOutput, result.filesModified)
+            this.observers.forEach(o => o.onStepComplete(step.id, false, analysis.suggestedFix))
 
-              if (!this.config.autoRetry) { retryCount++; break }
+            if (!this.config.autoRetry) { retryCount++; break }
 
-              const repairResult = await this.attemptRepair(step, stepOutput, analysis, fixExecutor)
-              if (!repairResult) { retryCount++; break }
-              continue
-            } else {
-              // Intermediate step: NON-BLOCKING (Graph Harness §5.3)
-              // Keep stepSuccess=true, just append warning to output
-              stepOutput = `[Verify Warning] ${verifyResult.errors.join("\n")}\n\n${stepOutput}`
-              console.warn(`[AgentLoop] Intermediate verify warning for step ${step.id}: ${verifyResult.errors.join("; ")}`)
-            }
+            const repairResult = await this.attemptRepair(step, stepOutput, analysis, fixExecutor)
+            if (!repairResult) { retryCount++; break }
+            continue
+          } else if (verifyOutput && !verifyOutput.startsWith("✅")) {
+            // Intermediate step: NON-BLOCKING (Graph Harness §5.3)
+            // Keep stepSuccess=true, just append warning to output
+            stepOutput = `${verifyOutput}\n\n${stepOutput}`
+            console.warn(`[AgentLoop] Intermediate verify warning for step ${step.id}`)
           }
 
           if (step.verificationCriteria.length > 0 && verifier.hasLLM()) {
