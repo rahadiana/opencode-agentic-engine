@@ -1,3 +1,5 @@
+// ── Imports ──
+
 import { readFileSync } from "node:fs"
 import { basename, extname } from "node:path"
 import type { CodebaseNavigator, ProjectIndex } from "./navigator.js"
@@ -135,7 +137,6 @@ function inferIntentFromName(name: string): string {
       return prefix + (rest || "operation")
     }
   }
-  // Fallback: split camelCase/PascalCase into words
   const words = name
     .replace(/([A-Z])/g, " $1")
     .replace(/[-_]/g, " ")
@@ -155,7 +156,153 @@ function getPatternsForExt(ext: string): LangPatterns | null {
   return FUNCTION_PATTERNS.find(lp => lp.extensions.includes(ext)) ?? null
 }
 
-// ── CodeIntentAnalyzer ──
+// ── Pure helper functions (extracted from class — no `this` dependency) ──
+
+function makeCacheKey(projectDir: string): string {
+  return projectDir.replace(/\/+$/, "")
+}
+
+function safeReadFile(filePath: string): string | null {
+  try {
+    return readFileSync(filePath, "utf-8")
+  } catch {
+    return null
+  }
+}
+
+function getLineNumber(content: string, index: number): number {
+  const before = content.slice(0, index)
+  return before.split("\n").length
+}
+
+function findBlockEnd(content: string, openBraceIndex: number): number {
+  let depth = 0
+  let inString = false
+  let stringChar = ""
+
+  for (let i = openBraceIndex; i < content.length; i++) {
+    const ch = content[i]
+
+    if (inString) {
+      if (ch === stringChar && content[i - 1] !== "\\") inString = false
+      continue
+    }
+
+    if (ch === "'" || ch === '"' || ch === "`") {
+      inString = true
+      stringChar = ch
+      continue
+    }
+
+    if (ch === "{") depth++
+    else if (ch === "}") {
+      depth--
+      if (depth === 0) return i + 1
+    }
+  }
+
+  return content.length
+}
+
+function generateFileSummary(filePath: string, content: string, exports: string[], functions: FunctionIntent[]): string {
+  const name = basename(filePath)
+  const lines = content.split("\n").length
+  const funcCount = functions.length
+
+  let summary = `${name} (${lines} lines, ${funcCount} functions)`
+
+  if (exports.length > 0) {
+    const expStr = exports.slice(0, 5).join(", ")
+    summary += `. Exports: ${expStr}${exports.length > 5 ? ` +${exports.length - 5} more` : ""}`
+  }
+
+  if (/\binterface\b|\btype\b/.test(content) && (extname(filePath).match(/\.ts|\.tsx/))) {
+    summary += ". Contains type definitions."
+  }
+  if (/\bclass\b/.test(content)) {
+    summary += ". Contains class definitions."
+  }
+  if (/\bimport\s+(React|Vue|Angular)\b/.test(content)) {
+    summary += ". UI component."
+  }
+  if (/\btest|describe|it\(|assert|expect\b/.test(content)) {
+    summary += ". Test file."
+  }
+
+  return summary
+}
+
+function determineComplexity(content: string, funcCount: number): "low" | "medium" | "high" {
+  const lines = content.split("\n").length
+  if (lines > 300 || funcCount > 15) return "high"
+  if (lines > 100 || funcCount > 5) return "medium"
+  return "low"
+}
+
+function buildDependencyChain(fileIntents: FileIntent[], _projectIndex: ProjectIndex): string[] {
+  const fileSet = new Set(fileIntents.map(f => f.relativePath))
+  const ordered: string[] = []
+
+  for (const file of fileIntents) {
+    const localImports = file.imports.filter(i => fileSet.has(i))
+    if (localImports.length > 0 && !ordered.includes(file.relativePath)) {
+      ordered.push(file.relativePath)
+    }
+  }
+
+  const allImportedButNotFirst = new Set<string>()
+  for (const file of fileIntents) {
+    for (const imp of file.imports) {
+      if (fileSet.has(imp) && !ordered.includes(imp)) {
+        allImportedButNotFirst.add(imp)
+      }
+    }
+  }
+  for (const imp of allImportedButNotFirst) {
+    if (!ordered.includes(imp)) {
+      const firstDependent = fileIntents.find(f => f.imports.includes(imp))
+      const idx = firstDependent ? ordered.indexOf(firstDependent.relativePath) : -1
+      if (idx >= 0) {
+        ordered.splice(idx + 1, 0, imp)
+      } else {
+        ordered.push(imp)
+      }
+    }
+  }
+
+  for (const file of fileIntents) {
+    if (!ordered.includes(file.relativePath)) {
+      ordered.push(file.relativePath)
+    }
+  }
+
+  return ordered
+}
+
+function countDependents(relativePath: string, dependencyChain: string[]): number {
+  const idx = dependencyChain.indexOf(relativePath)
+  if (idx === -1) return 0
+  return Math.max(0, dependencyChain.length - idx - 1)
+}
+
+function generateOverallSummary(goal: string, files: FileIntent[], primaryLanguage: string | null): string {
+  const lang = primaryLanguage ?? "unknown"
+  const totalFiles = files.length
+  const totalFuncs = files.reduce((s, f) => s + f.functions.length, 0)
+
+  return `Analyzed ${totalFiles} files, ${totalFuncs} functions in ${lang}. Goal: "${goal.slice(0, 80)}". Files ready for implementation with program-analysis grounding.`
+}
+
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;")
+}
+
+// ── CodeIntentAnalyzer class ──
 
 export class CodeIntentAnalyzer {
   private navigator: CodebaseNavigator | null = null
@@ -163,9 +310,8 @@ export class CodeIntentAnalyzer {
   private llm: LLMEngine | null = null
   private scanCache: { key: string; map: CodeIntentMap; timestamp: number } | null = null
   private readonly cacheTTL = 30_000 // 30 detik
-  private cacheKey(projectDir: string): string {
-    return projectDir.replace(/\/+$/, "")
-  }
+
+  // ── Dependency injection ──
 
   setNavigator(nav: CodebaseNavigator): void {
     this.navigator = nav
@@ -187,18 +333,18 @@ export class CodeIntentAnalyzer {
     this.scanCache = null
   }
 
+  // ── Main analysis ──
+
   /**
    * Analyze the intent of code relevant to a given goal.
    * Uses only internal tools (CodebaseNavigator, DependencyTracker) — NO MCP codegraph needed.
    */
   async analyze(goal: string, projectDir: string): Promise<CodeIntentMap> {
-    const key = this.cacheKey(projectDir)
-    // Check cache: key (projectDir) + TTL
+    const key = makeCacheKey(projectDir)
     if (this.scanCache && this.scanCache.key === key && Date.now() - this.scanCache.timestamp < this.cacheTTL) {
       return this.scanCache.map
     }
 
-    // Step 1: Scan project if navigator is available
     let projectIndex: ProjectIndex | null = null
     if (this.navigator) {
       try {
@@ -208,7 +354,6 @@ export class CodeIntentAnalyzer {
       }
     }
 
-    // Step 2: Find relevant files using navigator
     const relevantPaths: string[] = []
     if (this.navigator && projectIndex) {
       try {
@@ -219,9 +364,7 @@ export class CodeIntentAnalyzer {
       }
     }
 
-    // Step 3: If no relevant files found via navigator, try to find any source files
     if (relevantPaths.length === 0 && projectIndex) {
-      // Fall back to all source modules
       for (const m of projectIndex.modules) {
         if (!m.ext.match(/\.(test|spec)\./i)) {
           relevantPaths.push(m.path)
@@ -230,31 +373,24 @@ export class CodeIntentAnalyzer {
       }
     }
 
-    // Step 4: Read files and extract functions
     const fileIntents: FileIntent[] = []
     const primaryLanguage = projectIndex?.primaryLanguage ?? null
 
     for (const filePath of relevantPaths) {
-      const content = this.safeReadFile(filePath)
+      const content = safeReadFile(filePath)
       if (!content) continue
 
       const ext = extname(filePath)
       const lang = detectLanguage(ext)
       const patterns = getPatternsForExt(ext)
 
-      // Extract exports from module info
       const moduleInfo = projectIndex?.modules.find(m => m.path === filePath)
       const exports = moduleInfo?.exports ?? []
       const imports = moduleInfo?.imports ?? []
 
-      // Extract functions
       const functions = patterns ? this.extractFunctions(content, filePath, patterns) : []
-
-      // Generate summary
-      const summary = this.generateFileSummary(filePath, content, exports, functions)
-
-      // Determine complexity
-      const complexity = this.determineComplexity(content, functions.length)
+      const summary = generateFileSummary(filePath, content, exports, functions)
+      const complexity = determineComplexity(content, functions.length)
 
       fileIntents.push({
         filePath,
@@ -268,25 +404,22 @@ export class CodeIntentAnalyzer {
       })
     }
 
-    // Step 5: Build dependency chain
     let dependencyChain: string[] = []
     if (this.depTracker && projectIndex) {
       try {
-        dependencyChain = this.buildDependencyChain(fileIntents, projectIndex)
+        dependencyChain = buildDependencyChain(fileIntents, projectIndex)
       } catch {
         // Non-fatal
       }
     }
 
-    // Step 6: Generate overall summary
-    const overallSummary = this.generateOverallSummary(goal, fileIntents, primaryLanguage)
+    const overallSummary = generateOverallSummary(goal, fileIntents, primaryLanguage)
 
-    // Step 7: Optionally enhance with LLM
     if (this.llm && fileIntents.length > 0) {
       try {
         await this.enhanceWithLLM(fileIntents, goal)
       } catch {
-        // LLM enhancement is optional — non-fatal
+        // Non-fatal
       }
     }
 
@@ -300,11 +433,12 @@ export class CodeIntentAnalyzer {
       analysisTimestamp: Date.now(),
     }
 
-    // Cache for TTL
     this.scanCache = { key, map, timestamp: Date.now() }
 
     return map
   }
+
+  // ── Context serialization ──
 
   /**
    * Get a compact context string for injection into LLM prompts.
@@ -314,22 +448,22 @@ export class CodeIntentAnalyzer {
 
     const lines: string[] = [
       `<code-intent-analysis>`,
-      `  <summary>${this.escapeXml(intentMap.overallSummary)}</summary>`,
+      `  <summary>${escapeXml(intentMap.overallSummary)}</summary>`,
       `  <primary-language>${intentMap.primaryLanguage ?? "unknown"}</primary-language>`,
     ]
 
     const filesToShow = intentMap.files.slice(0, maxFiles)
     for (const file of filesToShow) {
-      lines.push(`  <file path="${this.escapeXml(file.relativePath)}" lang="${file.language}" complexity="${file.complexity}">`)
-      lines.push(`    <summary>${this.escapeXml(file.summary)}</summary>`)
+      lines.push(`  <file path="${escapeXml(file.relativePath)}" lang="${file.language}" complexity="${file.complexity}">`)
+      lines.push(`    <summary>${escapeXml(file.summary)}</summary>`)
 
       if (file.functions.length > 0) {
         lines.push(`    <functions>`)
-        const funcsToShow = file.functions.slice(0, 8) // cap per file
+        const funcsToShow = file.functions.slice(0, 8)
         for (const fn of funcsToShow) {
-          lines.push(`      <function name="${this.escapeXml(fn.functionName)}" line="${fn.lineNumber}" confidence="${fn.confidence.toFixed(2)}">`)
-          lines.push(`        <intent>${this.escapeXml(fn.inferredIntent)}</intent>`)
-          lines.push(`        <signature>${this.escapeXml(fn.signature.slice(0, 120))}</signature>`)
+          lines.push(`      <function name="${escapeXml(fn.functionName)}" line="${fn.lineNumber}" confidence="${fn.confidence.toFixed(2)}">`)
+          lines.push(`        <intent>${escapeXml(fn.inferredIntent)}</intent>`)
+          lines.push(`        <signature>${escapeXml(fn.signature.slice(0, 120))}</signature>`)
           lines.push(`      </function>`)
         }
         if (file.functions.length > 8) {
@@ -339,11 +473,11 @@ export class CodeIntentAnalyzer {
       }
 
       if (file.exports.length > 0) {
-        lines.push(`    <exports>${this.escapeXml(file.exports.join(", "))}</exports>`)
+        lines.push(`    <exports>${escapeXml(file.exports.join(", "))}</exports>`)
       }
 
       if (intentMap.dependencyChain.length > 1) {
-        lines.push(`    <dependents>${this.countDependents(file.relativePath, intentMap.dependencyChain)} dependents</dependents>`)
+        lines.push(`    <dependents>${countDependents(file.relativePath, intentMap.dependencyChain)} dependents</dependents>`)
       }
 
       lines.push(`  </file>`)
@@ -353,9 +487,8 @@ export class CodeIntentAnalyzer {
       lines.push(`  <!-- ${intentMap.files.length - maxFiles} more files omitted -->`)
     }
 
-    // Dependency chain summary
     if (intentMap.dependencyChain.length > 1) {
-      lines.push(`  <dependency-chain>${this.escapeXml(intentMap.dependencyChain.join(" → "))}</dependency-chain>`)
+      lines.push(`  <dependency-chain>${escapeXml(intentMap.dependencyChain.join(" → "))}</dependency-chain>`)
     }
 
     lines.push(`</code-intent-analysis>`)
@@ -383,26 +516,18 @@ export class CodeIntentAnalyzer {
 
   // ── Private helpers ──
 
-  private safeReadFile(filePath: string): string | null {
-    try {
-      return readFileSync(filePath, "utf-8")
-    } catch {
-      return null
-    }
-  }
-
   private extractFunctions(content: string, filePath: string, patterns: LangPatterns): FunctionIntent[] {
     const functions: FunctionIntent[] = []
     const seen = new Set<string>()
 
-    // Extract named function declarations
     let match: RegExpExecArray | null
+
     const funcRegex = new RegExp(patterns.functionPattern)
     while ((match = funcRegex.exec(content)) !== null) {
       const name = match[1] ?? match[2] ?? match[3] ?? match[4]
       if (!name || name === "if" || name === "for" || name === "while" || name === "switch") continue
 
-      const lineNumber = this.getLineNumber(content, match.index)
+      const lineNumber = getLineNumber(content, match.index)
       const sigEnd = content.indexOf("{", match.index)
       const signature = sigEnd !== -1
         ? content.slice(match.index, sigEnd + 1).trim()
@@ -418,31 +543,26 @@ export class CodeIntentAnalyzer {
       }
     }
 
-    // Also look for class methods if this is a class-based file
-    // Extract class names first
     const classRegex = new RegExp(patterns.classPattern)
     while ((match = classRegex.exec(content)) !== null) {
       const className = match[1] ?? match[2]
       if (!className) continue
 
-      // Find class body and extract methods (using indentation heuristic)
       const classStart = match.index
       const classBodyStart = content.indexOf("{", classStart)
       if (classBodyStart === -1) continue
 
-      // Find the class body range
-      const bodyEnd = this.findBlockEnd(content, classBodyStart)
+      const bodyEnd = findBlockEnd(content, classBodyStart)
       const classBody = content.slice(classBodyStart, bodyEnd)
 
-      // Extract methods from class body
       const methodRegex = new RegExp(patterns.methodPattern)
       let methodMatch: RegExpExecArray | null
       while ((methodMatch = methodRegex.exec(classBody)) !== null) {
         const methodName = methodMatch[1]
         if (!methodName || methodName === "if" || methodName === "for" || methodName === "while" || methodName === "switch") continue
-        if (seen.has(`${methodName}:${this.getLineNumber(content, classBodyStart + methodMatch.index)}`)) continue
+        if (seen.has(`${methodName}:${getLineNumber(content, classBodyStart + methodMatch.index)}`)) continue
 
-        const absLine = this.getLineNumber(content, classBodyStart + methodMatch.index)
+        const absLine = getLineNumber(content, classBodyStart + methodMatch.index)
         const sig = classBody.slice(methodMatch.index, methodMatch.index + 80).trim()
         const intent = `${className}.${methodName}() — ${inferIntentFromName(methodName)}`
         const confidence = 0.5
@@ -462,162 +582,29 @@ export class CodeIntentAnalyzer {
       }
     }
 
-    // Sort by line number
     functions.sort((a, b) => a.lineNumber - b.lineNumber)
 
     return functions
   }
 
-  private getLineNumber(content: string, index: number): number {
-    const before = content.slice(0, index)
-    return before.split("\n").length
-  }
-
-  private findBlockEnd(content: string, openBraceIndex: number): number {
-    let depth = 0
-    let inString = false
-    let stringChar = ""
-
-    for (let i = openBraceIndex; i < content.length; i++) {
-      const ch = content[i]
-
-      if (inString) {
-        if (ch === stringChar && content[i - 1] !== "\\") inString = false
-        continue
-      }
-
-      if (ch === "'" || ch === '"' || ch === "`") {
-        inString = true
-        stringChar = ch
-        continue
-      }
-
-      if (ch === "{") depth++
-      else if (ch === "}") {
-        depth--
-        if (depth === 0) return i + 1
-      }
-    }
-
-    return content.length
-  }
-
-  private generateFileSummary(filePath: string, content: string, exports: string[], functions: FunctionIntent[]): string {
-    const name = basename(filePath)
-    const lines = content.split("\n").length
-    const funcCount = functions.length
-
-    let summary = `${name} (${lines} lines, ${funcCount} functions)`
-
-    if (exports.length > 0) {
-      const expStr = exports.slice(0, 5).join(", ")
-      summary += `. Exports: ${expStr}${exports.length > 5 ? ` +${exports.length - 5} more` : ""}`
-    }
-
-    // Check for common patterns
-    if (/\binterface\b|\btype\b/.test(content) && (extname(filePath).match(/\.ts|\.tsx/))) {
-      summary += ". Contains type definitions."
-    }
-    if (/\bclass\b/.test(content)) {
-      summary += ". Contains class definitions."
-    }
-    if (/\bimport\s+(React|Vue|Angular)\b/.test(content)) {
-      summary += ". UI component."
-    }
-    if (/\btest|describe|it\(|assert|expect\b/.test(content)) {
-      summary += ". Test file."
-    }
-
-    return summary
-  }
-
-  private determineComplexity(content: string, funcCount: number): "low" | "medium" | "high" {
-    const lines = content.split("\n").length
-    if (lines > 300 || funcCount > 15) return "high"
-    if (lines > 100 || funcCount > 5) return "medium"
-    return "low"
-  }
-
-  private buildDependencyChain(fileIntents: FileIntent[], _projectIndex: ProjectIndex): string[] {
-    // Build a simple dependency chain: files ordered by dependency
-    // Files that depend on others come first (dependents first, then providers)
-    const fileSet = new Set(fileIntents.map(f => f.relativePath))
-    const ordered: string[] = []
-
-    // First pass: files that import others (dependents)
-    for (const file of fileIntents) {
-      const localImports = file.imports.filter(i => fileSet.has(i))
-      if (localImports.length > 0 && !ordered.includes(file.relativePath)) {
-        ordered.push(file.relativePath)
-      }
-    }
-
-    // Second pass: files that are imported but don't import others
-    const allImportedButNotFirst = new Set<string>()
-    for (const file of fileIntents) {
-      for (const imp of file.imports) {
-        if (fileSet.has(imp) && !ordered.includes(imp)) {
-          allImportedButNotFirst.add(imp)
-        }
-      }
-    }
-    for (const imp of allImportedButNotFirst) {
-      if (!ordered.includes(imp)) {
-        // Insert after dependents
-        const firstDependent = fileIntents.find(f => f.imports.includes(imp))
-        const idx = firstDependent ? ordered.indexOf(firstDependent.relativePath) : -1
-        if (idx >= 0) {
-          ordered.splice(idx + 1, 0, imp)
-        } else {
-          ordered.push(imp)
-        }
-      }
-    }
-
-    // Remaining files that don't import or get imported
-    for (const file of fileIntents) {
-      if (!ordered.includes(file.relativePath)) {
-        ordered.push(file.relativePath)
-      }
-    }
-
-    return ordered
-  }
-
-  private countDependents(relativePath: string, dependencyChain: string[]): number {
-    // Count how many files depend on this one in the chain
-    const idx = dependencyChain.indexOf(relativePath)
-    if (idx === -1) return 0
-    // Files after this one in the chain likely depend on it
-    return Math.max(0, dependencyChain.length - idx - 1)
-  }
-
-  private generateOverallSummary(goal: string, files: FileIntent[], primaryLanguage: string | null): string {
-    const lang = primaryLanguage ?? "unknown"
-    const totalFiles = files.length
-    const totalFuncs = files.reduce((s, f) => s + f.functions.length, 0)
-
-    return `Analyzed ${totalFiles} files, ${totalFuncs} functions in ${lang}. Goal: "${goal.slice(0, 80)}". Files ready for implementation with program-analysis grounding.`
-  }
+  // ── LLM enhancement ──
 
   private async enhanceWithLLM(files: FileIntent[], goal: string): Promise<void> {
     if (!this.llm) return
 
-    // Only enhance files with low-confidence functions
     const lowConfFiles = files.filter(f =>
       f.functions.some(fn => fn.confidence < 0.5)
     )
 
     if (lowConfFiles.length === 0) return
 
-    // Build a prompt with function signatures for LLM to analyze
     const funcsToEnhance = lowConfFiles.flatMap(f =>
       f.functions.filter(fn => fn.confidence < 0.5).map(fn => ({
         file: f.relativePath,
         name: fn.functionName,
         signature: fn.signature.slice(0, 200),
       }))
-    ).slice(0, 20) // cap
+    ).slice(0, 20)
 
     if (funcsToEnhance.length === 0) return
 
@@ -654,16 +641,8 @@ export class CodeIntentAnalyzer {
       // LLM enhancement is optional — non-fatal
     }
   }
-
-  private escapeXml(str: string): string {
-    return str
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&apos;")
-  }
 }
 
-/** Singleton instance */
+// ── Singleton instance ──
+
 export const codeIntentAnalyzer = new CodeIntentAnalyzer()
