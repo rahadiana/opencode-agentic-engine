@@ -43,6 +43,10 @@ const FALLBACK_STOP_WORDS = new Set([
   "tetapi", "namun", "selesai", "sukses", "berhasil",
 ])
 
+import { createLogger } from "../observability/logger.js"
+
+const log = createLogger("Stopwords")
+
 // ── Load stopwords-iso, fall back to minimal set ───────────────────────
 function loadStopWords(): Set<string> {
   try {
@@ -50,7 +54,7 @@ function loadStopWords(): Set<string> {
     const stopwordsIso: Record<string, string[]> = require("stopwords-iso")
 
     if (!stopwordsIso || typeof stopwordsIso !== "object") {
-      console.warn("[stopwords] stopwords-iso loaded but not an object, using fallback")
+      log.warn("stopwords-iso loaded but not an object, using fallback")
       return new Set(FALLBACK_STOP_WORDS)
     }
 
@@ -72,15 +76,15 @@ function loadStopWords(): Set<string> {
       }
     }
 
-    console.debug(
-      `[stopwords] Loaded ${totalWords} stop words from ${langCount} languages ` +
+    log.debug(
+      `Loaded ${totalWords} stop words from ${langCount} languages ` +
       `(${merged.size} unique after dedup)`
     )
     return merged
   } catch (err) {
     // Package not available — use fallback
-    console.warn(
-      "[stopwords] stopwords-iso not available, using bundled fallback " +
+    log.warn(
+      "stopwords-iso not available, using bundled fallback " +
       `(${FALLBACK_STOP_WORDS.size} words): ${(err as Error)?.message ?? String(err)}`
     )
     return new Set(FALLBACK_STOP_WORDS)

@@ -1,4 +1,5 @@
 import { existsSync, statSync } from "fs"
+import { sdkMockClient } from "./mock-sdk-client.mjs"
 
 const pluginPath = "/tmp/dropin-project/.opencode/plugins/agentic-engine/index.js"
 
@@ -16,7 +17,7 @@ if (typeof mod.AgenticEngine !== "function") {
 console.log("OK AgenticEngine exported as function")
 
 const hooks = await mod.AgenticEngine({
-  client: {},
+  client: sdkMockClient(),
   project: { name: "test", path: "/tmp/dropin-project" },
   directory: "/tmp/dropin-project",
   worktree: "/tmp/dropin-project",

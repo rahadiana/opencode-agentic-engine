@@ -9,6 +9,7 @@
  * - STEM Agent (arXiv:2603.22359): Event-triggered + time-triggered consolidation
  */
 
+import { createLogger } from "../observability/logger.js"
 import { MemoryOrchestrator, type ConsolidationReport } from "./memory-orchestrator.js"
 import type { SessionStore } from "./session-store.js"
 
@@ -47,6 +48,8 @@ const DEFAULT_SCHEDULE: ConsolidationSchedule = {
 }
 
 // ── ConsolidationScheduler ─────────────────────────────────────────
+
+const log = createLogger("Consolidation")
 
 export class ConsolidationScheduler {
   private orchestrator: MemoryOrchestrator
@@ -178,7 +181,7 @@ export class ConsolidationScheduler {
       try {
         cb(report)
       } catch (e) {
-        console.warn("[ConsolidationScheduler] callback error:", e)
+        log.warn("callback error", { error: e instanceof Error ? e.message : String(e) })
       }
     }
 

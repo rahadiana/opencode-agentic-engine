@@ -14,6 +14,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from "node:fs"
 import { resolve } from "node:path"
 import { homedir } from "node:os"
+import { createLogger } from "../observability/logger.js"
+
+const log = createLogger("StateStore")
 
 // ── Types ──
 
@@ -218,7 +221,7 @@ export class StateStore {
       } catch (err) {
         const isTest = typeof process !== "undefined" && process.env?.NODE_ENV === "test"
         if (!isTest) {
-          console.warn(`[StateStore] Failed to load ${filePath}:`, (err as Error).message)
+          log.warn(`Failed to load ${filePath}`, { error: (err as Error).message })
         }
       }
     }

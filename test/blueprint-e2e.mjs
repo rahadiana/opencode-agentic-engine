@@ -12,6 +12,7 @@
 import { existsSync } from "node:fs"
 import { join, dirname } from "node:path"
 import { fileURLToPath } from "node:url"
+import { sdkMockClient } from "./mock-sdk-client.mjs"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const projectRoot = join(__dirname, "..")
@@ -52,7 +53,7 @@ async function main() {
   assert(typeof AgenticEngine === "function", "AgenticEngine is a function")
 
   const mockInput = {
-    client: {},
+    client: sdkMockClient(),
     project: { name: "test", path: projectRoot },
     directory: projectRoot,
     worktree: projectRoot,

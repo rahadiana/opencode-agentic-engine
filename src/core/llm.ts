@@ -1,16 +1,19 @@
-// Error logging helper for silent catch blocks
-function logParseError(context: string, error: unknown): void {
-  if (process.env.DEBUG_LLM_PARSING) {
-    console.error(`[LLM Parse Error] ${context}:`, error);
-  }
-}
-
 import type { LLMConfig, LLMRequest, LLMResponse, CostSwitchEvent } from './llm-types.js'
 import { TOOL_COMPLEXITY } from './llm-types.js'
 import type { ModelRegistry } from "./model-registry.js"
 import type { BudgetTracker } from "./budget-tracker.js"
 import { SessionReader } from "./session-reader.js"
 import { SemanticCache } from "./semantic-cache.js"
+import { createLogger } from "../observability/logger.js"
+
+const log = createLogger("LLM")
+
+// Error logging helper for silent catch blocks
+function logParseError(context: string, error: unknown): void {
+  if (process.env.DEBUG_LLM_PARSING) {
+    log.error(`[LLM Parse Error] ${context}`, { error });
+  }
+}
 
 export class LLMEngine {
   private config: LLMConfig

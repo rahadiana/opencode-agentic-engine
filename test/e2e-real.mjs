@@ -13,6 +13,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
 import { execFileSync } from "child_process"
+import { sdkMockClient } from "./mock-sdk-client.mjs"
 
 const pluginDist = new URL("../dist/index.js", import.meta.url).pathname
 const results = []
@@ -102,7 +103,7 @@ async function main() {
 
     try {
       const mockInput = {
-        client: {},
+        client: sdkMockClient(),
         project: { name: `task-${i}`, path: dir },
         directory: dir,
         worktree: dir,

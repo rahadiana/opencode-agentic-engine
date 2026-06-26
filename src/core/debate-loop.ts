@@ -1,5 +1,8 @@
 import type { LLMEngine } from "./llm.js"
 import { TimeoutError } from "./errors.js"
+import { createLogger } from "../observability/logger.js"
+
+const log = createLogger("DebateLoop")
 
 export interface DebateConfig {
   /** The task to analyze/debate */
@@ -99,7 +102,7 @@ Output the cleaned version only.`
 
 function logParseError(context: string, error: unknown): void {
   if (process.env.DEBUG_AGENTIC) {
-    console.error(`[DebateLoop] ${context}:`, error)
+    log.error(`[DebateLoop] ${context}: ${String(error)}`)
   }
 }
 
@@ -126,21 +129,21 @@ export class DebateLoop {
 
     try {
       if (config.verbose) {
-        console.log(`\n━━━ Debate: "${config.task}" ━━━`)
-        console.log(`Max rounds: ${maxRounds} | Format: ${format} | Timeout: ${totalTimeoutMs}ms`)
+        log.debug(`\n━━━ Debate: "${config.task}" ━━━`)
+        log.debug(`Max rounds: ${maxRounds} | Format: ${format} | Timeout: ${totalTimeoutMs}ms`)
       }
 
       for (let round = 1; round <= maxRounds; round++) {
         // Check for cancellation between rounds
         if (effectiveSignal.aborted) {
-          if (config.verbose) console.log(`\n⚠️ Debate cancelled at round ${round}`)
+          if (config.verbose) log.debug(`\n⚠️ Debate cancelled at round ${round}`)
           return {
             task: config.task, totalRounds: round - 1, approved: false,
             rounds, finalOutput: "", revisionSummary: `Debate cancelled (${config.signal?.aborted ? "external signal" : `total timeout ${totalTimeoutMs}ms exceeded`})`, aborted: true,
           }
         }
 
-        if (config.verbose) console.log(`\n── Round ${round}/${maxRounds} ──`)
+        if (config.verbose) log.debug(`\n── Round ${round}/${maxRounds} ──`)
 
       // ── Step 1: Executor produces draft (or revises based on feedback) ──
       let executorInput: string
@@ -175,9 +178,9 @@ export class DebateLoop {
         clearTimeout(timeoutId)
         draft = draftResp.content
         if (config.verbose) {
-          console.log(`\n┃ [Executor] Draft produced (${draft.length} chars):`)
-          console.log(`┃ ${draft.slice(0, 300)}${draft.length > 300 ? "..." : ""}`)
-          if (draft.length > 300) console.log(`┃ ... (${draft.length - 300} more chars)`)
+          log.debug(`\n┃ [Executor] Draft produced (${draft.length} chars):`)
+          log.debug(`┃ ${draft.slice(0, 300)}${draft.length > 300 ? "..." : ""}`)
+          if (draft.length > 300) log.debug(`┃ ... (${draft.length - 300} more chars)`)
         }
       } catch (error) {
         logParseError("executor call", error)
@@ -192,7 +195,7 @@ export class DebateLoop {
           ? 1 - (levenshteinDistance(draft, prevDraft) / Math.max(draft.length, prevDraft.length))
           : 0
         if (similarity > 0.95) {
-          if (config.verbose) console.log(`\n┃ ⚠️ [Auto-Break] Draft ${(similarity * 100).toFixed(0)}% similar to previous round — loop detected`)
+          if (config.verbose) log.debug(`\n┃ ⚠️ [Auto-Break] Draft ${(similarity * 100).toFixed(0)}% similar to previous round — loop detected`)
           rounds.push({
             round,
             draft,
@@ -228,9 +231,9 @@ export class DebateLoop {
         clearTimeout(criticTimeoutId)
         review = criticResp.content
         if (config.verbose) {
-          console.log(`\n┃ [Critic] Review produced (${review.length} chars):`)
-          console.log(`┃ ${review.slice(0, 300)}${review.length > 300 ? "..." : ""}`)
-          if (review.length > 300) console.log(`┃ ... (${review.length - 300} more chars)`)
+          log.debug(`\n┃ [Critic] Review produced (${review.length} chars):`)
+          log.debug(`┃ ${review.slice(0, 300)}${review.length > 300 ? "..." : ""}`)
+          if (review.length > 300) log.debug(`┃ ... (${review.length - 300} more chars)`)
         }
 
         // Check if approved
@@ -262,13 +265,13 @@ export class DebateLoop {
 
       if (config.verbose) {
         const status = approved ? "✅ Approved" : `⚠️ ${issues.length} issue(s)`
-        console.log(`\n┃ [Round ${round}] ${status}`)
+        log.debug(`\n┃ [Round ${round}] ${status}`)
         if (!approved && issues.length > 0) {
-          console.log(`┃ Issues:`)
+          log.debug(`┃ Issues:`)
           for (const issue of issues.slice(0, 5)) {
-            console.log(`┃   • ${issue.slice(0, 200)}`)
+            log.debug(`┃   • ${issue.slice(0, 200)}`)
           }
-          if (issues.length > 5) console.log(`┃   ... and ${issues.length - 5} more`)
+          if (issues.length > 5) log.debug(`┃   ... and ${issues.length - 5} more`)
         }
       }
 
@@ -278,7 +281,7 @@ export class DebateLoop {
 
     // ── Step 3: Clean the final output ──
     let finalOutput = currentDraft
-    if (config.verbose) console.log(`\n── Cleaner ──`)
+    if (config.verbose) log.debug(`\n── Cleaner ──`)
     try {
       const cleanController = new AbortController()
       const cleanTimeoutId = setTimeout(() => cleanController.abort(), 30_000) // 30s timeout (STEM Agent §timeout)
@@ -315,11 +318,11 @@ export class DebateLoop {
     }
 
     if (config.verbose) {
-      console.log(`\n━━━ Debate Complete ━━━`)
-      console.log(`Status: ${approved ? "✅ Approved" : "⚠️ Not fully resolved"}`)
-      console.log(`Rounds: ${rounds.length}`)
-      console.log(`Revision: ${revisionSummary}`)
-      if (config.signal?.aborted) console.log(`Cancelled: external signal`)
+      log.debug(`\n━━━ Debate Complete ━━━`)
+      log.debug(`Status: ${approved ? "✅ Approved" : "⚠️ Not fully resolved"}`)
+      log.debug(`Rounds: ${rounds.length}`)
+      log.debug(`Revision: ${revisionSummary}`)
+      if (config.signal?.aborted) log.debug(`Cancelled: external signal`)
     }
 
     return {

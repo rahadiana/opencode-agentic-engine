@@ -2,6 +2,7 @@
 // Tests the new autoHallucinationCheck, blockOnHallucination configs
 
 import assert from "node:assert"
+import { sdkMockClient } from "./mock-sdk-client.mjs"
 
 let passed = 0
 let failed = 0
@@ -27,7 +28,7 @@ import { tmpdir } from "node:os"
 const testDir = mkdtempSync(join(tmpdir(), "agentic-test-"))
 
 const mockInput = {
-  client: {},
+  client: sdkMockClient(),
   project: { name: "test", path: testDir },
   directory: testDir,
   worktree: testDir,

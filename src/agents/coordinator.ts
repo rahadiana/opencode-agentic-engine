@@ -1,6 +1,9 @@
 import crypto from "node:crypto"
 import { RoleRegistry, type AgentDef, type CustomAgentDef } from "./role-registry.js"
 import type { SkillStore } from "../memory/skill-store.js"
+import { createLogger } from "../observability/logger.js"
+
+const log = createLogger("Coordinator")
 
 export type AgentRole = "architect" | "developer" | "qa" | "coordinator" | "pm" | "analyst" | "builder" | "reviewer" | "planner"
 
@@ -173,7 +176,7 @@ export class AgentCoordinator {
       const entry: SharedMemoryEntry = { key, value, writtenBy: agentRole, timestamp: Date.now() }
       this.sharedMemory.set(key, entry)
       for (const listener of this.memoryListeners) {
-        try { listener(entry) } catch (err) { console.warn(`[Coordinator] memoryListener error:`, err) }
+        try { listener(entry) } catch (err) { log.warn(`[Coordinator] memoryListener error: ${String(err)}`) }
       }
       return entry
     } finally {
@@ -195,7 +198,7 @@ export class AgentCoordinator {
       }
       for (const entry of temp) {
         for (const listener of this.memoryListeners) {
-          try { listener(entry) } catch (err) { console.warn(`[Coordinator] batch memoryListener error:`, err) }
+          try { listener(entry) } catch (err) { log.warn(`[Coordinator] batch memoryListener error: ${String(err)}`) }
         }
       }
     } finally {
@@ -399,7 +402,7 @@ export class AgentCoordinator {
           return llmRole as AgentRole
         }
       } catch {
-        console.warn(`[Coordinator] LLM suggestRole failed for "${description.slice(0, 60)}", falling back to keyword matching`)
+        log.warn(`[Coordinator] LLM suggestRole failed for "${description.slice(0, 60)}", falling back to keyword matching`)
       }
     }
 
@@ -439,7 +442,7 @@ export class AgentCoordinator {
     sec.history.push({ key, value, writtenBy: agentRole, timestamp: entry.timestamp, action: "write" })
     const cbs = this.sectionCallbacks.get(section) ?? []
     for (const cb of cbs) {
-      try { cb(section, entry) } catch (err) { console.warn(`[Coordinator] sectionCallback error for section "${section}":`, err) }
+      try { cb(section, entry) } catch (err) { log.warn(`[Coordinator] sectionCallback error for section "${section}": ${String(err)}`) }
     }
     return entry
   }
@@ -566,7 +569,7 @@ export class AgentCoordinator {
   setPhaseStatus(status: AgentPhase): void {
     this.phaseStatus = status
     for (const cb of this.phaseListeners) {
-      try { cb(status) } catch (err) { console.warn(`[Coordinator] phaseListener error:`, err) }
+      try { cb(status) } catch (err) { log.warn(`[Coordinator] phaseListener error: ${String(err)}`) }
     }
   }
 

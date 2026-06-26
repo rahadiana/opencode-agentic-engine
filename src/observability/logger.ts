@@ -4,10 +4,18 @@
  * Wraps console methods with severity levels, source tagging,
  * and optional JSON output for machine consumption.
  *
+ * When an OpenCode client is available (via setGlobalLogClient),
+ * logs are sent via client.app.log() instead of console.*.
+ *
  * Usage:
  *   const log = createLogger("Verifier")
  *   log.warn("File skipped", { file, reason: "EACCES" })
  *   log.error(err, { operation: "readFile" })
+ *
+ * Global client:
+ *   import { setGlobalLogClient } from "./logger.js"
+ *   setGlobalLogClient(input.client)
+ *   // All subsequent createLogger() calls use client.app.log()
  */
 
 export type LogSeverity = "debug" | "info" | "warn" | "error"
@@ -26,6 +34,22 @@ export interface Logger {
   warn(msg: string, meta?: Record<string, unknown>): void
   error(msg: string | Error, meta?: Record<string, unknown>): void
 }
+
+// ── Global client for SDK logging ──────────────────────────
+
+type LogClient = { app?: { log?: (opts: { body: { service: string; level: string; message: string; extra?: Record<string, unknown> } }) => Promise<boolean> } }
+let _globalClient: LogClient | null = null
+
+/**
+ * Set the global OpenCode client for all loggers.
+ * Call once at plugin init. All subsequent createLogger() calls
+ * will use client.app.log() instead of console.* when available.
+ */
+export function setGlobalLogClient(client: LogClient): void {
+  _globalClient = client
+}
+
+// ── Logger factory ─────────────────────────────────────────
 
 function formatEntry(entry: LogEntry, jsonMode: boolean): string {
   if (jsonMode) {
@@ -61,6 +85,23 @@ export function createLogger(source: string): Logger {
       message,
       ...(meta ? { meta } : {}),
     }
+
+    // Prefer client.app.log when available (fire-and-forget)
+    if (_globalClient?.app?.log) {
+      _globalClient.app.log({
+        body: {
+          service: source,
+          level: severity,
+          message,
+          extra: meta,
+        },
+      }).catch(() => {
+        /* swallow — fallback already in console */
+      })
+      return
+    }
+
+    // Fallback: console.*
     const output = formatEntry(entry, jsonMode)
     switch (severity) {
       case "error": console.error(output); break

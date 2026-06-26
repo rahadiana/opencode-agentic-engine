@@ -34,6 +34,7 @@ import { ConsolidationScheduler } from "./memory/consolidation-scheduler.js"
 import { HallucinationGuard, type ClaimResult, type HallucinationCheck } from "./drift/hallucination-guard.js"
 import { ParallelExecutor } from "./core/parallel.js"
 import { Dashboard } from "./observability/dashboard.js"
+import { createLogger, setGlobalLogClient } from "./observability/logger.js"
 import { CheckpointSystem } from "./drift/checkpoints.js"
 import { SessionStore } from "./memory/session-store.js"
 import { TraceLogger } from "./observability/trace-logger.js"
@@ -314,6 +315,7 @@ const createEngine: Plugin = async (input, _options) => {
   // are injected per-LLM-call via `experimental.chat.system.transform` hook.
   // This avoids file I/O latency, stale prompts, and corrupt-agent errors.
   let currentInjectDomain: DomainPack = genericDomain
+  const log = createLogger("Agentic")
 
   // Write initial prompt (deferred — after persistence is available for smart cache)
 
@@ -363,7 +365,7 @@ const createEngine: Plugin = async (input, _options) => {
       } catch (err: any) {
         const errMsg = err instanceof Error ? err.message : String(err)
         const errStack = err instanceof Error ? err.stack : ""
-        console.error(`[Agentic] ❌ Tool "${name}" execution failed:\n  ${errMsg}\n${errStack ? `  ${errStack.split("\n").slice(1, 4).join("\n  ")}` : ""}`)
+        log.error(`[Agentic] ❌ Tool "${name}" execution failed:\n  ${errMsg}\n${errStack ? `  ${errStack.split("\n").slice(1, 4).join("\n  ")}` : ""}`)
         logErrorToFile(name, errMsg, errStack)
         return {
           output: `❌ **${name}** execution failed: ${errMsg}\n\nPlease check your inputs and try again. If the problem persists, use \`agentic_reflect\` for debugging.`,
@@ -385,7 +387,7 @@ const createEngine: Plugin = async (input, _options) => {
     } catch (e) {
       // Non-fatal: registry registration is best-effort
       const errMsg = e instanceof Error ? e.message : String(e)
-      console.error(`[Agentic] ❌ Tool registration FAILED for "${name}": ${errMsg}`)
+      log.error(`[Agentic] ❌ Tool registration FAILED for "${name}": ${errMsg}`)
     }
     return tool({ description: def.description, args: def.args, execute: wrappedExecute as any })
   }
@@ -446,6 +448,7 @@ const confidenceScorer = new ConfidenceScorer()
 const confidenceStore = new ConfidenceStore()
   const llmEngine = new LLMEngine()
   llmEngine.setOpencodeClient(input.client)
+  setGlobalLogClient(input.client as any)
     llmEngine.setModelRegistry(modelRegistry)
     llmEngine.setSessionStore(sessionStore)
     llmEngine.setBudgetTracker(budgetTracker)
@@ -568,7 +571,7 @@ const confidenceStore = new ConfidenceStore()
   try {
     sqliteDB = new SQLitePersistence()
   } catch (e) {
-    console.log("[Agentic] SQLite not available — agentic_db tool disabled:", (e as Error).message)
+    log.info("[Agentic] SQLite not available — agentic_db tool disabled: " + (e as Error).message)
   }
   // Build RAG config from config file
   const ragConfig: import("./memory/multi-index-rag.js").RAGConfig = {
@@ -693,7 +696,7 @@ const confidenceStore = new ConfidenceStore()
     const knowledgeRaw = readFileSync(knowledgePath, "utf-8")
     const knowledge = JSON.parse(knowledgeRaw)
     if (knowledge?.sessions?.length > 0) {
-      console.debug(`[init] Loaded ${knowledge.sessions.length} prior session(s) from knowledge.json`)
+      log.debug(`[init] Loaded ${knowledge.sessions.length} prior session(s) from knowledge.json`)
     }
     // Store in a global for tool access
     ;(globalThis as { __agenticKnowledge?: typeof knowledge }).__agenticKnowledge = knowledge
@@ -930,10 +933,10 @@ const confidenceStore = new ConfidenceStore()
     try {
       const trigger = continuousEvolution.shouldEvolve(sessionId)
       if (trigger) {
-        console.debug(`[auto-evolve] Triggered: ${trigger.reason}`)
+        log.debug(`[auto-evolve] Triggered: ${trigger.reason}`)
         runAutoEvolve().then((result) => {
-          // Tampilkan hasil evolusi ke user via console.log + trace
-          console.log(`[auto-evolve] ${result.replace(/\n/g, " | ")}`)
+          // Tampilkan hasil evolusi ke user via trace
+          log.info(`[auto-evolve] ${result.replace(/\n/g, " | ")}`)
           traceLogger.log({
             toolUsed: "auto-evolve",
             success: true,
@@ -942,7 +945,7 @@ const confidenceStore = new ConfidenceStore()
             step: "auto-evolve",
             durationMs: 0,
           })
-        }).catch((err) => console.warn(`[auto-evolve] Fire-and-forget evolution error:`, (err as Error).message))
+        }).catch((err) => log.warn(`[auto-evolve] Fire-and-forget evolution error: ${(err as Error).message}`))
       }
     } catch {
       // Non-fatal — don't let evolution errors affect step execution
@@ -5901,7 +5904,7 @@ const confidenceStore = new ConfidenceStore()
           const skillContexts: string[] = []
 
           try {
-            await navigator.scan(projectDir).catch((err) => console.warn(`[agentic_auto] navigator scan failed:`, err))
+            await navigator.scan(projectDir).catch((err) => log.warn(`[agentic_auto] navigator scan failed:`, err))
             codebaseSummary = navigator.getSummary()
             const found = navigator.findRelevantFiles(args.goal, 8)
             relevantFiles.push(...found)
@@ -6272,11 +6275,11 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                   // Log for observability
                   const totalMatured = Object.values(matureSummary).reduce((a: number, b: number) => a + b, 0)
                   if (totalMatured > 0) {
-                    console.debug(`[auto] Auto-matured ${totalMatured} skills: ${JSON.stringify(matureSummary)}`)
+                    log.debug(`[auto] Auto-matured ${totalMatured} skills: ${JSON.stringify(matureSummary)}`)
                   }
                 }
               } catch { /* non-fatal */ }
-            })().catch((err) => console.warn(`[agentic_auto] thorough post-processing error:`, err))
+            })().catch((err) => log.warn(`[agentic_auto] thorough post-processing error:`, err))
           }
 
           const allSuccess = !hasNoLLM
@@ -6442,7 +6445,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
               }
             }
           } catch (e) {
-            console.error("[Agentic] RAG search failed:", e instanceof Error ? e.message : e)
+            log.error("[Agentic] RAG search failed: " + (e instanceof Error ? e.message : String(e)))
           }
 
           // ── Tool selection: kirim SEMUA tools — LLM modern pinter milih sendiri ──
@@ -6489,7 +6492,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
         }
       } catch (e) {
         // GLOBAL FALLBACK: jika transform gagal total, inject tool list minimum
-        console.error("[Agentic] system.transform ERROR — injecting fallback:", e instanceof Error ? e.message : e)
+        log.error("[Agentic] system.transform ERROR — injecting fallback: " + (e instanceof Error ? e.message : String(e)))
         const fallbackTools = TOOL_REGISTRY.map(t => `- **${t.name}**: ${t.description.slice(0, 100)}`).join("\n")
         const fallback = `\n\n## Agentic Tools\n\nYou have access to these tools. Use them with their \`agentic_\` prefix.\n\n### Tool List (${TOOL_REGISTRY.length})\n${fallbackTools}\n\nBuilt-in tools: \`read\`, \`edit\`, \`bash\`, \`grep\`, \`webfetch\`, \`write\`.`
         if (output.system.length > 0) {
@@ -6551,7 +6554,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
         || (outputText.length === 0)
 
       if (isError) {
-        console.error(`[Agentic] Tool "${toolName}" returned error:\n${outputText.slice(0, 500)}`)
+        log.error(`[Agentic] Tool "${toolName}" returned error:\n${outputText.slice(0, 500)}`)
         logErrorToFile(toolName, `tool output error: ${outputText.slice(0, 300)}`)
       }
 
@@ -6650,12 +6653,12 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
     },
 
     dispose: async () => {
-      configLoader.stopWatch()
-      stateStore.set("models", "registry", modelRegistry.toJSON())
-      stateStore.set("prompts", "state", roleRegistry.getAllPromptStates())
-      stateStore.set("evolution", "trend", continuousEvolution.toJSON(), projectId)
-      stateStore.set("evaluation", "live", liveEvaluator.toJSON(), projectId)
-      await traceLogger.dispose()
+      try { configLoader.stopWatch() } catch { /* non-fatal */ }
+      try { stateStore.set("models", "registry", modelRegistry.toJSON()) } catch { /* non-fatal */ }
+      try { stateStore.set("prompts", "state", roleRegistry.getAllPromptStates()) } catch { /* non-fatal */ }
+      try { stateStore.set("evolution", "trend", continuousEvolution.toJSON(), projectId) } catch { /* non-fatal */ }
+      try { stateStore.set("evaluation", "live", liveEvaluator.toJSON(), projectId) } catch { /* non-fatal */ }
+      try { await traceLogger.dispose() } catch { /* non-fatal */ }
     },
   }
 }

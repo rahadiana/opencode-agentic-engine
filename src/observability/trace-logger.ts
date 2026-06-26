@@ -6,6 +6,9 @@ import { existsSync } from "node:fs"
 import { createGzip } from "node:zlib"
 import { pipeline } from "node:stream/promises"
 import { statSync } from "node:fs"
+import { createLogger } from "./logger.js"
+
+const log = createLogger("TraceLogger")
 
 export type LogLevel = "info" | "warn" | "error"
 
@@ -33,6 +36,8 @@ export class TraceLogger {
   private useCompression: boolean
   private minLevel: LogLevel
   private flushLock = false
+  /** In-flight flush promise — dispose awaits this before its own flush. */
+  private pendingFlush: Promise<void> | null = null
 
   constructor(
     worktree: string,
@@ -122,7 +127,7 @@ export class TraceLogger {
       }
       return total - kept
     } catch (err) {
-      console.error("[TraceLogger] pruneOldTraces error:", err)
+      log.error("pruneOldTraces error", { error: err })
       return 0
     }
   }
@@ -160,7 +165,7 @@ export class TraceLogger {
     })
 
     if (this.buffer.length >= this.batchSize && !this.flushLock) {
-      this.flush().catch(() => {})
+      this.pendingFlush = this.flush().catch(() => {})
     }
 
     if (!this.flushInterval) {
@@ -212,6 +217,11 @@ export class TraceLogger {
     if (this.flushInterval) {
       clearInterval(this.flushInterval)
       this.flushInterval = null
+    }
+    // Await any in-flight auto-flush before flushing remaining buffer
+    if (this.pendingFlush) {
+      await this.pendingFlush
+      this.pendingFlush = null
     }
     await this.flush()
   }

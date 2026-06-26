@@ -5,7 +5,10 @@
  * data → Consumer (BudgetTracker) auto-update tanpa LLM harus manual chaining.
  * EventBus menggeneralisasi ini: siapapun bisa emit, siapapun bisa subscribe.
  */
+import { createLogger } from "../observability/logger.js"
 import type { AgenticEvent } from "./event-taxonomy.js"
+
+const log = createLogger("EventBus")
 
 type EventHandler = (event: AgenticEvent) => void | Promise<void>
 
@@ -43,10 +46,10 @@ export class EventBus {
         try {
           const result = handler(event)
           if (result instanceof Promise) {
-            result.catch(e => console.error(`[EventBus] subscriber error on ${event.type}:`, e))
+            result.catch(e => log.error(`subscriber error on ${event.type}`, { error: e }))
           }
         } catch (e) {
-          console.error(`[EventBus] subscriber error on ${event.type}:`, e)
+          log.error(`subscriber error on ${event.type}`, { error: e })
         }
       }
     }

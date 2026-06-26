@@ -4,6 +4,9 @@ import { readFile } from "node:fs/promises"
 import { resolve } from "node:path"
 import type { DomainRegistry } from "./domain-registry.js"
 import type { LLMEngine } from "./llm.js"
+import { createLogger } from "../observability/logger.js"
+
+const log = createLogger("Verifier")
 
 export type SupportedLanguage = "typescript" | "python" | "go" | "rust" | "javascript" | "unknown"
 
@@ -631,7 +634,7 @@ export class Verifier {
           }
         }
       } catch {
-        console.warn(`[Verifier] Failed to parse package.json in ${projectDir}, using default test config`)
+        log.warn(`Failed to parse package.json in ${projectDir}, using default test config`)
       }
     }
 

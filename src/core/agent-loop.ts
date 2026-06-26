@@ -25,6 +25,9 @@ import { ConfidenceScorer, ConfidenceStore, type ScoringSignals } from "./confid
 import { PlanningLayer } from "./planning-layer.js"
 import { ExecutionLayer } from "./execution-layer.js"
 import { RecoveryLayer, type RecoveryDecision } from "./recovery-layer.js"
+import { createLogger } from "../observability/logger.js"
+
+const log = createLogger("AgentLoop")
 
 export interface AgentLoopConfig {
   maxIterations: number
@@ -165,7 +168,7 @@ export class AgentLoop {
     // Validate plan before execution
     const validation = this.planningLayer.validate(plan.intent.goal, dagPlan)
     if (!validation.valid) {
-      console.warn(`[AgentLoop] Plan validation warnings: ${validation.warnings.join(", ")}`)
+      log.warn(`[AgentLoop] Plan validation warnings: ${validation.warnings.join(", ")}`)
     }
 
     // DAG observer → legacy observer mapping
@@ -248,7 +251,7 @@ export class AgentLoop {
           // Intermediate step: NON-BLOCKING — warn only, keep success=true
           // Per Graph Harness §5.3, this prevents cascading failure from minor issues
           result.output = `${verifyOutput}\n\n${result.output}`
-          console.warn(`[AgentLoop] Intermediate verify warning for step ${node.id}`)
+          log.warn(`[AgentLoop] Intermediate verify warning for step ${node.id}`)
         }
 
         // Verification criteria
@@ -281,7 +284,7 @@ export class AgentLoop {
         if (cs.overall < 0.4 && cs.overall >= 0.2) {
           const warnMsg = `[Confidence Warning] Score ${cs.overall.toFixed(2)} < 0.4 — review recommended`
           result.output = `${warnMsg}\n\n${result.output}`
-          console.warn(`[AgentLoop] ${warnMsg} for step ${node.id}`)
+          log.warn(`[AgentLoop] ${warnMsg} for step ${node.id}`)
         }
         // Blocking FAIL for very low confidence (< 0.2)
         if (cs.overall < 0.2) {
@@ -290,11 +293,11 @@ export class AgentLoop {
             const failMsg = `[Confidence Block] Score ${cs.overall.toFixed(2)} < 0.2 — final step blocked`
             result.success = false
             result.output = `${failMsg}\n\n${result.output}`
-            console.warn(`[AgentLoop] ${failMsg} for step ${node.id}`)
+            log.warn(`[AgentLoop] ${failMsg} for step ${node.id}`)
           } else {
             const warnMsg = `[Confidence Block Warning] Score ${cs.overall.toFixed(2)} < 0.2 — intermediate step at risk`
             result.output = `${warnMsg}\n\n${result.output}`
-            console.warn(`[AgentLoop] ${warnMsg} for step ${node.id}`)
+            log.warn(`[AgentLoop] ${warnMsg} for step ${node.id}`)
           }
         }
       }
@@ -333,9 +336,9 @@ export class AgentLoop {
 
     // Notify observers about escalated nodes
     if (escalatedNodes.length > 0) {
-      console.warn(`[AgentLoop] Escalated ${escalatedNodes.length} node(s):`)
+      log.warn(`[AgentLoop] Escalated ${escalatedNodes.length} node(s):`)
       for (const en of escalatedNodes) {
-        console.warn(`  ${en.nodeId}: ${en.reason}`)
+        log.warn(`  ${en.nodeId}: ${en.reason}`)
         if (dagResult.completedNodes.includes(en.nodeId)) continue
         if (originallyFailed.has(en.nodeId) && !dagResult.failedNodes.includes(en.nodeId)) {
           dagResult.failedNodes.push(en.nodeId)
@@ -352,7 +355,7 @@ export class AgentLoop {
     }
 
     if (recoveryDepth >= MAX_RECOVERY_DEPTH) {
-      console.warn(`[AgentLoop] Recovery depth limit (${MAX_RECOVERY_DEPTH}) reached — forcing all pending to escalated`)
+      log.warn(`[AgentLoop] Recovery depth limit (${MAX_RECOVERY_DEPTH}) reached — forcing all pending to escalated`)
       for (const nid of pendingNodes) {
         if (!dagResult.failedNodes.includes(nid)) {
           dagResult.failedNodes.push(nid)
@@ -435,7 +438,7 @@ export class AgentLoop {
       return { verified: true, tier, output }
     } catch (err) {
       const msg = `Verification error: ${err instanceof Error ? err.message : String(err)}`
-      console.warn(msg)
+      log.warn(msg)
       output = msg
       return { verified: isFinalStep ? false : true, tier, output }
     }
@@ -757,7 +760,7 @@ export class AgentLoop {
             // Intermediate step: NON-BLOCKING (Graph Harness §5.3)
             // Keep stepSuccess=true, just append warning to output
             stepOutput = `${verifyOutput}\n\n${stepOutput}`
-            console.warn(`[AgentLoop] Intermediate verify warning for step ${step.id}`)
+            log.warn(`[AgentLoop] Intermediate verify warning for step ${step.id}`)
           }
 
           if (step.verificationCriteria.length > 0 && verifier.hasLLM()) {
@@ -848,7 +851,7 @@ export class AgentLoop {
       if (llmAnalysis && llmAnalysis.category !== "unknown" && llmAnalysis.fix && llmAnalysis.fix !== "Manual investigation needed") {
         if (fixExecutor) {
           const fixed = await fixExecutor(llmAnalysis.fix).catch((err) => {
-            console.warn(`[AgentLoop] fixExecutor failed for step ${_step.id}:`, err)
+            log.warn(`[AgentLoop] fixExecutor failed for step ${_step.id}:`, err)
             return false
           })
           if (fixed) return true
@@ -856,7 +859,7 @@ export class AgentLoop {
         return true
       }
     } catch (e) {
-      console.warn(`[AgentLoop] LLM repair failed for step ${_step.id}:`, e)
+      log.warn(`[AgentLoop] LLM repair failed for step ${_step.id}: ${String(e)}`)
     }
 
     if (analysis && analysis.category !== "unknown") {

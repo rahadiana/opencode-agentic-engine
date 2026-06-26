@@ -5,6 +5,9 @@ import type { EventBus } from "../core/event-bus.js"
 import type { Condition } from "../core/formal-model.js"
 import { parseFileEntries, writeFiles, recordCompletion } from "../core/execution-helpers.js"
 import fs from "node:fs"
+import { createLogger } from "../observability/logger.js"
+
+const log = createLogger("Orchestrator")
 
 export interface PipelineStage {
   role: string
@@ -264,7 +267,7 @@ export class Orchestrator {
       try {
         const data: WorkflowPipeline[] = JSON.parse(fs.readFileSync(filePath, "utf-8"))
         for (const p of data) this.pipelines.set(p.id, p)
-      } catch { console.warn(`[Orchestrator] Failed to load pipelines from ${filePath}`) }
+      } catch { log.warn(`[Orchestrator] Failed to load pipelines from ${filePath}`) }
     }
   }
 
@@ -527,7 +530,7 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
           }
         }
       } catch {
-        console.warn(`[Orchestrator] LLM cross-validation failed for stage ${targetRole}`)
+        log.warn(`[Orchestrator] LLM cross-validation failed for stage ${targetRole}`)
       }
     }
     return issues
@@ -648,7 +651,7 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
           if (!xv.passed) verifyNote += ` ⚠️ Cross-validation: ${xv.issues.length} issues`
         }
       } catch (err) {
-        console.warn(`[Orchestrator] Cross-validation failed for run ${runId}:`, err)
+        log.warn(`[Orchestrator] Cross-validation failed for run ${runId}: ${String(err)}`)
       }
     }
 

@@ -7,6 +7,9 @@
  * Aligns with the paper's "continuous evolution" vision:
  * agents that monitor their own performance and self-improve over time.
  */
+import { createLogger } from "../observability/logger.js"
+
+const log = createLogger("ContinuousEvo")
 
 export interface StepResult {
   stepId: string
@@ -254,7 +257,7 @@ export class ContinuousEvolution {
         },
       }
       for (const cb of this.degradationCallbacks) {
-        try { cb(trend, trigger) } catch (err) { console.error("[ContinuousEvolution] callback error:", err) }
+        try { cb(trend, trigger) } catch (err) { log.error("callback error", { error: err }) }
       }
     }
     return trend

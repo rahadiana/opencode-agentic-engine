@@ -1,4 +1,7 @@
+import { createLogger } from "../observability/logger.js"
 import type { LLMEngine } from "./llm.js"
+
+const log = createLogger("Router")
 
 /**
  * Predefined knowledge categories for multi-index RAG routing.
@@ -282,7 +285,7 @@ export class RouterAgent {
           }
         }
       } catch (e) {
-        console.error(`[RouterAgent] LLM fallback failed:`, e)
+        log.error(`LLM fallback failed`, { error: e })
       }
     }
 

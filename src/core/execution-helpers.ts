@@ -14,6 +14,9 @@ import type { ConfigLoader } from "./config.js"
 import type { FileWrittenEvent } from "./event-taxonomy.js"
 import type { ConfidenceScorer, ConfidenceStore, ScoringSignals } from "./confidence-scorer.js"
 import type { SchemaValidator, SchemaValidationError } from "./skill-schema.js"
+import { createLogger } from "../observability/logger.js"
+
+const log = createLogger("ExecHelpers")
 
 type AgenticFilePayload = FileWrittenEvent["payload"]
 
@@ -56,12 +59,12 @@ export function writeFiles(
         eventBus.emit({ type: "file.written", payload })
       }
     } catch (e) {
-      console.error(`[writeFiles] Failed to write ${f.path}:`, e)
+      log.error(`Failed to write ${f.path}`, { error: e })
       failed.push(f.path)
     }
   }
   if (failed.length > 0) {
-    console.warn(`[writeFiles] ${failed.length}/${files.length} files failed to write:`, failed)
+    log.warn(`${failed.length}/${files.length} files failed to write`, { failed })
   }
   return written
 }

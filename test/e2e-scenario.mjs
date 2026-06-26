@@ -11,6 +11,7 @@
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs"
 import { resolve, dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { sdkMockClient } from "./mock-sdk-client.mjs"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PLUGIN_DIST = resolve(__dirname, "..", "dist", "index.js")
@@ -73,7 +74,7 @@ async function main() {
   assert(typeof mod.AgenticEngine === "function", "AgenticEngine exported")
 
   const hooks = await mod.AgenticEngine({
-    client: {},
+    client: sdkMockClient(),
     project: { name: "e2e-app", path: WORKTREE },
     directory: WORKTREE,
     worktree: WORKTREE,

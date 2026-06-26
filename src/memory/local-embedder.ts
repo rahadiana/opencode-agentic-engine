@@ -12,6 +12,10 @@
  *   EMBEDDING_API_KEY=sk-...                  (default: LLM API key)
  */
 
+import { createLogger } from "../observability/logger.js"
+
+const log = createLogger("Embedder")
+
 export interface EmbedderConfig {
   /** Model name for embedding (default: "text-embedding-3-small") */
   model?: string
@@ -155,7 +159,7 @@ export class LocalEmbedder {
       try {
         return await this.remoteEmbed(text)
       } catch (e) {
-        console.warn(`[LocalEmbedder] remote embedding failed, falling back to hash:`, e)
+        log.warn(`remote embedding failed, falling back to hash`, { error: e })
       }
     }
 
@@ -198,7 +202,7 @@ export class LocalEmbedder {
           return results
         }
       } catch (e) {
-        console.warn(`[LocalEmbedder] batch embedding failed, falling back to hash:`, e)
+        log.warn(`batch embedding failed, falling back to hash`, { error: e })
       }
     }
 

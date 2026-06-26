@@ -1,6 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync, renameSync } from "node:fs"
 import { resolve } from "node:path"
 import { homedir } from "node:os"
+import { createLogger } from "../observability/logger.js"
+
+const log = createLogger("Persistence")
 
 export interface PersistentState<T> {
   key: string
@@ -131,7 +134,7 @@ export class PersistenceLayer {
       writeFileSync(tmpPath, JSON.stringify(state, null, 2), "utf-8")
       renameSync(tmpPath, filePath)
     } catch (e) {
-      console.error(`[PersistenceLayer] writeTo failed (${base}/${namespace}/${key}):`, e)
+      log.error(`writeTo failed (${base}/${namespace}/${key})`, { error: e })
     }
   }
 

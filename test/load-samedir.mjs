@@ -4,6 +4,7 @@
 import { existsSync, readFileSync } from "node:fs"
 import { resolve, dirname } from "node:path"
 import { fileURLToPath } from "node:url"
+import { sdkMockClient } from "./mock-sdk-client.mjs"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PLUGIN_DIST = process.env.PLUGIN_DIST || resolve(__dirname, "..", "dist", "index.js")
@@ -45,7 +46,7 @@ assert(typeof mod.AgenticEngine === "function", "AgenticEngine exported")
 let hooks
 try {
   hooks = await mod.AgenticEngine({
-    client: {},
+    client: sdkMockClient(),
     project: { name: "test", path: WORKSPACE },
     directory: WORKSPACE,
     worktree: WORKSPACE,
@@ -172,7 +173,10 @@ await hooks.dispose()
 const tracePath = `${WORKSPACE}/.agentic/trace.jsonl`
 assert(existsSync(tracePath), "trace file created")
 
-const lines = readFileSync(tracePath, "utf-8").trim().split("\n").filter(Boolean)
+const rawContent = readFileSync(tracePath, "utf-8")
+console.error(`  [TRACE DEBUG] file size: ${rawContent.length}, first 100: ${JSON.stringify(rawContent.slice(0, 100))}`)
+const lines = rawContent.trim().split("\n").filter(Boolean)
+console.error(`  [TRACE DEBUG] lines after filter: ${lines.length}`)
 assert(lines.length >= 3, `at least 3 trace entries (got ${lines.length})`)
 
 console.log(`\n=== SAME-DIR LOAD TEST: ${passed} passed, ${failed} failed ===`)

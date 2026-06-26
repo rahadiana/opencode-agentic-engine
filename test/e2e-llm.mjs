@@ -10,6 +10,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs"
 import { resolve, dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { sdkMockClient } from "./mock-sdk-client.mjs"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PLUGIN_DIST = resolve(__dirname, "..", "dist", "index.js")
@@ -40,7 +41,7 @@ function ctx(sessionID) {
 function getClient() {
   // Plugin needs an opencode client. When running standalone (not in OpenCode),
   // LLM calls will return [NO_LLM] — that's expected.
-  return {}
+  return sdkMockClient()
 }
 
 async function setupWorktree() {

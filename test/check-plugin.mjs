@@ -13,6 +13,7 @@
 import { existsSync, readFileSync, mkdirSync, writeFileSync, rmSync } from "node:fs"
 import { join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import { sdkMockClient } from "./mock-sdk-client.mjs"
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url))
 const pluginDist = resolve(__dirname, "..", "dist", "index.js")
@@ -101,7 +102,7 @@ async function main() {
     }
 
     const hooks = await mod.AgenticEngine({
-      client: {},
+      client: sdkMockClient(),
       project: { name: "diagnostic", path: targetDir },
       directory: targetDir,
       worktree: targetDir,

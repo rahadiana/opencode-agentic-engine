@@ -3,7 +3,10 @@
  * Seeds the RAG index with high-confidence documentation about the plugin
  * itself, so the agent has reliable knowledge when working on this codebase.
  */
+import { createLogger } from "../observability/logger.js"
 import type { MultiIndexRAG } from "../memory/multi-index-rag.js"
+
+const log = createLogger("Bootstrap")
 
 export interface BootstrapEntry {
   goal: string
@@ -63,9 +66,9 @@ const BOOTSTRAP_NOWLEDGE: BootstrapEntry[] = [
   },
   {
     goal: "OpenCode Plugin API and hooks",
-    summary: "The plugin implements 6 hooks: experimental.chat.system.transform (injects Knowledge-First system prompt with RAG results), experimental.chat.params (model detection), experimental.chat.pre (route to agentic tools), tool.* (29 agentic_ tool handlers), experimental.tool-call (observability tracing), experimental.chat.post (post-processing). The plugin runs via OpenCode SDK — all LLM calls go through client.session.prompt(), never directly to external APIs. The engine uses LLMEngine which wraps the SDK client.",
+    summary: "The plugin implements 5 hooks: config (agent registration), experimental.chat.system.transform (injects Knowledge-First system prompt with RAG results), chat.params (model tracking), tool.execute.after (observability tracing), and dispose (cleanup). All LLM calls go through client.session.prompt() via LLMEngine, never directly to external APIs. The experimental.chat.system.transform hook is the ONLY way to dynamically inject system prompt content — it appends RAG results, tool definitions, guardrails, and mandatory research instructions to every chat-mode LLM call.",
     tags: ["hooks", "plugin-api", "opencode", "sdk", "integration"],
-    decisions: ["6 hooks: system.transform, chat.params, chat.pre, tool.*, tool-call, chat.post", "All LLM via SDK client.session.prompt()", "No direct external API calls for LLM inference"]
+    decisions: ["5 hooks: config, system.transform, chat.params, tool.execute.after, dispose", "All LLM via SDK client.session.prompt()", "No direct external API calls for LLM inference"]
   },
   {
     goal: "How testing works",
@@ -108,6 +111,6 @@ export function bootstrapKnowledge(rag: MultiIndexRAG, projectId: string): void 
   }
 
   if (process.env.DEBUG_AGENTIC) {
-    console.debug(`[BootstrapKnowledge] Seeded ${count} entries into RAG`)
+    log.debug(`Seeded ${count} entries into RAG`)
   }
 }

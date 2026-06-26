@@ -1,5 +1,8 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, watch, statSync } from "node:fs"
 import { join } from "node:path"
+import { createLogger } from "../observability/logger.js"
+
+const log = createLogger("Config")
 
 // ──────────────────────────────────────────────
 // JSON Schema Validation
@@ -350,10 +353,10 @@ export class ConfigLoader {
         const warnings = issues.filter(i => i.severity === "warning")
         const errors = issues.filter(i => i.severity === "error")
         if (warnings.length > 0) {
-          console.warn(`[ConfigLoader] ${warnings.length} config warning(s):\n${warnings.map(i => `  - ${i.path}: ${i.message}`).join("\n")}`)
+          log.warn(`${warnings.length} config warning(s):\n${warnings.map(i => `  - ${i.path}: ${i.message}`).join("\n")}`)
         }
         if (errors.length > 0) {
-          console.warn(`[ConfigLoader] ${errors.length} config error(s) — fixing with defaults:\n${errors.map(i => `  - ${i.path}: ${i.message}`).join("\n")}`)
+          log.warn(`${errors.length} config error(s) — fixing with defaults:\n${errors.map(i => `  - ${i.path}: ${i.message}`).join("\n")}`)
         }
       }
 
@@ -371,7 +374,7 @@ export class ConfigLoader {
       return this.config
     } catch {
       // Parse error — fallback ke default
-      console.warn(`[ConfigLoader] Failed to parse config, using defaults`)
+      log.warn(`Failed to parse config, using defaults`)
       this.config = { ...DEFAULT_CONFIG }
       return this.config
     }
@@ -418,7 +421,7 @@ export class ConfigLoader {
             }
           } catch (e) {
             this.stopWatch()
-            console.error(`[ConfigLoader] Config watcher error, stopped:`, e)
+            log.error(`Config watcher error, stopped`, { error: e })
           }
         }
       })

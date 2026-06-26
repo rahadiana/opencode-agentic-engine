@@ -13,6 +13,9 @@
 import type { Subtask } from "./intent-parser.js"
 import { TimeoutError, BudgetExceededError } from "./errors.js"
 import { computeBackoff, buildSummary, inferNodeType, detectLoop, LOOP_DETECTION_MAX_IDENTICAL } from "./dag-helpers.js"
+import { createLogger } from "../observability/logger.js"
+
+const log = createLogger("DAG")
 
 // ── Type Definitions ────────────────────────────────────────────────
 
@@ -189,7 +192,7 @@ export class DAGEngine {
         if (!allIds.has(d)) {
           // Dep yang gak ada — anggap sebagai root node
           // (bisa dari external atau upstream yang gak di-include)
-          console.warn(`[DAGEngine] Node "${n.id}" depends on "${d}" which is not in the plan`)
+          log.warn(`Node "${n.id}" depends on "${d}" which is not in the plan`)
         }
       }
     }

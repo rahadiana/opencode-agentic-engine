@@ -1,4 +1,7 @@
+import { createLogger } from "../observability/logger.js"
 import type { AgentRole } from "./coordinator.js"
+
+const log = createLogger("RoleRegistry")
 
 export interface AgentDef {
   role: AgentRole
@@ -369,7 +372,7 @@ Focus on the "what" and "why".`,
     let result = base
     if (complexity === "simple" && base === "capable") result = "fast"
     if (complexity === "complex" && base === "fast") result = "capable"
-    console.debug(`[RoleRegistry] suggestModel(role=${role}, complexity=${complexity}) => ${result}`)
+    log.debug(`suggestModel(role=${role}, complexity=${complexity}) => ${result}`)
     return result
   }
 
