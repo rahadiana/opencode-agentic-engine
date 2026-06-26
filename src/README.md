@@ -1,15 +1,19 @@
-# src/ — Source Code
+# opencode-agentic-engine — Source
 
-## Modules
+Plugin OpenCode yang mengimplementasikan agentic software engineering workflow.
 
-| Module | Path | Description |
-|--------|------|-------------|
-| Module | Path | Files | Description |
-|--------|------|-------|-------------|
-| Core | [core/](core/README.md) | 63 + 6 domains | Planning, execution, verification, LLM integration, DAG engine, DSL, state store, protocol adapter, workflow engine |
-| Agents | [agents/](agents/README.md) | 7 | Multi-agent coordination, A2A protocol, agent runtime, orchestrator |
-| Drift | [drift/](drift/README.md) | 5 | Error detection & recovery, hallucination guard, checkpoint, context compression |
-| Memory | [memory/](memory/README.md) | 18 | Cross-session & in-session memory, RAG, skill extraction, SQLite persistence, execution tracing |
-| Evaluation | [evaluation/](evaluation/README.md) | 1 | Real-time scoring (live evaluator) |
-| Evolution | [evolution/](evolution/README.md) | 2 | Self-evolution system, continuous evolution |
-| Observability | [observability/](observability/README.md) | 3 | Dashboard, trace logging, structured logger |
+## Struktur
+
+| Direktori | Fungsi |
+|-----------|--------|
+| `core/` | Inti engine: planning, execution, verification, LLM, DSL, planner, domain generators |
+| `agents/` | Multi-agent coordination: runtime, orchestrator, coordinator, role registry, A2A |
+| `drift/` | Error detection & recovery: checkpoints, hallucination guard, context compression |
+| `memory/` | Cross-session & in-session memory: episodic store, RAG, skill store, vector store |
+| `evaluation/` | Real-time scoring dari tool hooks (5 dimensi) |
+| `evolution/` | Self-evolution: continuous evolution, prompt improvement |
+| `observability/` | Logger, dashboard, trace logger |
+
+## Entry Point
+
+`index.ts` — registers 33 tools + 6 hooks. Semua tool pakai prefix `agentic_`.

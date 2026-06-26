@@ -22,12 +22,11 @@ Berdasarkan paper **arXiv:2606.05608** — "The End of Software Engineering".
 - `src/memory/skill-store.ts`: Auto-extraction, sliding window success rate
 - `src/evolution/self-evolver.ts`: Skill patch generation, role suggestion
 - `src/evolution/continuous-evolution.ts`: Self-evolution pipeline
-- `test/run.mjs`: 1291+ unit tests
+- `test/run.mjs`: 1779+ unit tests
 
 ## Plugin Stats
 - `@ts-expect-error` / `@ts-ignore`: 0
-- `as any`: 3 across 22,019 LOC (0.01%)
-- Empty catch blocks: 1 (skill-training.ts:243)
+- `as any`: 90% reduced from baseline, mostly in protocol adapters
 - 1 external dependency: `stopwords-iso`
 - ESLint: `typescript-eslint/recommended` with `no-explicit-any: warn`
 - TypeScript: `strict: true`, `noUnusedLocals`, `noUnusedParameters`

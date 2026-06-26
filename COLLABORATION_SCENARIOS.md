@@ -1,7 +1,7 @@
 # 🤝 Collaboration Scenarios — OpenCode Agentic Engine
 
 > Panduan lengkap tool chaining patterns, multi-agent workflows, dan collaboration scenarios
-> untuk 30 agentic_* tools. Referensi utama untuk autonomous software engineering.
+> untuk 33 agentic_* tools. Referensi utama untuk autonomous software engineering.
 
 ---
 
@@ -982,6 +982,9 @@ agentic_auto (single call replaces all of the above)
 | `agentic_rag` | router, store | - | plan, context |
 | `agentic_mcp` | any | - | external tools |
 | `agentic_a2a` | any | - | remote agents |
+| `agentic_db` | any | - | structured data |
+| `agentic_mcp_server` | any | - | expose tools via MCP |
+| `agentic_tools` | any | - | cross-protocol tool discovery |
 | `agentic_finetune` | skill, episodes | - | fine-tuned model |
 | `agentic_model_reset` | any | - | model degradation recovery |
 

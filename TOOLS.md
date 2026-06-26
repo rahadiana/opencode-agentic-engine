@@ -1,8 +1,8 @@
 # OpenCode Agentic Engine — 30 Tools Reference
 
 > **Plugin**: opencode-agentic-engine  
-> **Version**: 0.5.2  
-> **Total Tools**: 30 (Stage I–V + Blueprint)
+> **Version**: 0.5.3  
+> **Total Tools**: 33 (Stage I–V + Blueprint)
 
 ---
 
@@ -348,7 +348,7 @@ Manajemen reusable skills yang diekstrak dari task completion.
 
 | Parameter | Tipe | Required | Deskripsi |
 |-----------|------|----------|-----------|
-| `action` | `"extract" \| "find" \| "list"` | ✅ | Operasi skill |
+| `action` | `"extract" \| "find" \| "list" \| "clear"` | ✅ | Operasi skill |
 | `query` | `string` | ❌ | Search query atau stepId target ekstraksi |
 
 **Deskripsi**:  
@@ -604,6 +604,53 @@ Implementasi standar Google A2A protocol untuk cross-framework interoperability.
 
 ---
 
+### agentic_db
+
+SQLite database backend.
+
+| Parameter | Tipe | Required | Deskripsi |
+|-----------|------|----------|-----------|
+| `action` | `"query" \| "save" \| "load" \| "list" \| "stats" \| "tables" \| "migrate"` | ✅ | Operasi database |
+| `sql` | `string` | ❌ | SQL query (untuk action=query) |
+| `namespace` | `string` | ❌ | Namespace (untuk save/load/list) |
+| `key` | `string` | ❌ | Key (untuk save/load) |
+| `data` | `string` | ❌ | JSON data string (untuk save) |
+| `scope` | `string` | ❌ | Scope/projectId |
+
+**Deskripsi**: Query, key-value save/load, list tables, migrate JSON → SQLite. WHERE, JOIN, GROUP BY support.
+
+---
+
+### agentic_mcp_server
+
+Start/stop MCP server yang mengekspos plugin tools via standard MCP protocol.
+
+| Parameter | Tipe | Required | Deskripsi |
+|-----------|------|----------|-----------|
+| `action` | `"start" \| "stop" \| "status" \| "restart"` | ✅ | Operasi server |
+| `port` | `number` | ❌ | Port (untuk start) |
+
+**Deskripsi**: External MCP clients bisa discover dan call plugin tools. stdio transport.
+
+---
+
+### agentic_tools
+
+Unified tool discovery dan calling across MCP + A2A protocols.
+
+| Parameter | Tipe | Required | Deskripsi |
+|-----------|------|----------|-----------|
+| `action` | `"search" \| "call" \| "list" \| "stats"` | ✅ | Operasi |
+| `query` | `string` | ❌ | Search query |
+| `protocol` | `"mcp" \| "a2a"` | ❌ | Protocol hint (untuk call) |
+| `source` | `string` | ❌ | Source identifier (MCP server / A2A agent URL) |
+| `method` | `string` | ❌ | Tool name atau capability |
+| `params` | `string` | ❌ | JSON string parameter |
+
+**Deskripsi**: Auto-route calls ke backend yang tepat. Search across both protocols.
+
+---
+
 ## 📂 Klasifikasi per Stage
 
 ```
@@ -613,9 +660,10 @@ Stage III  Multi-Agent    [10 tools]  delegate, pipeline, message, parallel, ski
                                       episodes, dashboard, guard, model_reset, finetune
 Stage IV   Evolution      [1 tool]    evolve
 Stage V    Autonomous     [1 tool]    auto
-Blueprint  Experimental   [6 tools]   debate, router, clean, rag, mcp, a2a
+Blueprint  Experimental   [9 tools]   debate, router, clean, rag, mcp, a2a,
+                                      db, mcp_server, tools
 ───────────────────────────────────────────────────
-Total                    [30 tools]
+Total                    [33 tools]
 ```
 
 ---

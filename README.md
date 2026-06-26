@@ -17,40 +17,43 @@ Berdasarkan konsep dari paper **"The End of Software Engineering"** (arXiv:2606.
 | — | **Model Registry** | Auto-discover model dari provider, tracking reliability & hallucination rate |
 | — | **Dashboard** | Timeline, anomaly detection, model reliability stats |
 
-### 30 Tools
+### 33 Tools
 
 | Tool | Stage | Description | Teknik Kunci |
 |---|---|---|---|
-| `agentic_plan` | I | Create structured execution plan. Auto-decompose via templates (create/fix/refactor/test/deploy/migrate/doc/perf/security/docker/CI) + LLM fallback | Template-based decomposition, scoring-based rule matching, cycle detection (Kahn's), LLM auto-decompose |
-| `agentic_execute` | I | Record subtask completion. Auto-verify compile on success, error recovery guidance + propagation tracing, user feedback for continuous learning | File writing chokepoint, hallucination guard auto-check, skill auto-extract, budget step tracking |
-| `agentic_reflect` | I | Analyze failed step: diagnose error category, trace error propagation across step chain via dependency graph, suggest recovery plan | Import graph traversal, transitive dependents analysis, multi-category error matching |
-| `agentic_verify` | I | Full verification: compile + lint + test + semantic + security + performance + architecture + dependency audit (Gap #4). 3-tier system: fast/standard/deep | Multi-language execFileSync, compile cache, semantic LLM verification, domain verifier strategies |
-| `agentic_status` | I | Execution dashboard: progress bar, health, blocked steps, dependency graph, retry history, file change summary | ExecutionState snapshot, topological dependency visualization |
-| `agentic_nav` | II | Scan codebase for task-relevant files. Multi-language scanner (TS/JS/Python/PHP/Go/Rust/Java/generic) | LanguageConfig per bahasa, relevance scoring, import/export indexing |
-| `agentic_context` | II | View & compress execution context. Summarizes conversation history preserving decisions, file changes, invariants | Rule-based extraction + LLM compression fallback, token estimation |
-| `agentic_snapshot` | II | Save/restore/list execution checkpoints. Checkpoints store plan progress, file changes, decisions | Full state serialization, restore resets execution state |
-| `agentic_pr` | II | Generate PR description from plan + step results + files changed. Optionally create actual PR via GitHub CLI (`gh`) | Plan→Step→Files summary pipeline, git integration |
-| `agentic_score` | II | Technical debt analysis: coupling, file size, scope, code patterns (`any` type, TODO, casts) | Coupling analysis, file entropy, pattern detection |
-| `agentic_model` | II | Configure per-role LLM model preferences per session. Persisted to `.agentic/models.json` | ModelRegistry alias resolution, per-task-type scoring |
-| `agentic_model_reset` | II | Reset model statistics to recover from degraded performance. Single/stale/all modes | Quarantine system, stale detection (7d), consecutive failure tracking |
-| `agentic_budget` | II | Circuit breaker for resource limits: tokens, steps, time, cost. Multi-scope (session/task) with per-model ledger | PDP/PEP pattern, 4-axis tracking, model price ledger |
-| `agentic_delegate` | III | Assign task to specialist role (architect/developer/qa/coordinator/pm). Pipeline-aware with cross-validation + inter-agent messaging | Shared memory injection, skill context enrichment, delegation depth control |
-| `agentic_pipeline` | III | Define & run multi-agent pipelines (PM→Arch→Dev→QA). Cross-validation between stages with formal contracts | PipelineContract (I/O schema), invariant checking, LLM cross-validation |
-| `agentic_message` | III | Inter-agent messaging: send, inbox, conversation threads, review requests. 6 message types | Message bus with pruning (max 500/role), conversation threading |
-| `agentic_parallel` | III | Dependency-based concurrency: analyze parallelism, execute ready steps concurrently with conflict detection | Kahn's algorithm phasing, Promise.allSettled, same-file conflict detection |
-| `agentic_skill` | III | Extract/find/list reusable skills from successful task completions. Self-describing `agentic-skill/v1` format | Auto-extraction (success+completion+action markers), sliding window success rate |
-| `agentic_episodes` | III | Cross-session memory search. Search past task outcomes to avoid repeating mistakes | TF-IDF relevance scoring, recency + success bonus, schema versioning |
-| `agentic_dashboard` | III | Observability dashboard: timeline, statistics, tool usage, anomaly detection (timeout, retry storm, loop, silent failure), model reliability | 4 anomaly types, latency p50/p95/p99, peak concurrency via interval overlap |
-| `agentic_guard` | III | Manual re-run of hallucination guard. Auto-runs inside agentic_execute; standalone for re-audit or detailed per-claim breakdown | 4 claim types verification, path traversal protection, multi-language function detection |
-| `agentic_finetune` | III | End-to-end fine-tuning pipeline: prepare dataset → save → upload to OpenAI → create & monitor job | OpenAI API integration, hyperparameter config (epochs, batch, LR), polling |
-| `agentic_evolve` | IV | Inspect & extend the agent system: register custom roles, versioned memory schemas, export skills, run self-evolution, prompt management | Versioned prompt history, rollback support, EvolutionReport generation |
-| `agentic_auto` | V | Fully autonomous orchestrator: one call handles memory + skills → architecture → code → guard check → verify → score → learn | Full pipeline orchestration, auto-retry with strategy rotation, post-processing async |
-| `agentic_debate` | 🏗 Blueprint | Executor ↔ Critic debate loop for thorough analysis. Multi-round: draft → review → revise until approved | Loop detection (identical output), configurable rounds (max 5) |
-| `agentic_router` | 🏗 Blueprint | Lightweight intent classifier. Keyword-based routing (zero LLM cost) with LLM fallback for low-confidence | Keyword matching + LLM fallback, configurable categories |
-| `agentic_clean` | 🏗 Blueprint | Strip debate artifacts, reformat to markdown/json, validate against schema. Post-processing for debate/analysis output | Regex stripping, LLM-based reformatting, schema validation |
-| `agentic_rag` | 🏗 Blueprint | Multi-index RAG: store/search knowledge in category-segregated indices. Hybrid search (TF-IDF + Vector) | Per-category indexes, auto-category, vector enrichment via cosine similarity |
-| `agentic_mcp` | 🏗 Blueprint | MCP client: connect to external servers (DB, APIs) via stdio or HTTP(S). Auto-discover tools via `tools/list`, call via JSON-RPC | JSON-RPC protocol, tool discovery, connection lifecycle management |
-| `agentic_a2a` | 🏗 Blueprint | Agent-to-Agent protocol: discover remote agents, delegate tasks, start/stop A2A server. Google A2A standard for cross-framework interoperability | A2A Agent Card, JSON-RPC task delegation, HTTP transport |
+| `agentic_plan` | I | Create structured execution plan. Auto-decompose via templates + LLM fallback | Template decomposition, cycle detection (Kahn's), LLM auto-decompose |
+| `agentic_execute` | I | Record subtask completion. Auto-verify compile, hallucination guard, skill extraction | File writing chokepoint, auto-guard, auto-skill, budget tracking |
+| `agentic_reflect` | I | Analyze failed step: error category + propagation trace | Import graph traversal, transitive dependents, multi-category error matching |
+| `agentic_verify` | I | Full verification: compile+lint+test+security+perf+arch+deps (Gap #4). 3-tier: fast/standard/deep | Multi-language exec, semantic LLM verification, 4 security dimensions |
+| `agentic_status` | I | Execution dashboard: progress, blocked steps, retry history | ExecutionState snapshot, topological dependency viz |
+| `agentic_nav` | II | Scan codebase for relevant files. Multi-language (TS/JS/Python/PHP/Go/Rust/Java) | LanguageConfig, relevance scoring, import/export indexing |
+| `agentic_context` | II | View & compress execution context | Rule-based extraction + LLM compression, token estimation |
+| `agentic_snapshot` | II | Save/restore/list execution checkpoints | Full state serialization, restore resets execution state |
+| `agentic_pr` | II | Generate PR description, optionally create via `gh` CLI | Plan→Step→Files pipeline, git integration |
+| `agentic_score` | II | Technical debt: coupling, file size, scope, patterns | Coupling analysis, file entropy, pattern detection |
+| `agentic_model` | II | Per-role/per-tool/per-category LLM model preferences. Persisted to `.agentic/models.json` | ModelRegistry alias, 3-level resolution |
+| `agentic_model_reset` | II | Reset model stats: single/stale/all modes | Quarantine, stale detection (7d), consecutive failure tracking |
+| `agentic_budget` | II | Circuit breaker: tokens, steps, time, cost. Multi-scope (session/task) | PDP/PEP, 4-axis tracking, model price ledger |
+| `agentic_delegate` | III | Assign task to specialist (architect/developer/qa/coordinator/pm). Pipeline-aware | Shared memory injection, skill context, delegation depth control |
+| `agentic_pipeline` | III | Define & run multi-agent pipelines (PM→Arch→Dev→QA). Cross-validation | PipelineContract, invariant checking, LLM cross-validation |
+| `agentic_message` | III | Inter-agent messaging: send, inbox, conversation, review | Message bus with pruning (max 500), conversation threading |
+| `agentic_parallel` | III | Dependency-based concurrency + conflict detection | Kahn's algorithm, Promise.allSettled, same-file conflict |
+| `agentic_skill` | III | Extract/find/list/clear reusable skills. `agentic-skill/v1` format | Auto-extraction, sliding window success rate, TF-IDF search |
+| `agentic_episodes` | III | Cross-session memory search | TF-IDF + recency + success bonus, schema versioning |
+| `agentic_dashboard` | III | Observability dashboard: timeline, stats, anomaly detection, model reliability | 4 anomaly types, p50/p95/p99, peak concurrency |
+| `agentic_guard` | III | Manual hallucination guard re-run (auto-runs on execute) | 4 claim types, path traversal protection, multi-language |
+| `agentic_finetune` | III | End-to-end fine-tuning: prepare→save→upload→create→monitor | OpenAI API, hyperparameter config, polling |
+| `agentic_evolve` | IV | Inspect & extend agent system: register roles, manage prompts, export skills | Versioned prompt history, rollback, EvolutionReport |
+| `agentic_auto` | V | Fully autonomous: plan→execute→verify→retry→score→learn in one call | Full pipeline orchestration, auto-retry, post-processing async |
+| `agentic_debate` | 🏗 | Executor ↔ Critic debate via sub-agent spawn. Multi-round with fallback | Sub-agent via AgentRuntime, Levenshtein loop detection, `[NO_LLM]` fallback |
+| `agentic_router` | 🏗 | Lightweight intent classifier. Keyword-based + LLM fallback | Keyword matching + LLM fallback, configurable categories |
+| `agentic_clean` | 🏗 | Strip artifacts, reformat markdown/json, validate against schema | Regex + LLM reformatting, schema validation |
+| `agentic_rag` | 🏗 | Multi-index RAG: store/search in category-segregated indexes | Per-category indexes, hybrid TF-IDF + vector search |
+| `agentic_mcp` | 🏗 | MCP client: connect to external servers (stdio/HTTP), discover & call tools | JSON-RPC protocol, tool discovery, connection lifecycle |
+| `agentic_a2a` | 🏗 | Agent-to-Agent protocol: discover, delegate, serve Agent Card | Google A2A standard, JSON-RPC task delegation, HTTP transport |
+| `agentic_db` | 🏗 | SQLite backend: query, save/load, list, stats, tables | Raw SQL, key-value namespace, JSON schema |
+| `agentic_mcp_server` | 🏗 | Start/stop MCP server exposing plugin tools via standard MCP protocol | MCP stdio transport, tool discovery, lifecycle management |
+| `agentic_tools` | 🏗 | Unified tool discovery across MCP + A2A. Search, call, list, stats | Multi-protocol routing, cross-protocol search |
 
 ## Quick Start
 
@@ -222,74 +225,68 @@ File ini di-watch — perubahan langsung diterapkan tanpa restart plugin.
 
 ```
 src/
-├── index.ts                 # Plugin entry: registers 30 tools + 6 hooks
-├── core/
-│   ├── domain-registry.ts   # Domain pack system: tools, verifiers, error matchers
-│   ├── domains/             # Built-in domain packs (generic, code)
-│   │   ├── generic.ts
-│   │   └── code.ts
-│   ├── planner.ts           # Domain-aware auto-decompose (generic + code templates)
-│   ├── planner-critic.ts    # PlannerCritic self-reflection loop for plan refinement
-│   ├── planner-tree-search.ts # Tree search for optimal plan selection
-│   ├── executor.ts          # Step execution, domain-aware error categorization
-│   ├── verifier.ts          # Compile + test + Gap #4: multi-dimensional (security, perf, arch, deps) with 3-tier system
-│   ├── semantic-cache.ts    # Gap #7: TF-IDF + cosine similarity LLM response cache
-│   ├── error-analyzer.ts    # Error categorization
-│   ├── errors.ts            # Custom error classes (TimeoutError, LLMError, etc.)
-│   ├── bootstrap-knowledge.ts # Seeds RAG with high-confidence plugin docs
-│   ├── model-registry.ts    # Per-role LLM model preferences + reliability tracking
-│   ├── navigator.ts         # Multi-language codebase scanning (TS/JS/Py/PHP/Go/Rust/Java)
-│   ├── prompt-builder.ts    # Dynamic agent prompt per active domain
-│   ├── intent-parser.ts     # Parses user intent → Plan structure
-│   ├── git.ts               # Git commit, history, PR description generation
+├── index.ts                 # Plugin entry: registers 33 tools + 6 hooks
+├── core/                    # Inti engine (70+ file)
+│   ├── planner*.ts          # Planner, critic, tree-search, data, utils — auto-decompose
+│   ├── planning-layer.ts    # Orchestrates planning subsystem
+│   ├── agent-loop.ts        # Autonomous loop: plan → execute → verify → retry
+│   ├── execution-layer.ts   # Exec subsystem orchestrator
+│   ├── executor.ts          # Step execution, retry tracking
+│   ├── recovery-layer.ts    # Error recovery orchestrator
+│   ├── auto-retry.ts        # Exponential backoff + strategy rotation
+│   ├── verifier.ts          # Gap #4: 3-tier (fast/standard/deep), 4 security dimensions
+│   ├── semantic-cache.ts    # Gap #7: TF-IDF + cosine similarity LLM cache
+│   ├── llm.ts               # LLM engine via OpenCode SDK
+│   ├── model-registry.ts    # Per-role model prefs + reliability tracking
+│   ├── prompt-builder.ts    # Dynamic prompt construction
+│   ├── prompt-template.ts   # XML-based prompt templates
+│   ├── code-sandbox.ts      # Sandboxed code execution (VM)
+│   ├── domain-registry.ts   # Domain packs + generators (code/devops/mobile/...)
+│   ├── dsl-*.ts             # DSL executor/types/validator
+│   ├── dag-engine.ts        # DAG execution engine
+│   ├── event-bus.ts         # Pub/sub event system
+│   ├── debate-loop.ts       # Sub-agent debate (executor ↔ critic)
+│   ├── navigator.ts         # Multi-language codebase scanner
+│   ├── git.ts               # Git integration
 │   ├── tech-debt-scorer.ts  # Coupling/size/scope/patterns analysis
-│   ├── parallel.ts          # Dependency-based concurrency + conflict detection
-│   ├── agent-blueprint.ts   # Agent blueprint definitions
-│   ├── dag-engine.ts        # DAG-based execution engine
-│   ├── constraint-manifold.ts # Constraint propagation and satisfaction
-│   ├── session-reader.ts    # Session state reader
-│   ├── code-sandbox.ts      # Sandboxed code execution
-│   ├── dsl-executor.ts      # DSL execution engine
-│   ├── skill-schema.ts      # Skill schema definitions
-│   ├── skill-improver.ts    # Skill improvement suggestions
-│   ├── attention-scheduler.ts # Attention/scheduling logic
-│   ├── meta-reasoner.ts     # Meta-reasoning engine
-│   ├── simulation-engine.ts # Simulation engine
-│   ├── world-model.ts       # World model state tracking
-│   └── tool-router.ts       # Tool routing and classification
-├── agents/                  # Multi-agent system
-│   ├── coordinator.ts       # Delegates to agent roles, auto-suggests role, message bus
-│   ├── orchestrator.ts      # Multi-agent workflow pipelines + cross-validation
-│   ├── role-registry.ts     # Built-in + custom agent definitions (extensible)
-│   ├── a2a-server.ts        # A2A (Agent-to-Agent) HTTP server
-│   ├── a2a-client.ts        # A2A client for remote agent communication
-│   └── a2a-types.ts         # A2A protocol type definitions
-├── drift/                   # Context & safety
-│   ├── dependency-tracker.ts     # Per-session file change + error propagation
-│   ├── context-compressor.ts     # Sliding window + key info extraction
-│   ├── checkpoints.ts            # Risk evaluation: BLOCK/REVIEW/WARNING
-│   └── hallucination-guard.ts    # File/func/import claim verification
-├── memory/                  # Persistent memory
-│   ├── session-store.ts     # Conversation turns + plan + progress
-│   ├── skill-store.ts       # Skill extraction, search, failure reporting
-│   ├── skill-format.ts      # Self-describing agentic-skill/v1 schema
-│   ├── episodic-store.ts    # Cross-session memory with versioned schema
-│   ├── schema-version.ts    # Memory schema envelope + migration system
-│   ├── skill-training.ts    # Skill → training data conversion (JSONL/instructions)
-│   ├── vector-store.ts      # Sparse retrieval (TF-IDF)
-│   ├── local-embedder.ts    # Local embedding for vector search
-│   ├── persistence.ts       # Model stats persistence
-│   ├── memory-orchestrator.ts # Cross-memory coordination
-│   ├── consolidation-scheduler.ts # Memory consolidation scheduling
-│   └── stopwords.ts         # Stop word list for text processing
+│   ├── parallel.ts          # Dependency-based concurrency
+│   ├── tool-router.ts       # Tool routing
+│   ├── mcp-client.ts        # MCP client
+│   ├── mcp-server.ts        # MCP server
+│   └── ...                  # 40+ file lainnya (formal-model, world-model, dll)
+├── agents/                  # Multi-agent (7 file)
+│   ├── coordinator.ts       # Delegation, auto-suggest role, message bus
+│   ├── orchestrator.ts      # Workflow pipelines + cross-validation
+│   ├── role-registry.ts     # Built-in + custom roles, versioned prompts
+│   ├── agent-runtime.ts     # Sub-process spawner, isolated LLM per role
+│   ├── a2a-client.ts        # A2A protocol client
+│   ├── a2a-server.ts        # A2A protocol server
+│   └── a2a-types.ts         # A2A types
+├── drift/                   # Error detection & recovery (5 file)
+│   ├── checkpoints.ts       # Risk eval: BLOCK/REVIEW/WARNING
+│   ├── context-compressor.ts
+│   ├── dependency-tracker.ts
+│   ├── hallucination-guard.ts
+│   └── pattern-discovery.ts
+├── memory/                  # Persistence & memory (19 file)
+│   ├── episodic-store.ts    # Cross-session memory
+│   ├── skill-store.ts       # Skill extraction/search/clear
+│   ├── multi-index-rag.ts   # Hybrid TF-IDF + vector RAG
+│   ├── session-store.ts     # Conversation turns + plan
+│   ├── vector-store.ts      # TF-IDF vector search
+│   ├── sqlite-persistence.ts
+│   ├── memory-orchestrator.ts
+│   ├── consolidation-scheduler.ts
+│   └── ...                  # 11 file lainnya
 ├── evaluation/
-│   └── live-evaluator.ts    # 5-dimensi real-time scoring dari tool hooks
+│   └── live-evaluator.ts    # 5-dimensi real-time scoring
 ├── evolution/
-│   ├── self-evolver.ts       # Auto-improvement analysis
-│   └── continuous-evolution.ts # Continuous self-evolution pipeline
+│   ├── self-evolver.ts       # Skill patch, role suggestion
+│   └── continuous-evolution.ts # Rolling window performance monitoring
 └── observability/
-    ├── trace-logger.ts       # JSONL trace writer (buffered, auto-flush, dedup guard)
-    └── dashboard.ts          # Timeline + stats + anomaly detection + model reliability
+    ├── trace-logger.ts       # JSONL buffered writer
+    ├── dashboard.ts          # Timeline, anomaly, model reliability
+    └── logger.ts             # Structured logger
 ```
 
 > **Note:** Domain packs (`core/domains/`) mendefinisikan tool set, verifier, error matchers, dan decomposition rules per domain. Prompt agent di-generate dinamis via `prompt-builder.ts` sesuai domain aktif. `navigator.ts` mendukung 8 bahasa (TS, JS, Python, PHP, Go, Rust, Java, Generic) dengan auto-deteksi dari project files.
@@ -441,7 +438,7 @@ Format canonical: `run-{sessionID}-{pipelineId}`. Setiap level di-track dengan n
 ## Testing
 
 ```bash
-# Unit tests (1291 tests, mock-based, no LLM needed)
+# Unit tests (1779 tests, mock-based, no LLM needed)
 node test/run.mjs
 
 # Simulates opencode auto-discovery
@@ -462,7 +459,7 @@ node test/e2e-llm.mjs
 # SWE-bench mock mode (no LLM)
 LLM_OFF=true node test/swebench-harness.mjs
 
-# Docker pipeline (7 layers, 1291 unit + E2E tests)
+# Docker pipeline (7 layers, 1779 unit + E2E tests)
 ./test-container.sh
 ```
 
