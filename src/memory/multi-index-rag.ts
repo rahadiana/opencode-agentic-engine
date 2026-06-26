@@ -1,5 +1,6 @@
 import type { Episode } from "./episodic-store.js"
 import type { SkillRecord } from "./skill-store.js"
+import type { ScoredResult } from "./vector-store.js"
 import { VectorStore } from "./vector-store.js"
 import { LocalEmbedder, type EmbedderConfig } from "./local-embedder.js"
 
@@ -245,24 +246,16 @@ export class MultiIndexRAG {
     this.indices = newIndices
   }
 
-  /**
-   * Search within a specific category using hybrid TF-IDF + Vector scoring.
-   */
-  searchByCategory(query: string, category: string, limit = 10): IndexSearchResult {
-    const index = this.indices.get(category)
-    if (!index) {
-      return { entries: [], category, totalInCategory: 0, query }
-    }
+  // ── Private Helpers ──
 
-    // 1. TF-IDF scoring via VectorStore
-    const tfidfResults = this.vectorStore.search(query, category, limit * 2)
-
-    // 2. Fallback: keyword matching for anything not caught by TF-IDF
-    //    (episodes/skills that don't have enough TF-IDF signal)
-    //    Early break once we have enough keyword bonuses to fill the limit.
+  private computeKeywordBonus(
+    query: string,
+    index: { episodes: Episode[]; skills: SkillRecord[] },
+    limit: number,
+  ): Map<string, number> {
     const q = query.toLowerCase()
     const keywordBonus = new Map<string, number>()
-    const kwNeeded = limit + 5 // collect a bit more than needed for dedup
+    const kwNeeded = limit + 5
 
     for (const ep of index.episodes) {
       if (keywordBonus.size >= kwNeeded) break
@@ -281,11 +274,17 @@ export class MultiIndexRAG {
       if ((sk.definition.trigger.keywords ?? []).some(k => k.toLowerCase().includes(q))) bonus += 2
       if (bonus > 0) keywordBonus.set(skId, bonus)
     }
+    return keywordBonus
+  }
 
-    // 3. Build scored result map
+  private buildScoredResults(
+    tfidfResults: ScoredResult[],
+    index: { episodes: Episode[]; skills: SkillRecord[] },
+    keywordBonus: Map<string, number>,
+    category: string,
+  ): Map<string, { entry: IndexEntry; tfidfScore: number; kwBonus: number }> {
     const scoredMap = new Map<string, { entry: IndexEntry; tfidfScore: number; kwBonus: number }>()
 
-    // From TF-IDF
     for (const result of tfidfResults) {
       const id = result.doc.id
       const isEpisode = id.startsWith("ep-")
@@ -307,10 +306,9 @@ export class MultiIndexRAG {
         tfidfScore: result.score,
         kwBonus: keywordBonus.get(id) ?? 0,
       })
-      keywordBonus.delete(id) // Already counted
+      keywordBonus.delete(id)
     }
 
-    // From keyword bonus only (items TF-IDF missed)
     for (const [id, bonus] of keywordBonus) {
       if (scoredMap.has(id)) {
         scoredMap.get(id)!.kwBonus += bonus
@@ -337,31 +335,35 @@ export class MultiIndexRAG {
       })
     }
 
-    // 4. Vector scores are computed asynchronously via enrichWithVectors().
-    //    The sync path uses TF-IDF + keyword bonus only.
-    //    This keeps searchByCategory synchronous and fast.
+    return scoredMap
+  }
 
-    // 5. Compute combined TF-IDF + keyword score
+  private normalizeResults(
+    scoredMap: Map<string, { entry: IndexEntry; tfidfScore: number; kwBonus: number }>,
+  ): void {
     for (const [_id, data] of scoredMap) {
       const tfidf = data.tfidfScore
       const kw = data.kwBonus
 
-      // Normalize TF-IDF to 0-1 range
       const maxTfidf = Math.max(...[...scoredMap.values()].map(v => v.tfidfScore), 1)
       const normTfidf = tfidf / maxTfidf
 
-      // Normalize keyword bonus to 0-1
       const maxKw = Math.max(...[...scoredMap.values()].map(v => v.kwBonus), 1)
       const normKw = kw / maxKw
 
-      // Combined score (TF-IDF heavy, keyword as boost)
       const combined = (0.7 * normTfidf) + (0.3 * normKw)
 
       data.entry.hybridScore = combined
       data.entry.tfidfScore = tfidf
     }
+  }
 
-    // 6. Sort by combined score descending
+  private sortAndLimitResults(
+    scoredMap: Map<string, { entry: IndexEntry; tfidfScore: number; kwBonus: number }>,
+    limit: number,
+    category: string,
+    query: string,
+  ): IndexSearchResult {
     const sorted = [...scoredMap.values()]
       .sort((a, b) => (b.entry.hybridScore ?? 0) - (a.entry.hybridScore ?? 0))
       .slice(0, limit)
@@ -374,6 +376,37 @@ export class MultiIndexRAG {
       totalInCategory: catIndex ? catIndex.episodes.length + catIndex.skills.length : sorted.length,
       query,
     }
+  }
+
+  // ── Search ──
+
+  /**
+   * Search within a specific category using hybrid TF-IDF + Vector scoring.
+   */
+  searchByCategory(query: string, category: string, limit = 10): IndexSearchResult {
+    const index = this.indices.get(category)
+    if (!index) {
+      return { entries: [], category, totalInCategory: 0, query }
+    }
+
+    // 1. TF-IDF scoring via VectorStore
+    const tfidfResults = this.vectorStore.search(query, category, limit * 2)
+
+    // 2. Keyword bonus for items TF-IDF missed
+    const keywordBonus = this.computeKeywordBonus(query, index, limit)
+
+    // 3. Build scored result map
+    const scoredMap = this.buildScoredResults(tfidfResults, index, keywordBonus, category)
+
+    // 4. Vector scores are computed asynchronously via enrichWithVectors().
+    //    The sync path uses TF-IDF + keyword bonus only.
+    //    This keeps searchByCategory synchronous and fast.
+
+    // 5. Normalize and compute combined scores
+    this.normalizeResults(scoredMap)
+
+    // 6. Sort and limit
+    return this.sortAndLimitResults(scoredMap, limit, category, query)
   }
 
   /**
@@ -435,6 +468,25 @@ export class MultiIndexRAG {
     return results
   }
 
+  // ── Confidence ──
+
+  private computeConfidenceMetrics(
+    entries: IndexEntry[],
+  ): { averageConfidence: number; topConfidence: number; hasHighConfidence: boolean; isEmpty: boolean } {
+    const confidences = entries.map(e => e.confidence ?? 0)
+    const averageConfidence = confidences.length > 0
+      ? confidences.reduce((s, c) => s + c, 0) / confidences.length
+      : 0
+    const topConfidence = confidences.length > 0 ? Math.max(...confidences) : 0
+
+    return {
+      averageConfidence,
+      topConfidence,
+      hasHighConfidence: topConfidence >= 0.6,
+      isEmpty: entries.length === 0,
+    }
+  }
+
   /**
    * Search with confidence scoring — designed for knowledge-first injection.
    *
@@ -468,37 +520,27 @@ export class MultiIndexRAG {
       }
 
       for (const entry of catResult.entries) {
-        // Compute confidence from hybridScore
         const rawScore = entry.hybridScore ?? 0
-        // Penalize very low scores — if hybrid < 0.3, confidence drops sharply
         const confidence = rawScore >= 0.3 ? rawScore : rawScore * 0.5
         entry.confidence = Math.min(1, Math.max(0, confidence))
         allResults.push(entry)
       }
     }
 
-    // Sort by confidence descending
     allResults.sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))
-
-    // Trim to limit across all categories
     const trimmed = allResults.slice(0, limit)
 
-    const confidences = trimmed.map(e => e.confidence ?? 0)
-    const averageConfidence = confidences.length > 0
-      ? confidences.reduce((s, c) => s + c, 0) / confidences.length
-      : 0
-    const topConfidence = confidences.length > 0 ? Math.max(...confidences) : 0
+    const metrics = this.computeConfidenceMetrics(trimmed)
 
     return {
       entries: trimmed,
-      averageConfidence,
-      topConfidence,
-      hasHighConfidence: topConfidence >= 0.6,
-      isEmpty: trimmed.length === 0,
+      ...metrics,
       query,
       categories: cats,
     }
   }
+
+  // ── Category Management ──
 
   /**
    * Auto-select the best category based on TF-IDF scoring.
@@ -610,6 +652,8 @@ export class MultiIndexRAG {
       perCategory,
     }
   }
+
+  // ── Import/Export ──
 
   /**
    * Export all data for persistence.
