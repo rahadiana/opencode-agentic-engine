@@ -127,7 +127,7 @@ async function createPlugin(worktree) {
   const hooks = await factory({
     client: {
       config: {
-        providers: async () => ({ 200: { providers: [], default: {} } }),
+        providers: async () => ({ data: { providers: [], default: {} } }),
         models: async () => [],
       },
     },
@@ -177,7 +177,7 @@ async function createFreshPlugin() {
   const freshHooks = await factory2({
     client: {
       config: {
-        providers: async () => ({ 200: { providers: [], default: {} } }),
+        providers: async () => ({ data: { providers: [], default: {} } }),
         models: async () => [],
       },
     },

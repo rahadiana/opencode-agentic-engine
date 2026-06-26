@@ -478,14 +478,15 @@ const confidenceStore = new ConfidenceStore()
   // Discover models from OpenCode client + env vars
   ;(async () => {
     try {
-      const client = input.client as { config?: { providers?: () => Promise<{ 200?: { providers: Array<{ name: string; id: string; models?: Record<string, unknown> }>; default?: Record<string, string> } }> }; models?: () => Promise<Array<{ id: string }>> }
+      const client = input.client as { config?: { providers?: () => Promise<{ data?: { providers: Array<{ name: string; id: string; models?: Record<string, unknown> }>; default?: Record<string, string> } }> }; models?: () => Promise<Array<{ id: string }>> }
       const allModels: string[] = []
 
       // 1. Try client.config.providers() — daftar provider + model dari OpenCode
+      // SDK response: { data: { providers: [...], default: {...} } }
       if (client?.config?.providers) {
         const provResp = await client.config.providers()
-        const providers = provResp?.[200]?.providers ?? []
-        const defaultMap = provResp?.[200]?.default ?? {}
+        const providers = provResp?.data?.providers ?? []
+        const defaultMap = provResp?.data?.default ?? {}
         const defaultModelName = defaultMap[Object.keys(defaultMap)[0] ?? ""]?.split("/")?.pop() || ""
         if (defaultModelName) allModels.push(defaultModelName)
         for (const p of providers) {

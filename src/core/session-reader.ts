@@ -131,7 +131,7 @@ export class SessionReader {
       const sdk = this.opencodeClient as {
         config?: {
           providers?: () => Promise<{
-            200?: {
+            data?: {
               providers: Array<{ name: string; id: string; models?: Record<string, unknown> }>
               default?: Record<string, string>
             }
@@ -143,9 +143,10 @@ export class SessionReader {
       const result: Array<{ id: string; providerID: string; providerName: string }> = []
 
       // 1. Coba dari client.config.providers() — paling lengkap
+      // SDK response: { data: { providers: [...], default: {...} } }
       if (sdk?.config?.providers) {
         const resp = await sdk.config.providers()
-        const providers = resp?.[200]?.providers ?? []
+        const providers = resp?.data?.providers ?? []
         for (const p of providers) {
           if (p.models) {
             for (const modelKey of Object.keys(p.models)) {

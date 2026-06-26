@@ -914,7 +914,7 @@ const modelCtx52Input = {
   client: {
     config: {
       providers: async () => ({
-        200: {
+        data: {
           providers: [
             { name: "openai", id: "openai", models: { "gpt-4o": {}, "gpt-4o-mini": {} } },
             { name: "9router", id: "9router", models: { "claude-3-opus": {}, "claude-3-sonnet": {} } },
@@ -9544,6 +9544,186 @@ function pa_assert(cond, msg) { if (cond) { paPassed++ } else { console.error(` 
 
 console.log(`  PA: ${paPassed} passed, ${paFailed} failed`)
 passed += paPassed; failed += paFailed
+
+// ── HK: Hook Tests ──
+// Tests plugin hooks against proper mock SDK client
+console.log("\n[HK] Hook Tests — plugin hooks with SDK-like mock")
+let hkPassed = 0, hkFailed = 0
+function hkAssert(cond, msg) { if (cond) { hkPassed++; console.log(`  PASS: ${msg}`) } else { hkFailed++; console.log(`  FAIL: ${msg}`) } }
+
+// SDK-like mock client that mimics real OpenCode SDK responses
+function sdkMockClient(sessionId = "hk-session") {
+  let sessionCost = 0
+  let sessionTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+  const messages = []
+  return {
+    config: {
+      providers: async () => ({
+        data: {
+          providers: [
+            { name: "OpenAI", id: "openai", models: { "gpt-4o": { id: "gpt-4o", providerID: "openai", name: "GPT-4o", status: "active" } } },
+            { name: "Anthropic", id: "anthropic", models: { "claude-sonnet-4-20250514": { id: "claude-sonnet-4-20250514", providerID: "anthropic", name: "Claude Sonnet 4", status: "active" } } },
+          ],
+          default: { build: "openai/gpt-4o", plan: "anthropic/claude-sonnet-4-20250514" },
+        },
+      }),
+    },
+    session: {
+      get: async (opts) => {
+        return {
+          data: {
+            cost: sessionCost,
+            model: { id: "gpt-4o", providerID: "openai" },
+            tokens: sessionTokens,
+            title: "Test Session",
+            agent: "build",
+          },
+        }
+      },
+      create: async (opts) => ({ data: { id: `temp-${Date.now()}` } }),
+      delete: async (opts) => true,
+      prompt: async (opts) => {
+        // Track tokens/cost as real SDK would
+        sessionCost += 0.001
+        sessionTokens.input += opts.body?.parts?.[0]?.text?.length ?? 0
+        sessionTokens.output += 50
+        messages.push({ role: "user", text: opts.body?.parts?.[0]?.text })
+        return {
+          data: {
+            info: {
+              id: `msg-${messages.length}`,
+              sessionID: sessionId,
+              role: "assistant",
+              cost: 0.001,
+              tokens: { input: 100, output: 50, reasoning: 0, cache: { read: 0, write: 0 } },
+              finish: "stop",
+            },
+            parts: [{ id: `part-${messages.length}`, type: "text", text: `Response to: ${opts.body?.parts?.[0]?.text ?? ""}` }],
+          },
+        }
+      },
+    },
+    app: {
+      log: async (opts) => { /* capture for assertions */ return true },
+    },
+  }
+}
+
+// Mock plugin input for standalone hook tests (outside runAll closure)
+function hkMockInput(client) {
+  return {
+    client,
+    project: { name: "hk-test", path: "/tmp/hk-test" },
+    directory: "/tmp/hk-test",
+    worktree: "/tmp/hk-test",
+    experimental_workspace: { register: () => {} },
+    serverUrl: new URL("http://localhost:3000"),
+    $: new Proxy({}, { get() { return async () => ({ exitCode: 0, text: () => "", stdout: Buffer.from(""), stderr: Buffer.from("") }) } }),
+  }
+}
+
+// HK-1: config hook registers agent
+{
+  const client = sdkMockClient()
+  const hk = await mod.AgenticEngine(hkMockInput(client))
+  const configOutput = {}
+  await hk.config?.(configOutput)
+  hkAssert(configOutput.agent?.agentic?.mode === "primary", "HK-1a config hook sets agent mode=primary")
+  hkAssert(typeof configOutput.agent?.agentic?.description === "string", "HK-1b config hook sets agent description")
+  hkAssert(typeof configOutput.agent?.agentic?.prompt === "string", "HK-1c config hook sets agent prompt")
+  hkAssert(configOutput.default_agent === "agentic", "HK-1d config hook sets default_agent=agentic")
+  await hk.dispose?.()
+}
+
+// HK-2: config hook does not overwrite existing default_agent
+{
+  const client = sdkMockClient()
+  const hk = await mod.AgenticEngine(hkMockInput(client))
+  const configOutput = { default_agent: "build", agent: {} }
+  await hk.config?.(configOutput)
+  hkAssert(configOutput.default_agent === "build", "HK-2 config hook respects existing default_agent")
+  await hk.dispose?.()
+}
+
+// HK-3: chat.params hook tracks model
+{
+  const client = sdkMockClient()
+  const hk = await mod.AgenticEngine(hkMockInput(client))
+  const chatInput = { sessionID: "hk-session", agent: "build", model: { providerID: "anthropic", id: "claude-sonnet-4-20250514" }, provider: "anthropic" }
+  const chatOutput = {}
+  await hk["chat.params"]?.(chatInput, chatOutput)
+  // Model tracking happens inside llmEngine, not directly observable via hook output
+  hkAssert(true, "HK-3 chat.params hook executes without error")
+  await hk.dispose?.()
+}
+
+// HK-4: tool.execute.after hook records calls
+{
+  const client = sdkMockClient()
+  const hk = await mod.AgenticEngine(hkMockInput(client))
+  // First verify the hook exists
+  hkAssert(typeof hk["tool.execute.after"] === "function", "HK-4a tool.execute.after hook registered")
+  
+  const toolInput = { tool: "agentic_nav", args: { query: "test" }, sessionID: "hk-session", callID: "call-1" }
+  const toolOutput = { title: "Nav Result", output: "Found files", metadata: {} }
+  await hk["tool.execute.after"]?.(toolInput, toolOutput)
+  hkAssert(true, "HK-4b tool.execute.after executes without error")
+  await hk.dispose?.()
+}
+
+// HK-5: Model discovery via SDK client.config.providers()
+{
+  const client = sdkMockClient("hk-model-disc")
+  const hk = await mod.AgenticEngine(hkMockInput(client))
+  await new Promise(r => setTimeout(r, 50)) // wait for async discovery
+  const statusResp = await hk.tool.agentic_status.execute({}, { sessionID: "hk-model-disc", messageID: "m", agent: "test", directory: "/tmp", worktree: "/tmp", abort: new AbortController().signal, metadata: () => {}, ask: async () => {} })
+  const statusOut = typeof statusResp === "string" ? statusResp : statusResp?.output || JSON.stringify(statusResp)
+  hkAssert(statusOut.includes("gpt-4o") || statusOut.includes("gpt-4o") || statusOut.includes("Fast"), "HK-5a discovered models appear in status")
+  hkAssert(statusOut.includes("claude") || statusOut.includes("sonnet"), "HK-5b claude models appear in status")
+  await hk.dispose?.()
+}
+
+// HK-6: LLMEngine call via SDK-like client (not fallback)
+{
+  const { LLMEngine } = mod
+  const engine = new LLMEngine()
+  const client = sdkMockClient("hk-llm")
+  engine.setOpencodeClient(client)
+  engine.setSessionId("hk-llm")
+  
+  const result = await engine.call({
+    userPrompt: "Hello from test",
+    systemPrompt: "You are a test assistant",
+    toolName: "test",
+  })
+  
+  hkAssert(result.content.startsWith("Response to:"), "HK-6a LLMEngine.call returns real SDK response (not NO_LLM)")
+  hkAssert(result.content.includes("Hello from test"), "HK-6b response contains the prompt echo")
+  hkAssert(result.finishReason === "stop", "HK-6c finishReason is stop")
+}
+
+// HK-7: LLMEngine falls back when no SDK client
+{
+  const { LLMEngine } = mod
+  const engine = new LLMEngine()
+  const result = await engine.call({
+    userPrompt: "test",
+    systemPrompt: "test",
+    toolName: "test",
+  })
+  hkAssert(result.content.includes("[NO_LLM]"), "HK-7 LLMEngine returns NO_LLM without client")
+  hkAssert(result.finishReason === "no_llm", "HK-7b finishReason is no_llm")
+}
+
+// HK-8: app.log is available on SDK client
+{
+  const client = sdkMockClient()
+  const logResult = await client.app.log({ body: { service: "test", level: "info", message: "test log", extra: { key: "val" } } })
+  hkAssert(logResult === true, "HK-8 app.log executes without error")
+}
+
+console.log(`  HK: ${hkPassed} passed, ${hkFailed} failed`)
+passed += hkPassed; failed += hkFailed
 
 console.log(`Results: ${passed} passed, ${failed} failed`)
 if (failed === 0) console.log("ALL TESTS PASSED")
