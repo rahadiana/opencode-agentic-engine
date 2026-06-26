@@ -472,6 +472,20 @@ export class SkillImprover {
     // _schemaValidator and _codeSandbox reserved for future use
   }
 
+  // ── Public API ─────────────────────────────────────────────────
+
+  /**
+   * Auto-generate test cases from a skill's input/output schema.
+   * Delegates to the module-level autoGenerateTests function.
+   */
+  autoGenerateTests(
+    skill: SkillDefinition,
+    inputSchema: Record<string, SchemaField>,
+    outputSchema?: Record<string, SchemaField>,
+  ): SkillTestCase[] {
+    return autoGenerateTests(skill, inputSchema, outputSchema)
+  }
+
   // ── Core Pipeline ──────────────────────────────────────────────
 
   /**
