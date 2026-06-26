@@ -12,8 +12,9 @@
 
 import type { Subtask } from "./intent-parser.js"
 import { TimeoutError, BudgetExceededError } from "./errors.js"
+import { computeBackoff, buildSummary, inferNodeType, detectLoop, LOOP_DETECTION_MAX_IDENTICAL } from "./dag-helpers.js"
 
-// ── Types ──────────────────────────────────────────────────────────
+// ── Type Definitions ────────────────────────────────────────────────
 
 export type DAGNodeType = "plan" | "execute" | "verify" | "reflect" | "delegate"
 
@@ -120,14 +121,14 @@ const DEFAULT_CIRCUIT_BREAKER = true
 const DEFAULT_RECOVERY = "restart-node"
 const DEFAULT_MAX_STEPS = 50
 const DEFAULT_TIMEOUT = 120_000
-const LOOP_DETECTION_WINDOW_MS = 60_000
-const LOOP_DETECTION_MAX_IDENTICAL = 5
 
-// ── DAGEngine ──────────────────────────────────────────────────────
+// ── DAGEngine Class ──────────────────────────────────────────────────
 
 export class DAGEngine {
   private observers: DAGObserver[] = []
   private budgetCheck?: () => { exceeded?: boolean; metric?: string; current?: number; limit?: number } | null
+
+  // ── Constructor / Setup ──────────────────────────────────────────
 
   setBudgetChecker(
     check: () => { exceeded?: boolean; metric?: string; current?: number; limit?: number } | null,
@@ -162,7 +163,7 @@ export class DAGEngine {
     overrides?: Partial<DAGPlan["metadata"]>,
   ): { plan: DAGPlan; context: DAGExecutionContext } {
     const nodes: DAGNode[] = subtasks.map(s => {
-      const type = this.inferNodeType(s)
+      const type = inferNodeType(s)
       return {
         id: s.id,
         type,
@@ -218,17 +219,7 @@ export class DAGEngine {
     }))
   }
 
-  /** Infer node type dari description */
-  private inferNodeType(s: Subtask): DAGNodeType {
-    const desc = s.description.toLowerCase()
-    if (/verify|compile|test|check|lint/i.test(desc)) return "verify"
-    if (/plan|design|architecture/i.test(desc)) return "plan"
-    if (/analyze|debug|reflect|investigate/i.test(desc)) return "reflect"
-    if (/delegate|assign|orchestrat/i.test(desc)) return "delegate"
-    return "execute"
-  }
-
-  // ── Topological Sort — Kahn's Algorithm ──────────────────────────
+  // ── Phase Computation (Topological Sort) ──────────────────────────
 
   /**
    * Compute topological phases using Kahn's algorithm.
@@ -466,7 +457,7 @@ export class DAGEngine {
       failedNodes,
       totalNodes: context.plan.nodes.length,
       totalTime,
-      summary: this.buildSummary(context, startNodeCount, totalTime),
+      summary: buildSummary(context, startNodeCount, totalTime),
       circuitBreakerTripped: context.circuitBreakerTripped,
       recoveryTriggered,
       escalationRequired,
@@ -475,6 +466,8 @@ export class DAGEngine {
     this.observers.forEach(o => o.onDAGComplete(result))
     return result
   }
+
+  // ── Node Execution ──────────────────────────────────────────────
 
   /**
    * Execute a single node with retry logic.
@@ -499,7 +492,7 @@ export class DAGEngine {
 
     // Circuit breaker: loop detection
     if (context.plan.metadata.circuitBreaker) {
-      if (this.detectLoop(context, node.id)) {
+      if (detectLoop(context, node.id)) {
         context.circuitBreakerTripped = true
         const errMsg = `Infinite loop detected: node "${node.id}" repeated ${LOOP_DETECTION_MAX_IDENTICAL}+ times`
         this.notifyCircuitBreaker(node.id, errMsg)
@@ -564,7 +557,7 @@ export class DAGEngine {
         if (retryCount > node.config.maxRetries) break
 
         // Backoff
-        const delay = this.computeBackoff(node.config.retryStrategy, retryCount)
+        const delay = computeBackoff(node.config.retryStrategy, retryCount)
         await sleep(delay)
 
       } catch (err) {
@@ -579,7 +572,7 @@ export class DAGEngine {
 
         if (retryCount > node.config.maxRetries) break
 
-        const delay = this.computeBackoff(node.config.retryStrategy, retryCount)
+        const delay = computeBackoff(node.config.retryStrategy, retryCount)
         await sleep(delay)
       }
     }
@@ -592,7 +585,7 @@ export class DAGEngine {
     return { nodeId: node.id, success: false, output: lastError, error: lastError }
   }
 
-  // ── Internal ─────────────────────────────────────────────────────
+  // ── Internal Helpers ──────────────────────────────────────────────
 
   private createContext(plan: DAGPlan): DAGExecutionContext {
     const nodeStates = new Map<string, NodeState>()
@@ -642,42 +635,6 @@ export class DAGEngine {
     return results
   }
 
-  /** Compute backoff delay based on retry strategy */
-  private computeBackoff(strategy: RetryStrategy, attempt: number): number {
-    switch (strategy) {
-      case "none":
-        return 0
-      case "linear":
-        return Math.min(attempt * 1000, 30_000)
-      case "exponential":
-        return Math.min(Math.pow(2, attempt) * 500, 30_000)
-      default:
-        return Math.min(attempt * 1000, 30_000)
-    }
-  }
-
-  /** Loop detection: hash-based rolling window */
-  private detectLoop(context: DAGExecutionContext, nodeId: string): boolean {
-    const now = Date.now()
-    const hash = `${nodeId}`
-    context.callHistory.push({ nodeId, ts: now, hash })
-
-    // Prune old entries
-    const window = context.callHistory.filter(c => now - c.ts < LOOP_DETECTION_WINDOW_MS)
-    context.callHistory.length = 0
-    context.callHistory.push(...window)
-
-    const identical = window.filter(c => c.hash === hash).length
-    return identical > LOOP_DETECTION_MAX_IDENTICAL
-  }
-
-  private buildSummary(context: DAGExecutionContext, prevCompleted: number, totalTime: number): string {
-    const { completed, total, failed } = this.getProgress(context)
-    const newDone = completed - prevCompleted
-    return `DAG: ${completed}/${total} nodes, ${failed} failed, ${newDone} new in ${totalTime}ms` +
-      (context.circuitBreakerTripped ? " [CIRCUIT BREAKER TRIPPED]" : "")
-  }
-
   private notifyCircuitBreaker(nodeId: string, reason: string): void {
     this.observers.forEach(o => o.onCircuitBreaker(nodeId, reason))
   }
@@ -687,7 +644,7 @@ export class DAGEngine {
   }
 }
 
-// ── NodePool — Parallel execution with concurrency limit ────────────
+// ── NodePool Class ──────────────────────────────────────────────────
 
 class NodePool {
   constructor(
@@ -721,7 +678,7 @@ class NodePool {
   }
 }
 
-// ── Helpers ────────────────────────────────────────────────────────
+// ── Standalone Helpers ──────────────────────────────────────────────
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))

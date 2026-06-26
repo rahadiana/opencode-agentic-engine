@@ -135,27 +135,32 @@ export class Verifier {
     this.lastCompileFiles = []
   }
 
+  private async readChangedFiles(projectDir: string, changedFiles: string[]): Promise<Record<string, string>> {
+    const fileContents: Record<string, string> = {}
+    for (const f of changedFiles) {
+      const absPath = resolve(projectDir, f)
+      try { fileContents[f] = await readFile(absPath, "utf-8") } catch { /* skip */ }
+    }
+    return fileContents
+  }
+
+  private buildFilesBlock(fileContents: Record<string, string>, maxLength = 2000): string {
+    return Object.entries(fileContents)
+      .map(([path, content]) => `### ${path}\n\`\`\`\n${content.slice(0, maxLength)}\n\`\`\``)
+      .join("\n\n")
+  }
+
   async verifySemantic(_stepId: string, intent: string, changedFiles: string[], projectDir: string): Promise<CheckResult> {
     if (!this.llm) {
       return { name: "semantic", passed: true, output: "Semantic verification skipped (no LLM configured)" }
     }
 
-    const fileContents: Record<string, string> = {}
-    for (const f of changedFiles) {
-      const absPath = resolve(projectDir, f)
-      try {
-        fileContents[f] = await readFile(absPath, "utf-8")
-      } catch { /* skip unreadable files */ }
-    }
-
+    const fileContents = await this.readChangedFiles(projectDir, changedFiles)
     if (Object.keys(fileContents).length === 0) {
       return { name: "semantic", passed: true, output: "Semantic verification skipped (no readable changed files)" }
     }
 
-    const filesBlock = Object.entries(fileContents).map(([path, content]) =>
-      `### ${path}\n\`\`\`\n${content.slice(0, 2000)}\n\`\`\``
-    ).join("\n\n")
-
+    const filesBlock = this.buildFilesBlock(fileContents)
     const domainName = this.domainRegistry?.getCurrentDomain() ?? "generic"
     const resp = await this.llm.call({
       systemPrompt: `You are a semantic verification assistant. Given an intent/goal and the changes made in the "${domainName}" domain, determine if the changes correctly implement the intent. Consider: edge cases, completeness, correctness. Respond as JSON with keys: passed (boolean), reasoning (string), issuesFound (array of strings).`,
@@ -183,18 +188,9 @@ export class Verifier {
       return { name: "criteria", passed: true, output: "Criteria verification skipped (no LLM or no criteria)" }
     }
 
-    const fileContents: Record<string, string> = {}
-    for (const f of changedFiles) {
-      const absPath = resolve(projectDir, f)
-      try {
-        fileContents[f] = await readFile(absPath, "utf-8")
-      } catch { /* skip */ }
-    }
-
+    const fileContents = await this.readChangedFiles(projectDir, changedFiles)
     const criteriaBlock = criteria.map((c, i) => `${i + 1}. ${c}`).join("\n")
-    const filesBlock = Object.entries(fileContents).map(([path, content]) =>
-      `### ${path}\n\`\`\`\n${content.slice(0, 2000)}\n\`\`\``
-    ).join("\n\n")
+    const filesBlock = this.buildFilesBlock(fileContents)
 
     const domainName = this.domainRegistry?.getCurrentDomain() ?? "generic"
     const resp = await this.llm.call({
@@ -255,36 +251,50 @@ export class Verifier {
   }
 
   /**
-   * Gap #4: Security verification — LLM-based OWASP review.
-   * Checks for: SQL injection, XSS, RCE, path traversal, insecure deserialization, hardcoded secrets, auth bypass.
+   * Shared LLM check for security/performance/architecture.
+   * Reads changed files, builds files block, calls LLM, parses result.
    */
-  async verifySecurity(intent: string, changedFiles: string[], projectDir: string): Promise<CheckResult> {
+  private async runLLMCheck(
+    name: string,
+    systemPrompt: string,
+    userPromptTemplate: string,
+    projectDir: string,
+    changedFiles: string[],
+    maxLength = 2000,
+  ): Promise<CheckResult> {
     if (!this.llm) {
-      return { name: "security", passed: true, output: "Security verification skipped (no LLM configured)" }
+      return { name, passed: true, output: `${name} verification skipped (no LLM configured)` }
     }
 
-    const fileContents: Record<string, string> = {}
-    for (const f of changedFiles) {
-      const absPath = resolve(projectDir, f)
-      try { fileContents[f] = await readFile(absPath, "utf-8") } catch { /* skip */ }
-    }
+    const fileContents = await this.readChangedFiles(projectDir, changedFiles)
     if (Object.keys(fileContents).length === 0) {
-      return { name: "security", passed: true, output: "Security verification skipped (no readable changed files)" }
+      return { name, passed: true, output: `${name} verification skipped (no readable changed files)` }
     }
 
-    const filesBlock = Object.entries(fileContents)
-      .map(([path, content]) => `### ${path}\n\`\`\`\n${content.slice(0, 2000)}\n\`\`\``)
-      .join("\n\n")
-
-    const domainName = this.domainRegistry?.getCurrentDomain() ?? "generic"
+    const filesBlock = this.buildFilesBlock(fileContents, maxLength)
     const resp = await this.llm.call({
-      systemPrompt: `You are a security verification assistant for the "${domainName}" domain. Review the code for OWASP Top 10 vulnerabilities. Respond as JSON with keys: passed (boolean), reasoning (string), issuesFound (array of strings).`,
-      userPrompt: `## Intent\n${intent}\n\n## Changed Files\n${filesBlock}\n\nReview for security vulnerabilities. Return JSON.`,
+      systemPrompt,
+      userPrompt: userPromptTemplate.replace("${filesBlock}", filesBlock),
       jsonMode: true,
       temperature: 0.1,
     })
 
-    return this.parseLLMCheck("security", resp.content)
+    return this.parseLLMCheck(name, resp.content)
+  }
+
+  /**
+   * Gap #4: Security verification — LLM-based OWASP review.
+   * Checks for: SQL injection, XSS, RCE, path traversal, insecure deserialization, hardcoded secrets, auth bypass.
+   */
+  async verifySecurity(intent: string, changedFiles: string[], projectDir: string): Promise<CheckResult> {
+    const domainName = this.domainRegistry?.getCurrentDomain() ?? "generic"
+    return this.runLLMCheck(
+      "security",
+      `You are a security verification assistant for the "${domainName}" domain. Review the code for OWASP Top 10 vulnerabilities. Respond as JSON with keys: passed (boolean), reasoning (string), issuesFound (array of strings).`,
+      `## Intent\n${intent}\n\n## Changed Files\n` + "${filesBlock}" + `\n\nReview for security vulnerabilities. Return JSON.`,
+      projectDir,
+      changedFiles,
+    )
   }
 
   /**
@@ -292,32 +302,14 @@ export class Verifier {
    * Checks for: O(n²) loops, N+1 queries, memory leaks, large payloads, inefficient algorithms.
    */
   async verifyPerformance(intent: string, changedFiles: string[], projectDir: string): Promise<CheckResult> {
-    if (!this.llm) {
-      return { name: "performance", passed: true, output: "Performance verification skipped (no LLM configured)" }
-    }
-
-    const fileContents: Record<string, string> = {}
-    for (const f of changedFiles) {
-      const absPath = resolve(projectDir, f)
-      try { fileContents[f] = await readFile(absPath, "utf-8") } catch { /* skip */ }
-    }
-    if (Object.keys(fileContents).length === 0) {
-      return { name: "performance", passed: true, output: "Performance verification skipped (no readable changed files)" }
-    }
-
-    const filesBlock = Object.entries(fileContents)
-      .map(([path, content]) => `### ${path}\n\`\`\`\n${content.slice(0, 2000)}\n\`\`\``)
-      .join("\n\n")
-
     const domainName = this.domainRegistry?.getCurrentDomain() ?? "generic"
-    const resp = await this.llm.call({
-      systemPrompt: `You are a performance verification assistant for the "${domainName}" domain. Review the code for performance anti-patterns. Respond as JSON with keys: passed (boolean), reasoning (string), issuesFound (array of strings).`,
-      userPrompt: `## Intent\n${intent}\n\n## Changed Files\n${filesBlock}\n\nReview for performance issues. Return JSON.`,
-      jsonMode: true,
-      temperature: 0.1,
-    })
-
-    return this.parseLLMCheck("performance", resp.content)
+    return this.runLLMCheck(
+      "performance",
+      `You are a performance verification assistant for the "${domainName}" domain. Review the code for performance anti-patterns. Respond as JSON with keys: passed (boolean), reasoning (string), issuesFound (array of strings).`,
+      `## Intent\n${intent}\n\n## Changed Files\n` + "${filesBlock}" + `\n\nReview for performance issues. Return JSON.`,
+      projectDir,
+      changedFiles,
+    )
   }
 
   /**
@@ -325,129 +317,130 @@ export class Verifier {
    * Checks for: circular dependencies, layer violations, module boundary crossings, orphan modules.
    */
   async verifyArchitecture(intent: string, changedFiles: string[], projectDir: string): Promise<CheckResult> {
-    if (!this.llm) {
-      return { name: "architecture", passed: true, output: "Architecture verification skipped (no LLM configured)" }
-    }
-
-    const allFiles: string[] = []
+    const domainName = this.domainRegistry?.getCurrentDomain() ?? "generic"
     const srcFiles = changedFiles.filter(f =>
       f.endsWith(".ts") || f.endsWith(".tsx") || f.endsWith(".js") ||
       f.endsWith(".py") || f.endsWith(".go") || f.endsWith(".rs")
     )
-    for (const f of srcFiles) {
-      try {
-        const content = await readFile(resolve(projectDir, f), "utf-8")
-        allFiles.push(`### ${f}\n\`\`\`\n${content.slice(0, 1500)}\n\`\`\``)
-      } catch { /* skip */ }
-    }
-
-    if (allFiles.length === 0) {
-      return { name: "architecture", passed: true, output: "Architecture verification skipped (no readable source files)" }
-    }
-
-    const filesBlock = allFiles.join("\n\n")
-    const domainName = this.domainRegistry?.getCurrentDomain() ?? "generic"
-    const resp = await this.llm.call({
-      systemPrompt: `You are an architecture verification assistant for the "${domainName}" domain. Analyze the import graph and module structure. Respond as JSON with keys: passed (boolean), reasoning (string), issuesFound (array of strings).`,
-      userPrompt: `## Intent\n${intent}\n\n## Source Files\n${filesBlock}\n\nAnalyze for circular dependencies, layer violations, and architectural issues. Return JSON.`,
-      jsonMode: true,
-      temperature: 0.1,
-    })
-
-    return this.parseLLMCheck("architecture", resp.content)
+    return this.runLLMCheck(
+      "architecture",
+      `You are an architecture verification assistant for the "${domainName}" domain. Analyze the import graph and module structure. Respond as JSON with keys: passed (boolean), reasoning (string), issuesFound (array of strings).`,
+      `## Intent\n${intent}\n\n## Source Files\n` + "${filesBlock}" + `\n\nAnalyze for circular dependencies, layer violations, and architectural issues. Return JSON.`,
+      projectDir,
+      srcFiles,
+      1500,
+    )
   }
 
   /**
    * Gap #4: Dependency audit — run package manager's built-in audit command.
    * Supports: npm audit (Node.js), pip-audit (Python), cargo audit (Rust).
    */
-  verifyDeps(projectDir: string): CheckResult {
-    if (this.detectedLang === "unknown") this.detectLanguage(projectDir)
+  private runNpmAudit(projectDir: string): CheckResult | null {
+    if (!existsSync(resolve(projectDir, "package-lock.json")) && !existsSync(resolve(projectDir, "yarn.lock"))) {
+      return null
+    }
+    try {
+      const output = execFileSync("npm", ["audit", "--json"], {
+        cwd: projectDir,
+        timeout: 30000,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "pipe"],
+      })
+      const parsed = JSON.parse(output)
+      const vulns = parsed.vulnerabilities ?? {}
+      const criticalCount = Object.values(vulns).filter((v: any) => v.severity === "critical").length
+      const highCount = Object.values(vulns).filter((v: any) => v.severity === "high").length
+      const moderateCount = Object.values(vulns).filter((v: any) => v.severity === "moderate").length
 
-    // npm audit for Node.js
-    if (existsSync(resolve(projectDir, "package-lock.json")) || existsSync(resolve(projectDir, "yarn.lock"))) {
+      if (criticalCount > 0 || highCount > 0) {
+        return {
+          name: "deps:npm",
+          passed: false,
+          output: `npm audit: ${criticalCount} critical, ${highCount} high, ${moderateCount} moderate vulnerabilities found. Run \`npm audit fix\` to resolve.`,
+        }
+      }
+      return {
+        name: "deps:npm",
+        passed: true,
+        output: `npm audit: ${criticalCount} critical, ${highCount} high, ${moderateCount} moderate — all acceptable.`,
+      }
+    } catch (e: unknown) {
+      const err = e as { stdout?: string; stderr?: string; message?: string }
+      const stdout = err.stdout ?? err.message ?? ""
       try {
-        const output = execFileSync("npm", ["audit", "--json"], {
-          cwd: projectDir,
-          timeout: 30000,
-          encoding: "utf-8",
-          stdio: ["ignore", "pipe", "pipe"],
-        })
-        const parsed = JSON.parse(output)
+        const parsed = JSON.parse(stdout)
         const vulns = parsed.vulnerabilities ?? {}
         const criticalCount = Object.values(vulns).filter((v: any) => v.severity === "critical").length
         const highCount = Object.values(vulns).filter((v: any) => v.severity === "high").length
-        const moderateCount = Object.values(vulns).filter((v: any) => v.severity === "moderate").length
-
         if (criticalCount > 0 || highCount > 0) {
           return {
             name: "deps:npm",
             passed: false,
-            output: `npm audit: ${criticalCount} critical, ${highCount} high, ${moderateCount} moderate vulnerabilities found. Run \`npm audit fix\` to resolve.`,
+            output: `npm audit: ${criticalCount} critical, ${highCount} high vulnerabilities. Run \`npm audit fix\` to resolve.`,
           }
         }
-        return {
-          name: "deps:npm",
-          passed: true,
-          output: `npm audit: ${criticalCount} critical, ${highCount} high, ${moderateCount} moderate — all acceptable.`,
-        }
-      } catch (e: unknown) {
-        const err = e as { stdout?: string; stderr?: string; message?: string }
-        // npm audit exits with code 1 even when it succeeds but finds vulns
-        // Try to parse stdout for JSON
-        const stdout = err.stdout ?? err.message ?? ""
-        try {
-          const parsed = JSON.parse(stdout)
-          const vulns = parsed.vulnerabilities ?? {}
-          const criticalCount = Object.values(vulns).filter((v: any) => v.severity === "critical").length
-          const highCount = Object.values(vulns).filter((v: any) => v.severity === "high").length
-          if (criticalCount > 0 || highCount > 0) {
-            return {
-              name: "deps:npm",
-              passed: false,
-              output: `npm audit: ${criticalCount} critical, ${highCount} high vulnerabilities. Run \`npm audit fix\` to resolve.`,
-            }
-          }
-          return { name: "deps:npm", passed: true, output: "npm audit: no critical/high vulnerabilities." }
-        } catch {
-          return { name: "deps:npm", passed: true, output: `npm audit: ${stdout.slice(0, 300)}` }
-        }
+        return { name: "deps:npm", passed: true, output: "npm audit: no critical/high vulnerabilities." }
+      } catch {
+        return { name: "deps:npm", passed: true, output: `npm audit: ${stdout.slice(0, 300)}` }
       }
     }
+  }
 
-    // pip-audit for Python
-    if (existsSync(resolve(projectDir, "requirements.txt")) || existsSync(resolve(projectDir, "Pipfile.lock"))) {
-      try {
-        const output = execFileSync("python", ["-m", "pip_auth", "--quiet"], {
-          cwd: projectDir,
-          timeout: 30000,
-          encoding: "utf-8",
-          stdio: ["ignore", "pipe", "pipe"],
-        })
-        return { name: "deps:pip", passed: true, output: output || "pip-audit: no vulnerabilities found." }
-      } catch (e: unknown) {
-        const err = e as { stdout?: string; message?: string }
-        return { name: "deps:pip", passed: true, output: `pip-audit: ${(err.stdout || err.message || "").slice(0, 200)}` }
-      }
+  private runPipAudit(projectDir: string): CheckResult | null {
+    if (!existsSync(resolve(projectDir, "requirements.txt")) && !existsSync(resolve(projectDir, "Pipfile.lock"))) {
+      return null
+    }
+    try {
+      const output = execFileSync("python", ["-m", "pip_auth", "--quiet"], {
+        cwd: projectDir,
+        timeout: 30000,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "pipe"],
+      })
+      return { name: "deps:pip", passed: true, output: output || "pip-audit: no vulnerabilities found." }
+    } catch (e: unknown) {
+      const err = e as { stdout?: string; message?: string }
+      return { name: "deps:pip", passed: true, output: `pip-audit: ${(err.stdout || err.message || "").slice(0, 200)}` }
+    }
+  }
+
+  private runCargoAudit(projectDir: string): CheckResult | null {
+    if (!existsSync(resolve(projectDir, "Cargo.lock"))) return null
+    try {
+      const output = execFileSync("cargo", ["audit", "--quiet"], {
+        cwd: projectDir,
+        timeout: 60000,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "pipe"],
+      })
+      return { name: "deps:cargo", passed: true, output: output || "cargo audit: no vulnerabilities found." }
+    } catch (e: unknown) {
+      const err = e as { stdout?: string; message?: string }
+      return { name: "deps:cargo", passed: true, output: `cargo audit: ${(err.stdout || err.message || "").slice(0, 200)}` }
+    }
+  }
+
+  verifyDeps(projectDir: string): CheckResult {
+    if (this.detectedLang === "unknown") this.detectLanguage(projectDir)
+
+    const checks: CheckResult[] = []
+    const npmResult = this.runNpmAudit(projectDir)
+    if (npmResult) checks.push(npmResult)
+    const pipResult = this.runPipAudit(projectDir)
+    if (pipResult) checks.push(pipResult)
+    const cargoResult = this.runCargoAudit(projectDir)
+    if (cargoResult) checks.push(cargoResult)
+
+    if (checks.length === 0) {
+      return { name: "deps", passed: true, output: "No supported package manager lockfile found — dependency audit skipped." }
     }
 
-    // cargo audit for Rust
-    if (existsSync(resolve(projectDir, "Cargo.lock"))) {
-      try {
-        const output = execFileSync("cargo", ["audit", "--quiet"], {
-          cwd: projectDir,
-          timeout: 60000,
-          encoding: "utf-8",
-          stdio: ["ignore", "pipe", "pipe"],
-        })
-        return { name: "deps:cargo", passed: true, output: output || "cargo audit: no vulnerabilities found." }
-      } catch (e: unknown) {
-        const err = e as { stdout?: string; message?: string }
-        return { name: "deps:cargo", passed: true, output: `cargo audit: ${(err.stdout || err.message || "").slice(0, 200)}` }
-      }
+    return {
+      name: "deps",
+      passed: checks.every(c => c.passed),
+      output: checks.map(c => c.output).join("; ") || "No dependency checks were run",
     }
-
-    return { name: "deps", passed: true, output: "No supported package manager lockfile found — dependency audit skipped." }
   }
 
   /**
