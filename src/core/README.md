@@ -1,6 +1,6 @@
 # src/core — Agentic Engine Core
 
-> Modul inti dari agentic engine. Berisi implementasi agent loop, planning, execution, verification, error analysis, budget tracking, model registry, formal model, event system, dan domain-specific packs.
+> Modul inti dari agentic engine. Berisi implementasi agent loop, planning, execution, verification, error analysis, budget tracking, model registry, formal model, event system, code intent analysis, confidence scoring, DAG engine, DSL interpreter, dynamic tool registry, planning layer, execution layer, recovery layer, protocol adapter, workflow engine, state store, dan domain-specific packs.
 
 ---
 
@@ -784,6 +784,294 @@ BDI world model dengan entities, relations, belief state. Externalized belief st
 | `snapshot` | — | `WorldSnapshot` | Snapshot seluruh world state |
 | `restore` | `(snapshot)` | `void` | Restore dari snapshot |
 | `getStats` | — | `{entities, relations, beliefs, cycles}` | World model statistics |
+
+---
+
+### 48. `code-intent-analyzer.ts`
+Gap #3 — Menganalisis codebase untuk meng-infer intent fungsi/metode/class terhadap suatu goal. Menggunakan regex pattern per-bahasa (TS/JS/Python/Go/Rust/Java/PHP) dan LLM enhancement untuk low-confidence matches. Menghasilkan `CodeIntentMap` dengan dependency chain.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `CodeIntentAnalyzer` | — | `CodeIntentAnalyzer` | Analyzer intent kode |
+| `setNavigator` | `(nav: CodebaseNavigator)` | `void` | Inject codebase navigator |
+| `setDependencyTracker` | `(dt: DependencyTracker)` | `void` | Inject dependency tracker |
+| `setLLM` | `(llm: LLMEngine)` | `void` | Inject LLM engine |
+| `invalidateCache` | — | `void` | Invalidasi scan cache |
+| `analyze` | `(goal, projectDir)` | `Promise<CodeIntentMap>` | Analisis utama: navigator + pattern + optional LLM |
+| `getContextSummary` | `(intentMap, maxFiles?)` | `string` | Compact XML summary untuk LLM prompt injection |
+
+---
+
+### 49. `confidence-scorer.ts`
+Gap #2 — Composite weighted confidence scoring dari 7 dimensi (compile, hallucination, semantic, test, lint, tech debt, model reliability) per execution step. Termasuk `ConfidenceStore` untuk per-step tracking.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `ConfidenceScorer` | `(weights?, threshold?)` | `ConfidenceScorer` | Scorer 7-dimensi dengan bobot |
+| `setWeights` | `(weights)` | `void` | Set custom weights |
+| `setThreshold` | `(threshold)` | `void` | Set confidence threshold |
+| `getWeights` | — | `ConfidenceWeights` | Dapatkan weights |
+| `getThreshold` | — | `number` | Threshold saat ini |
+| `score` | `(signals: ScoringSignals)` | `ConfidenceScore` | Hitung composite score |
+| `format` | `(score)` | `string` | Format confidence block |
+| `formatCompact` | `(score)` | `string` | Single-line summary |
+| `ConfidenceStore` | — | `ConfidenceStore` | Store per-step confidence |
+| `set` | `(stepId, score, modelName?)` | `void` | Simpan per-step |
+| `get` | `(stepId)` | `StepConfidenceRecord \| undefined` | Ambil step confidence |
+| `getAll` | — | `StepConfidenceRecord[]` | Semua records |
+| `getSorted` | — | `StepConfidenceRecord[]` | Sorted descending |
+| `getLowConfidence` | `(threshold?)` | `StepConfidenceRecord[]` | Steps di bawah threshold |
+| `getAverage` | — | `number` | Average semua steps |
+
+---
+
+### 50. `dag-helpers.ts`
+Pure helper functions untuk DAGEngine — compute backoff delay, build execution summary, infer node type dari deskripsi, dan hash-based loop detection dengan sliding window.
+
+| Fungsi | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `computeBackoff` | `(strategy, attempt)` | `number` | Backoff delay (none/linear/exponential), capped 30s |
+| `buildSummary` | `(context, prevCompleted, totalTime)` | `string` | Execution summary string |
+| `inferNodeType` | `(subtask: Subtask)` | `DAGNodeType` | Infer node type dari deskripsi |
+| `detectLoop` | `(context, nodeId)` | `boolean` | Hash-based rolling window loop detection |
+
+---
+
+### 51. `dsl-types.ts`
+Type definitions dan constants untuk DSL executor. Mendefinisikan 16 supported operations (`DslOp`), instruction interfaces, execution context, results, dan safety limits (max 50 instructions, nesting 5, call depth 3, execution steps 200).
+
+| Interface | Key Properties |
+|---|---|
+| `DslInstruction` | `id?`, `op: DslOp`, `source?`, `target?`, `value?`, `tool?`, `params?`, `condition?`, `then[]?`, `else[]?` |
+| `DslContext` | `input`, `output`, `memory` (semua `Record<string, unknown>`) |
+| `DslResult` | `success`, `output`, `memory`, `error?` |
+| `DslStepResult` | `instructionId?`, `op`, `success`, `value?`, `error?` |
+| `DslTrace` | `steps[]`, `durationMs` |
+| `DslFullResult` | extends `DslResult` + `trace` |
+| `DslValidationError` | `path`, `message`, `instructionId?` |
+
+| Constant | Value | Deskripsi |
+|---|---|---|
+| `MAX_DSL_INSTRUCTIONS` | `50` | Max instructions per program |
+| `MAX_DSL_NESTING` | `5` | Max if/then/else nesting |
+| `MAX_CALL_DEPTH` | `3` | Max recursion untuk call_skill |
+| `MAX_EXECUTION_STEPS` | `200` | Anti-infinite-loop guard |
+| `DSL_OP_WHITELIST` | 16 ops | Semua allowed operations |
+
+---
+
+### 52. `dsl-validator.ts`
+Validasi DSL instruction sets sebelum eksekusi. Cek operation whitelist, required fields per op type, nesting depth, dan instruction count limits.
+
+| Fungsi | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `validateDSL` | `(instructions, nesting?)` | `DslValidationError[]` | Validasi seluruh instruction set; empty array = valid |
+
+---
+
+### 53. `dynamic-tool-registry.ts`
+Runtime tool registry dengan versioning support. Setiap tool bisa punya multiple versions; active version auto-select highest semver kecuali di-pin. Mendukung version pinning, deprecation, migration paths, dan MCP exposure.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `DynamicToolRegistry` | — | `DynamicToolRegistry` | Registry tool runtime dengan versioning |
+| `register` | `(registration)` | `void` | Daftarkan tool dengan optional version |
+| `registerBatch` | `(registrations[])` | `void` | Daftarkan multiple tools |
+| `unregister` | `(name)` | `boolean` | Hapus semua versions |
+| `unregisterVersion` | `(name, version)` | `boolean` | Hapus specific version |
+| `get` | `(name, version?)` | `DynamicToolRegistration \| undefined` | Ambil tool (active atau specific) |
+| `has` | `(name)` | `boolean` | Cek tool exists |
+| `pin` | `(name, version)` | `boolean` | Pin ke specific version |
+| `unpin` | `(name)` | `boolean` | Lepas pin |
+| `listVersions` | `(name)` | `VersionInfo[]` | List semua versions |
+| `deprecate` | `(name, version)` | `boolean` | Mark version deprecated |
+| `addMigration` | `(migration)` | `void` | Daftarkan migration path |
+| `call` | `(name, args)` | `Promise<ToolCallResult>` | Execute tool by name |
+| `list` | — | `DynamicToolRegistration[]` | List active versions |
+| `listByCategory` | `(category)` | `DynamicToolRegistration[]` | List by category |
+| `search` | `(query)` | `DynamicToolRegistration[]` | Search by name/desc/keywords |
+| `getStats` | — | `{total, byCategory, totalVersions, pinnedCount}` | Registry statistics |
+| `toMCPTools` | — | `MCPTool[]` | Export sebagai MCP tool descriptors |
+| `clear` | — | `void` | Hapus semua tools |
+
+---
+
+### 54. `execution-layer.ts`
+Graph Harness §3.2 — standalone DAG node execution manager. Mengkonsumsi DAGPlan dari PlanningLayer, execute nodes topological order, tracking state per node (pending/running/completed/failed/skipped), parallel execution dalam phase, dan hooks untuk RecoveryLayer.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `ExecutionLayer` | `(dagEngine, config?)` | `ExecutionLayer` | Execution manager DAG |
+| `execute` | `(context, runner, signal?)` | `Promise<DAGResult>` | Execute full DAG plan |
+| `executeNode` | `(context, node, runner, signal?)` | `Promise<NodeExecutionResult>` | Execute single node dengan retry tracking |
+| `getReadyNodes` | `(context)` | `DAGNode[]` | Nodes dengan met dependencies |
+| `computePhases` | `(context)` | `ExecutionPhase[]` | Topological phases (Kahn's algorithm) |
+| `snapshot` | `(context)` | `ExecutionSnapshot` | Current execution progress |
+| `canRetry` | `(context, nodeId)` | `boolean` | Cek retry availability |
+| `setBudgetChecker` | `(check)` | `void` | Set budget checker untuk circuit breaking |
+| `toSubtasks` | `(plan)` | `Subtask[]` | Convert DAGPlan → Subtask array |
+
+---
+
+### 55. `llm-types.ts`
+LLM configuration types — token limits, temperature, multi-provider auto-fallback chain, cost-aware auto-switch, dan per-tool complexity tier mappings untuk model resolution.
+
+| Interface | Key Properties |
+|---|---|
+| `LLMConfig` | `maxTokens?`, `temperature?`, `fallbackModels[]?`, `maxFallbackAttempts?`, `costAutoSwitch?` |
+| `CostAutoSwitchConfig` | `enabled`, `minReliability`, `minUserSatisfaction`, `maxCostPerCall`, `budgetTightMultiplier`, `categories[]?` |
+| `CostSwitchEvent` | `fromModel`, `toModel`, `reason`, `category`, `estimatedSavingsUsd`, `timestamp` |
+| `LLMRequest` | `systemPrompt`, `userPrompt`, `maxTokens?`, `temperature?`, `jsonMode?`, `model?`, `toolName?`, `reasoningEffort?`, `signal?` |
+| `LLMResponse` | `content`, `usage?` (`promptTokens`, `completionTokens`, `reasoningTokens?`), `finishReason?` |
+
+| Constant | Deskripsi |
+|---|---|
+| `TOOL_COMPLEXITY` | Mapping tool → complexity tier: quick/unspecified-low/unspecified-high/deep |
+
+---
+
+### 56. `mcp-server.ts`
+MCP protocol HTTP server yang mengekspos plugin tools via Model Context Protocol. JSON-RPC 2.0 dengan `initialize`, `tools/list`, `tools/call`, plus health check. Port default: 4124.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `MCPServer` | `(registry: DynamicToolRegistry, config?)` | `MCPServer` | MCP HTTP server |
+| `start` | — | `Promise<void>` | Start HTTP server |
+| `stop` | — | `Promise<void>` | Stop server |
+| `port` | — | `number` | Actual listening port |
+| `getStatus` | — | `MCPServerStatus` | Status + uptime |
+
+| Route | Method | Deskripsi |
+|---|---|---|
+| `GET /health` | — | Health check |
+| `GET /` atau `/tools` | — | List all tools |
+| `POST /` atau `/rpc` | JSON-RPC 2.0 | MCP endpoint: `initialize`, `tools/list`, `tools/call` |
+
+---
+
+### 57. `planner-data.ts`
+Default decomposition rules dan macro templates untuk Planner — 14 data-driven rules mapping goal patterns (add/fix/refactor/test/deploy/migrate/doc/perf/security/docker/CI/research/review/improve) ke 3-step subtask sequences.
+
+| Fungsi | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `createDefaultRules` | — | `DecompositionRule[]` | 14 default decomposition rules |
+| `createMacroTemplates` | — | `MacroTemplate[]` | 4 macro templates (create/fix/refactor/research) |
+
+| Pattern Rules | Keywords Contoh |
+|---|---|
+| add/create/build/implement | feature, component, module, endpoint, api |
+| fix/bug/repair/resolve | bug, issue, error, crash, broken |
+| refactor/clean/restructure | refactor, cleanup, extract, rename |
+| test/spec/verify | test, spec, coverage, verify |
+| deploy/release/ship | deploy, release, publish |
+| migrate/upgrade/update dep | migrate, upgrade, bump, dependency |
+| doc/document/readme | document, readme, docs, comment |
+| perf/optimize/speed | performance, optimize, bottleneck |
+| security/auth/vuln | security, vulnerability, xss, csrf |
+| docker/container/image | docker, dockerfile, compose |
+
+---
+
+### 58. `planner-utils.ts`
+Utility functions untuk Planner — topological phase ordering via Kahn's algorithm dan numeric subgoal scoring berdasarkan issues dan step count.
+
+| Fungsi | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `computePhaseOrder` | `(phases: MacroPhase[])` | `string[]` | Topological sort phases (Kahn's algorithm) |
+| `computeSubgoalScore` | `(issues[], stepCount)` | `number` | Score 0-1, deduct 0.15 per issue, penalize extreme step count |
+
+---
+
+### 59. `planning-layer.ts`
+Graph Harness §3.1 — plan versioning dan validation. Menerima user goals, menghasilkan immutable DAG execution plans, validasi correctness (cycle detection, missing deps), dan versioned replanning (immutable per version).
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `PlanningLayer` | `(dagEngine, config?)` | `PlanningLayer` | Plan versioning & validation |
+| `createPlan` | `(goal, subtasks[], overrides?)` | `{plan, context, version}` | Create initial DAG plan v1 |
+| `createPlanVersion` | `(goal, originalSubtasks, failedStepId, newSubtasks[], overrides?)` | `{plan, context, version}` | Replan: replace failed step, create vN+1 |
+| `validate` | `(goal, plan)` | `PlanValidationResult` | Cycle detection + missing deps validation |
+| `getVersions` | `(goal)` | `PlanVersion[]` | Semua versions untuk plan |
+| `getVersionStats` | — | `{totalPlans, totalVersions}` | Aggregate stats |
+
+---
+
+### 60. `protocol-adapter.ts`
+Unified gateway untuk MCP + A2A protocols. Menyediakan unified discovery, auto-routing calls ke protocol backend yang benar, dan combined statistics.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `ProtocolAdapter` | `(mcpClient: MCPClient)` | `ProtocolAdapter` | Gateway MCP + A2A |
+| `connectMCP` | `(config)` | `Promise<MCPConnection>` | Connect ke MCP server |
+| `listMCP` | — | `MCPConnection[]` | List semua MCP connections |
+| `callMCP` | `(serverName, toolName, args?)` | `Promise<MCPCallResult>` | Call MCP tool |
+| `disconnectMCP` | `(serverName)` | `boolean` | Disconnect MCP |
+| `discoverA2A` | `(url)` | `Promise<AgentCard \| null>` | Discover remote A2A agent |
+| `delegateA2A` | `(serverUrl, taskDescription, messages?)` | `Promise<TaskSendResult>` | Send task ke A2A agent |
+| `serveA2A` | `(config)` | `Promise<void>` | Start local A2A server |
+| `stopA2A` | — | `Promise<void>` | Stop local A2A server |
+| `findTools` | `(query, maxResults?)` | `ToolDescriptor[]` | Search across MCP + A2A |
+| `call` | `(target, params?)` | `Promise<ProtocolCallResult>` | Auto-route call by protocol |
+| `getStats` | — | `ProtocolAdapterStats` | Combined statistics |
+
+---
+
+### 61. `recovery-layer.ts`
+Graph Harness §3.3 — strict escalation protocol untuk failures: retry node (dengan configurable backoff) → replan node → escalate ke human. Setiap level punya max attempts sendiri.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `RecoveryLayer` | `(config?)` | `RecoveryLayer` | Escalation protocol handler |
+| `decide` | `(node, context, error)` | `RecoveryDecision` | Escalation: retry → replan → escalate |
+| `generateReplan` | `(original, error, planner?)` | `ReplanResult` | Default: split jadi diagnose → fix → verify |
+| `getRecoveries` | `(nodeId)` | `RecoveryRecord[]` | Recovery history untuk node |
+| `getAllRecoveries` | — | `RecoveryRecord[]` | Semua recovery records |
+| `getStats` | — | `{totalRecoveries, byLevel, byStatus}` | Statistics |
+
+---
+
+### 62. `state-store.ts`
+Unified single-source-of-truth data layer. Cache-first reads (lazy-load dari disk), write-through persistence (memory + file sync), namespace isolation (rag/skills/episodes/evolution/evaluation/models/prompts/session), per-namespace scope control (local/global/both).
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `StateStore` | `(config)` | `StateStore` | Namespaced persistent store |
+| `get` | `(namespace, key, scope?)` | `T \| null` | Get single entry |
+| `getAll` | `(namespace, scope?)` | `StoreEntry<T>[]` | Get all entries di namespace |
+| `set` | `(namespace, key, data, scope?)` | `void` | Save entry (write-through) |
+| `delete` | `(namespace, key, scope?)` | `boolean` | Delete entry |
+| `reload` | `(namespace?, scope?)` | `void` | Force reload dari disk |
+| `isLoaded` | `(namespace, scope?)` | `boolean` | Cek apakah namespace loaded |
+| `keys` | `(namespace, scope?)` | `string[]` | List keys |
+| `stats` | `(namespace, scope?)` | `{entries, loaded}` | Statistics |
+
+| Namespace | Scope | Storage Location |
+|---|---|---|
+| `rag` | local | `.agentic/store/rag/` |
+| `skills` | global | `~/.config/opencode/agentic-store/skills/` |
+| `episodes` | local | `.agentic/store/episodes/` |
+| `evolution` | local | `.agentic/store/evolution/` |
+| `evaluation` | local | `.agentic/store/evaluation/` |
+| `models` | global | `~/.config/opencode/agentic-store/models/` |
+| `prompts` | both | local override global |
+| `session` | local | `.agentic/store/session/` |
+
+---
+
+### 63. `workflow-engine.ts`
+Event-driven tool chaining engine. Mendengarkan EventBus events (`step.completed`, `step.failed`, `task.completed`) dan auto-chain tool execution — suggest next ready steps, track retries, advance pipeline stages.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `WorkflowEngine` | `(config)` | `WorkflowEngine` | Event-driven tool chaining |
+| `dispose` | — | `void` | Unsubscribe semua listeners |
+| `relayStep` | `(sessionId, stepId, success, output, filesModified, error?, durationMs?)` | `ChainedResult` | Relay step result → emit `step.completed`/`step.failed` |
+| `relayDelegation` | `(sessionId, taskId, role, success, result?, pipelineRunId?)` | `ChainedResult` | Relay delegation result → emit `task.completed` |
+
+**Event-driven behavior:**
+- **`step.completed`** → mark step done, find next ready steps → `nextSteps`
+- **`step.failed`** → track retry (max 3) → `recoverySteps`
+- **`task.completed`** → if pipelineRunId exists → `advancedStages`
 
 ---
 

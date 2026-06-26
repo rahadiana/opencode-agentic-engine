@@ -1,6 +1,6 @@
 # `src/memory` — Modul Sistem Memori & Persistent Storage
 
-> Menyediakan sistem penyimpanan memori lintas-sesi, ekstraksi skill, pencarian RAG, embedding vektor lokal, konversi skill ke training data untuk fine-tuning, hierarchical memory orchestration (working/episodic/semantic/procedural), periodic consolidation scheduling, dan multilingual stop word filtering (58 bahasa).
+> Menyediakan sistem penyimpanan memori lintas-sesi, ekstraksi skill, pencarian RAG, embedding vektor lokal, konversi skill ke training data untuk fine-tuning, hierarchical memory orchestration (working/episodic/semantic/procedural), periodic consolidation scheduling, execution tracing, importance indexing, memory query engine, SQLite persistence, multilingual stop word filtering (58 bahasa), dan integrasi knowledge lintas-sesi.
 
 ---
 
@@ -229,8 +229,99 @@ Scheduler periodik untuk konsolidasi memory. Timer-based dengan configurable int
 | `getStats` | — | `SchedulerStats` | Statistik: total runs, last run, next run, is running |
 | `getSchedule` | — | `ConsolidationSchedule` | Jadwal aktif |
 | `updateSchedule` | `partial: Partial<ConsolidationSchedule>` | `void` | Update jadwal runtime (restart timer jika running) |
+---
+
+### 14. `execution-tracer.ts`
+Standalone trace management — tracking `ExecutionTrace` dan `ExecutionStep` records dengan LRU eviction (max 200 traces). Dipisah dari `MemoryOrchestrator` untuk separation of concerns yang lebih bersih.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `ExecutionTracer` | `(maxTraces?: number)` | `ExecutionTracer` | Trace management dengan LRU eviction |
+| `trackExecution` | `(trace: ExecutionTrace)` | `void` | Track execution trace |
+| `getExecutionTrace` | `(id)` | `ExecutionTrace \| undefined` | Dapatkan trace by ID |
+| `getSessionTraces` | `(sessionId)` | `ExecutionTrace[]` | Traces untuk session tertentu |
+| `getAllTraces` | — | `ExecutionTrace[]` | Semua traces |
+| `beginStep` | `(traceId, sessionId, goal, stepId, description)` | `void` | Mulai step baru |
+| `completeStep` | `(traceId, stepId, status, error?, confidence?)` | `{trace?, step?, justCompleted}` | Selesaikan step |
 
 ---
+
+### 15. `importance-index.ts`
+In-memory importance scoring index untuk memory entries. Tracks importance, accessCount, lastAccessed per entry. Pruning berdasarkan composite score. Default importance: working=0.9, procedural=0.8, semantic=0.7, episodic=0.6.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `ImportanceIndex` | `(maxEntries?: number)` | `ImportanceIndex` | Importance scoring index |
+| `get` | `(id)` | `ImportanceEntry \| undefined` | Dapatkan importance entry |
+| `set` | `(id, level, importance)` | `void` | Set importance entry |
+| `delete` | `(id)` | `void` | Hapus entry |
+| `indexImportance` | `(entries[])` | `void` | Batch index importance |
+| `pruneImportanceIndex` | — | `void` | Prune by composite score |
+
+---
+
+### 16. `memory-query-engine.ts`
+Query subsystem untuk `MemoryOrchestrator` — routing query ke semua memory levels (working/episodic/semantic/procedural), multi-level entry resolution, keyword/content relevance scoring dengan recency decay, dan cross-level search.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `MemoryQueryEngine` | `(getWorkingList, getSemanticEntries, getProceduralList, importanceIndex, workingMem, episodicStore, executionTracer)` | `MemoryQueryEngine` | Query engine multi-level |
+| `query` | `(opts: MemoryQuery)` | `MemoryQueryResult` | Query lintas level dengan scoring |
+| `getEntriesByLevel` | `(level)` | `MemoryEntry[]` | Entries per level memory |
+
+---
+
+### 17. `skill-extractor.ts`
+Extract structured `ExtractedSkill` records dari agent output text. Mendeteksi action-oriented language, success indicators, completion markers. Normalisasi teks, infer action types, tools, dan capability names dari step descriptions.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `SkillExtractor` | — | `SkillExtractor` | Ekstraktor skill dari output agent |
+| `extract` | `(content, contextTags?)` | `ExtractedSkill \| null` | Extract skill dari text output |
+| `inferAction` | `(stepDesc)` | `string` | Infer action type (create/delete/modify/research/verify/dll) |
+| `inferToolForStep` | `(stepDesc)` | `string \| undefined` | Infer `agentic_*` tool dari deskripsi |
+
+| Export | Deskripsi |
+|---|---|
+| `ExtractedSkill` | `{name, steps[], pattern, keywords[], tools[], capability?}` |
+| `MIN_EXTRACT_CONTENT_LENGTH` | Min 60 chars untuk ekstraksi |
+| `normalize` | Normalisasi teks untuk parsing |
+
+---
+
+### 18. `sqlite-persistence.ts`
+Backend SQLite persistence layer. Dual driver: `better-sqlite3` (Node.js) dan `bun:sqlite` (Bun). Auto-deteksi driver available; throw jika keduanya unavailable. WAL mode, CRUD dengan namespace/scope/key partitioning, raw SQL queries, auto-migrate.
+
+| Fungsi/Kelas | Parameter | Return | Deskripsi |
+|---|---|---|---|
+| `SQLitePersistence` | `(config?: SQLiteConfig)` | `SQLitePersistence` | SQLite backend persistence |
+| `save` | `(namespace, key, data, scope?)` | `void` | Save entry |
+| `load` | `(namespace, key, scope?)` | `T \| null` | Load entry |
+| `loadAll` | `(namespace, scope?)` | `PersistentState<T>[]` | Load semua entries |
+| `delete` | `(namespace, key, scope?)` | `boolean` | Delete entry |
+| `listKeys` | `(namespace, scope?)` | `string[]` | List keys |
+| `listScopes` | `(namespace)` | `string[]` | List scopes |
+| `clearNamespace` | `(namespace, scope?)` | `number` | Hapus namespace |
+| `query` | `(sql, params?)` | `T[]` | Raw SQL query |
+| `stats` | — | `{namespaces[], fileSize, dbPath}` | Database statistics |
+| `close` | — | `void` | Tutup koneksi |
+| `driver` | — | `"better-sqlite3" \| "bun:sqlite" \| null` | Active driver |
+
+**Database schema:**
+```sql
+CREATE TABLE store (
+  namespace  TEXT NOT NULL,
+  scope      TEXT DEFAULT '',
+  key        TEXT NOT NULL,
+  data       TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (namespace, scope, key)
+);
+```
+
+---
+
 ### File Knowledge Lintas-Sesi
 
 📄 **`.agentic/knowledge.json`** — Menyimpan ringkasan pengetahuan dari sesi-sesi sebelumnya.

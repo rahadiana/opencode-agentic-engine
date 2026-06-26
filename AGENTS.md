@@ -27,7 +27,7 @@ src/
 ├── README.md                  # → Dokumentasi fungsi per folder untuk AI context
 │
 ├── core/                      # Inti engine: planning, execution, verification
-│   ├── README.md              # Dokumentasi 29 file + 6 domain
+│   ├── README.md              # Dokumentasi 63 file + 6 domain
 │   ├── agent-loop.ts          # Autonomous loop: plan → execute → verify → retry
     │   ├── auto-retry.ts          # Exponential backoff + jitter retry logic
     │   ├── bootstrap-knowledge.ts # Seeds RAG with high-confidence plugin docs
@@ -65,7 +65,7 @@ src/
 │       ├── generic.ts, mobile.ts, security.ts
 │
 ├── agents/                    # Multi-agent coordination
-│   ├── README.md              # Dokumentasi 4 file
+│   ├── README.md              # Dokumentasi 7 file
 │   ├── agent-runtime.ts       # Agent sub-process spawner
 │   ├── coordinator.ts         # Delegates to agent roles, auto-suggests role, msg bus
 │   ├── orchestrator.ts        # Multi-agent workflow pipelines + cross-validation
@@ -80,7 +80,7 @@ src/
 │   └── pattern-discovery.ts   # Error pattern discovery
 │
 ├── memory/                    # Cross-session & in-session memory
-│   ├── README.md              # Dokumentasi 10 file
+│   ├── README.md              # Dokumentasi 18 file
 │   ├── episodic-store.ts      # Cross-session memory with versioned schema
 │   ├── local-embedder.ts      # Local text embedding (API-based)
 │   ├── multi-index-rag.ts     # Multi-index RAG with category segregation
@@ -102,7 +102,8 @@ src/
 │   └── self-evolver.ts        # Agent prompt evolution
 │
 └── observability/
-    ├── README.md              # Dokumentasi 2 file
+    ├── README.md              # Dokumentasi 3 file
+    ├── logger.ts              # Structured logger (debug/info/warn/error)
     ├── dashboard.ts           # Timeline + stats + anomaly detection + model reliability
     └── trace-logger.ts        # JSONL trace writer (buffered, auto-flush, dedup guard)
 ```

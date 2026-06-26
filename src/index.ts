@@ -4352,6 +4352,7 @@ const confidenceStore = new ConfidenceStore()
           context: tool.schema.string().optional().describe("Additional context: data, files, requirements, or previous work"),
           maxRounds: tool.schema.number().optional().default(3).describe("Maximum debate rounds (default: 3, max: 5)"),
           format: tool.schema.enum(["markdown", "json"]).optional().default("json").describe("Output format: structured JSON or readable markdown"),
+          verbose: tool.schema.boolean().optional().default(false).describe("Tampilkan progress debate real-time + full transcript per round"),
         },
         async execute(args, context) {
           llmEngine.setSessionId(context.sessionID)
@@ -4369,6 +4370,7 @@ const confidenceStore = new ConfidenceStore()
             context: args.context,
             maxRounds,
             format: args.format ?? "json",
+            verbose: args.verbose ?? false,
           })
 
           // Record as episode for future learning
@@ -4403,8 +4405,29 @@ const confidenceStore = new ConfidenceStore()
             durationMs: Date.now() - startTime,
           })
 
+          // Build output — with full debate history when verbose
+          let outputText: string
+          if (args.verbose) {
+            outputText = `## 🗣️ Debate Result\n\n**Task:** ${args.task}\n**Status:** ${result.approved ? "✅ Approved" : "⚠️ Not fully resolved"} after ${result.totalRounds} round(s)\n**Revision:** ${result.revisionSummary}\n\n### Final Output\n\n${(args.format ?? "json") === "json" ? "```json\n" + result.finalOutput + "\n```" : result.finalOutput}\n\n### Full Debate History\n\n`
+            for (const round of result.rounds) {
+              outputText += `#### Round ${round.round}\n\n`
+              outputText += `**Executor Draft:**\n\`\`\`\n${round.draft}\n\`\`\`\n\n`
+              outputText += `**Critic Review:**\n\`\`\`\n${round.review}\n\`\`\`\n\n`
+              if (round.issues.length > 0) {
+                outputText += `**Issues:**\n`
+                for (const issue of round.issues) {
+                  outputText += `- ${issue}\n`
+                }
+                outputText += `\n`
+              }
+              if (round.approved) outputText += `**[Approved]**\n\n`
+            }
+          } else {
+            outputText = `## 🗣️ Debate Result\n\n**Task:** ${args.task}\n**Status:** ${result.approved ? "✅ Approved" : "⚠️ Not fully resolved"} after ${result.totalRounds} round(s)\n**Revision:** ${result.revisionSummary}\n\n### Final Output\n\n${(args.format ?? "json") === "json" ? "```json\n" + result.finalOutput + "\n```" : result.finalOutput}`
+          }
+
           return {
-            output: `## 🗣️ Debate Result\n\n**Task:** ${args.task}\n**Status:** ${result.approved ? "✅ Approved" : "⚠️ Not fully resolved"} after ${result.totalRounds} round(s)\n**Revision:** ${result.revisionSummary}\n\n### Final Output\n\n${(args.format ?? "json") === "json" ? "```json\n" + result.finalOutput + "\n```" : result.finalOutput}`,
+            output: outputText,
             metadata: { debateResult: result },
           }
         },

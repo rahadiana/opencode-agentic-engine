@@ -16,6 +16,12 @@ export interface DebateConfig {
   criticModel?: { providerID: string; modelID: string }
   /** Model override untuk Cleaner (default: resolved via tool context) */
   cleanerModel?: { providerID: string; modelID: string }
+  /**
+   * Verbose mode — tampilkan setiap round secara real-time via console.log
+   * dan include full debate transcript dalam output.
+   * Default: false (hanya final output).
+   */
+  verbose?: boolean
   /** AbortSignal to cancel a long-running debate */
   signal?: AbortSignal
   /**
@@ -119,14 +125,22 @@ export class DebateLoop {
       : totalController.signal
 
     try {
+      if (config.verbose) {
+        console.log(`\n━━━ Debate: "${config.task}" ━━━`)
+        console.log(`Max rounds: ${maxRounds} | Format: ${format} | Timeout: ${totalTimeoutMs}ms`)
+      }
+
       for (let round = 1; round <= maxRounds; round++) {
         // Check for cancellation between rounds
         if (effectiveSignal.aborted) {
+          if (config.verbose) console.log(`\n⚠️ Debate cancelled at round ${round}`)
           return {
             task: config.task, totalRounds: round - 1, approved: false,
             rounds, finalOutput: "", revisionSummary: `Debate cancelled (${config.signal?.aborted ? "external signal" : `total timeout ${totalTimeoutMs}ms exceeded`})`, aborted: true,
           }
         }
+
+        if (config.verbose) console.log(`\n── Round ${round}/${maxRounds} ──`)
 
       // ── Step 1: Executor produces draft (or revises based on feedback) ──
       let executorInput: string
@@ -160,6 +174,11 @@ export class DebateLoop {
         ])
         clearTimeout(timeoutId)
         draft = draftResp.content
+        if (config.verbose) {
+          console.log(`\n┃ [Executor] Draft produced (${draft.length} chars):`)
+          console.log(`┃ ${draft.slice(0, 300)}${draft.length > 300 ? "..." : ""}`)
+          if (draft.length > 300) console.log(`┃ ... (${draft.length - 300} more chars)`)
+        }
       } catch (error) {
         logParseError("executor call", error)
         // Short-circuit: don't continue debate with an error string as draft
@@ -173,6 +192,7 @@ export class DebateLoop {
           ? 1 - (levenshteinDistance(draft, prevDraft) / Math.max(draft.length, prevDraft.length))
           : 0
         if (similarity > 0.95) {
+          if (config.verbose) console.log(`\n┃ ⚠️ [Auto-Break] Draft ${(similarity * 100).toFixed(0)}% similar to previous round — loop detected`)
           rounds.push({
             round,
             draft,
@@ -207,6 +227,11 @@ export class DebateLoop {
         ])
         clearTimeout(criticTimeoutId)
         review = criticResp.content
+        if (config.verbose) {
+          console.log(`\n┃ [Critic] Review produced (${review.length} chars):`)
+          console.log(`┃ ${review.slice(0, 300)}${review.length > 300 ? "..." : ""}`)
+          if (review.length > 300) console.log(`┃ ... (${review.length - 300} more chars)`)
+        }
 
         // Check if approved
         const approveMatch = review.match(/^APPROVED:\s*(.+)/im)
@@ -235,12 +260,25 @@ export class DebateLoop {
         issues: approved ? [] : issues,
       })
 
+      if (config.verbose) {
+        const status = approved ? "✅ Approved" : `⚠️ ${issues.length} issue(s)`
+        console.log(`\n┃ [Round ${round}] ${status}`)
+        if (!approved && issues.length > 0) {
+          console.log(`┃ Issues:`)
+          for (const issue of issues.slice(0, 5)) {
+            console.log(`┃   • ${issue.slice(0, 200)}`)
+          }
+          if (issues.length > 5) console.log(`┃   ... and ${issues.length - 5} more`)
+        }
+      }
+
       currentDraft = draft
       if (approved) break
     }
 
     // ── Step 3: Clean the final output ──
     let finalOutput = currentDraft
+    if (config.verbose) console.log(`\n── Cleaner ──`)
     try {
       const cleanController = new AbortController()
       const cleanTimeoutId = setTimeout(() => cleanController.abort(), 30_000) // 30s timeout (STEM Agent §timeout)
@@ -274,6 +312,14 @@ export class DebateLoop {
       const totalIssues = rounds.slice(0, -1).reduce((sum, r) => sum + r.issues.length, 0)
       const finalStatus = approved ? "approved" : "max rounds reached"
       revisionSummary = `${rounds.length} rounds, ${totalIssues} issues raised, ${finalStatus}${approvalMessage ? `: ${approvalMessage}` : ""}`
+    }
+
+    if (config.verbose) {
+      console.log(`\n━━━ Debate Complete ━━━`)
+      console.log(`Status: ${approved ? "✅ Approved" : "⚠️ Not fully resolved"}`)
+      console.log(`Rounds: ${rounds.length}`)
+      console.log(`Revision: ${revisionSummary}`)
+      if (config.signal?.aborted) console.log(`Cancelled: external signal`)
     }
 
     return {
