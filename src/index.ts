@@ -334,12 +334,29 @@ const createEngine: Plugin = async (input, _options) => {
   /**
    * Helper: register a tool in both DynamicToolRegistry AND OpenCode hooks.tool.
    * Converts Zod args schema → JSON Schema using Zod 4's built-in toJSONSchema().
+   * Automatically wraps execute with error handling for all tools.
    */
   function registryTool(
     name: string,
     def: { description: string; args: any; execute: (args: any, context: any) => Promise<any> },
     registryMeta?: { version?: string; category?: string; keywords?: string[] },
   ) {
+    // Wrap execute with global error handler
+    const wrappedExecute = async (args: any, context: any) => {
+      try {
+        const result = await def.execute(args, context)
+        return result
+      } catch (err: any) {
+        const errMsg = err instanceof Error ? err.message : String(err)
+        const errStack = err instanceof Error ? err.stack : ""
+        console.error(`[Agentic] ❌ Tool "${name}" execution failed:\n  ${errMsg}\n${errStack ? `  ${errStack.split("\n").slice(1, 4).join("\n  ")}` : ""}`)
+        return {
+          output: `❌ **${name}** execution failed: ${errMsg}\n\nPlease check your inputs and try again. If the problem persists, use \`agentic_reflect\` for debugging.`,
+          metadata: { error: errMsg, tool: name },
+        }
+      }
+    }
+
     try {
       const zodObj = tool.schema.object(def.args)
       const jsonSchema = tool.schema.toJSONSchema(zodObj, { target: "draft-7", unrepresentable: "any" })
@@ -347,15 +364,15 @@ const createEngine: Plugin = async (input, _options) => {
         name,
         def.description,
         jsonSchema as Record<string, unknown>,
-        def.execute as (args: Record<string, unknown>, context?: any) => Promise<unknown>,
+        wrappedExecute as (args: Record<string, unknown>, context?: any) => Promise<unknown>,
         registryMeta,
       )
     } catch (e) {
       // Non-fatal: registry registration is best-effort
       const errMsg = e instanceof Error ? e.message : String(e)
-      console.warn(`[registryTool] Failed to register "${name}": ${errMsg}`)
+      console.error(`[Agentic] ❌ Tool registration FAILED for "${name}": ${errMsg}`)
     }
-    return tool({ description: def.description, args: def.args, execute: def.execute as any })
+    return tool({ description: def.description, args: def.args, execute: wrappedExecute as any })
   }
 
   const navigator = new CodebaseNavigator()
@@ -6481,12 +6498,22 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
       recentToolCalls.push(toolName)
       if (recentToolCalls.length > 20) recentToolCalls.shift()
 
+      // Detect tool failure from output
+      const outputText = _output?.output || ""
+      const isError = /^(Error|❌|Failed|Error:|Cannot|Not found|Unknown)/.test(outputText.trim())
+        || (outputText.length > 0 && outputText.trim().startsWith("```") && outputText.includes("error"))
+        || (outputText.length === 0)
+
+      if (isError) {
+        console.error(`[Agentic] Tool "${toolName}" returned error:\n${outputText.slice(0, 500)}`)
+      }
+
       traceLogger.log({
         step: "tool",
         input: JSON.stringify(toolInput.args ?? {}),
-        output: "completed",
+        output: isError ? `error: ${outputText.slice(0, 200)}` : "completed",
         toolUsed: toolName,
-        success: true,
+        success: !isError,
         durationMs: 0,
       })
 
