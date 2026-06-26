@@ -114,6 +114,10 @@ export interface LLMRequest {
    *  'high' — thorough reasoning
    *  Ignored by providers/models that don't support it. */
   reasoningEffort?: 'low' | 'medium' | 'high'
+  /** External AbortSignal to cancel the request.
+   *  If the signal fires before the LLM responds, the call aborts
+   *  and returns a fallback response. */
+  signal?: AbortSignal
 }
 
 export interface LLMResponse {

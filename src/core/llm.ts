@@ -349,6 +349,11 @@ export class LLMEngine {
     let success = false
     let response: LLMResponse
 
+    // Early abort: if external signal already fired, return immediately
+    if (req.signal?.aborted) {
+      return { content: "[NO_LLM] LLM call cancelled before start", finishReason: "error" }
+    }
+
     // Resolve model: per-call > tool-context > category > engine default
     const effectiveToolName = req.toolName ?? this._toolContext
     if (!req.model && effectiveToolName) {
@@ -547,7 +552,7 @@ export class LLMEngine {
 
       // Try each fallback model in order
       for (const fallbackModel of fallbackChain) {
-        if (success) break
+        if (success || req.signal?.aborted) break
 
         const [providerID, ...modelParts] = fallbackModel.split('/')
         const modelID = modelParts.join('/')
@@ -568,7 +573,7 @@ export class LLMEngine {
       }
 
       // Final fallback: session default (no model override)
-      if (!success) {
+      if (!success && !req.signal?.aborted) {
         delete req.model
         try {
           response = await this.callOpenCode(req)
@@ -978,9 +983,16 @@ export class LLMEngine {
     sessionId: string,
     body: ReturnType<LLMEngine['_buildPromptBody']>,
     timeoutMs: number = 120_000,
+    externalSignal?: AbortSignal,
   ): Promise<string> {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+    // Forward external abort to our controller
+    const onExternalAbort = () => { controller.abort() }
+    if (externalSignal) {
+      externalSignal.addEventListener('abort', onExternalAbort, { once: true })
+    }
 
     try {
       const result = await Promise.race([
@@ -990,13 +1002,19 @@ export class LLMEngine {
         }),
         new Promise<never>((_, reject) => {
           controller.signal.addEventListener('abort', () => {
-            reject(new Error(`OpenCode call timed out after ${timeoutMs}ms`))
+            const reason = externalSignal?.aborted
+              ? 'LLM call cancelled (parent timeout/abort)'
+              : `OpenCode call timed out after ${timeoutMs}ms`
+            reject(new Error(reason))
           })
         }),
       ])
       return this._extractResponse(result)
     } finally {
       clearTimeout(timeoutId)
+      if (externalSignal) {
+        externalSignal.removeEventListener('abort', onExternalAbort)
+      }
     }
   }
 
@@ -1017,7 +1035,7 @@ export class LLMEngine {
 
     try {
       const body = this._buildPromptBody(req)
-      const text = await this._promptWithTimeout(client, this.pluginSessionId, body)
+      const text = await this._promptWithTimeout(client, this.pluginSessionId, body, 120_000, req.signal)
 
       if (text.trim()) {
         return { content: text.trim(), finishReason: 'stop' }
@@ -1052,7 +1070,7 @@ export class LLMEngine {
       }
 
       const body = this._buildPromptBody(req)
-      const text = await this._promptWithTimeout(client, tempSessionId, body)
+      const text = await this._promptWithTimeout(client, tempSessionId, body, 120_000, req.signal)
 
       if (text.trim()) {
         return { content: text.trim(), finishReason: 'stop' }

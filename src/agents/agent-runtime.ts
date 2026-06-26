@@ -142,20 +142,28 @@ export class AgentRuntime {
     }
 
     try {
+      const fullPrompt = promptParts.join("\n")
+      // Dynamic timeout: estimate ~4 chars per token, min 120s, max 600s (10 menit)
+      const approxTokens = Math.ceil(fullPrompt.length / 4)
+      const dynamicTimeout = Math.min(Math.max(approxTokens * 0.3, 120_000), 600_000)
+      const timeoutMs = Math.round(dynamicTimeout)
+
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 120_000)
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
       const resp = await Promise.race([
         engine.call({
-          systemPrompt: promptParts.join("\n"),
-          userPrompt: ctx.taskDescription,
+          systemPrompt: fullPrompt,
+          userPrompt: `Complete the task described in the system prompt.`, // ringkas, gak duplikasi
           temperature: 0.3,
           maxTokens: 4096,
           model: modelOverride, // ← dikirim ke SDK langsung, bukan via config
+          signal: controller.signal, // ← forward AbortSignal ke bawah
           ...(ctx.reasoningEffort ? { reasoningEffort: ctx.reasoningEffort } : {}),
         }),
         new Promise<LLMResponse>((_, reject) => {
           controller.signal.addEventListener("abort", () => {
-            reject(new TimeoutError("LLM call", 120000))
+            reject(new TimeoutError("LLM call", timeoutMs))
           })
         }),
       ])
@@ -169,13 +177,13 @@ export class AgentRuntime {
       const err = e as Error
       const msg = err.message
       if (msg.includes('timeout') || msg.includes('timed out')) {
-        return { output: '', success: false, error: `LLM timeout: ${msg}` }
+        return { output: '', success: false, error: `LLM timeout after ${Math.round((parseInt(msg.match(/\d+/)?.[0] || '0') || 0) / 1000)}s: ${msg}` }
       }
       if (msg.includes('rate limit') || msg.includes('rate_limit') || msg.includes('rateLimit')) {
         return { output: '', success: false, error: `Rate limit exceeded: ${msg}` }
       }
-      if (msg.includes('abort') || msg.includes('AbortError')) {
-        return { output: '', success: false, error: `LLM call aborted: ${msg}` }
+      if (msg.includes('abort') || msg.includes('AbortError') || msg.includes('cancelled')) {
+        return { output: '', success: false, error: `LLM call cancelled: ${msg}` }
       }
       return { output: "", success: false, error: msg }
     }

@@ -2699,6 +2699,13 @@ const confidenceStore = new ConfidenceStore()
           // Check for pending messages for this role
           const pendingMessages = coordinator.getMessages(role, true)
 
+          // ── Compress shared memory — avoid bloat ──
+          const allShared = coordinator.getAllSharedMemory()
+          const compressedShared = allShared
+            .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0)) // terbaru dulu
+            .slice(0, 20) // max 20 entry
+            .map(e => ({ key: e.key, value: e.value.slice(0, 300), writtenBy: e.writtenBy }))
+
           // ── Actual Agent Execution via Isolated AgentRuntime ──
           const sessionModelPref = sessionStore.getModelPreference(context.sessionID, role)
           const agentCtx = {
@@ -2708,7 +2715,7 @@ const confidenceStore = new ConfidenceStore()
             taskDescription: contextWithMemory,
             pipelineContext: pipelineContext || undefined,
             pendingMessages: pendingMessages.length > 0 ? pendingMessages.map(m => ({ from: m.from, payload: m.payload })) : undefined,
-            sharedMemory: coordinator.getAllSharedMemory().map(e => ({ key: e.key, value: e.value, writtenBy: e.writtenBy })),
+            sharedMemory: compressedShared,
             modelPreference: sessionModelPref || undefined,
             reasoningEffort: args.reasoningEffort || undefined,
           }
