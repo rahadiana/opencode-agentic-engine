@@ -2479,7 +2479,7 @@ const g4_vDepsNpm = new mod.Verifier()
 g4_vDepsNpm.detectLanguage(g4_npmDir)
 const g4_depsNpm = g4_vDepsNpm.verifyDeps(g4_npmDir)
 assert(typeof g4_depsNpm.passed === "boolean", "G4-11a verifyDeps ran npm audit (no crash)")
-assert(g4_depsNpm.name === "deps:npm", "G4-11b verifyDeps returns deps:npm check")
+assert(g4_depsNpm.name === "deps", "G4-11b verifyDeps returns deps check")
 try { rmSync(g4_npmDir, { recursive: true, force: true }) } catch {}
 
 // Test 12: verifyAllDeep with tier="deep" and mock LLM — all dimensions

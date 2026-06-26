@@ -77,7 +77,7 @@ const PHASE_PERMISSIONS: Record<string, AgentPhase[]> = {
   architect: ["planning", "executing"],
   pm: ["planning"],
   executor: ["executing"],
-  developer: ["executing", "critic"],
+  developer: ["executing"],
   builder: ["executing"],
   critic: ["critic"],
   qa: ["critic"],

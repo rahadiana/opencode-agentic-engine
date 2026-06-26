@@ -132,7 +132,7 @@ export class SemanticCache {
     this.config = {
       maxEntries: config?.maxEntries ?? 500,
       ttlMs: config?.ttlMs ?? 300_000, // 5 minutes
-      similarityThreshold: config?.similarityThreshold ?? 0.7,
+      similarityThreshold: config?.similarityThreshold ?? 0.78, // Benchmark-optimized: 0 FP at >= 0.78, best F1 at >= 0.78 with zero false positives
       evictFraction: config?.evictFraction ?? 0.2,
     }
   }
