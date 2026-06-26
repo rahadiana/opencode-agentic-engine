@@ -2905,9 +2905,9 @@ const confidenceStore = new ConfidenceStore()
       }),
 
       agentic_skill: registryTool("agentic_skill", {
-        description: "Manage reusable skills extracted from successful task completions. Use 'extract' to create a skill from a completed step. Use 'find' to search existing skills. Use 'capability' for exact-match lookup.",
+        description: "Manage reusable skills extracted from successful task completions. Use 'extract' to create a skill from a completed step. Use 'find' to search existing skills. Use 'capability' for exact-match lookup. Use 'clear' to delete all skills.",
         args: {
-          action: tool.schema.enum(["extract", "find", "list", "capability"]).describe("'extract' creates a skill; 'find' searches; 'list' shows all; 'capability' exact-match lookup"),
+          action: tool.schema.enum(["extract", "find", "list", "capability", "clear"]).describe("'extract' creates a skill; 'find' searches; 'list' shows all; 'capability' exact-match lookup; 'clear' deletes all skills"),
           query: tool.schema.string().optional().describe("Search query, extraction target (stepId), or capability string"),
         },
         async execute(args, context) {
@@ -2965,6 +2965,11 @@ const confidenceStore = new ConfidenceStore()
               return line
             }).join("\n")
             return { output }
+          }
+
+          if (args.action === "clear") {
+            const count = skillStore.clearAll()
+            return { output: `## 🗑️ Skills Cleared\n\nRemoved **${count}** skills from the library.` }
           }
 
           const skills = skillStore.getAll()

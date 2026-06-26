@@ -335,6 +335,7 @@ export class Dashboard {
 
     // Tools used
     output += `\n### Tools Used\n`
+    output += `| Tool | Count |\n|------|-------|\n`
     const toolsArr = Object.entries(data.statistics.toolsUsed).sort((a, b) => b[1] - a[1])
     for (const [tool, count] of toolsArr) {
       output += `| \`${tool}\` | ${count} |\n`
@@ -342,11 +343,12 @@ export class Dashboard {
 
     // Timeline
     output += `\n### Timeline (last ${tlLimit})\n`
+    output += `| Time | Status | Tool | Step |\n|------|--------|------|------|\n`
     const recent = data.timeline.slice(-tlLimit)
     for (const evt of recent) {
       const icon = evt.success ? "[OK]" : "[FAIL]"
       const dur = evt.durationMs > 0 ? ` (${evt.durationMs}ms)` : ""
-      output += `| ${evt.time.slice(11, 19)} | ${icon} \`${evt.tool}\` | ${evt.step}${dur} |\n`
+      output += `| ${evt.time.slice(11, 19)} | ${icon} | \`${evt.tool}\` | ${evt.step}${dur} |\n`
     }
 
     // Anomalies
@@ -394,6 +396,8 @@ export class Dashboard {
       const cb = cm.categoryBreakdown
       output += `\n**Violation Breakdown:**\n`
       output += `| Category | Count |\n|----------|-------|\n`
+      const hasAny = cb.file_safety > 0 || cb.budget > 0 || cb.resource > 0 || cb.circuit_breaker > 0 || cb.invariant > 0 || cb.dependency > 0 || cb.other > 0
+      if (!hasAny) output += `| _(none)_ | 0 |\n`
       if (cb.file_safety > 0) output += `| File safety | ${cb.file_safety} |\n`
       if (cb.budget > 0) output += `| Budget warnings | ${cb.budget} |\n`
       if (cb.resource > 0) output += `| Resource (concurrent) | ${cb.resource} |\n`

@@ -598,6 +598,13 @@ export class SkillStore {
   }
 
   /** Get the lifecycle stage of a skill */
+  /** Delete all skills from the store. Returns count of removed skills. */
+  clearAll(): number {
+    const count = this.skills.size
+    this.skills.clear()
+    return count
+  }
+
   getLifecycle(skillId: string): SkillLifecycleStage {
     const record = this.skills.get(skillId)
     return record?.lifecycle ?? "raw"
