@@ -1,4 +1,5 @@
 import type { LLMEngine } from "./llm.js"
+import type { AgentRuntime, AgentContext } from "../agents/agent-runtime.js"
 import { TimeoutError } from "./errors.js"
 import { createLogger } from "../observability/logger.js"
 
@@ -13,12 +14,18 @@ export interface DebateConfig {
   maxRounds?: number
   /** Output format: "markdown" or "json" (default: "json") */
   format?: "markdown" | "json"
+  /** Session ID — required when using AgentRuntime sub-agent mode */
+  sessionId?: string
   /** Model override untuk Executor (default: resolved via tool context) */
   executorModel?: { providerID: string; modelID: string }
   /** Model override untuk Critic (default: resolved via tool context) */
   criticModel?: { providerID: string; modelID: string }
   /** Model override untuk Cleaner (default: resolved via tool context) */
   cleanerModel?: { providerID: string; modelID: string }
+  /** Reasoning effort untuk executor (o-series, GPT-5) */
+  executorReasoning?: 'low' | 'medium' | 'high'
+  /** Reasoning effort untuk critic */
+  criticReasoning?: 'low' | 'medium' | 'high'
   /**
    * Verbose mode — tampilkan setiap round secara real-time via console.log
    * dan include full debate transcript dalam output.
@@ -29,8 +36,7 @@ export interface DebateConfig {
   signal?: AbortSignal
   /**
    * Total timeout for entire debate loop (default: 120000ms = 120s).
-   * Per Graph Harness §6.2 & Omnigent: every bounded process needs a total circuit breaker.
-   * Prevents 660s worst-case (3 rounds × (60s executor + 120s critic) + 120s cleaner).
+   * Prevents unbounded execution.
    */
   totalTimeoutMs?: number
 }
@@ -54,6 +60,8 @@ export interface DebateResult {
   revisionSummary: string
   /** Whether the debate was cancelled via AbortSignal */
   aborted?: boolean
+  /** Error message if LLM unavailable */
+  error?: string
 }
 
 const EXECUTOR_PROMPT = `You are an **executor agent**. Your job is to produce a thorough, well-structured analysis or implementation based on the given task and context.
@@ -100,6 +108,14 @@ Rules:
 
 Output the cleaned version only.`
 
+const NO_LLM_RESPONSE = "⚠️ **LLM tidak tersedia.** Debate membutuhkan akses LLM untuk sub-agent executor dan critic. Jalankan perintah ini di dalam OpenCode yang memiliki akses LLM, atau gunakan `agentic_plan` + `agentic_execute` untuk workflow manual."
+const NO_LLM_PREFIX = "[NO_LLM]"
+
+/** Check if an LLM response indicates LLM unavailability */
+function isNoLlm(output: string): boolean {
+  return output.startsWith(NO_LLM_PREFIX) || output.startsWith("LLM error") || output.startsWith("LLM call failed")
+}
+
 function logParseError(context: string, error: unknown): void {
   if (process.env.DEBUG_AGENTIC) {
     log.error(`[DebateLoop] ${context}: ${String(error)}`)
@@ -107,20 +123,21 @@ function logParseError(context: string, error: unknown): void {
 }
 
 export class DebateLoop {
-  constructor(private llmEngine: LLMEngine) {}
+  constructor(
+    private llmEngine: LLMEngine,
+    private agentRuntime?: AgentRuntime,
+  ) {}
 
   async execute(config: DebateConfig): Promise<DebateResult> {
     const maxRounds = config.maxRounds ?? 2
     const format = config.format ?? "json"
-    const totalTimeoutMs = config.totalTimeoutMs ?? 120_000 // 120s total (Graph Harness §6.2)
+    const totalTimeoutMs = config.totalTimeoutMs ?? 120_000 // 120s total
     const rounds: DebateRound[] = []
     let currentDraft = ""
     let approved = false
     let approvalMessage = ""
 
-    // ── Total timeout wrapper (Graph Harness §6.2, Omnigent) ──
-    // Prevents 660s worst-case by bounding the entire debate at totalTimeoutMs.
-    // Uses AbortController + clearTimeout pattern (P0 compliant).
+    // ── Total timeout wrapper ──
     const totalController = new AbortController()
     const totalTimeoutId = setTimeout(() => totalController.abort(), totalTimeoutMs)
     const effectiveSignal = config.signal
@@ -131,6 +148,7 @@ export class DebateLoop {
       if (config.verbose) {
         log.debug(`\n━━━ Debate: "${config.task}" ━━━`)
         log.debug(`Max rounds: ${maxRounds} | Format: ${format} | Timeout: ${totalTimeoutMs}ms`)
+        log.debug(`Sub-agent mode: ${this.agentRuntime ? "✅ AgentRuntime" : "❌ direct llm (fallback)"}`)
       }
 
       for (let round = 1; round <= maxRounds; round++) {
@@ -145,91 +163,60 @@ export class DebateLoop {
 
         if (config.verbose) log.debug(`\n── Round ${round}/${maxRounds} ──`)
 
-      // ── Step 1: Executor produces draft (or revises based on feedback) ──
-      let executorInput: string
-      if (round === 1) {
-        executorInput = `Task: ${config.task}\n\nContext:\n${config.context || "(no additional context)"}\n\nProduce a thorough analysis.`
-      } else {
-        const prevRound = rounds[rounds.length - 1]
-        executorInput = `Task: ${config.task}\n\nContext:\n${config.context || "(no additional context)"}\n\nYour previous draft had the following issues that MUST be fixed:\n${prevRound.issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}\n\nCritic feedback:\n${prevRound.review}\n\nRevise your analysis addressing ALL issues above.`
-      }
+        // ── Step 1: Executor produces draft (or revises based on feedback) ──
+        let executorInput: string
+        if (round === 1) {
+          executorInput = `Task: ${config.task}\n\nContext:\n${config.context || "(no additional context)"}\n\nProduce a thorough analysis.`
+        } else {
+          const prevRound = rounds[rounds.length - 1]
+          executorInput = `Task: ${config.task}\n\nContext:\n${config.context || "(no additional context)"}\n\nYour previous draft had the following issues that MUST be fixed:\n${prevRound.issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}\n\nCritic feedback:\n${prevRound.review}\n\nRevise your analysis addressing ALL issues above.`
+        }
 
-      let draft = ""
-      let issues: string[] = []
-      try {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 60_000)
-        const draftResp = await Promise.race([
-          this.llmEngine.call({
-            systemPrompt: EXECUTOR_PROMPT,
-            userPrompt: executorInput,
-            temperature: 0.2,
-            maxTokens: 4096,
-            bypassCache: round > 1,
-            model: config.executorModel,
-            toolName: 'debate-executor',
-          }),
-          new Promise<never>((_, reject) => {
-            controller.signal.addEventListener("abort", () => {
-              reject(new TimeoutError("LLM call", 60000))
-            })
-          }),
-        ])
-        clearTimeout(timeoutId)
-        draft = draftResp.content
+        const executorResult = await this.callExecutor(config, executorInput, round, effectiveSignal)
+        if (executorResult.error) {
+          return {
+            task: config.task, totalRounds: round - 1, approved: false,
+            rounds, finalOutput: "", revisionSummary: "Executor LLM unavailable",
+            error: executorResult.error,
+          }
+        }
+        const draft = executorResult.output
         if (config.verbose) {
           log.debug(`\n┃ [Executor] Draft produced (${draft.length} chars):`)
           log.debug(`┃ ${draft.slice(0, 300)}${draft.length > 300 ? "..." : ""}`)
           if (draft.length > 300) log.debug(`┃ ... (${draft.length - 300} more chars)`)
         }
-      } catch (error) {
-        logParseError("executor call", error)
-        // Short-circuit: don't continue debate with an error string as draft
-        issues = [`Executor failed: ${error}`]
-        break
-      }
 
-      if (round > 1) {
-        const prevDraft = rounds[rounds.length - 1].draft
-        const similarity = (draft.length > 0 && prevDraft.length > 0)
-          ? 1 - (levenshteinDistance(draft, prevDraft) / Math.max(draft.length, prevDraft.length))
-          : 0
-        if (similarity > 0.95) {
-          if (config.verbose) log.debug(`\n┃ ⚠️ [Auto-Break] Draft ${(similarity * 100).toFixed(0)}% similar to previous round — loop detected`)
-          rounds.push({
-            round,
-            draft,
-            review: "AUTO-BREAK: Executor produced nearly identical output as previous round. Loop detected.",
-            approved: false,
-            issues: ["Output >95% similar to previous round -- loop detected, debate terminated"],
-          })
-          break
-        }
-      }
-
-      // ── Step 2: Critic reviews ──
-      let review = ""
-      try {
-        const criticController = new AbortController()
-        const criticTimeoutId = setTimeout(() => criticController.abort(), 45_000) // 45s timeout (STEM Agent §timeout)
-        const criticResp = await Promise.race([
-          this.llmEngine.call({
-            systemPrompt: CRITIC_PROMPT,
-            userPrompt: `Executor's output for task "${config.task}":\n\n${draft}\n\nReview this output. If APPROVED, respond with "APPROVED: (message)". Otherwise list all issues.`,
-            temperature: 0.2,
-            maxTokens: 2048,
-            bypassCache: round > 1, // Skip cache for revision rounds
-            model: config.criticModel,
-            toolName: 'debate-critic',
-          }),
-          new Promise<never>((_, reject) => {
-            criticController.signal.addEventListener("abort", () => {
-              reject(new TimeoutError("Critic LLM call", 45000))
+        // Auto-detect loop: identical output as previous round
+        if (round > 1) {
+          const prevDraft = rounds[rounds.length - 1].draft
+          const similarity = (draft.length > 0 && prevDraft.length > 0)
+            ? 1 - (levenshteinDistance(draft, prevDraft) / Math.max(draft.length, prevDraft.length))
+            : 0
+          if (similarity > 0.95) {
+            if (config.verbose) log.debug(`\n┃ ⚠️ [Auto-Break] Draft ${(similarity * 100).toFixed(0)}% similar to previous round — loop detected`)
+            rounds.push({
+              round,
+              draft,
+              review: "AUTO-BREAK: Executor produced nearly identical output as previous round. Loop detected.",
+              approved: false,
+              issues: ["Output >95% similar to previous round -- loop detected, debate terminated"],
             })
-          }),
-        ])
-        clearTimeout(criticTimeoutId)
-        review = criticResp.content
+            break
+          }
+        }
+
+        // ── Step 2: Critic reviews ──
+        const criticResult = await this.callCritic(config, draft, round, effectiveSignal)
+        if (criticResult.error) {
+          return {
+            task: config.task, totalRounds: round - 1, approved: false,
+            rounds, finalOutput: draft, revisionSummary: "Critic LLM unavailable",
+            error: criticResult.error,
+          }
+        }
+        const review = criticResult.output
+        let issues: string[] = []
         if (config.verbose) {
           log.debug(`\n┃ [Critic] Review produced (${review.length} chars):`)
           log.debug(`┃ ${review.slice(0, 300)}${review.length > 300 ? "..." : ""}`)
@@ -249,106 +236,223 @@ export class DebateLoop {
             .filter(l => l.length > 10)
           issues = issueLines.length > 0 ? issueLines : (review.length > 50 ? [review.slice(0, 500)] : [])
         }
-      } catch (error) {
-        logParseError("critic call", error)
-        review = `[Error generating critique: ${error}]`
-        issues = ["Critique generation failed — manual review needed"]
+
+        rounds.push({
+          round,
+          draft,
+          review,
+          approved,
+          issues: approved ? [] : issues,
+        })
+
+        if (config.verbose) {
+          const status = approved ? "✅ Approved" : `⚠️ ${issues.length} issue(s)`
+          log.debug(`\n┃ [Round ${round}] ${status}`)
+          if (!approved && issues.length > 0) {
+            log.debug(`┃ Issues:`)
+            for (const issue of issues.slice(0, 5)) {
+              log.debug(`┃   • ${issue.slice(0, 200)}`)
+            }
+            if (issues.length > 5) log.debug(`┃   ... and ${issues.length - 5} more`)
+          }
+        }
+
+        currentDraft = draft
+        if (approved) break
       }
 
-      rounds.push({
-        round,
-        draft,
-        review,
-        approved,
-        issues: approved ? [] : issues,
-      })
+      // ── Step 3: Clean the final output ──
+      let finalOutput = currentDraft
+      if (config.verbose) log.debug(`\n── Cleaner ──`)
+      try {
+        const cleanController = new AbortController()
+        const cleanTimeoutId = setTimeout(() => cleanController.abort(), 30_000)
+        const cleanResp = await Promise.race([
+          this.llmEngine.call({
+            systemPrompt: CLEANER_PROMPT,
+            userPrompt: `Format: ${format}\n\nTask: ${config.task}\n\nFinal analysis to clean:\n\n${currentDraft}\n\nOutput the cleaned version in ${format} format.`,
+            temperature: 0.1,
+            maxTokens: 4096,
+            model: config.cleanerModel,
+            toolName: 'debate-cleaner',
+          }),
+          new Promise<never>((_, reject) => {
+            cleanController.signal.addEventListener("abort", () => {
+              reject(new TimeoutError("Cleaner LLM call", 30000))
+            })
+          }),
+        ])
+        clearTimeout(cleanTimeoutId)
+        finalOutput = cleanResp.content
+      } catch (error) {
+        logParseError("cleaner call", error)
+        // Use draft as-is if cleaning fails
+      }
+
+      // ── Build revision summary ──
+      let revisionSummary = ""
+      if (rounds.length <= 1) {
+        revisionSummary = approved ? "Approved in first round — no revisions needed" : "Single round (max rounds reached)"
+      } else {
+        const totalIssues = rounds.slice(0, -1).reduce((sum, r) => sum + r.issues.length, 0)
+        const finalStatus = approved ? "approved" : "max rounds reached"
+        revisionSummary = `${rounds.length} rounds, ${totalIssues} issues raised, ${finalStatus}${approvalMessage ? `: ${approvalMessage}` : ""}`
+      }
 
       if (config.verbose) {
-        const status = approved ? "✅ Approved" : `⚠️ ${issues.length} issue(s)`
-        log.debug(`\n┃ [Round ${round}] ${status}`)
-        if (!approved && issues.length > 0) {
-          log.debug(`┃ Issues:`)
-          for (const issue of issues.slice(0, 5)) {
-            log.debug(`┃   • ${issue.slice(0, 200)}`)
-          }
-          if (issues.length > 5) log.debug(`┃   ... and ${issues.length - 5} more`)
-        }
+        log.debug(`\n━━━ Debate Complete ━━━`)
+        log.debug(`Status: ${approved ? "✅ Approved" : "⚠️ Not fully resolved"}`)
+        log.debug(`Rounds: ${rounds.length}`)
+        log.debug(`Revision: ${revisionSummary}`)
+        if (config.signal?.aborted) log.debug(`Cancelled: external signal`)
       }
 
-      currentDraft = draft
-      if (approved) break
+      return {
+        task: config.task,
+        totalRounds: rounds.length,
+        approved,
+        rounds,
+        finalOutput,
+        revisionSummary,
+      }
+    } catch (error) {
+      // Total timeout or unexpected error — return partial results
+      logParseError("debate execute", error)
+      clearTimeout(totalTimeoutId)
+      return {
+        task: config.task,
+        totalRounds: rounds.length,
+        approved: false,
+        rounds,
+        finalOutput: currentDraft,
+        revisionSummary: `Debate terminated: ${error instanceof Error ? error.message : String(error)}`,
+        aborted: true,
+      }
+    } finally {
+      clearTimeout(totalTimeoutId)
+    }
+  }
+
+  /**
+   * Call the executor role — uses AgentRuntime sub-agent when available,
+   * falls back to direct llmEngine.call() for backward compat.
+   */
+  private async callExecutor(
+    config: DebateConfig,
+    input: string,
+    round: number,
+    signal: AbortSignal,
+  ): Promise<{ output: string; error?: string }> {
+    if (this.agentRuntime && config.sessionId) {
+      const ctx: AgentContext = {
+        systemPrompt: EXECUTOR_PROMPT,
+        sessionId: config.sessionId,
+        role: 'debate-executor',
+        taskDescription: input,
+        modelPreference: config.executorModel
+          ? `${config.executorModel.providerID}/${config.executorModel.modelID}`
+          : undefined,
+        reasoningEffort: config.executorReasoning,
+      }
+      const result = await this.agentRuntime.execute(ctx)
+      if (!result.success || isNoLlm(result.output)) {
+        return { output: '', error: result.error || NO_LLM_RESPONSE }
+      }
+      return { output: result.output }
     }
 
-    // ── Step 3: Clean the final output ──
-    let finalOutput = currentDraft
-    if (config.verbose) log.debug(`\n── Cleaner ──`)
+    // Fallback: direct llmEngine.call()
     try {
-      const cleanController = new AbortController()
-      const cleanTimeoutId = setTimeout(() => cleanController.abort(), 30_000) // 30s timeout (STEM Agent §timeout)
-      const cleanResp = await Promise.race([
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 60_000)
+      const resp = await Promise.race([
         this.llmEngine.call({
-          systemPrompt: CLEANER_PROMPT,
-          userPrompt: `Format: ${format}\n\nTask: ${config.task}\n\nFinal analysis to clean:\n\n${currentDraft}\n\nOutput the cleaned version in ${format} format.`,
-          temperature: 0.1,
+          systemPrompt: EXECUTOR_PROMPT,
+          userPrompt: input,
+          temperature: 0.2,
           maxTokens: 4096,
-          model: config.cleanerModel,
-          toolName: 'debate-cleaner',
+          bypassCache: round > 1,
+          model: config.executorModel,
+          toolName: 'debate-executor',
+          signal,
         }),
         new Promise<never>((_, reject) => {
-          cleanController.signal.addEventListener("abort", () => {
-            reject(new TimeoutError("Cleaner LLM call", 30000))
+          controller.signal.addEventListener("abort", () => {
+            reject(new TimeoutError("LLM call", 60000))
           })
         }),
       ])
-      clearTimeout(cleanTimeoutId)
-      finalOutput = cleanResp.content
-    } catch (error) {
-      logParseError("cleaner call", error)
-      // Use draft as-is if cleaning fails
-    }
-
-    // ── Build revision summary ──
-    let revisionSummary = ""
-    if (rounds.length <= 1) {
-      revisionSummary = approved ? "Approved in first round — no revisions needed" : "Single round (max rounds reached)"
-    } else {
-      const totalIssues = rounds.slice(0, -1).reduce((sum, r) => sum + r.issues.length, 0)
-      const finalStatus = approved ? "approved" : "max rounds reached"
-      revisionSummary = `${rounds.length} rounds, ${totalIssues} issues raised, ${finalStatus}${approvalMessage ? `: ${approvalMessage}` : ""}`
-    }
-
-    if (config.verbose) {
-      log.debug(`\n━━━ Debate Complete ━━━`)
-      log.debug(`Status: ${approved ? "✅ Approved" : "⚠️ Not fully resolved"}`)
-      log.debug(`Rounds: ${rounds.length}`)
-      log.debug(`Revision: ${revisionSummary}`)
-      if (config.signal?.aborted) log.debug(`Cancelled: external signal`)
-    }
-
-    return {
-      task: config.task,
-      totalRounds: rounds.length,
-      approved,
-      rounds,
-      finalOutput,
-      revisionSummary,
-    }
-      } catch (error) {
-        // Total timeout or unexpected error — return partial results
-        logParseError("debate execute", error)
-        clearTimeout(totalTimeoutId)
-        return {
-          task: config.task,
-          totalRounds: rounds.length,
-          approved: false,
-          rounds,
-          finalOutput: currentDraft,
-          revisionSummary: `Debate terminated: ${error instanceof Error ? error.message : String(error)}`,
-          aborted: true,
-        }
-      } finally {
-        clearTimeout(totalTimeoutId)
+      clearTimeout(timeoutId)
+      if (isNoLlm(resp.content)) {
+        return { output: '', error: NO_LLM_RESPONSE }
       }
+      return { output: resp.content }
+    } catch (error) {
+      logParseError("executor call", error)
+      return { output: '', error: `Executor failed: ${error}` }
+    }
+  }
+
+  /**
+   * Call the critic role — uses AgentRuntime sub-agent when available,
+   * falls back to direct llmEngine.call() for backward compat.
+   */
+  private async callCritic(
+    config: DebateConfig,
+    draft: string,
+    round: number,
+    signal: AbortSignal,
+  ): Promise<{ output: string; error?: string }> {
+    const criticInput = `Executor's output for task "${config.task}":\n\n${draft}\n\nReview this output. If APPROVED, respond with "APPROVED: (message)". Otherwise list all issues.`
+
+    if (this.agentRuntime && config.sessionId) {
+      const ctx: AgentContext = {
+        systemPrompt: CRITIC_PROMPT,
+        sessionId: config.sessionId,
+        role: 'debate-critic',
+        taskDescription: criticInput,
+        modelPreference: config.criticModel
+          ? `${config.criticModel.providerID}/${config.criticModel.modelID}`
+          : undefined,
+        reasoningEffort: config.criticReasoning,
+      }
+      const result = await this.agentRuntime.execute(ctx)
+      if (!result.success || isNoLlm(result.output)) {
+        return { output: '', error: result.error || NO_LLM_RESPONSE }
+      }
+      return { output: result.output }
+    }
+
+    // Fallback: direct llmEngine.call()
+    try {
+      const criticController = new AbortController()
+      const criticTimeoutId = setTimeout(() => criticController.abort(), 45_000)
+      const resp = await Promise.race([
+        this.llmEngine.call({
+          systemPrompt: CRITIC_PROMPT,
+          userPrompt: criticInput,
+          temperature: 0.2,
+          maxTokens: 2048,
+          bypassCache: round > 1,
+          model: config.criticModel,
+          toolName: 'debate-critic',
+          signal,
+        }),
+        new Promise<never>((_, reject) => {
+          criticController.signal.addEventListener("abort", () => {
+            reject(new TimeoutError("Critic LLM call", 45000))
+          })
+        }),
+      ])
+      clearTimeout(criticTimeoutId)
+      if (isNoLlm(resp.content)) {
+        return { output: '', error: NO_LLM_RESPONSE }
+      }
+      return { output: resp.content }
+    } catch (error) {
+      logParseError("critic call", error)
+      return { output: '', error: `Critic failed: ${error}` }
+    }
   }
 }
 

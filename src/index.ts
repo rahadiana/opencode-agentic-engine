@@ -591,7 +591,7 @@ const confidenceStore = new ConfidenceStore()
     stateStore.set("rag", "global", data)
   })
 
-  const debateLoop = new DebateLoop(llmEngine)
+  const debateLoop = new DebateLoop(llmEngine, agentRuntime)
   const routerAgent = new RouterAgent(llmEngine)
   const dataCleaner = new DataCleaner(llmEngine)
   const mcpClient = new MCPClient()
@@ -4375,6 +4375,7 @@ const confidenceStore = new ConfidenceStore()
             maxRounds,
             format: args.format ?? "json",
             verbose: args.verbose ?? false,
+            sessionId: context.sessionID,
           })
 
           // Record as episode for future learning

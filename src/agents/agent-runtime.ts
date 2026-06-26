@@ -115,7 +115,10 @@ export class AgentRuntime {
 
     // Build the system prompt from the role definition + context
     const promptParts: string[] = []
-    if (roleDef?.prompt) {
+    if (ctx.systemPrompt) {
+      // Explicit systemPrompt overrides role prompt (used by DebateLoop sub-agents)
+      promptParts.push(ctx.systemPrompt)
+    } else if (roleDef?.prompt) {
       promptParts.push(roleDef.prompt)
     } else {
       promptParts.push(`You are a ${ctx.role} in a software engineering team.`)
