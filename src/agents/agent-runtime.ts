@@ -19,6 +19,9 @@ export interface AgentContext {
   /** Reasoning effort untuk model yg support (OpenAI o-series, GPT-5).
    *  Dikirim ke SDK → provider. Diabaikan kalo model gak support. */
   reasoningEffort?: 'low' | 'medium' | 'high'
+  /** Explicit timeout in milliseconds. Overrides the dynamic timeout calculation.
+   *  Default: min 30s, scaled by prompt size, max 600s (10 min). */
+  timeoutMs?: number
 }
 
 export interface AgentResult {
@@ -146,9 +149,10 @@ export class AgentRuntime {
 
     try {
       const fullPrompt = promptParts.join("\n")
-      // Dynamic timeout: estimate ~4 chars per token, min 120s, max 600s (10 menit)
+      // Dynamic timeout: estimate ~4 chars per token, min 30s, max 600s (10 menit)
       const approxTokens = Math.ceil(fullPrompt.length / 4)
-      const dynamicTimeout = Math.min(Math.max(approxTokens * 0.3, 120_000), 600_000)
+      const minTimeout = ctx.timeoutMs ?? 30_000
+      const dynamicTimeout = Math.min(Math.max(approxTokens * 0.3, minTimeout), 600_000)
       const timeoutMs = Math.round(dynamicTimeout)
 
       const controller = new AbortController()
