@@ -1,6 +1,6 @@
 import type { Plugin, PluginModule } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin"
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, cpSync, rmSync, mkdtempSync } from "node:fs"
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, cpSync, rmSync, mkdtempSync, appendFileSync } from "node:fs"
 import { execFileSync } from "node:child_process"
 import { join, dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -174,6 +174,20 @@ const createEngine: Plugin = async (input, _options) => {
   // If still looks like a system dir and we have input.directory, use it
   if (systemDirs.includes(worktree) && input.directory && !systemDirs.includes(input.directory)) {
     worktree = input.directory
+  }
+
+  // ── Error log file (persistent, append-only) ──
+  const errorLogPath = join(worktree, ".agentic", "errors.log")
+  function logErrorToFile(toolName: string, message: string, stack?: string): void {
+    try {
+      const dir = dirname(errorLogPath)
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+      const timestamp = new Date().toISOString()
+      const entry = `[${timestamp}] [${toolName}] ${message}${stack ? `\n${stack.split("\n").slice(0, 4).join("\n")}` : ""}\n`
+      appendFileSync(errorLogPath, entry, "utf-8")
+    } catch {
+      // non-fatal: if file write fails, nothing we can do
+    }
   }
 
   // ── Config (load first, everything else depends on it) ──
@@ -350,6 +364,7 @@ const createEngine: Plugin = async (input, _options) => {
         const errMsg = err instanceof Error ? err.message : String(err)
         const errStack = err instanceof Error ? err.stack : ""
         console.error(`[Agentic] ❌ Tool "${name}" execution failed:\n  ${errMsg}\n${errStack ? `  ${errStack.split("\n").slice(1, 4).join("\n  ")}` : ""}`)
+        logErrorToFile(name, errMsg, errStack)
         return {
           output: `❌ **${name}** execution failed: ${errMsg}\n\nPlease check your inputs and try again. If the problem persists, use \`agentic_reflect\` for debugging.`,
           metadata: { error: errMsg, tool: name },
@@ -6506,6 +6521,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
 
       if (isError) {
         console.error(`[Agentic] Tool "${toolName}" returned error:\n${outputText.slice(0, 500)}`)
+        logErrorToFile(toolName, `tool output error: ${outputText.slice(0, 300)}`)
       }
 
       traceLogger.log({
