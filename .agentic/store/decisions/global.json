@@ -8,7 +8,14 @@
       "sessionId": "ses_0f7ac1ae6ffewD4Qcf7Tt9lm6D",
       "id": "dec-1782554321174-itw6dx",
       "timestamp": 1782554321174
+    },
+    {
+      "title": "Test decision for reflection",
+      "context": "Testing that agentRuntime fallback works for agentic_memo reflect in chat mode",
+      "sessionId": "ses_0f7ac1ae6ffewD4Qcf7Tt9lm6D",
+      "id": "dec-1782555234604-euxyjz",
+      "timestamp": 1782555234604
     }
   ],
-  "updatedAt": "2026-06-27T09:58:41.174Z"
+  "updatedAt": "2026-06-27T10:13:54.604Z"
 }

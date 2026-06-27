@@ -6424,6 +6424,8 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
           relation: tool.schema.string().optional().describe("Relation type (for action=graph)"),
         },
         execute: async (args: Record<string, unknown>, _context: Record<string, unknown>) => {
+          const context = _context as Record<string, unknown>
+          llmEngine.setSessionId(context.sessionID as string)
           const sb = getSecondBrain()
           if (!sb) return { output: "Second Brain not initialized." }
 
@@ -6435,7 +6437,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                 context: args.context as string,
                 alternatives: args.alternatives as string | undefined,
                 consequence: args.consequence as string | undefined,
-                sessionId: (_context as any)?.sessionID,
+                sessionId: context.sessionID as string,
               })
               return { output: `✅ Decision recorded: **${dec.title}**\nID: \`${dec.id}\`` }
             }
@@ -6446,7 +6448,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                 text: args.text as string,
                 priority: (args.priority as any) ?? "medium",
                 category: args.category as string | undefined,
-                sessionId: (_context as any)?.sessionID,
+                sessionId: context.sessionID as string,
               })
               return { output: `✅ TODO added: **${todo.text}** [${todo.priority}]\nID: \`${todo.id}\`` }
             }
@@ -6482,7 +6484,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
             }
 
             case "reflect": {
-              const reflection = await sb.reflect((_context as any)?.sessionID)
+              const reflection = await sb.reflect(context.sessionID as string)
               let out = `## 🔄 Reflection Complete\n\n${reflection.summary}`
               if (reflection.conflicts.length > 0) out += `\n\n**Conflicts found:**\n${reflection.conflicts.map(c => `- ${c}`).join("\n")}`
               if (reflection.planUpdates.length > 0) out += `\n\n**Plan updates:**\n${reflection.planUpdates.map(p => `- ${p}`).join("\n")}`

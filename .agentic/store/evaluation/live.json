@@ -1,11 +1,33 @@
 {
   "key": "live",
   "data": {
-    "stepResults": [],
+    "stepResults": [
+      {
+        "stepId": "debate-Analisis: dari 1 decision + 1 TODO, apak",
+        "success": false,
+        "sessionId": "ses_0f7ac1ae6ffewD4Qcf7Tt9lm6D",
+        "timestamp": 1782554507505
+      }
+    ],
     "errorRecoveries": [],
     "navigations": [
       {
         "query": "system prompt injection transform hook knowledge-first RAG",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "StateStore implementation",
+        "resultsCount": 1,
+        "focused": true
+      },
+      {
+        "query": "hybrid search implementation RAG memory vector",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "multi-index-rag tool memo second brain",
         "resultsCount": 10,
         "focused": true
       }
@@ -13,5 +35,5 @@
     "delegations": [],
     "skillLookups": []
   },
-  "updatedAt": "2026-06-27T09:56:42.478Z"
+  "updatedAt": "2026-06-27T10:13:19.281Z"
 }
