@@ -124,9 +124,23 @@ export class BudgetTracker {
   private behaviors: Map<BudgetScope, OnExceededBehavior> = new Map()
   /** Status exceeded terakhir (null = tidak exceeded) */
   private _exceeded: BudgetExceededEvent | null = null
+  /** EventBus reference for emitting exceeded events (optional) */
+  private eventBus?: { emit(event: { type: string; payload: Record<string, unknown> }): void }
+  /** Session ID untuk event payload */
+  private sessionId?: string
 
   constructor(modelPrices?: Record<string, ModelPriceEntry>) {
     this.modelPrices = { ...DEFAULT_MODEL_PRICES, ...(modelPrices ?? {}) }
+  }
+
+  /** Set EventBus reference (optional, for emitting exceeded events) */
+  setEventBus(bus: { emit(event: { type: string; payload: Record<string, unknown> }): void }): void {
+    this.eventBus = bus
+  }
+
+  /** Set session ID for event payloads */
+  setSessionId(sid: string): void {
+    this.sessionId = sid
   }
 
   // ── Limit management ──
@@ -423,6 +437,20 @@ export class BudgetTracker {
       timestamp: Date.now(),
     }
     this._exceeded = event
+    // Emit ke EventBus untuk observability + SecondBrain auto-TODO
+    if (this.eventBus) {
+      this.eventBus.emit({
+        type: "budget.limit.exceeded",
+        payload: {
+          sessionID: this.sessionId ?? "",
+          scope,
+          metric,
+          current: Math.round(current),
+          limit,
+          behavior,
+        },
+      })
+    }
     return event
   }
 }

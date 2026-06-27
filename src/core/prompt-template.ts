@@ -139,29 +139,6 @@ export class PromptTemplate {
     return this
   }
 
-  /**
-   * Bulk-add multiple items to a section.
-   */
-  identityAll(items: string[], when: boolean = true): this {
-    for (const item of items) this.identity(item, when)
-    return this
-  }
-
-  knowledgeAll(items: string[], when: boolean = true): this {
-    for (const item of items) this.knowledge(item, when)
-    return this
-  }
-
-  instructionsAll(items: string[], when: boolean = true): this {
-    for (const item of items) this.instructions(item, when)
-    return this
-  }
-
-  guardrailsAll(items: string[], when: boolean = true): this {
-    for (const item of items) this.guardrails(item, when)
-    return this
-  }
-
   /** Returns true if at least one section has active (when=true) content */
   private get hasContent(): boolean {
     return (
@@ -230,23 +207,4 @@ mode: all
 ${body}`
   }
 
-  /** Reset all sections */
-  clear(): void {
-    this._identity = []
-    this._knowledge = []
-    this._instructions = []
-    this._guardrails = []
-    this._title = ""
-  }
-
-  /** Clone this template (deep copy of sections) */
-  clone(): PromptTemplate {
-    const t = new PromptTemplate()
-    t._title = this._title
-    t._identity = [...this._identity.map(s => ({ ...s }))]
-    t._knowledge = [...this._knowledge.map(s => ({ ...s }))]
-    t._instructions = [...this._instructions.map(s => ({ ...s }))]
-    t._guardrails = [...this._guardrails.map(s => ({ ...s }))]
-    return t
-  }
 }

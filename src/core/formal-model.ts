@@ -219,15 +219,6 @@ export class DependencyGraph {
 // 3. ContractVerifier — Pre/post-condition verification engine
 // ──────────────────────────────────────────────────────────────
 
-export interface ContractVerificationResult {
-  contractDescription: string
-  preConditions: Array<{ condition: Condition; satisfied: boolean; detail: string }>
-  postConditions: Array<{ condition: Condition; satisfied: boolean; detail: string }>
-  invariants: Array<{ condition: Condition; satisfied: boolean; detail: string }>
-  passed: boolean
-  summary: string
-}
-
 /** Context provided to condition evaluators */
 export interface VerificationContext {
   stepId: string
@@ -307,50 +298,6 @@ export class ContractVerifier {
     this.evaluator = evaluator ?? defaultConditionEvaluator
   }
 
-  /** Set a custom condition evaluator (e.g., domain-specific) */
-  setEvaluator(evaluator: ConditionEvaluator): void {
-    this.evaluator = evaluator
-  }
-
-  /** Verify a contract against execution context */
-  async verify(
-    contract: FormalContract,
-    context: VerificationContext,
-  ): Promise<ContractVerificationResult> {
-    const preResults = contract.preConditions.map(c => ({
-      condition: c,
-      ...this.evaluator(c, context),
-    }))
-
-    const postResults = contract.postConditions.map(c => ({
-      condition: c,
-      ...this.evaluator(c, context),
-    }))
-
-    const invResults = contract.invariants.map(c => ({
-      condition: c,
-      ...this.evaluator(c, context),
-    }))
-
-    const allChecks = [...preResults, ...postResults, ...invResults]
-    const passed = allChecks.every(r => r.satisfied)
-    const errors = allChecks.filter(r => !r.satisfied && r.condition.severity === "error")
-    const warnings = allChecks.filter(r => !r.satisfied && r.condition.severity === "warning")
-
-    const summary = passed
-      ? `✅ All ${allChecks.length} condition(s) satisfied`
-      : `⚠ ${errors.length} error(s), ${warnings.length} warning(s) — ${errors.map(e => e.condition.description).join("; ")}`
-
-    return {
-      contractDescription: contract.description,
-      preConditions: preResults,
-      postConditions: postResults,
-      invariants: invResults,
-      passed,
-      summary,
-    }
-  }
-
   /** Quick check: only verify pre-conditions (before execution) */
   async verifyPreConditions(
     contract: FormalContract,
@@ -391,103 +338,7 @@ export class ContractVerifier {
 }
 
 // ──────────────────────────────────────────────────────────────
-// 4. FormalModel — Aggregate A=(M,T,M,Π)
-// ──────────────────────────────────────────────────────────────
-
-export interface FormalModelSnapshot {
-  memoryProviders: string[]
-  tools: string[]
-  multiAgentRoles: string[]
-  promptCount: number
-  domainContracts: Array<{ domain: string; contractCount: number }>
-  dependencyGraphEdges: number
-  timestamp: number
-}
-
-export class FormalModel {
-  /** Dependency graph for task scheduling */
-  readonly dependencyGraph: DependencyGraph
-  /** Contract verifier for pre/post-condition checks */
-  readonly contractVerifier: ContractVerifier
-  /** Registered formal contracts, keyed by domain or step pattern */
-  private contracts = new Map<string, FormalContract>()
-
-  constructor() {
-    this.dependencyGraph = new DependencyGraph()
-    this.contractVerifier = new ContractVerifier()
-  }
-
-  /** Register a formal contract for a domain or pattern */
-  registerContract(key: string, contract: FormalContract): void {
-    this.contracts.set(key, contract)
-  }
-
-  /** Get contract by key */
-  getContract(key: string): FormalContract | undefined {
-    return this.contracts.get(key)
-  }
-
-  /** Get all registered contracts */
-  getAllContracts(): Map<string, FormalContract> {
-    return new Map(this.contracts)
-  }
-
-  /** Remove a contract */
-  unregisterContract(key: string): boolean {
-    return this.contracts.delete(key)
-  }
-
-  /** Verify a specific contract */
-  async verifyContract(
-    key: string,
-    context: VerificationContext,
-  ): Promise<ContractVerificationResult | null> {
-    const contract = this.contracts.get(key)
-    if (!contract) return null
-    return this.contractVerifier.verify(contract, context)
-  }
-
-  /** Detect cycles in a set of step dependencies */
-  detectCycle(subtasks: Array<{ id: string; dependsOn: string[] }>): CycleResult {
-    const vertices = subtasks.map(s => s.id)
-    const graph = new DependencyGraph()
-
-    for (const step of subtasks) {
-      for (const dep of step.dependsOn) {
-        graph.addEdge(dep, step.id)
-      }
-    }
-
-    return graph.detectCycle(vertices)
-  }
-
-  /** Get a snapshot of the current formal model state */
-  snapshot(): FormalModelSnapshot {
-    return {
-      memoryProviders: ["session-store", "episodic-store", "skill-store", "vector-store"],
-      tools: [
-        "agentic_plan", "agentic_execute", "agentic_reflect", "agentic_verify",
-        "agentic_status", "agentic_nav", "agentic_context", "agentic_snapshot",
-        "agentic_pr", "agentic_score", "agentic_model", "agentic_model_reset",
-        "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_parallel",
-        "agentic_skill", "agentic_episodes", "agentic_dashboard", "agentic_guard",
-        "agentic_evolve", "agentic_auto", "agentic_debate", "agentic_router",
-        "agentic_clean", "agentic_rag", "agentic_mcp", "agentic_budget",
-      ],
-      multiAgentRoles: ["pm", "architect", "developer", "qa", "coordinator"],
-      promptCount: 5, // 5 built-in roles
-      domainContracts: [...this.contracts.entries()].map(([domain, contract]) => ({
-        domain,
-        contractCount: contract.preConditions.length + contract.postConditions.length + contract.invariants.length,
-      })),
-      dependencyGraphEdges: this.dependencyGraph.getEdges().length,
-      timestamp: Date.now(),
-    }
-  }
-}
-
-// ──────────────────────────────────────────────────────────────
-// 5. Helper: Build default contracts for common domains
+// 4. Helper: Build default contracts for common domains
 // ──────────────────────────────────────────────────────────────
 
 /** Default generic contract — applies to any domain */

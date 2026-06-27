@@ -81,8 +81,6 @@ export type IndexData = Record<string, { episodes: Episode[]; skills: SkillRecor
 
 export class MultiIndexRAG {
   private indices = new Map<string, { episodes: Episode[]; skills: SkillRecord[] }>()
-  private onIndex?: (entry: IndexEntry) => void
-
   /** TF-IDF sparse vector store */
   readonly vectorStore: VectorStore
   /** Dense vector embedder (optional) */
@@ -119,10 +117,6 @@ export class MultiIndexRAG {
   private onPersist?: (data: ReturnType<typeof this.exportAll>) => void
   /** Suppress persist notifications during batch seeding */
   private suppressPersist = false
-
-  setPersistenceCallback(cb: (entry: IndexEntry) => void): void {
-    this.onIndex = cb
-  }
 
   /**
    * Set a callback that fires whenever data is stored, so it can be persisted to disk.
@@ -182,14 +176,6 @@ export class MultiIndexRAG {
       metadata: { type: "episode", episodeId: episode.id },
     })
 
-    this.onIndex?.({
-      category,
-      episode,
-      timestamp: episode.timestamp,
-      keywords: episode.tags,
-      title: episode.planGoal,
-    })
-
     this.notifyPersist()
   }
 
@@ -214,14 +200,6 @@ export class MultiIndexRAG {
       content: skill.definition.trigger.pattern,
       keywords: skill.definition.trigger.keywords ?? [],
       metadata: { type: "skill", skillId: skill.definition.meta.id },
-    })
-
-    this.onIndex?.({
-      category,
-      skill,
-      timestamp: skill.definition.audit.createdAt,
-      keywords: skill.definition.trigger.keywords ?? [],
-      title: skill.definition.meta.name,
     })
 
     this.notifyPersist()

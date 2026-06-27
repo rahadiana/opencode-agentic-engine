@@ -446,6 +446,7 @@ const createEngine: Plugin = async (input, _options) => {
 const liveEvaluator = new LiveEvaluator()
 const modelRegistry = new ModelRegistry()
 const eventBus = new EventBus()
+budgetTracker.setEventBus(eventBus)
 const confidenceScorer = new ConfidenceScorer()
 const confidenceStore = new ConfidenceStore()
   const llmEngine = new LLMEngine()
@@ -987,9 +988,6 @@ const confidenceStore = new ConfidenceStore()
     })
     // Auto-evolve check on every failed step
     checkAutoEvolve(ev.payload.sessionID)
-  })
-  eventBus.on("task.delegated", (ev: any) => {
-    liveEvaluator.feedDelegation(ev.payload.taskId, ev.payload.role, true)
   })
   eventBus.on("task.completed", (ev: any) => {
     liveEvaluator.feedDelegation(ev.payload.taskId, ev.payload.role, ev.payload.success)
@@ -2704,6 +2702,19 @@ const confidenceStore = new ConfidenceStore()
             status: "running",
             pipelineRunId: args.pipelineRunId,
           }, context.sessionID, 0, relevantSkills)
+
+          // Emit delegation event so SecondBrain can track delegated tasks
+          eventBus.emit({
+            type: "task.delegated",
+            payload: {
+              sessionID: context.sessionID,
+              taskId: args.taskId,
+              role,
+              description: args.description,
+              pipelineRunId: args.pipelineRunId,
+              delegationDepth: 0,
+            },
+          })
 
           // Build pipeline context if part of a pipeline run
           let pipelineContext = ""

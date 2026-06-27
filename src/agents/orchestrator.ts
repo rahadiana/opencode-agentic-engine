@@ -291,10 +291,6 @@ export class Orchestrator {
     return [...this.pipelines.values()]
   }
 
-  cleanupRun(runId: string): void {
-    this.activeRuns.delete(runId)
-  }
-
   private cleanupStaleRuns(): void {
     if (this.activeRuns.size > this.maxActiveRuns) {
       const keys = [...this.activeRuns.keys()]
@@ -338,10 +334,6 @@ export class Orchestrator {
     run.currentStageIndex++
     if (run.currentStageIndex >= pipeline.stages.length) return null
     return pipeline.stages[run.currentStageIndex]
-  }
-
-  getStageResult(runId: string, role: string): { output: string; issues: string[]; validatedBy: string[] } | undefined {
-    return this.activeRuns.get(runId)?.stageResults.get(role)
   }
 
   getAllStageResults(runId: string): Map<string, { output: string; issues: string[]; validatedBy: string[] }> {
