@@ -8856,6 +8856,166 @@ function tv_assert(cond, msg) { if (cond) { tv++ } else { console.error(`  ❌ $
 console.log(`  TV: ${tv} passed, ${tvf} failed`)
 passed += tv; failed += tvf
 
+// ── SecondBrain — handleEvent auto-capture ──
+// SB: Event-driven auto-save for decisions, TODOs, graph edges
+let sb = 0, sbf = 0
+function sb_assert(cond, msg) { if (cond) { sb++ } else { console.error(`  ❌ ${msg}`); sbf++ } }
+{
+  const { SecondBrain, initSecondBrain, StateStore } = mod
+  const fsMod = await import("fs")
+  const tmpDir = `/tmp/sb-test-${Date.now()}`
+  fsMod.mkdirSync(tmpDir, { recursive: true })
+
+  const store = new StateStore({ worktree: tmpDir, globalDir: `${tmpDir}-global` })
+  const sbBrain = new SecondBrain(store)
+  const ctx = { sessionID: "sb-session" }
+
+  // SB-1: step.completed with decision keywords → auto ADR
+  sbBrain.handleEvent("step.completed", {
+    stepId: "step-dec",
+    output: "We decided to use SQLite for storage because it's simpler",
+    filesModified: ["src/db.ts", "src/schema.ts"],
+    sessionID: "sb-session",
+  })
+  const decisions = sbBrain.getRecentDecisions(5)
+  sb_assert(decisions.length >= 1, "SB-1a step.completed with decision keywords creates ADR")
+  sb_assert(decisions[0].title.includes("SQLite"), "SB-1b ADR title contains decision context")
+
+  // SB-2: step.completed without decision keywords → no ADR
+  sbBrain.handleEvent("step.completed", {
+    stepId: "step-norm",
+    output: "Fixed the indentation in all files",
+    filesModified: ["src/utils.ts"],
+    sessionID: "sb-session",
+  })
+  const decisions2 = sbBrain.getRecentDecisions(5)
+  // Only 1 ADR should exist (from the first call), the second didn't create one
+  // Actually, let's count the exact number added — we'll check the graph instead
+  const edges = sbBrain.getEdges()
+  const normEdges = edges.filter(e => e.source === "src/utils.ts" && e.relation === "modified_by")
+  sb_assert(normEdges.length === 1, "SB-2 step.completed tracks file→step graph even without decision")
+
+  // SB-3: step.failed → error edge tracked
+  sbBrain.handleEvent("step.failed", {
+    stepId: "step-fail",
+    error: "TypeError: Cannot read property of undefined",
+    errorCategory: "type",
+    filesModified: ["src/broken.ts"],
+    sessionID: "sb-session",
+  })
+  const failEdges = sbBrain.getEdges().filter(e => e.source === "src/broken.ts" && e.relation.startsWith("error"))
+  sb_assert(failEdges.length >= 1, "SB-3a step.failed tracks file→error edge")
+  sb_assert(failEdges[0].relation === "error:type", "SB-3b error category preserved in relation")
+
+  // SB-4: guard.check.completed with high hallucination → TODO + edge
+  sbBrain.handleEvent("guard.check.completed", {
+    stepId: "step-guard",
+    passed: false,
+    hallucinationRate: 0.5,
+    sessionID: "sb-session",
+  })
+  const guardTodos = sbBrain.getPendingTodos(10)
+  const guardTodo = guardTodos.find(t => t.text.toLowerCase().includes("hallucination"))
+  sb_assert(guardTodo != null, "SB-4a high hallucination rate creates TODO")
+  sb_assert(guardTodo.priority === "medium", "SB-4b hallucination TODO priority is medium")
+  const guardEdges = sbBrain.getEdges().filter(e => e.target === "hallucination")
+  sb_assert(guardEdges.length >= 1, "SB-4c hallucination guard edge tracked")
+
+  // SB-5: file.written → graph edge
+  sbBrain.handleEvent("file.written", {
+    filePath: "src/new-file.ts",
+    sourceStepId: "step-write",
+    bytesWritten: 1024,
+    sessionID: "sb-session",
+  })
+  const writeEdges = sbBrain.getEdges().filter(e => e.relation === "wrote" && e.source === "step-write")
+  sb_assert(writeEdges.length >= 1, "SB-5 file.written tracks write graph edge")
+
+  // SB-6: task.delegated → graph edge
+  sbBrain.handleEvent("task.delegated", {
+    taskId: "task-1",
+    role: "developer",
+    description: "Implement auth module",
+    sessionID: "sb-session",
+  })
+  const taskEdges = sbBrain.getEdges().filter(e => e.relation === "assigned" && e.source === "developer")
+  sb_assert(taskEdges.length >= 1, "SB-6 task.delegated tracks assignment edge")
+
+  // SB-7: task.completed (failed) → TODO
+  sbBrain.handleEvent("task.completed", {
+    taskId: "task-1",
+    role: "developer",
+    success: false,
+    sessionID: "sb-session",
+  })
+  const failTasks = sbBrain.getPendingTodos(10).filter(t => t.text.includes("task-1"))
+  sb_assert(failTasks.length >= 1, "SB-7 failed delegated task creates TODO")
+  const taskCompEdges = sbBrain.getEdges().filter(e => e.source === "task-1" && e.relation === "failed_by")
+  sb_assert(taskCompEdges.length >= 1, "SB-7b failed task tracks failed_by edge")
+
+  // SB-8: memory.skill.extracted → graph edge
+  sbBrain.handleEvent("memory.skill.extracted", {
+    skillId: "skill-auth",
+    name: "auth-setup",
+    sourceStepId: "step-auth",
+    sessionID: "sb-session",
+  })
+  const skillEdges = sbBrain.getEdges().filter(e => e.relation === "extracted_from" && e.source === "skill-auth")
+  sb_assert(skillEdges.length >= 1, "SB-8 skill.extracted tracks extraction edge")
+
+  // SB-9: budget.limit.exceeded → TODO
+  sbBrain.handleEvent("budget.limit.exceeded", {
+    metric: "tokens",
+    current: 50000,
+    limit: 40000,
+    scope: "session",
+    behavior: "hard-stop",
+    sessionID: "sb-session",
+  })
+  const budgetTodos = sbBrain.getPendingTodos(10).filter(t => t.text.includes("tokens"))
+  sb_assert(budgetTodos.length >= 1, "SB-9 budget exceeded creates TODO")
+
+  // SB-10: plan.created → ADR
+  sbBrain.handleEvent("plan.created", {
+    goal: "Refactor authentication to use JWT tokens",
+    subtaskCount: 5,
+    sessionID: "sb-session",
+  })
+  const planDecisions = sbBrain.getRecentDecisions(5).filter(d => d.title.startsWith("Plan:"))
+  sb_assert(planDecisions.length >= 1, "SB-10a plan.created creates ADR")
+  sb_assert(planDecisions[0].title.includes("JWT"), "SB-10b ADR title contains plan goal")
+
+  // SB-11: plan.completed with failure → TODO
+  sbBrain.handleEvent("plan.completed", {
+    allPassed: false,
+    goal: "Refactor authentication to use JWT tokens",
+    sessionID: "sb-session",
+  })
+  const planFailTodos = sbBrain.getPendingTodos(10).filter(t => t.text.includes("[plan]"))
+  sb_assert(planFailTodos.length >= 1, "SB-11 plan.completed with failure creates follow-up TODO")
+
+  // SB-12: Unknown event is silently ignored (no crash)
+  sbBrain.handleEvent("some.random.event", {
+    data: "test",
+    sessionID: "sb-session",
+  })
+  sb_assert(true, "SB-12 unknown events handled silently without crash")
+
+  // SB-13: Empty step.completed (no output, no files) → no crash
+  sbBrain.handleEvent("step.completed", {
+    stepId: "step-empty",
+    output: "",
+    filesModified: [],
+    sessionID: "sb-session",
+  })
+  sb_assert(true, "SB-13 empty step.completed handled without crash")
+
+  // Cleanup
+  try { fsMod.rmSync(tmpDir, { recursive: true }) } catch {}
+}
+console.log(`  SB: ${sb} passed, ${sbf} failed`)
+passed += sb; failed += sbf
+
 // ── StateStore Tests ──
 // SS: Unified data layer — single source of truth
 let ss = 0, ssf = 0

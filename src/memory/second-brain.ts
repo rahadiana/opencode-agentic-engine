@@ -192,11 +192,6 @@ export class SecondBrain {
       .slice(0, limit)
   }
 
-  /** Get TODOs by category */
-  getTodosByCategory(category: string): Todo[] {
-    return this.getTodos().filter(t => t.category === category)
-  }
-
   // ── Reflection ───────────────────────────────────────────────────
 
   /**
@@ -505,18 +500,301 @@ export class SecondBrain {
 
   // ── Event-driven Auto-save ───────────────────────────────────────
 
+  /** Decision-indicating keywords in step output */
+  private static DECISION_KEYWORDS = [
+    "decided", "decide", "memutuskan", "memilih",
+    "architecture decision", "architectural change",
+    "migrate to", "switch to", "refactor to",
+    "chose", "selected", "opted for", "migrasi",
+  ]
+
+  /** Simple heuristic: does output contain decision-like phrasing? */
+  private _looksLikeDecision(output: string): boolean {
+    const lower = output.toLowerCase()
+    return SecondBrain.DECISION_KEYWORDS.some(kw => lower.includes(kw))
+  }
+
   /**
    * Handle an event from the event bus and auto-store relevant info.
-   * Call this from event handlers.
+   *
+   * Auto-capture rules:
+   *   step.completed        → track files, auto-detect decisions
+   *   step.failed            → track error patterns
+   *   file.written           → track file→step graph
+   *   guard.check.completed  → track hallucination patterns
+   *   task.completed         → track delegation results
+   *   memory.skill.extracted → track skill origins
+   *   llm.response           → accumulate model usage stats
+   *   plan.created           → track plan goal
+   *   plan.completed         → trigger reflection
+   *
+   * Events that are only in the taxonomy but not yet emitted are
+   * handled for forward-compatibility.
    */
-  handleEvent(_type: string, _payload: Record<string, unknown>, _sessionId?: string): void {
-    // Event-driven memory: automatically save relevant info from events.
-    // Currently reserved for future use — the event bus listener is wired
-    // so handlers can be added here without changing initialization code.
-    // Example events to handle:
-    //   - file.written: track file→module relations in graph
-    //   - step.completed: auto-save brief memo (already handled by agentic_execute)
-    //   - llm.response: track model usage per task type (already handled by modelRegistry)
+  handleEvent(type: string, payload: Record<string, unknown>, _sessionId?: string): void {
+    try {
+      const sessionId = _sessionId ?? (payload.sessionID as string | undefined)
+
+      switch (type) {
+        // ── Step lifecycle ──
+        case "step.completed": {
+          const stepId = payload.stepId as string
+          const output = (payload.output as string) ?? ""
+          const files = payload.filesModified as string[] | undefined
+
+          // Decision auto-capture: if output mentions a decision, save ADR
+          if (output && this._looksLikeDecision(output)) {
+            // Extract a short title from the first sentence or decision phrase
+            const firstSentence = output.split(/[.!?\n]/).find(s => s.trim().length > 20)?.trim() ?? output.slice(0, 120)
+            this.addDecision({
+              title: firstSentence.slice(0, 80),
+              context: output.slice(0, 500),
+              sessionId,
+            })
+          }
+
+          // Track file modifications in graph
+          if (files && files.length > 0) {
+            for (const f of files) {
+              this.addEdge({
+                source: f,
+                target: stepId,
+                relation: "modified_by",
+                metadata: { event: "step.completed", timestamp: Date.now() },
+              })
+            }
+          }
+          break
+        }
+
+        case "step.failed": {
+          const stepId = payload.stepId as string
+          const error = (payload.error as string) ?? "unknown"
+          const errorCategory = (payload.errorCategory as string) ?? "unknown"
+          const files = payload.filesModified as string[] | undefined
+
+          // Track error→file relations
+          if (files && files.length > 0) {
+            for (const f of files) {
+              this.addEdge({
+                source: f,
+                target: stepId,
+                relation: `error:${errorCategory}`,
+                metadata: { error: error.slice(0, 200), timestamp: Date.now() },
+              })
+            }
+          }
+
+          // Track error category
+          this.addEdge({
+            source: stepId,
+            target: errorCategory,
+            relation: "has_error",
+            metadata: { error: error.slice(0, 200), timestamp: Date.now() },
+          })
+          break
+        }
+
+        case "step.retrying": {
+          const stepId = payload.stepId as string
+          const attempt = payload.attempt as number
+          this.addEdge({
+            source: stepId,
+            target: `retry-${attempt}`,
+            relation: "retried",
+            metadata: { attempt, timestamp: Date.now() },
+          })
+          break
+        }
+
+        // ── Plan lifecycle ──
+        case "plan.created": {
+          const planGoal = payload.goal as string
+          if (planGoal) {
+            this.addDecision({
+              title: `Plan: ${planGoal.slice(0, 80)}`,
+              context: `${planGoal} (${payload.subtaskCount as number} subtasks)`,
+              sessionId,
+            })
+          }
+          break
+        }
+
+        case "plan.completed": {
+          const passed = payload.allPassed as boolean
+          const goal = payload.goal as string
+          if (!passed && goal) {
+            this.addTodo({
+              text: `[plan] Follow up on failed plan: ${goal.slice(0, 100)}`,
+              priority: "high",
+              category: "plan",
+              sessionId,
+            })
+          }
+          break
+        }
+
+        // ── Pipeline lifecycle ──
+        case "pipeline.stage.completed": {
+          const role = payload.role as string
+          const issues = payload.issues as string[] | undefined
+          if (issues && issues.length > 0) {
+            this.addEdge({
+              source: `pipeline:${payload.runId as string}`,
+              target: `${role}:stage${payload.stageIndex as number}`,
+              relation: "has_issues",
+              metadata: { issueCount: issues.length, timestamp: Date.now() },
+            })
+          }
+          break
+        }
+
+        case "pipeline.completed": {
+          const crossValidated = payload.crossValidationPassed as boolean
+          if (!crossValidated) {
+            this.addTodo({
+              text: `[pipeline] Cross-validation failed for ${(payload.pipelineId as string) ?? "pipeline"}`,
+              priority: "high",
+              category: "pipeline",
+              sessionId,
+            })
+          }
+          break
+        }
+
+        // ── Budget ──
+        case "budget.limit.exceeded": {
+          this.addTodo({
+            text: `[budget] ${(payload.metric as string) ?? "resource"} limit exceeded (${(payload.current as number) ?? "?"}/${(payload.limit as number) ?? "?"})`,
+            priority: "high",
+            category: "budget",
+            sessionId,
+          })
+          break
+        }
+
+        case "budget.threshold.warning": {
+          this.addTodo({
+            text: `[budget] ${(payload.metric as string) ?? "resource"} at ${(payload.usagePercent as number)?.toFixed(0) ?? "?"}%`,
+            priority: "medium",
+            category: "budget",
+            sessionId,
+          })
+          break
+        }
+
+        // ── Guard ──
+        case "guard.check.completed": {
+          const passed = payload.passed as boolean
+          const rate = payload.hallucinationRate as number
+          if (!passed && rate > 0.3) {
+            this.addEdge({
+              source: payload.stepId as string,
+              target: "hallucination",
+              relation: "guard_failed",
+              metadata: { rate, timestamp: Date.now() },
+            })
+            this.addTodo({
+              text: `[guard] Hallucination check failed (rate: ${(rate * 100).toFixed(0)}%) in step ${payload.stepId as string}`,
+              priority: "medium",
+              category: "quality",
+              sessionId,
+            })
+          }
+          break
+        }
+
+        // ── Task delegation ──
+        case "task.delegated": {
+          this.addEdge({
+            source: payload.role as string,
+            target: payload.taskId as string,
+            relation: "assigned",
+            metadata: { description: (payload.description as string)?.slice(0, 200), timestamp: Date.now() },
+          })
+          break
+        }
+
+        case "task.completed": {
+          const success = payload.success as boolean
+          this.addEdge({
+            source: payload.taskId as string,
+            target: payload.role as string,
+            relation: success ? "completed_by" : "failed_by",
+            metadata: { timestamp: Date.now() },
+          })
+          if (!success) {
+            this.addTodo({
+              text: `[task] Delegated task ${payload.taskId as string} (${payload.role as string}) failed`,
+              priority: "medium",
+              category: "task",
+              sessionId,
+            })
+          }
+          break
+        }
+
+        // ── LLM ──
+        case "llm.response": {
+          // Track model usage — accumulate cost for future reflection
+          const model = payload.model as string
+          const cost = payload.costUsd as number
+          if (model && cost != null) {
+            this.addEdge({
+              source: "llm",
+              target: model,
+              relation: "cost",
+              metadata: { costUsd: cost, timestamp: Date.now() },
+            })
+          }
+          break
+        }
+
+        // ── File ──
+        case "file.written": {
+          const filePath = payload.filePath as string
+          const sourceStepId = payload.sourceStepId as string | undefined
+          if (filePath && sourceStepId) {
+            this.addEdge({
+              source: sourceStepId,
+              target: filePath,
+              relation: "wrote",
+              metadata: { bytes: payload.bytesWritten as number, timestamp: Date.now() },
+            })
+          }
+          break
+        }
+
+        // ── Memory ──
+        case "memory.skill.extracted": {
+          this.addEdge({
+            source: payload.skillId as string,
+            target: (payload.sourceStepId as string) ?? "unknown",
+            relation: "extracted_from",
+            metadata: { name: payload.name as string, timestamp: Date.now() },
+          })
+          break
+        }
+
+        case "memory.episode.recorded": {
+          // Episodes are already stored via EpisodicStore — just track in graph
+          this.addEdge({
+            source: "episode",
+            target: payload.episodeId as string,
+            relation: "recorded",
+            metadata: { outcome: payload.outcome as string, timestamp: Date.now() },
+          })
+          break
+        }
+
+        default:
+          // Unknown events are silently ignored
+          break
+      }
+    } catch (e) {
+      // Non-fatal: don't let Second Brain errors break the event loop
+      // Ponytail: single catch-all instead of per-branch try/catch
+    }
   }
 }
 
