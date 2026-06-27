@@ -83,4 +83,48 @@ console.log('=== Config generated ===');
 console.log(JSON.stringify(config, null, 2));
 "
 
+# ── Embedding Config (Ollama / external) ──
+# Set EMBEDDING_ENDPOINT to enable vector search in agentic-engine
+if [ -n "${EMBEDDING_ENDPOINT:-}" ]; then
+  AGENTIC_CONFIG="/workspace/.agentic/config.json"
+  mkdir -p "/workspace/.agentic"
+
+  if [ -f "$AGENTIC_CONFIG" ]; then
+    # Update existing config — inject embedding settings
+    node -e "
+    const fs = require('fs');
+    const cfg = JSON.parse(fs.readFileSync('$AGENTIC_CONFIG', 'utf-8'));
+    cfg.embedding = {
+      endpoint: '${EMBEDDING_ENDPOINT}',
+      model: '${EMBEDDING_MODEL:-nomic-embed-text}',
+      ${EMBEDDING_API_KEY:+apiKey: '${EMBEDDING_API_KEY}',}
+    };
+    cfg.memory.mode = 'full';
+    fs.writeFileSync('$AGENTIC_CONFIG', JSON.stringify(cfg, null, 2));
+    console.log('=== Embedding config injected ===');
+    "
+  else
+    # Create fresh config with embedding
+    node -e "
+    const cfg = {
+      \"\$schema\": \"v1\",
+      embedding: {
+        endpoint: '${EMBEDDING_ENDPOINT}',
+        model: '${EMBEDDING_MODEL:-nomic-embed-text}',
+        ${EMBEDDING_API_KEY:+apiKey: '${EMBEDDING_API_KEY}',}
+      },
+      memory: {
+        enabled: true,
+        mode: 'full',
+        maxEntries: 1000,
+        forgetAfterDays: 30,
+        search: { keywordWeight: 0.3, vectorWeight: 0.7 }
+      }
+    };
+    fs.writeFileSync('$AGENTIC_CONFIG', JSON.stringify(cfg, null, 2));
+    console.log('=== Embedding config created ===');
+    "
+  fi
+fi
+
 exec "$@"

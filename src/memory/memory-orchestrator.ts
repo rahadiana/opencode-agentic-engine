@@ -21,6 +21,7 @@ import type { SimulationInput } from "../core/simulation-engine.js"
 import { ImportanceIndex } from "./importance-index.js"
 import { ExecutionTracer } from "./execution-tracer.js"
 import { MemoryQueryEngine } from "./memory-query-engine.js"
+import type { MultiIndexRAG } from "./multi-index-rag.js"
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -76,10 +77,20 @@ export interface MemoryQuery {
   minImportance?: number
 }
 
+export interface KnowledgeEntry {
+  source: string
+  confidence: number
+  content: string
+  category: string
+}
+
 export interface MemoryQueryResult {
   entries: MemoryEntry[]
   totalTime: number
   sources: MemoryLevel[]
+  /** Knowledge entries with confidence scoring (from RAG, populated by queryWithKnowledge) */
+  knowledge?: KnowledgeEntry[]
+  hasHighConfidence?: boolean
 }
 
 export interface ConsolidationReport {
@@ -121,6 +132,9 @@ export class MemoryOrchestrator {
 
   /** Query subsystem — delegated to MemoryQueryEngine */
   private memoryQueryEngine: MemoryQueryEngine
+
+  /** RAG store for knowledge-first semantic search */
+  private ragStore?: MultiIndexRAG
 
   constructor(
     workingMem: SessionStore,
@@ -274,9 +288,45 @@ export class MemoryOrchestrator {
 
   // ── Query ────────────────────────────────────────────────────────
 
+  /** Inject RAG store after construction (to break circular init dependency) */
+  setRagStore(rag: MultiIndexRAG): void {
+    this.ragStore = rag
+  }
+
   /** Query across all (or selected) memory levels, ranked by relevance + importance */
   query(opts: MemoryQuery): MemoryQueryResult {
     return this.memoryQueryEngine.query(opts)
+  }
+
+  /**
+   * Query with knowledge-first RAG enrichment.
+   * Sync query() first, then enrich with confidence-scored RAG entries.
+   */
+  async queryWithKnowledge(query: string, category?: string, limit = 5): Promise<MemoryQueryResult> {
+    const base = this.query({ query, maxResults: limit })
+
+    if (!this.ragStore) return base
+
+    try {
+      const cats = category ? [category] : undefined
+      const ragResult = await this.ragStore.searchWithConfidence(query, cats, limit)
+
+      if (!ragResult.isEmpty) {
+        base.knowledge = ragResult.entries
+          .map(entry => ({
+            source: entry.title,
+            confidence: entry.confidence ?? 0,
+            content: entry.episode?.summary ?? entry.skill?.definition.trigger.pattern ?? "",
+            category: entry.category,
+          }))
+          .filter(e => e.content.length > 0)
+        base.hasHighConfidence = base.knowledge.some(e => e.confidence >= 0.6)
+      }
+    } catch {
+      // RAG unavailable — base result is still valid
+    }
+
+    return base
   }
 
   // ── Consolidation ────────────────────────────────────────────────

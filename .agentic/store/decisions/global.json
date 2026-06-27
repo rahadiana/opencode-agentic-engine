@@ -1,0 +1,14 @@
+{
+  "key": "global",
+  "data": [
+    {
+      "title": "Pilih SQLite sebagai database",
+      "context": "Second Brain perlu persistence yang simplest — SQLite via StateStore udah ada, zero infra tambahan",
+      "consequence": "TAPI gak perlu migration, cocok untuk single-node deployment",
+      "sessionId": "ses_0f7ac1ae6ffewD4Qcf7Tt9lm6D",
+      "id": "dec-1782554321174-itw6dx",
+      "timestamp": 1782554321174
+    }
+  ],
+  "updatedAt": "2026-06-27T09:58:41.174Z"
+}

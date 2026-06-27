@@ -1,0 +1,960 @@
+{
+  "key": "global",
+  "data": {
+    "automotive": {
+      "episodes": [],
+      "skills": [
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782552559723-92lg",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-27T09:29:19.723Z",
+              "lastUsed": "2026-06-27T09:29:19.723Z",
+              "lastModified": "2026-06-27T09:29:19.723Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-27T09:29:19.723Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782551204674-mi4v",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-27T09:06:44.674Z",
+              "lastUsed": "2026-06-27T09:06:44.674Z",
+              "lastModified": "2026-06-27T09:06:44.674Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-27T09:06:44.674Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782553146391-8yxq",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-27T09:39:06.391Z",
+              "lastUsed": "2026-06-27T09:39:06.391Z",
+              "lastModified": "2026-06-27T09:39:06.391Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-27T09:39:06.391Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782552832307-gt6y",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-27T09:33:52.307Z",
+              "lastUsed": "2026-06-27T09:33:52.307Z",
+              "lastModified": "2026-06-27T09:33:52.307Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-27T09:33:52.307Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782553509200-1t8c",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-27T09:45:09.200Z",
+              "lastUsed": "2026-06-27T09:45:09.200Z",
+              "lastModified": "2026-06-27T09:45:09.200Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-27T09:45:09.200Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1782554165446-gx0r",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-06-27T09:56:05.446Z",
+              "lastUsed": "2026-06-27T09:56:05.446Z",
+              "lastModified": "2026-06-27T09:56:05.446Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-06-27T09:56:05.446Z"
+        }
+      ],
+      "tfidfDocs": [
+        {
+          "id": "sk-skill-1782552559723-92lg",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782552559723-92lg"
+          }
+        },
+        {
+          "id": "sk-skill-1782551204674-mi4v",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782551204674-mi4v"
+          }
+        },
+        {
+          "id": "sk-skill-1782553146391-8yxq",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782553146391-8yxq"
+          }
+        },
+        {
+          "id": "sk-skill-1782552832307-gt6y",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782552832307-gt6y"
+          }
+        },
+        {
+          "id": "sk-skill-1782553509200-1t8c",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782553509200-1t8c"
+          }
+        },
+        {
+          "id": "sk-skill-1782554165446-gx0r",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1782554165446-gx0r"
+          }
+        }
+      ]
+    },
+    "financial": {
+      "episodes": [],
+      "skills": [],
+      "tfidfDocs": []
+    },
+    "personal": {
+      "episodes": [],
+      "skills": [],
+      "tfidfDocs": []
+    },
+    "tech": {
+      "episodes": [],
+      "skills": [],
+      "tfidfDocs": []
+    },
+    "general": {
+      "episodes": [],
+      "skills": [],
+      "tfidfDocs": []
+    },
+    "knowledge-tech": {
+      "episodes": [
+        {
+          "id": "bootstrap-understand-opencode-agentic-engine-archi",
+          "sessionId": "bootstrap",
+          "planGoal": "Understand opencode-agentic-engine architecture",
+          "summary": "opencode-agentic-engine is an OpenCode plugin implementing agentic software engineering. It has 79 TypeScript source files across 6 layers: core/ (engine: planning, execution, verification, LLM, git, budget), agents/ (multi-agent coordination + A2A protocol), drift/ (error detection, hallucination guard), memory/ (episodic store, skill store, vector store, RAG), evaluation/ (live evaluator), observability/ (trace logger, dashboard). The entry point is src/index.ts which registers 30 tools and 6 hooks.",
+          "outcome": "success",
+          "decisions": [
+            "Entry: src/index.ts",
+            "Core engine: src/core/",
+            "Multi-agent: src/agents/",
+            "Memory: src/memory/"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-27T09:03:59.242Z",
+          "tags": [
+            "architecture",
+            "structure",
+            "overview",
+            "plugin",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "projectId": "opencode-agentic-engine",
+          "score": 0.95,
+          "usageCount": 1
+        },
+        {
+          "id": "bootstrap-what-are-the-30-agentic-tools-",
+          "sessionId": "bootstrap",
+          "planGoal": "What are the 30 agentic tools?",
+          "summary": "Stage I Foundation (5): agentic_plan, agentic_execute, agentic_reflect, agentic_verify, agentic_status. Stage II Intelligence (8): agentic_nav, agentic_context, agentic_snapshot, agentic_pr, agentic_score, agentic_model, agentic_model_reset, agentic_budget. Stage III Orchestration (9): agentic_delegate, agentic_pipeline, agentic_message, agentic_parallel, agentic_skill, agentic_episodes, agentic_dashboard, agentic_guard, agentic_finetune. Stage IV Evolution (1): agentic_evolve. Stage V Autonomous (1): agentic_auto. Blueprint (6): agentic_debate, agentic_router, agentic_clean, agentic_rag, agentic_mcp, agentic_a2a. All tools use the agentic_ prefix.",
+          "outcome": "success",
+          "decisions": [
+            "30 tools total (added agentic_a2a)",
+            "Grouped by stage (I-V + Blueprint)",
+            "All prefixed with agentic_"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-27T09:03:59.242Z",
+          "tags": [
+            "tools",
+            "agentic",
+            "reference",
+            "list",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "projectId": "opencode-agentic-engine",
+          "score": 0.95,
+          "usageCount": 1
+        },
+        {
+          "id": "bootstrap-recommended-workflow--research---plan---",
+          "sessionId": "bootstrap",
+          "planGoal": "Recommended workflow: research → plan → implement → verify",
+          "summary": "Phase 1 (Research): Use agentic_nav to scan codebase, agentic_skill find to find reusable skills, agentic_episodes search to learn from past sessions. Phase 2 (Plan): agentic_plan to decompose the goal into ordered subtasks with dependencies. Phase 3 (Implement): agentic_execute for each step, agentic_delegate for complex sub-tasks, agentic_parallel for concurrent independent steps. Phase 4 (Verify): agentic_verify for deep multi-dimensional checks (compile, lint, test, security, performance, architecture, deps). If a step fails, use agentic_reflect to diagnose error category and propagation.",
+          "outcome": "success",
+          "decisions": [
+            "Research first: nav + skill + episodes",
+            "Plan: decompose with dependencies",
+            "Implement: execute steps, delegate complex",
+            "Verify: multi-dimensional checks"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-27T09:03:59.242Z",
+          "tags": [
+            "workflow",
+            "pattern",
+            "recommended",
+            "best-practice",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "projectId": "opencode-agentic-engine",
+          "score": 0.95,
+          "usageCount": 1
+        },
+        {
+          "id": "bootstrap-how-model-preferences-work",
+          "sessionId": "bootstrap",
+          "planGoal": "How model preferences work",
+          "summary": "The plugin has a 3-level model resolution system: (1) Per-call explicit model override via llmEngine.call({ model: {...} }), (2) Per-tool override via agentic_model set tool=agentic_plan model=..., (3) Category fallback by complexity tier (quick, unspecified-low, unspecified-high, deep). Tool complexity: agentic_nav/clean/pr/router are 'quick', agentic_debate/plan are 'unspecified-high', agentic_verify/finetune are 'deep'. Model preferences are persisted to .agentic/models.json.",
+          "outcome": "success",
+          "decisions": [
+            "3-level resolution: call > tool > category > default",
+            "Persisted to .agentic/models.json",
+            "Per-role preferences for delegation"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-27T09:03:59.242Z",
+          "tags": [
+            "model",
+            "preference",
+            "configuration",
+            "llm",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "projectId": "opencode-agentic-engine",
+          "score": 0.95,
+          "usageCount": 1
+        },
+        {
+          "id": "bootstrap-how-error-analysis-and-recovery-works",
+          "sessionId": "bootstrap",
+          "planGoal": "How error analysis and recovery works",
+          "summary": "When a step fails, agentic_reflect calls ErrorAnalyzer which categorizes errors into: import, type, compile, test, runtime, or unknown. The DependencyTracker traces error propagation across the step chain — if step A depends on step B and B failed, A is marked as affected. The AgentLoop has auto-retry with exponential backoff and jitter (via auto-retry.ts). After maxRetries, it attempts LLM-based repair via attemptRepair(). HallucinationGuard checks file/function/import claims on every successful execute.",
+          "outcome": "success",
+          "decisions": [
+            "Error categories: import, type, compile, test, runtime, unknown",
+            "Auto-retry with exponential backoff + jitter",
+            "LLM-based repair on repeated failure",
+            "HallucinationGuard on every execute"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-27T09:03:59.242Z",
+          "tags": [
+            "error",
+            "recovery",
+            "reflect",
+            "retry",
+            "debugging",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "projectId": "opencode-agentic-engine",
+          "score": 0.95,
+          "usageCount": 1
+        },
+        {
+          "id": "bootstrap-how-multi-agent-coordination-works",
+          "sessionId": "bootstrap",
+          "planGoal": "How multi-agent coordination works",
+          "summary": "The agents/ layer has: Orchestrator (multi-agent workflow pipelines), Coordinator (task delegation, shared memory, inter-agent messaging), AgentRuntime (sub-process spawner), RoleRegistry (built-in roles: architect, developer, qa, coordinator, pm + custom). Pipelines chain PM → Architect → Developer → QA with cross-validation between stages. Inter-agent messaging supports: result, review_request, review_response, clarification, approval, revision.",
+          "outcome": "success",
+          "decisions": [
+            "Roles: architect, developer, qa, coordinator, pm",
+            "Pipeline: PM → Architect → Developer → QA",
+            "Cross-validation between stages",
+            "Inter-agent messaging with review/approval flow"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-27T09:03:59.242Z",
+          "tags": [
+            "multi-agent",
+            "pipeline",
+            "delegate",
+            "orchestrator",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "projectId": "opencode-agentic-engine",
+          "score": 0.95,
+          "usageCount": 1
+        },
+        {
+          "id": "bootstrap-how-memory-and-skills-work-across-sessio",
+          "sessionId": "bootstrap",
+          "planGoal": "How memory and skills work across sessions",
+          "summary": "The memory/ layer provides cross-session persistence: EpisodicStore (past task outcomes with project scoping), SkillStore (reusable skill extraction from successful tasks with success rate tracking), VectorStore (TF-IDF sparse retrieval), MultiIndexRAG (hybrid TF-IDF + vector search with category segregation), LocalEmbedder (text embedding via API or hash fallback). Skills use self-describing format (agentic-skill/v1 schema). Episodes are scoped per project. Skills are globally shared.",
+          "outcome": "success",
+          "decisions": [
+            "Episodes: project-scoped",
+            "Skills: globally shared",
+            "Vector: TF-IDF + optional embedding",
+            "RAG: hybrid search with category segregation"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-27T09:03:59.242Z",
+          "tags": [
+            "memory",
+            "skills",
+            "episodes",
+            "RAG",
+            "cross-session",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "projectId": "opencode-agentic-engine",
+          "score": 0.95,
+          "usageCount": 1
+        },
+        {
+          "id": "bootstrap-how-to-add-a-new-feature-to-the-plugin",
+          "sessionId": "bootstrap",
+          "planGoal": "How to add a new feature to the plugin",
+          "summary": "1) Create source file in appropriate src/ subdirectory. 2) Add import + instance in src/index.ts. 3) Add tool definition in the tools object. 4) Add to expected tool list in test/run.mjs, test/dropin.mjs, test/load-samedir.mjs. 5) Add ≥2 test cases (happy path + error path). 6) Run npm run build && node test/run.mjs. 7) If Docker: ./test-container.sh. Conventions: English for code, Indonesian for communication, ESM imports with .js extensions, use execFileSync not execSync for shell safety.",
+          "outcome": "success",
+          "decisions": [
+            "File in appropriate subdirectory",
+            "Register in src/index.ts tools object",
+            "Add to 3 test files",
+            "2+ test cases per tool",
+            "npm run build && node test/run.mjs"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-27T09:03:59.242Z",
+          "tags": [
+            "development",
+            "contribution",
+            "new-feature",
+            "howto",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "projectId": "opencode-agentic-engine",
+          "score": 0.95,
+          "usageCount": 1
+        },
+        {
+          "id": "bootstrap-opencode-plugin-api-and-hooks",
+          "sessionId": "bootstrap",
+          "planGoal": "OpenCode Plugin API and hooks",
+          "summary": "The plugin implements 5 hooks: config (agent registration), experimental.chat.system.transform (injects Knowledge-First system prompt with RAG results), chat.params (model tracking), tool.execute.after (observability tracing), and dispose (cleanup). All LLM calls go through client.session.prompt() via LLMEngine, never directly to external APIs. The experimental.chat.system.transform hook is the ONLY way to dynamically inject system prompt content — it appends RAG results, tool definitions, guardrails, and mandatory research instructions to every chat-mode LLM call.",
+          "outcome": "success",
+          "decisions": [
+            "5 hooks: config, system.transform, chat.params, tool.execute.after, dispose",
+            "All LLM via SDK client.session.prompt()",
+            "No direct external API calls for LLM inference"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-27T09:03:59.242Z",
+          "tags": [
+            "hooks",
+            "plugin-api",
+            "opencode",
+            "sdk",
+            "integration",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "projectId": "opencode-agentic-engine",
+          "score": 0.95,
+          "usageCount": 1
+        },
+        {
+          "id": "bootstrap-how-testing-works",
+          "sessionId": "bootstrap",
+          "planGoal": "How testing works",
+          "summary": "Tests live in test/run.mjs (1117+ unit tests spanning 50+ sections). Additional test files: dropin.mjs (plugin discovery), load-samedir.mjs (E2E workflow), e2e-scenario.mjs (EvoClaw benchmark), swebench-harness.mjs (SWE-bench), e2e-llm.mjs (LLM E2E). Tests use custom assert() functions, not Jest/Mocha. Each tool must have ≥2 test cases. Run with: node test/run.mjs for unit tests, LLM_OFF=true node test/swebench-harness.mjs for mock mode.",
+          "outcome": "success",
+          "decisions": [
+            "1117+ unit tests in run.mjs",
+            "22+ test files total",
+            "Custom assert() framework",
+            "Each tool: 2+ test cases"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-06-27T09:03:59.242Z",
+          "tags": [
+            "testing",
+            "test",
+            "run.mjs",
+            "e2e",
+            "benchmark",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "projectId": "opencode-agentic-engine",
+          "score": 0.95,
+          "usageCount": 1
+        }
+      ],
+      "skills": [],
+      "tfidfDocs": [
+        {
+          "id": "ep-bootstrap-understand-opencode-agentic-engine-archi",
+          "category": "knowledge-tech",
+          "title": "Understand opencode-agentic-engine architecture",
+          "content": "opencode-agentic-engine is an OpenCode plugin implementing agentic software engineering. It has 79 TypeScript source files across 6 layers: core/ (engine: planning, execution, verification, LLM, git, budget), agents/ (multi-agent coordination + A2A protocol), drift/ (error detection, hallucination guard), memory/ (episodic store, skill store, vector store, RAG), evaluation/ (live evaluator), observability/ (trace logger, dashboard). The entry point is src/index.ts which registers 30 tools and 6 hooks.\nEntry: src/index.ts\nCore engine: src/core/\nMulti-agent: src/agents/\nMemory: src/memory/",
+          "keywords": [
+            "architecture",
+            "structure",
+            "overview",
+            "plugin",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-understand-opencode-agentic-engine-archi"
+          }
+        },
+        {
+          "id": "ep-bootstrap-what-are-the-30-agentic-tools-",
+          "category": "knowledge-tech",
+          "title": "What are the 30 agentic tools?",
+          "content": "Stage I Foundation (5): agentic_plan, agentic_execute, agentic_reflect, agentic_verify, agentic_status. Stage II Intelligence (8): agentic_nav, agentic_context, agentic_snapshot, agentic_pr, agentic_score, agentic_model, agentic_model_reset, agentic_budget. Stage III Orchestration (9): agentic_delegate, agentic_pipeline, agentic_message, agentic_parallel, agentic_skill, agentic_episodes, agentic_dashboard, agentic_guard, agentic_finetune. Stage IV Evolution (1): agentic_evolve. Stage V Autonomous (1): agentic_auto. Blueprint (6): agentic_debate, agentic_router, agentic_clean, agentic_rag, agentic_mcp, agentic_a2a. All tools use the agentic_ prefix.\n30 tools total (added agentic_a2a)\nGrouped by stage (I-V + Blueprint)\nAll prefixed with agentic_",
+          "keywords": [
+            "tools",
+            "agentic",
+            "reference",
+            "list",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-what-are-the-30-agentic-tools-"
+          }
+        },
+        {
+          "id": "ep-bootstrap-recommended-workflow--research---plan---",
+          "category": "knowledge-tech",
+          "title": "Recommended workflow: research → plan → implement → verify",
+          "content": "Phase 1 (Research): Use agentic_nav to scan codebase, agentic_skill find to find reusable skills, agentic_episodes search to learn from past sessions. Phase 2 (Plan): agentic_plan to decompose the goal into ordered subtasks with dependencies. Phase 3 (Implement): agentic_execute for each step, agentic_delegate for complex sub-tasks, agentic_parallel for concurrent independent steps. Phase 4 (Verify): agentic_verify for deep multi-dimensional checks (compile, lint, test, security, performance, architecture, deps). If a step fails, use agentic_reflect to diagnose error category and propagation.\nResearch first: nav + skill + episodes\nPlan: decompose with dependencies\nImplement: execute steps, delegate complex\nVerify: multi-dimensional checks",
+          "keywords": [
+            "workflow",
+            "pattern",
+            "recommended",
+            "best-practice",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-recommended-workflow--research---plan---"
+          }
+        },
+        {
+          "id": "ep-bootstrap-how-model-preferences-work",
+          "category": "knowledge-tech",
+          "title": "How model preferences work",
+          "content": "The plugin has a 3-level model resolution system: (1) Per-call explicit model override via llmEngine.call({ model: {...} }), (2) Per-tool override via agentic_model set tool=agentic_plan model=..., (3) Category fallback by complexity tier (quick, unspecified-low, unspecified-high, deep). Tool complexity: agentic_nav/clean/pr/router are 'quick', agentic_debate/plan are 'unspecified-high', agentic_verify/finetune are 'deep'. Model preferences are persisted to .agentic/models.json.\n3-level resolution: call > tool > category > default\nPersisted to .agentic/models.json\nPer-role preferences for delegation",
+          "keywords": [
+            "model",
+            "preference",
+            "configuration",
+            "llm",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-how-model-preferences-work"
+          }
+        },
+        {
+          "id": "ep-bootstrap-how-error-analysis-and-recovery-works",
+          "category": "knowledge-tech",
+          "title": "How error analysis and recovery works",
+          "content": "When a step fails, agentic_reflect calls ErrorAnalyzer which categorizes errors into: import, type, compile, test, runtime, or unknown. The DependencyTracker traces error propagation across the step chain — if step A depends on step B and B failed, A is marked as affected. The AgentLoop has auto-retry with exponential backoff and jitter (via auto-retry.ts). After maxRetries, it attempts LLM-based repair via attemptRepair(). HallucinationGuard checks file/function/import claims on every successful execute.\nError categories: import, type, compile, test, runtime, unknown\nAuto-retry with exponential backoff + jitter\nLLM-based repair on repeated failure\nHallucinationGuard on every execute",
+          "keywords": [
+            "error",
+            "recovery",
+            "reflect",
+            "retry",
+            "debugging",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-how-error-analysis-and-recovery-works"
+          }
+        },
+        {
+          "id": "ep-bootstrap-how-multi-agent-coordination-works",
+          "category": "knowledge-tech",
+          "title": "How multi-agent coordination works",
+          "content": "The agents/ layer has: Orchestrator (multi-agent workflow pipelines), Coordinator (task delegation, shared memory, inter-agent messaging), AgentRuntime (sub-process spawner), RoleRegistry (built-in roles: architect, developer, qa, coordinator, pm + custom). Pipelines chain PM → Architect → Developer → QA with cross-validation between stages. Inter-agent messaging supports: result, review_request, review_response, clarification, approval, revision.\nRoles: architect, developer, qa, coordinator, pm\nPipeline: PM → Architect → Developer → QA\nCross-validation between stages\nInter-agent messaging with review/approval flow",
+          "keywords": [
+            "multi-agent",
+            "pipeline",
+            "delegate",
+            "orchestrator",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-how-multi-agent-coordination-works"
+          }
+        },
+        {
+          "id": "ep-bootstrap-how-memory-and-skills-work-across-sessio",
+          "category": "knowledge-tech",
+          "title": "How memory and skills work across sessions",
+          "content": "The memory/ layer provides cross-session persistence: EpisodicStore (past task outcomes with project scoping), SkillStore (reusable skill extraction from successful tasks with success rate tracking), VectorStore (TF-IDF sparse retrieval), MultiIndexRAG (hybrid TF-IDF + vector search with category segregation), LocalEmbedder (text embedding via API or hash fallback). Skills use self-describing format (agentic-skill/v1 schema). Episodes are scoped per project. Skills are globally shared.\nEpisodes: project-scoped\nSkills: globally shared\nVector: TF-IDF + optional embedding\nRAG: hybrid search with category segregation",
+          "keywords": [
+            "memory",
+            "skills",
+            "episodes",
+            "RAG",
+            "cross-session",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-how-memory-and-skills-work-across-sessio"
+          }
+        },
+        {
+          "id": "ep-bootstrap-how-to-add-a-new-feature-to-the-plugin",
+          "category": "knowledge-tech",
+          "title": "How to add a new feature to the plugin",
+          "content": "1) Create source file in appropriate src/ subdirectory. 2) Add import + instance in src/index.ts. 3) Add tool definition in the tools object. 4) Add to expected tool list in test/run.mjs, test/dropin.mjs, test/load-samedir.mjs. 5) Add ≥2 test cases (happy path + error path). 6) Run npm run build && node test/run.mjs. 7) If Docker: ./test-container.sh. Conventions: English for code, Indonesian for communication, ESM imports with .js extensions, use execFileSync not execSync for shell safety.\nFile in appropriate subdirectory\nRegister in src/index.ts tools object\nAdd to 3 test files\n2+ test cases per tool\nnpm run build && node test/run.mjs",
+          "keywords": [
+            "development",
+            "contribution",
+            "new-feature",
+            "howto",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-how-to-add-a-new-feature-to-the-plugin"
+          }
+        },
+        {
+          "id": "ep-bootstrap-opencode-plugin-api-and-hooks",
+          "category": "knowledge-tech",
+          "title": "OpenCode Plugin API and hooks",
+          "content": "The plugin implements 5 hooks: config (agent registration), experimental.chat.system.transform (injects Knowledge-First system prompt with RAG results), chat.params (model tracking), tool.execute.after (observability tracing), and dispose (cleanup). All LLM calls go through client.session.prompt() via LLMEngine, never directly to external APIs. The experimental.chat.system.transform hook is the ONLY way to dynamically inject system prompt content — it appends RAG results, tool definitions, guardrails, and mandatory research instructions to every chat-mode LLM call.\n5 hooks: config, system.transform, chat.params, tool.execute.after, dispose\nAll LLM via SDK client.session.prompt()\nNo direct external API calls for LLM inference",
+          "keywords": [
+            "hooks",
+            "plugin-api",
+            "opencode",
+            "sdk",
+            "integration",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-opencode-plugin-api-and-hooks"
+          }
+        },
+        {
+          "id": "ep-bootstrap-how-testing-works",
+          "category": "knowledge-tech",
+          "title": "How testing works",
+          "content": "Tests live in test/run.mjs (1117+ unit tests spanning 50+ sections). Additional test files: dropin.mjs (plugin discovery), load-samedir.mjs (E2E workflow), e2e-scenario.mjs (EvoClaw benchmark), swebench-harness.mjs (SWE-bench), e2e-llm.mjs (LLM E2E). Tests use custom assert() functions, not Jest/Mocha. Each tool must have ≥2 test cases. Run with: node test/run.mjs for unit tests, LLM_OFF=true node test/swebench-harness.mjs for mock mode.\n1117+ unit tests in run.mjs\n22+ test files total\nCustom assert() framework\nEach tool: 2+ test cases",
+          "keywords": [
+            "testing",
+            "test",
+            "run.mjs",
+            "e2e",
+            "benchmark",
+            "bootstrap",
+            "high-confidence"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "bootstrap-how-testing-works"
+          }
+        }
+      ]
+    }
+  },
+  "updatedAt": "2026-06-27T09:56:47.198Z"
+}

@@ -31,6 +31,7 @@ import { SkillStore } from "./memory/skill-store.js"
 import { EpisodicStore } from "./memory/episodic-store.js"
 import { MemoryOrchestrator } from "./memory/memory-orchestrator.js"
 import { ConsolidationScheduler } from "./memory/consolidation-scheduler.js"
+import { initSecondBrain, getSecondBrain } from "./memory/second-brain.js"
 import { HallucinationGuard, type ClaimResult, type HallucinationCheck } from "./drift/hallucination-guard.js"
 import { ParallelExecutor } from "./core/parallel.js"
 import { Dashboard } from "./observability/dashboard.js"
@@ -564,6 +565,7 @@ const confidenceStore = new ConfidenceStore()
     searchEpisodes: (query: string) => episodicStore.search(query),
     findSkills: (query: string) => skillStore.find(query).map(s => ({ name: s.definition.meta.name, successRate: s.successRate })),
   })
+  llmEngine.setMemoryOrchestrator(memoryOrchestrator)
   new AgentLoop(llmEngine, { maxIterations: 10, autoRetry: true, maxRetries: 2, verifyAfterEach: false })
   const stateStore = new StateStore({ worktree })
   // SQLite backend — lebih cepat dari file JSON, support structured queries
@@ -574,6 +576,12 @@ const confidenceStore = new ConfidenceStore()
   } catch (e) {
     log.info("[Agentic] SQLite not available — agentic_db tool disabled: " + (e as Error).message)
   }
+  // Second Brain — active memory subsystem (decisions, TODOs, reflection, graph, checklist)
+  const secondBrain = initSecondBrain(stateStore, sessionStore, memoryOrchestrator, llmEngine, agentRuntime)
+  // Wire event-driven memory: auto-save on key events
+  eventBus.onAny((event: { type: string; payload: Record<string, unknown> }) => {
+    try { secondBrain.handleEvent(event.type, event.payload, event.payload?.sessionID as string | undefined) } catch { /* non-fatal */ }
+  })
   // Build RAG config from config file
   const ragConfig: import("./memory/multi-index-rag.js").RAGConfig = {
     keywordWeight: config.memory.search.keywordWeight,
@@ -591,6 +599,8 @@ const confidenceStore = new ConfidenceStore()
   multiIndexRAG.setPersistCallback((data) => {
     stateStore.set("rag", "global", data)
   })
+  // Wire RAG into MemoryOrchestrator — single coordinator for all memory
+  memoryOrchestrator.setRagStore(multiIndexRAG)
 
   const debateLoop = new DebateLoop(llmEngine, agentRuntime)
   const routerAgent = new RouterAgent(llmEngine)
@@ -5962,6 +5972,25 @@ const confidenceStore = new ConfidenceStore()
           const startTime = Date.now()
           const thorough = args.thorough !== false
 
+          // ── Second Brain: checklist + resume ──
+          try {
+            const sb = getSecondBrain()
+            if (sb) {
+              // Resume from crash: check for latest snapshot
+              const snapshots = sessionStore.getOrCreate(context.sessionID).artifacts ?? new Map()
+              const snapKeys = [...snapshots.keys()].filter(k => k.startsWith("snapshot:"))
+              if (snapKeys.length > 0) {
+                const latest = snapKeys.sort().reverse()[0]
+                log.info(`[agentic_auto] Found saved snapshot: ${latest} — resuming with memory context`)
+              }
+              // Ensure memory loaded
+              const check = sb.ensureMemoryLoaded(context.sessionID)
+              if (!check.loaded && check.warning) {
+                log.info(`[agentic_auto] ${check.warning}`)
+              }
+            }
+          } catch { /* non-fatal */ }
+
           // ═══════════════════════════════════════════════
           // PHASE 1: Knowledge — scan + memory + skills
           // ═══════════════════════════════════════════════
@@ -6377,6 +6406,118 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
         },
       }),
 
+      // ── Second Brain ──
+      agentic_memo: registryTool("agentic_memo", {
+        description: "Second Brain: manage decisions (ADR), TODOs, run reflection, and inspect knowledge graph. Actions: decision (record ADR), todo (add/list/update/done), list (show pending), reflect (run reflection), graph (entity relations).",
+        args: {
+          action: tool.schema.enum(["decision", "todo", "todo-done", "list", "reflect", "graph"]).describe("Action: decision (record ADR), todo (add item), todo-done (mark done), list (show pending), reflect (run reflection), graph (entity relations)"),
+          title: tool.schema.string().optional().describe("Decision title (for action=decision)"),
+          context: tool.schema.string().optional().describe("Decision context/rationale (for action=decision)"),
+          alternatives: tool.schema.string().optional().describe("Alternative options considered (for action=decision)"),
+          consequence: tool.schema.string().optional().describe("Expected consequence (for action=decision)"),
+          text: tool.schema.string().optional().describe("TODO text (for action=todo)"),
+          priority: tool.schema.enum(["low", "medium", "high", "critical"]).optional().describe("TODO priority (for action=todo)"),
+          category: tool.schema.string().optional().describe("TODO/Search category (optional)"),
+          todoId: tool.schema.string().optional().describe("TODO ID (for action=todo-done)"),
+          source: tool.schema.string().optional().describe("Entity name (for action=graph)"),
+          target: tool.schema.string().optional().describe("Related entity name (for action=graph)"),
+          relation: tool.schema.string().optional().describe("Relation type (for action=graph)"),
+        },
+        execute: async (args: Record<string, unknown>, _context: Record<string, unknown>) => {
+          const sb = getSecondBrain()
+          if (!sb) return { output: "Second Brain not initialized." }
+
+          switch (args.action) {
+            case "decision": {
+              if (!args.title || !args.context) return { output: "`title` and `context` are required for decisions." }
+              const dec = sb.addDecision({
+                title: args.title as string,
+                context: args.context as string,
+                alternatives: args.alternatives as string | undefined,
+                consequence: args.consequence as string | undefined,
+                sessionId: (_context as any)?.sessionID,
+              })
+              return { output: `✅ Decision recorded: **${dec.title}**\nID: \`${dec.id}\`` }
+            }
+
+            case "todo": {
+              if (!args.text) return { output: "`text` is required for TODOs." }
+              const todo = sb.addTodo({
+                text: args.text as string,
+                priority: (args.priority as any) ?? "medium",
+                category: args.category as string | undefined,
+                sessionId: (_context as any)?.sessionID,
+              })
+              return { output: `✅ TODO added: **${todo.text}** [${todo.priority}]\nID: \`${todo.id}\`` }
+            }
+
+            case "todo-done": {
+              if (!args.todoId) return { output: "`todoId` is required." }
+              const ok = sb.updateTodoStatus(args.todoId as string, "done")
+              return { output: ok ? `✅ TODO \`${args.todoId}\` marked done.` : `⚠️ TODO \`${args.todoId}\` not found.` }
+            }
+
+            case "list": {
+              const todos = sb.getPendingTodos(20)
+              const decisions = sb.getRecentDecisions(10)
+              const lines: string[] = []
+              if (todos.length > 0) {
+                lines.push("### 📋 Pending TODOs")
+                lines.push(todos.map(t => `- [${t.priority}] \`${t.id.slice(0, 20)}\` ${t.text}${t.category ? ` (${t.category})` : ""}`).join("\n"))
+              } else {
+                lines.push("No pending TODOs.")
+              }
+              if (decisions.length > 0) {
+                lines.push("\n### 🏛️ Recent Decisions")
+                lines.push(decisions.map(d => `- **${d.title}**: ${d.context.slice(0, 120)}`).join("\n"))
+              }
+              const reflection = sb.getLatestReflection()
+              if (reflection) {
+                lines.push(`\n### 🔄 Last Reflection\n${reflection.summary.slice(0, 200)}`)
+                if (reflection.actionItems.length > 0) {
+                  lines.push(`Action items: ${reflection.actionItems.join(", ")}`)
+                }
+              }
+              return { output: lines.join("\n") || "No Second Brain data yet." }
+            }
+
+            case "reflect": {
+              const reflection = await sb.reflect((_context as any)?.sessionID)
+              let out = `## 🔄 Reflection Complete\n\n${reflection.summary}`
+              if (reflection.conflicts.length > 0) out += `\n\n**Conflicts found:**\n${reflection.conflicts.map(c => `- ${c}`).join("\n")}`
+              if (reflection.planUpdates.length > 0) out += `\n\n**Plan updates:**\n${reflection.planUpdates.map(p => `- ${p}`).join("\n")}`
+              if (reflection.newInfo.length > 0) out += `\n\n**New info:**\n${reflection.newInfo.map(n => `- ${n}`).join("\n")}`
+              if (reflection.actionItems.length > 0) out += `\n\n**Action items created:**\n${reflection.actionItems.map(a => `- ${a}`).join("\n")}`
+              return { output: out }
+            }
+
+            case "graph": {
+              if (args.source && args.target && args.relation) {
+                sb.addEdge({
+                  source: args.source as string,
+                  target: args.target as string,
+                  relation: args.relation as string,
+                })
+                return { output: `✅ Relation: \`${args.source}\` --[${args.relation}]--> \`${args.target}\`` }
+              }
+              // List graph
+              if (args.source) {
+                const neighbors = sb.findNeighbors(args.source as string)
+                return { output: neighbors.length > 0
+                  ? `🔗 Relations for **${args.source}**: ${neighbors.join(", ")}`
+                  : `No relations found for **${args.source}**.` }
+              }
+              const edges = sb.getEdges()
+              if (edges.length === 0) return { output: "No relations recorded yet." }
+              return { output: `🔗 **${edges.length} relations**\n${edges.slice(0, 20).map(e => `- \`${e.source}\` --[${e.relation}]--> \`${e.target}\``).join("\n")}` }
+            }
+
+            default:
+              return { output: `Unknown action: ${args.action}. Use: decision, todo, todo-done, list, reflect, graph.` }
+          }
+        },
+      }),
+
     },
 
     // ── Config hook: register agent programmatically ──
@@ -6497,23 +6638,50 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
 
             const { keywords, category } = routerAgent.extractKeywords(queryForRag)
             if (keywords.length > 0) {
-              const ragResult = await multiIndexRAG.searchWithConfidence(keywords.join(" "), [category], 5)
-              if (!ragResult.isEmpty) {
-                knowledgeEntries = ragResult.entries
-                  .map(entry => ({
-                    source: entry.title,
-                    confidence: entry.confidence ?? 0,
-                    content: entry.episode?.summary ?? entry.skill?.definition.trigger.pattern ?? "",
-                    category: entry.category,
-                  }))
-                  .filter(e => e.content.length > 0)
-
-                hasHighConfidenceKnowledge = knowledgeEntries.some(e => e.confidence >= 0.6)
+              const memResult = await memoryOrchestrator.queryWithKnowledge(keywords.join(" "), category, 5)
+              if (memResult.knowledge && memResult.knowledge.length > 0) {
+                knowledgeEntries = memResult.knowledge
+                hasHighConfidenceKnowledge = memResult.hasHighConfidence ?? false
               }
             }
           } catch (e) {
             log.error("[Agentic] RAG search failed: " + (e instanceof Error ? e.message : String(e)))
           }
+
+          // ── Second Brain injection: decisions + TODOs + reflection ──
+          try {
+            const sb = getSecondBrain()
+            if (sb) {
+              const decisions = sb.getRecentDecisions(3)
+              const todos = sb.getPendingTodos(5)
+              const refl = sb.getLatestReflection()
+              if (decisions.length > 0) {
+                hasHighConfidenceKnowledge = true
+                knowledgeEntries.push(...decisions.map(d => ({
+                  source: `decision:${d.title}`,
+                  confidence: 0.7,
+                  content: `${d.title}: ${d.context}${d.consequence ? ` → ${d.consequence}` : ""}`,
+                  category: "decision",
+                })))
+              }
+              if (todos.length > 0) {
+                knowledgeEntries.push({
+                  source: "todos",
+                  confidence: 0.6,
+                  content: `Pending tasks: ${todos.map(t => `[${t.priority}] ${t.text}`).join("; ")}`,
+                  category: "todo",
+                })
+              }
+              if (refl && refl.actionItems.length > 0) {
+                knowledgeEntries.push({
+                  source: "reflection",
+                  confidence: 0.6,
+                  content: `Reflection action items: ${refl.actionItems.join("; ")}`,
+                  category: "reflection",
+                })
+              }
+            }
+          } catch { /* non-fatal */ }
 
           // ── Tool selection: kirim SEMUA tools — LLM modern pinter milih sendiri ──
           injection = buildAgenticSystemInstructions(pack, TOOL_REGISTRY, {

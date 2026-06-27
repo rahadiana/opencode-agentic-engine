@@ -1,0 +1,16 @@
+{
+  "key": "global",
+  "data": [
+    {
+      "text": "Bikin integration test buat hybrid search",
+      "priority": "high",
+      "category": "testing",
+      "sessionId": "ses_0f7ac1ae6ffewD4Qcf7Tt9lm6D",
+      "id": "todo-1782554328790-11v7",
+      "status": "done",
+      "createdAt": 1782554328790,
+      "updatedAt": 1782554341982
+    }
+  ],
+  "updatedAt": "2026-06-27T09:59:01.982Z"
+}

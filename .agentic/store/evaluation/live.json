@@ -1,0 +1,17 @@
+{
+  "key": "live",
+  "data": {
+    "stepResults": [],
+    "errorRecoveries": [],
+    "navigations": [
+      {
+        "query": "system prompt injection transform hook knowledge-first RAG",
+        "resultsCount": 10,
+        "focused": true
+      }
+    ],
+    "delegations": [],
+    "skillLookups": []
+  },
+  "updatedAt": "2026-06-27T09:56:42.478Z"
+}

@@ -4,6 +4,7 @@ import type { ModelRegistry } from "./model-registry.js"
 import type { BudgetTracker } from "./budget-tracker.js"
 import { SessionReader } from "./session-reader.js"
 import { SemanticCache } from "./semantic-cache.js"
+import type { MemoryOrchestrator } from "../memory/memory-orchestrator.js"
 import { createLogger } from "../observability/logger.js"
 
 const log = createLogger("LLM")
@@ -42,6 +43,9 @@ export class LLMEngine {
    *  Allows getCurrentModel() to return the actual model instead of undefined.
    *  Format: "providerID/modelID" (e.g. "opencode/deepseek-v4-flash-free") */
   private _lastKnownModel?: string
+  /** Memory orchestrator for knowledge-first injection */
+  private memoryOrchestrator?: MemoryOrchestrator
+
   /** Cost auto-switch tracking */
   private costSwitchStats = { totalSwitches: 0, totalSavingsUsd: 0, switches: [] as CostSwitchEvent[] }
   /** Cost auto-switch observer callback */
@@ -67,6 +71,10 @@ export class LLMEngine {
 
   setSessionReader(reader: SessionReader): void {
     this.sessionReader = reader
+  }
+
+  setMemoryOrchestrator(orchestrator: MemoryOrchestrator): void {
+    this.memoryOrchestrator = orchestrator
   }
 
   setMemoryStores(stores: {
@@ -493,6 +501,41 @@ export class LLMEngine {
           }
           this._onCostSwitch?.(event)
         }
+      }
+    }
+
+    // ── Knowledge-first injection (tool mode) ──
+    // Chat mode already handled by system.transform hook.
+    // In tool mode, inject RAG knowledge into system prompt before LLM call.
+    if (!this._chatMode && !req.bypassCache && this.memoryOrchestrator) {
+      try {
+        const queryText = (req.userPrompt ?? "").slice(0, 500)
+        if (queryText) {
+          const memResult = await this.memoryOrchestrator.queryWithKnowledge(queryText, undefined, 5)
+          if (memResult.knowledge && memResult.knowledge.length > 0 && !req.systemPrompt.includes("<knowledge-context>")) {
+            const ctx = memResult.knowledge
+              .map(k => `  <source url="${k.source}" confidence="${k.confidence.toFixed(2)}">${k.content}</source>`)
+              .join("\n")
+            req.systemPrompt += `\n\n<knowledge-context>\n${ctx}\n</knowledge-context>`
+          }
+        }
+      } catch {
+        // Non-fatal — proceed without knowledge
+      }
+    }
+
+    // ── Second Brain injection (tool mode) ──
+    // Inject decisions, TODOs, and last reflection alongside RAG knowledge.
+    if (!this._chatMode && !req.bypassCache && !req.systemPrompt.includes("<second-brain>")) {
+      try {
+        const { getSecondBrain } = await import("../memory/second-brain.js")
+        const sb = getSecondBrain()
+        if (sb) {
+          const ctx = sb.formatKnowledgeSnapshot(3, 5)
+          if (ctx) req.systemPrompt += `\n${ctx}`
+        }
+      } catch {
+        // Non-fatal
       }
     }
 

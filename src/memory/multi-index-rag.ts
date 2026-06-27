@@ -442,7 +442,7 @@ export class MultiIndexRAG {
     // Enrich with vector scores if embedder is available
     if (this.embedder && result.entries.length > 0) {
       try {
-        const enriched = await enrichWithVectors(this.embedder, [result], query)
+        const enriched = await enrichWithVectors(this.embedder, [result], query, this.config.keywordWeight, this.config.vectorWeight)
         return enriched[0] ?? result
       } catch {
         // Partial vector fallback: TF-IDF results already populated
@@ -462,7 +462,7 @@ export class MultiIndexRAG {
 
     // Enrich with vector scores if embedder is available
     if (this.embedder && results.length > 0) {
-      return enrichWithVectors(this.embedder, results, query)
+      return enrichWithVectors(this.embedder, results, query, this.config.keywordWeight, this.config.vectorWeight)
     }
 
     return results
@@ -742,6 +742,8 @@ export async function enrichWithVectors(
   embedder: LocalEmbedder,
   results: IndexSearchResult[],
   query: string,
+  keywordWeight = 0.3,
+  vectorWeight = 0.7,
 ): Promise<IndexSearchResult[]> {
   const qVec = await embedder.embed(query)
 
@@ -752,7 +754,7 @@ export async function enrichWithVectors(
         const docVec = await embedder.embed(text)
         const sim = embedder.cosineSimilarity(qVec.vector, docVec.vector)
         entry.vectorScore = sim
-        entry.hybridScore = (entry.hybridScore ?? 0) * 0.3 + sim * 0.7
+        entry.hybridScore = (entry.hybridScore ?? 0) * keywordWeight + sim * vectorWeight
         return entry
       })
     )

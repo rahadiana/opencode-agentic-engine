@@ -1,0 +1,16 @@
+{
+  "key": "global",
+  "data": [
+    {
+      "id": "refl-1782554356181",
+      "timestamp": 1782554356181,
+      "summary": "Reflection: [NO_LLM] No LLM available. Run within OpenCode for native LLM access. Plugin does NOT call external APIs directly.",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7ac1ae6ffewD4Qcf7Tt9lm6D"
+    }
+  ],
+  "updatedAt": "2026-06-27T09:59:16.181Z"
+}

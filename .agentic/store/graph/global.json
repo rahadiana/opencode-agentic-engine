@@ -1,0 +1,11 @@
+{
+  "key": "global",
+  "data": [
+    {
+      "source": "StateStore",
+      "target": "SecondBrain",
+      "relation": "powers"
+    }
+  ],
+  "updatedAt": "2026-06-27T09:59:11.798Z"
+}
