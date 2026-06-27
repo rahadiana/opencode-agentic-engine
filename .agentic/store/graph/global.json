@@ -5,7 +5,22 @@
       "source": "StateStore",
       "target": "SecondBrain",
       "relation": "powers"
+    },
+    {
+      "source": "agentic_memo",
+      "target": "SecondBrain",
+      "relation": "manages"
+    },
+    {
+      "source": "decision",
+      "target": "duplicates",
+      "relation": "cleanup_needed"
+    },
+    {
+      "source": "StateStore",
+      "target": "SQLite",
+      "relation": "primary_vs_secondary"
     }
   ],
-  "updatedAt": "2026-06-27T09:59:11.798Z"
+  "updatedAt": "2026-06-27T10:25:33.716Z"
 }

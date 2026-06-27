@@ -20,7 +20,1619 @@
       "newInfo": [],
       "actionItems": [],
       "sessionId": "ses_0f7ac1ae6ffewD4Qcf7Tt9lm6D"
+    },
+    {
+      "id": "refl-1782555531794",
+      "timestamp": 1782555531794,
+      "summary": "Reflection: Here's the reflection analysis:\n\n```json\n{\n  \"summary\": \"Current state is clean: no pending TODOs, two decisions that are independent and non-conflicting. The SQLite decision anchors future Second Brain persistence work to existing StateStore infrastructure. Live evaluation shows excellent error rec",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76963ceffek3eEhRZjv6MrQq"
+    },
+    {
+      "id": "refl-1782555532454",
+      "timestamp": 1782555532454,
+      "summary": "Reflection: Here's the reflection analysis:\n\n```json\n{\n  \"summary\": \"Current state is clean: no pending TODOs, two decisions that are independent and non-conflicting. The SQLite decision anchors future Second Brain persistence work to existing StateStore infrastructure. Live evaluation shows excellent error rec",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7692cf7ffe59tATgyN0pGwP2"
+    },
+    {
+      "id": "refl-1782555535305",
+      "timestamp": 1782555535305,
+      "summary": "Reflection: Reflection selesai — berikut ringkasannya:\n\n```json\n{\n  \"summary\": \"Current state is clean: no pending TODOs, two decisions that are independent and non-conflicting. The SQLite decision anchors future Second Brain persistence work to existing StateStore infrastructure.\",\n  \"conflicts\": [],\n  \"planUp",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7ac1ae6ffewD4Qcf7Tt9lm6D"
+    },
+    {
+      "id": "refl-1782555536343",
+      "timestamp": 1782555536343,
+      "summary": "Reflection: Reflection selesai — berikut ringkasannya:\n\n```json\n{\n  \"summary\": \"Current state is clean: no pending TODOs, two decisions that are independent and non-conflicting. The SQLite decision anchors future Second Brain persistence work to existing StateStore infrastructure.\",\n  \"conflicts\": [],\n  \"planUp",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76926a0ffeaD9GA13xirHfAY"
+    },
+    {
+      "id": "refl-1782555538841",
+      "timestamp": 1782555538841,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Current state is clean: no pending TODOs, two decisions that are independent and non-conflicting. The SQLite decision anchors future Second Brain persistence work to existing StateStore infrastructure, keeping infra zero and migration-free. Live evaluation shows excellent err",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7696b8fffepI45CTzdYvofNS"
+    },
+    {
+      "id": "refl-1782555542898",
+      "timestamp": 1782555542898,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Current state is clean: no pending TODOs, two decisions that are independent and non-conflicting. The SQLite decision anchors future Second Brain persistence work to existing StateStore infrastructure, keeping infra zero and migration-free. Live evaluation shows excellent err",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7690681ffe5KmvV18m9cwrR2"
+    },
+    {
+      "id": "refl-1782555546906",
+      "timestamp": 1782555546906,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Current state is clean: no pending TODOs, two decisions that are independent and non-conflicting. The SQLite decision anchors future Second Brain persistence work to existing StateStore infrastructure, keeping infra zero and migration-free. Live evaluation shows excellent err",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f768f979ffeU4kZmxHL4SmAPg"
+    },
+    {
+      "id": "refl-1782555548438",
+      "timestamp": 1782555548438,
+      "summary": "Reflection: ## 🔄 Reflection Analysis — ✅ Complete\n\n**Summary:** Current state is clean — no conflicting decisions, no pending TODOs, no plan-updating surprises.\n\n| Area | Status |\n|------|--------|\n| **Conflicting decisions** | None — both decisions are independent |\n| **Plan-affecting decisions** | None ident",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76b11f5ffeNVRMw6Jrkpqykw"
+    },
+    {
+      "id": "refl-1782555549669",
+      "timestamp": 1782555549669,
+      "summary": "Reflection: ## 🔄 Reflection Analysis — ✅ Complete\n\n**Summary:** Current state is clean — no conflicting decisions, no pending TODOs, no plan-updating surprises.\n\n| Area | Status |\n|------|--------|\n| **Conflicting decisions** | None — both decisions are independent |\n| **Plan-affecting decisions** | None ident",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f768ed70ffeGAP83oTKSb451P"
+    },
+    {
+      "id": "refl-1782555552015",
+      "timestamp": 1782555552015,
+      "summary": "Reflection: ## 🔄 Reflection Analysis — ✅ Complete\n\n**Summary:** Current state is clean — no conflicting decisions, no pending TODOs, no plan-updating surprises.\n\n| Area | Status |\n|------|--------|\n| **Conflicting decisions** | None — both decisions are independent |\n| **Plan-affecting decisions** | None ident",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f768e1d4ffeRi2105tdIDO7bC"
+    },
+    {
+      "id": "refl-1782555555002",
+      "timestamp": 1782555555002,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Current state is clean — no conflicting decisions, no pending TODOs, no plan-updating surprises.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [],\n  \"actionItems\": []\n}\n```\n\n**Ringkasan:**\n\n| Area | Status |\n|------|--------|\n| **Conflicting decisions** | Tidak ada —",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76ace51ffebo1bhSSPOL46Ty"
+    },
+    {
+      "id": "refl-1782555557570",
+      "timestamp": 1782555557570,
+      "summary": "Reflection: ## 🔄 Reflection Analysis — ✅ Complete\n\n### Summary\n\nClean state — no conflicting decisions, no pending TODOs, no surprises.\n\n---\n\n### 1. ⚡ Conflicting Decisions?\n\n| Decision | Analysis |\n|----------|----------|\n| Test decision (agentic_memo reflect in chat mode) | ✅ Independent — purely a test/veri",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76adb54ffeM4uLt3RikA2uHj"
+    },
+    {
+      "id": "refl-1782555562302",
+      "timestamp": 1782555562302,
+      "summary": "Reflection: ## ✅ Reflection Complete\n\n```json\n{\n  \"summary\": \"Current state is clean: no pending TODOs, two independent non-conflicting decisions. SQLite decision correctly anchors Second Brain persistence to existing StateStore — zero new infra, no migration. Chat mode agentRuntime fallback confirmed working (",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7697700ffeEi0WE4XPWmft7l"
+    },
+    {
+      "id": "refl-1782555563398",
+      "timestamp": 1782555563398,
+      "summary": "Reflection: Semua bersih. Ini ringkasan refleksinya:\n\n```json\n{\n  \"summary\": \"Clean state — no conflicts, no pending TODOs, no plan-affecting surprises. Dua keputusan independen sudah berjalan: (1) agentRuntime fallback untuk agentic_memo reflect di chat mode — tested & working, (2) SQLite via StateStore untuk ",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76ac24affevpFqRTQ3zIHjvn"
+    },
+    {
+      "id": "refl-1782555570715",
+      "timestamp": 1782555570715,
+      "summary": "Reflection: **Reflection Analysis Complete — Clean State**\n\n```json\n{\n  \"summary\": \"Clean state — no conflicts, no pending TODOs, no plan-affecting surprises. Dua keputusan independen sudah berjalan: (1) agentRuntime fallback untuk agentic_memo reflect di chat mode — confirmed working via commits. (2) SQLite vi",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7698995ffeZtCMxNYErf77y0"
+    },
+    {
+      "id": "refl-1782555617519",
+      "timestamp": 1782555617519,
+      "summary": "Reflection: The project is in a clean state:\n\n- **No pending TODOs**\n- **No active plan steps**\n- **Recent work**: SQLite via StateStore for Second Brain persistence, agentRuntime fallback for chat mode LLM calls\n- **Last commit**: `8972731` — fix(agentic_memo): add llmEngine.setSessionId in handler\n\nThe modifi",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76a05a0ffe6xoKrTz5C3Dal6"
+    },
+    {
+      "id": "refl-1782555698550",
+      "timestamp": 1782555698550,
+      "summary": "Reflection: State is clean. Only auto-generated runtime state files modified (`.agentic/store/*`, `.agentic/trace.jsonl`) — not code changes. No pending TODOs, no active plan steps, no uncommitted code.\n\n**Skipped**: Nothing. Project is stable, no work needed.\n\nLast 5 commits show: SQLite backend → agentRuntime",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f767ce37ffeE8qI6jzSbu2gRA"
+    },
+    {
+      "id": "refl-1782555750592",
+      "timestamp": 1782555750592,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Proyek dalam keadaan stabil. SQLite/StateStore dual-backend sudah clear: StateStore primary (JSON, key-value untuk decisions/TODOs/reflections/RAG/skills/episodes), SQLite secondary (hanya untuk agentic_db). Tidak ada konflik. agentRuntime fallback untuk agentic_memo reflect ",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f766dfd5ffePd3sY14iTglj6p"
+    },
+    {
+      "id": "refl-1782555757856",
+      "timestamp": 1782555757856,
+      "summary": "Reflection: Here's the reflection analysis:\n\n**1. Conflicting Decisions?** — No real conflicts. The StateStore primary + SQLite secondary split is clean and consistent. The only issue is **decision noise**: the same \"Test decision for reflection\" and \"Pilih SQLite sebagai database\" entries appear 3× and 2× resp",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f766d1b4ffeh0UXunYBEEWXOy"
+    },
+    {
+      "id": "refl-1782555769272",
+      "timestamp": 1782555769272,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Reflection on current state shows clean, consistent decisions with no conflicts. StateStore vs SQLite separation is well-defined and documented. The main action item is the pre-existing low-priority housekeeping task.\",\n  \"conflicts\": [\n    \"No conflicting decisions found. Th",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f766e811ffeMV7J25srOPIKjJ"
+    },
+    {
+      "id": "refl-1782555787462",
+      "timestamp": 1782555787462,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Proyek dalam keadaan konsisten. Dua keputusan besar (StateStore primary + SQLite secondary) sudah clear dan tidak konflik. Ada duplicate decision entries yang perlu dibersihkan (low priority housekeeping). Tidak ada blokade atau perubahan prioritas.\",\n  \"conflicts\": [\n    \"Ti",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f769a3e1ffelB4rhhk8PsZQTf"
+    },
+    {
+      "id": "refl-1782555788562",
+      "timestamp": 1782555788562,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76b38a5ffeDO54nNthGz0CWp"
+    },
+    {
+      "id": "refl-1782555789166",
+      "timestamp": 1782555789166,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Reflection shows no conflicts. SQLite decision is consistent with existing StateStore architecture. Test decision for agentic_memo reflect fallback is straightforward. Only pending action is the pre-existing low-priority cleanup task.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76a9da4ffel20tDGdYtvNnFy"
+    },
+    {
+      "id": "refl-1782555793330",
+      "timestamp": 1782555793330,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Proyek dalam kondisi stabil. Arsitektur StateStore + SQLite sudah final dengan keputusan yang konsisten (StateStore = primary key-value, SQLite = secondary structured queries). Tidak ada konflik keputusan yang perlu resolusi. Satu-satunya noise adalah 3x entry 'Test decision ",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7661316ffe5wlzOIrEKs4F5k"
+    },
+    {
+      "id": "refl-1782555793523",
+      "timestamp": 1782555793523,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76b2ec3ffeXk5vEevVnwe3Gn"
+    },
+    {
+      "id": "refl-1782555795036",
+      "timestamp": 1782555795036,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Proyek dalam kondisi stabil. Arsitektur StateStore + SQLite sudah final dengan keputusan yang konsisten (StateStore = primary key-value, SQLite = secondary structured queries). Tidak ada konflik keputusan yang perlu resolusi. Satu-satunya noise adalah 3x entry 'Test decision ",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f765b331ffe0PVdEOQeIaz8dY"
+    },
+    {
+      "id": "refl-1782555795618",
+      "timestamp": 1782555795618,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Semua keputusan konsisten: StateStore sebagai primary persistence (JSON), SQLite sebagai secondary untuk agentic_db tool. Tidak ada konflik. Satu pending TODO low-priority: bersihin duplicate reflections.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [],\n  \"actionIte",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7660712ffe7Aj5UM0kj7N5F4"
+    },
+    {
+      "id": "refl-1782555795961",
+      "timestamp": 1782555795961,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76b1ca5ffeSufWRQ6tlb9MzI"
+    },
+    {
+      "id": "refl-1782555796141",
+      "timestamp": 1782555796141,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Semua keputusan konsisten: StateStore sebagai primary persistence (JSON), SQLite sebagai secondary untuk agentic_db tool. Tidak ada konflik. Satu pending TODO low-priority: bersihin duplicate reflections.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [],\n  \"actionIte",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7665736ffe0tpZH7FUzR7YuW"
+    },
+    {
+      "id": "refl-1782555797543",
+      "timestamp": 1782555797543,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Semua keputusan konsisten: StateStore sebagai primary persistence (JSON), SQLite sebagai secondary untuk agentic_db tool. Tidak ada konflik. Satu pending TODO low-priority: bersihin duplicate reflections.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [],\n  \"actionIte",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7655cfeffe1fuN2aE0LBss7L"
+    },
+    {
+      "id": "refl-1782555798914",
+      "timestamp": 1782555798914,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Semua keputusan konsisten: StateStore sebagai primary persistence (JSON), SQLite sebagai secondary untuk agentic_db tool. Tidak ada konflik. Satu pending TODO low-priority: bersihin duplicate reflections.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [],\n  \"actionIte",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76558b8ffeCLjBYNI11AdcZL"
+    },
+    {
+      "id": "refl-1782555799399",
+      "timestamp": 1782555799399,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Semua keputusan konsisten: StateStore sebagai primary persistence (JSON), SQLite sebagai secondary untuk agentic_db tool. Tidak ada konflik. Satu pending TODO low-priority: bersihin duplicate reflections.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [],\n  \"actionIte",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76558d7ffeYCIWKsVcjn4FhO"
+    },
+    {
+      "id": "refl-1782555802515",
+      "timestamp": 1782555802515,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Semua keputusan konsisten: StateStore sebagai primary persistence (JSON), SQLite sebagai secondary untuk agentic_db tool. Tidak ada konflik. Satu pending TODO low-priority: bersihin duplicate reflections.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [],\n  \"actionIte",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7654d0fffe7rIjDrTVud1Qqt"
+    },
+    {
+      "id": "refl-1782555802811",
+      "timestamp": 1782555802811,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Semua keputusan konsisten: StateStore sebagai primary persistence (JSON), SQLite sebagai secondary untuk agentic_db tool. Tidak ada konflik. Satu pending TODO low-priority: bersihin duplicate reflections.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [],\n  \"actionIte",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f765886dffeMls5lLpLFmB6CS"
+    },
+    {
+      "id": "refl-1782555803282",
+      "timestamp": 1782555803282,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Semua keputusan konsisten: StateStore sebagai primary persistence (JSON), SQLite sebagai secondary untuk agentic_db tool. Tidak ada konflik. Satu pending TODO low-priority: bersihin duplicate reflections.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [],\n  \"actionIte",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7654d99ffevci7EM3BNx62kp"
+    },
+    {
+      "id": "refl-1782555803824",
+      "timestamp": 1782555803824,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Semua keputusan konsisten: StateStore sebagai primary persistence (JSON), SQLite sebagai secondary untuk agentic_db tool. Tidak ada konflik. Satu pending TODO low-priority: bersihin duplicate reflections.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [],\n  \"actionIte",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7654343ffeWqAo4qv7A81CK4"
+    },
+    {
+      "id": "refl-1782555803896",
+      "timestamp": 1782555803896,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Semua keputusan konsisten: StateStore sebagai primary persistence (JSON), SQLite sebagai secondary untuk agentic_db tool. Tidak ada konflik. Satu pending TODO low-priority: bersihin duplicate reflections.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [],\n  \"actionIte",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7654cefffe0zbDVg5c0cELh0"
+    },
+    {
+      "id": "refl-1782555805076",
+      "timestamp": 1782555805076,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Semua keputusan konsisten: StateStore sebagai primary persistence (JSON), SQLite sebagai secondary untuk agentic_db tool. Tidak ada konflik. Satu pending TODO low-priority: bersihin duplicate reflections.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [],\n  \"actionIte",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76583fcffeSsj6MLp8eeZOar"
+    },
+    {
+      "id": "refl-1782555805614",
+      "timestamp": 1782555805614,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Semua keputusan konsisten: StateStore sebagai primary persistence (JSON), SQLite sebagai secondary untuk agentic_db tool. Tidak ada konflik. Satu pending TODO low-priority: bersihin duplicate reflections.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [],\n  \"actionIte",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76537daffeyLMksHz4PHiTpM"
+    },
+    {
+      "id": "refl-1782555806496",
+      "timestamp": 1782555806496,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Semua keputusan konsisten: StateStore sebagai primary persistence (JSON), SQLite sebagai secondary untuk agentic_db tool. Tidak ada konflik. Satu pending TODO low-priority: bersihin duplicate reflections.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [],\n  \"actionIte",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76536c8ffeDkJkKyY11aBoDj"
+    },
+    {
+      "id": "refl-1782555806591",
+      "timestamp": 1782555806591,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Semua keputusan konsisten: StateStore sebagai primary persistence (JSON), SQLite sebagai secondary untuk agentic_db tool. Tidak ada konflik. Satu pending TODO low-priority: bersihin duplicate reflections.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [],\n  \"actionIte",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76537a0ffejH3DaqLnS75JJQ"
+    },
+    {
+      "id": "refl-1782555809619",
+      "timestamp": 1782555809619,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Semua keputusan konsisten: StateStore sebagai primary persistence (JSON), SQLite sebagai secondary untuk agentic_db tool. Tidak ada konflik. Satu pending TODO low-priority: bersihin duplicate reflections.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [],\n  \"actionIte",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7652a25ffe1UGaSNtJvj8Hkf"
+    },
+    {
+      "id": "refl-1782555817796",
+      "timestamp": 1782555817796,
+      "summary": "Reflection: **Reflection Result:**\n\n| Aspect | Finding |\n|--------|---------|\n| ✅ **Conflicts** | None — both decisions are independent and non-overlapping |\n| ✅ **Plan Impact** | SQLite decision reinforces using StateStore (already exists) rather than adding new storage infra — simplifies the Second Brain appr",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f769cf19ffei331mddy7F7kQI"
+    },
+    {
+      "id": "refl-1782555821908",
+      "timestamp": 1782555821908,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76ab6b6ffeacTqiKl29u8Zwn"
+    },
+    {
+      "id": "refl-1782555822749",
+      "timestamp": 1782555822749,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Semua keputusan konsisten: StateStore sebagai primary persistence (JSON), SQLite sebagai secondary untuk agentic_db tool. Tidak ada konflik. Satu pending TODO low-priority: bersihin duplicate reflections.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [],\n  \"actionIte",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76506b1ffeMFcV0U6FA2brmv"
+    },
+    {
+      "id": "refl-1782555825716",
+      "timestamp": 1782555825716,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76aac8effeQs24hj64jAGYP0"
+    },
+    {
+      "id": "refl-1782555828569",
+      "timestamp": 1782555828569,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Semua keputusan konsisten: StateStore sebagai primary persistence (JSON), SQLite sebagai secondary untuk agentic_db tool. Tidak ada konflik. Satu pending TODO low-priority: bersihin duplicate reflections.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [],\n  \"actionIte",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7659ccaffek1N72YPMxK38r9"
+    },
+    {
+      "id": "refl-1782555832058",
+      "timestamp": 1782555832058,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76a91d3ffem9zrTRkjH1yCPI"
+    },
+    {
+      "id": "refl-1782555834502",
+      "timestamp": 1782555834502,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76a8572ffeS4I5LwHo48yWF1"
+    },
+    {
+      "id": "refl-1782555837063",
+      "timestamp": 1782555837063,
+      "summary": "Reflection: Berdasarkan analisis terhadap state terkini:\n\n**Ringkasan:** Tidak ada konflik keputusan yang sebenarnya. Dua keputusan arsitektur (StateStore primary, SQLite secondary) sudah divalidasi berulang kali dan tetap konsisten. Duplikasi entries adalah test artifact dari pengujian fitur reflection.\n\n**Dup",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f765e748ffeCnCD3U0onFXpcy"
+    },
+    {
+      "id": "refl-1782555862216",
+      "timestamp": 1782555862216,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76a1c1effesg1LtMecWwGiSe"
+    },
+    {
+      "id": "refl-1782555864679",
+      "timestamp": 1782555864679,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76a0fdcffeY5XNUrjF40AcZ3"
+    },
+    {
+      "id": "refl-1782555865386",
+      "timestamp": 1782555865386,
+      "summary": "Reflection: No conflicts found. The only pending item is the low-priority duplicate reflection cleanup — everything else is consistent.\n\n**Summary:**\n\n| Area | Status |\n|------|--------|\n| **Conflicts** | None — StateStore (JSON) primary + SQLite secondary is clean separation |\n| **Plan updates** | None needed ",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7657d30ffea2jRzi56AiR2FO"
+    },
+    {
+      "id": "refl-1782555869858",
+      "timestamp": 1782555869858,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f769fb54ffeIcObyQznVEQFg4"
+    },
+    {
+      "id": "refl-1782555872742",
+      "timestamp": 1782555872742,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"All architectural decisions are consistent: StateStore (JSON) as primary persistence with SQLite as secondary backend for structured queries. No conflicts across the stack. Main actionable item is the known duplicate reflection entries that need cleanup.\",\n  \"conflicts\": [],\n",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f764ef9effe99zR258261MuhV"
+    },
+    {
+      "id": "refl-1782555873352",
+      "timestamp": 1782555873352,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f769f139ffelsdRfgHW68Yrvi"
+    },
+    {
+      "id": "refl-1782555874944",
+      "timestamp": 1782555874944,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"All architectural decisions are consistent: StateStore (JSON) as primary persistence with SQLite as secondary backend for structured queries. No conflicts across the stack. Main actionable item is the known duplicate reflection entries that need cleanup.\",\n  \"conflicts\": [],\n",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f764705fffe2CKGAieLr0wf5T"
+    },
+    {
+      "id": "refl-1782555875531",
+      "timestamp": 1782555875531,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"All architectural decisions are consistent: StateStore (JSON) as primary persistence with SQLite as secondary backend for structured queries. No conflicts across the stack. Main actionable item is the known duplicate reflection entries that need cleanup.\",\n  \"conflicts\": [],\n",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7647116ffeNIfuPxainktW5e"
+    },
+    {
+      "id": "refl-1782555876150",
+      "timestamp": 1782555876150,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f769e432ffe2Est2AbrinDwa4"
+    },
+    {
+      "id": "refl-1782555877377",
+      "timestamp": 1782555877377,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76a7b7effeZNUzTxU6n0lKJi"
+    },
+    {
+      "id": "refl-1782555878445",
+      "timestamp": 1782555878445,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"All architectural decisions are consistent: StateStore (JSON) as primary persistence with SQLite as secondary backend for structured queries. No conflicts across the stack. Main actionable item is the known duplicate reflection entries that need cleanup.\",\n  \"conflicts\": [],\n",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7646295ffeqOdWfD3QCsjhF8"
+    },
+    {
+      "id": "refl-1782555878578",
+      "timestamp": 1782555878578,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f769d893ffeSHkk2N7Ui83JMq"
+    },
+    {
+      "id": "refl-1782555879261",
+      "timestamp": 1782555879261,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"All architectural decisions are consistent: StateStore (JSON) as primary persistence with SQLite as secondary backend for structured queries. No conflicts across the stack. Main actionable item is the known duplicate reflection entries that need cleanup.\",\n  \"conflicts\": [],\n",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7646372ffeoIDTS3CbnvTULO"
+    },
+    {
+      "id": "refl-1782555882295",
+      "timestamp": 1782555882295,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Reflection analysis complete. All 7 recent decisions are consistent — StateStore (JSON, primary) and SQLite (agentic_db, secondary) have clean separation, no layering confusion. 2 decisions are duplicates (SQLite decision recorded twice, test reflection decision recorded twic",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f766f3d8ffe72m7lQLRX6GAKU"
+    },
+    {
+      "id": "refl-1782555883165",
+      "timestamp": 1782555883165,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"All architectural decisions are consistent: StateStore (JSON) as primary persistence with SQLite as secondary backend for structured queries. No conflicts across the stack. Main actionable item is the known duplicate reflection entries that need cleanup.\",\n  \"conflicts\": [],\n",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76440dfffeZsOjzKKypaKO3t"
+    },
+    {
+      "id": "refl-1782555884088",
+      "timestamp": 1782555884088,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Reflection analysis: all decisions consistent, no conflicts\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [],\n  \"actionItems\": [\n    \"Bersihin duplicate reflections — low priority, bisa dilakukan kapan saja\"\n  ]\n}\n```",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f765a12affetuMADfjB64gcAz"
+    },
+    {
+      "id": "refl-1782555885088",
+      "timestamp": 1782555885088,
+      "summary": "Reflection: **Reflection Analysis Result:**\n\n```json\n{\n  \"summary\": \"Semua keputusan konsisten — StateStore (JSON) sebagai primary persistence, SQLite sebagai secondary backend untuk agentic_db tool. Tidak ada konflik arsitektural. TODO low-priority untuk bersihin duplicate reflections masih pending dan terkonf",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f768c8c7ffeLv1Q5ocTdzpbIc"
+    },
+    {
+      "id": "refl-1782555885496",
+      "timestamp": 1782555885496,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"All architectural decisions are consistent: StateStore (JSON) as primary persistence with SQLite as secondary backend for structured queries. No conflicts across the stack. Main actionable item is the known duplicate reflection entries that need cleanup.\",\n  \"conflicts\": [],\n",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7643deaffewCoGZy21Tlm7L4"
+    },
+    {
+      "id": "refl-1782555886817",
+      "timestamp": 1782555886817,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"All architectural decisions are consistent: StateStore (JSON) as primary persistence with SQLite as secondary backend for structured queries. No conflicts across the stack. Main actionable item is the known duplicate reflection entries that need cleanup.\",\n  \"conflicts\": [],\n",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7642b1dffeq0VuFjJu8S2fdF"
+    },
+    {
+      "id": "refl-1782555888228",
+      "timestamp": 1782555888228,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"All architectural decisions are consistent: StateStore (JSON) as primary persistence with SQLite as secondary backend for structured queries. No conflicts across the stack. Main actionable item is the known duplicate reflection entries that need cleanup.\",\n  \"conflicts\": [],\n",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7642151ffeTQaCMCJPlNhn2v"
+    },
+    {
+      "id": "refl-1782555889480",
+      "timestamp": 1782555889480,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"All architectural decisions are consistent: StateStore (JSON) as primary persistence with SQLite as secondary backend for structured queries. No conflicts across the stack. Main actionable item is the known duplicate reflection entries that need cleanup.\",\n  \"conflicts\": [],\n",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7641aedffeKrPaGjyAp4b1Rk"
+    },
+    {
+      "id": "refl-1782555889973",
+      "timestamp": 1782555889973,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"All architectural decisions are consistent: StateStore (JSON) as primary persistence with SQLite as secondary backend for structured queries. No conflicts across the stack. Main actionable item is the known duplicate reflection entries that need cleanup.\",\n  \"conflicts\": [],\n",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7640b2affeam72WMxJ85hPc1"
+    },
+    {
+      "id": "refl-1782555890002",
+      "timestamp": 1782555890002,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"All architectural decisions are consistent: StateStore (JSON) as primary persistence with SQLite as secondary backend for structured queries. No conflicts across the stack. Main actionable item is the known duplicate reflection entries that need cleanup.\",\n  \"conflicts\": [],\n",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f763c505ffeh01DaRRYC2ldku"
+    },
+    {
+      "id": "refl-1782555890023",
+      "timestamp": 1782555890023,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f769b0d7ffeBTXZwoJuUAtju8"
+    },
+    {
+      "id": "refl-1782555890067",
+      "timestamp": 1782555890067,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"All architectural decisions are consistent: StateStore (JSON) as primary persistence with SQLite as secondary backend for structured queries. No conflicts across the stack. Main actionable item is the known duplicate reflection entries that need cleanup.\",\n  \"conflicts\": [],\n",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7640eb7ffekQCWBN865vlE4N"
+    },
+    {
+      "id": "refl-1782555890781",
+      "timestamp": 1782555890781,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"All architectural decisions are consistent: StateStore (JSON) as primary persistence with SQLite as secondary backend for structured queries. No conflicts across the stack. Main actionable item is the known duplicate reflection entries that need cleanup.\",\n  \"conflicts\": [],\n",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f763faf6ffef6yGrN4wYt4OkR"
+    },
+    {
+      "id": "refl-1782555893438",
+      "timestamp": 1782555893438,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Project state is clean — all decisions consistent. StateStore (JSON) primary + SQLite secondary architecture is stable. Duplicate decision entries exist but don't cause conflicts. One high-priority TODO remains (test TODO feature), one low-priority (cleanup duplicates).\",\n  \"",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76702ecffeug4QxL5Ea31auc"
+    },
+    {
+      "id": "refl-1782555897319",
+      "timestamp": 1782555897319,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Reflection analysis confirms all decisions are consistent — StateStore (JSON) as primary persistence + SQLite via agentic_db as secondary is a clean separation with no conflicts. The agentRuntime fallback for chat mode is stable. However, there are multiple duplicate decision",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f764e067ffecwR32JM4VqpRKc"
+    },
+    {
+      "id": "refl-1782555897363",
+      "timestamp": 1782555897363,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Reflection analysis confirms all decisions are consistent — StateStore (JSON) as primary persistence + SQLite via agentic_db as secondary is a clean separation with no conflicts. The agentRuntime fallback for chat mode is stable. However, there are multiple duplicate decision",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f763d778ffeCAdVEirWg2ROo7"
+    },
+    {
+      "id": "refl-1782555898553",
+      "timestamp": 1782555898553,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Reflection analysis confirms all decisions are consistent — StateStore (JSON) as primary persistence + SQLite via agentic_db as secondary is a clean separation with no conflicts. The agentRuntime fallback for chat mode is stable. However, there are multiple duplicate decision",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f763d5d2ffelcayqZ1dCu1A4C"
+    },
+    {
+      "id": "refl-1782555899681",
+      "timestamp": 1782555899681,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Reflection analysis confirms all decisions are consistent — StateStore (JSON) as primary persistence + SQLite via agentic_db as secondary is a clean separation with no conflicts. The agentRuntime fallback for chat mode is stable. However, there are multiple duplicate decision",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f763d591ffezJj1Oxg1GvVBHs"
+    },
+    {
+      "id": "refl-1782555901489",
+      "timestamp": 1782555901489,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Reflection analysis confirms all decisions are consistent — StateStore (JSON) as primary persistence + SQLite via agentic_db as secondary is a clean separation with no conflicts. The agentRuntime fallback for chat mode is stable. However, there are multiple duplicate decision",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f763ce8cffev4jW6QKFaKVW9s"
+    },
+    {
+      "id": "refl-1782555902413",
+      "timestamp": 1782555902413,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Reflection analysis confirms all decisions are consistent — StateStore (JSON) as primary persistence + SQLite via agentic_db as secondary is a clean separation with no conflicts. The agentRuntime fallback for chat mode is stable. However, there are multiple duplicate decision",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f763cc4bffecrDQwXemnTya4P"
+    },
+    {
+      "id": "refl-1782555903498",
+      "timestamp": 1782555903498,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Reflection analysis confirms all decisions are consistent — StateStore (JSON) as primary persistence + SQLite via agentic_db as secondary is a clean separation with no conflicts. The agentRuntime fallback for chat mode is stable. However, there are multiple duplicate decision",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f764db7affeNSi5kpdK51B4Ox"
+    },
+    {
+      "id": "refl-1782555908799",
+      "timestamp": 1782555908799,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Reflection analysis confirms all decisions are consistent — StateStore (JSON) as primary persistence + SQLite via agentic_db as secondary is a clean separation with no conflicts. The agentRuntime fallback for chat mode is stable. However, there are multiple duplicate decision",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76378baffeozul96EPPm7zL1"
+    },
+    {
+      "id": "refl-1782555911920",
+      "timestamp": 1782555911920,
+      "summary": "Reflection: ```json\n{\"summary\":\"Reflection analysis of recent decisions: All 7 decisions are consistent — StateStore (JSON) is the primary persistence layer, SQLite is a secondary backend via the agentic_db tool. No conflicting decisions found. The only notable observation is duplicate decision entries: decisio",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f766477affeLDyY2G66FkvK7b"
+    },
+    {
+      "id": "refl-1782555912055",
+      "timestamp": 1782555912055,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Reflection analysis confirms all decisions are consistent — StateStore (JSON) as primary persistence + SQLite via agentic_db as secondary is a clean separation with no conflicts. The agentRuntime fallback for chat mode is stable. However, there are multiple duplicate decision",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f763ba77ffeDEoGPAV51gaeiG"
+    },
+    {
+      "id": "refl-1782555912797",
+      "timestamp": 1782555912797,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Reflection analysis: all decisions consistent, no conflicts across 5 decisions and 1 pending TODO. StateStore primary + SQLite secondary architecture is clean and stable. Only concern is duplicate reflection entries appearing in the decision log, which aligns with the existin",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76656e5ffeAq7CtRJmP8JkNu"
+    },
+    {
+      "id": "refl-1782555915117",
+      "timestamp": 1782555915117,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Decisions are consistent: StateStore (JSON) is primary persistence, SQLite is secondary backend via agentic_db tool. Multiple 'Test decision for reflection' entries are test artifacts from agentRuntime fallback testing. The pending TODO for duplicate cleanup remains valid but",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7663862ffeFkaMlWXozUCDOH"
+    },
+    {
+      "id": "refl-1782555916205",
+      "timestamp": 1782555916205,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Semua architectural decisions konsisten. StateStore (JSON) = primary persistence, SQLite = secondary untuk structured queries via agentic_db. Clean separation, zero overlap, no conflicts.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [\n    \"Recent decisions list cont",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f765f110ffeWD577bLHrmE4FA"
+    },
+    {
+      "id": "refl-1782555918780",
+      "timestamp": 1782555918780,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7693d21fferEtQhrq0y7HnKw"
+    },
+    {
+      "id": "refl-1782555919907",
+      "timestamp": 1782555919907,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Reflection analysis confirms all decisions are consistent — StateStore (JSON) as primary persistence + SQLite via agentic_db as secondary is a clean separation with no conflicts. The agentRuntime fallback for chat mode is stable. However, there are multiple duplicate decision",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f763a85affeSt2dE8KxtO5XiU"
+    },
+    {
+      "id": "refl-1782555921762",
+      "timestamp": 1782555921762,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76932b6ffepogQ4xb2IxdBYN"
+    },
+    {
+      "id": "refl-1782555928308",
+      "timestamp": 1782555928308,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"All architectural decisions are consistent: StateStore (JSON) as primary persistence with SQLite as secondary backend for structured queries. No conflicts across the stack. Main actionable item is the known duplicate reflection entries that need cleanup.\",\n  \"conflicts\": [],\n",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f764c13effeCyGary0zy4aRbh"
+    },
+    {
+      "id": "refl-1782555941644",
+      "timestamp": 1782555941644,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"All decisions remain consistent and conflict-free. StateStore (JSON) primary + SQLite secondary persistence separation is clean and stable. The only open item is low-priority cleanup of duplicate reflections.\",\n  \"conflicts\": [],\n  \"planUpdates\": [],\n  \"newInfo\": [\n    \"Dupli",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76803bfffe8EH3jYpQ3liRSl"
+    },
+    {
+      "id": "refl-1782555945018",
+      "timestamp": 1782555945018,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f768d7b9ffeAGZdy3L3Caeu4Z"
+    },
+    {
+      "id": "refl-1782555950942",
+      "timestamp": 1782555950942,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f768cbbaffeXq9qNh53lua1hA"
+    },
+    {
+      "id": "refl-1782555955170",
+      "timestamp": 1782555955170,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f768b107ffe0DY6vOeat4O6kc"
+    },
+    {
+      "id": "refl-1782555957873",
+      "timestamp": 1782555957873,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f768a688ffeEEAnSn23PIVjKM"
+    },
+    {
+      "id": "refl-1782555960317",
+      "timestamp": 1782555960317,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Reflection analysis confirms all decisions are consistent across the session. StateStore (JSON) as primary persistence and SQLite via agentic_db as secondary is a clean separation with zero conflicts. agentRuntime fallback for chat mode remains stable.\",\n  \"conflicts\": [],\n  ",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76599d6ffeKWqbvj0oFJ3Jkx"
+    },
+    {
+      "id": "refl-1782555961270",
+      "timestamp": 1782555961270,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"Semua decisions konsisten: StateStore (JSON) sebagai primary persistence, SQLite sebagai secondary backend via agentic_db. Tidak ada konflik. agentRuntime fallback untuk chat mode stabil. Satu TODO pending: bersihin duplicate reflections (low priority).\",\n  \"conflicts\": [],\n ",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f765cff9ffejIIRfv0nKYTqFS"
+    },
+    {
+      "id": "refl-1782555963090",
+      "timestamp": 1782555963090,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f768b0a1ffe6nW1lK2yCesgTl"
+    },
+    {
+      "id": "refl-1782555964030",
+      "timestamp": 1782555964030,
+      "summary": "Semua konsisten dan stabil. StateStore primary + SQLite secondary sudah clean separation, agentRuntime fallback untuk chat mode confirmed working. Satu-satunya pending item: low-priority cleanup duplicate reflections — bisa dikerjakan kapan saja tanpa urgency. Tidak ada konflik, tidak ada perubahan arah, tidak ada prioritas baru.",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [
+        "[low] Bersihin duplicate reflections — eksekusi via agentic_memo jika ada duplikasi di StateStore"
+      ],
+      "sessionId": "ses_0f76639ebffeRygiVaScXTlBmE"
+    },
+    {
+      "id": "refl-1782555966263",
+      "timestamp": 1782555966263,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7688539ffex1sju25uEZGkVe"
+    },
+    {
+      "id": "refl-1782555970816",
+      "timestamp": 1782555970816,
+      "summary": "Reflection: ```json\n{\n  \"summary\": \"All decisions are consistent and stable. StateStore (JSON) remains primary persistence with SQLite as secondary via agentic_db tool — clean separation with no conflicts. agentRuntime fallback for chat mode is working. The only recurring item is the low-priority cleanup of dup",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f763d591ffezJj1Oxg1GvVBHs"
+    },
+    {
+      "id": "refl-1782555974303",
+      "timestamp": 1782555974303,
+      "summary": "Reflection: ## Reflection Analysis\n\n**Summary:** All decisions remain consistent. The architecture is clean: StateStore (JSON) = primary persistence for fast key-value operations (decisions, TODOs, RAG, skills, episodes), SQLite = secondary backend scoped to `agentic_db` tool for structured queries. No conflict",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f767681bffe4YCL0Tyi9MyNt6"
+    },
+    {
+      "id": "refl-1782555976350",
+      "timestamp": 1782555976350,
+      "summary": "Reflection: ✅ **Reflection complete.** Here's the analysis:\n\n| Aspect | Verdict |\n|---|---|\n| **Conflicting decisions?** | ✅ None — StateStore (JSON) primary + SQLite secondary = clean separation |\n| **Decisions affecting plans?** | ✅ None — all decisions already implemented and stable |\n| **New info changing p",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f765e023ffeItiOh7my38LTzq"
+    },
+    {
+      "id": "refl-1782555985891",
+      "timestamp": 1782555985891,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76926a0ffeaD9GA13xirHfAY"
+    },
+    {
+      "id": "refl-1782555990560",
+      "timestamp": 1782555990560,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f768b4ceffep51YM0VXWVOCK6"
+    },
+    {
+      "id": "refl-1782556015471",
+      "timestamp": 1782556015471,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f767fa3bffeCcCrvPx43P9c3F"
+    },
+    {
+      "id": "refl-1782556027816",
+      "timestamp": 1782556027816,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f767b4adffeXNtNDgzCLd1L6N"
+    },
+    {
+      "id": "refl-1782556057698",
+      "timestamp": 1782556057698,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7675d5dffeIEZHI6qnTBZgq2"
+    },
+    {
+      "id": "refl-1782556062270",
+      "timestamp": 1782556062270,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7678814ffeIi1mJRnaopomS5"
+    },
+    {
+      "id": "refl-1782556072527",
+      "timestamp": 1782556072527,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76727dfffeJIs2VQD4fefNiN"
+    },
+    {
+      "id": "refl-1782556078368",
+      "timestamp": 1782556078368,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76713a8ffeypww5Fif1WHYj6"
+    },
+    {
+      "id": "refl-1782556081790",
+      "timestamp": 1782556081790,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f767517fffe2OWVgfWRi14cvI"
+    },
+    {
+      "id": "refl-1782556089602",
+      "timestamp": 1782556089602,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f767851effevD6snFJNysmBVX"
+    },
+    {
+      "id": "refl-1782556089751",
+      "timestamp": 1782556089751,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f766f6caffel2O4NwNM2Wyu0I"
+    },
+    {
+      "id": "refl-1782556097228",
+      "timestamp": 1782556097228,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f766db42ffeZG3U8M0TJsC3eB"
+    },
+    {
+      "id": "refl-1782556099703",
+      "timestamp": 1782556099703,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f766d966ffeHwcOHFZGmdSBbF"
+    },
+    {
+      "id": "refl-1782556105952",
+      "timestamp": 1782556105952,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f766b058ffecAsAnBaH76apmS"
+    },
+    {
+      "id": "refl-1782556113882",
+      "timestamp": 1782556113882,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7669700ffeHJuBsPs9F2Ubjr"
+    },
+    {
+      "id": "refl-1782556113977",
+      "timestamp": 1782556113977,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7669637ffeXhUhl9S5JyQz2p"
+    },
+    {
+      "id": "refl-1782556123383",
+      "timestamp": 1782556123383,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7666599ffekzJ1Rxp92eIZnz"
+    },
+    {
+      "id": "refl-1782556128192",
+      "timestamp": 1782556128192,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7665bbbffefZczEBugJkorZz"
+    },
+    {
+      "id": "refl-1782556130950",
+      "timestamp": 1782556130950,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7664565ffeWpPWQTaajWzDnn"
+    },
+    {
+      "id": "refl-1782556136356",
+      "timestamp": 1782556136356,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76637a8ffeTCtLHrsaaMc4B3"
+    },
+    {
+      "id": "refl-1782556149576",
+      "timestamp": 1782556149576,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f766790affeKA5UkFR1IovBZ6"
+    },
+    {
+      "id": "refl-1782556150010",
+      "timestamp": 1782556150010,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f765fff7ffeE68zFVJ7ykNvju"
+    },
+    {
+      "id": "refl-1782556150067",
+      "timestamp": 1782556150067,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f765f904ffeVtV3f6DRKzmGz9"
+    },
+    {
+      "id": "refl-1782556151898",
+      "timestamp": 1782556151898,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f765f66dffejdB0TmV8eYZTez"
+    },
+    {
+      "id": "refl-1782556152442",
+      "timestamp": 1782556152442,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f765f531ffeUhWwPePJapccRV"
+    },
+    {
+      "id": "refl-1782556161657",
+      "timestamp": 1782556161657,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7662ee0ffe7zATtj99rlZJBS"
+    },
+    {
+      "id": "refl-1782556182900",
+      "timestamp": 1782556182900,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7658f4bffeySDAwWqIce7iwK"
+    },
+    {
+      "id": "refl-1782556192620",
+      "timestamp": 1782556192620,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7634d06ffeVS5jg7HEHlhqCt"
+    },
+    {
+      "id": "refl-1782556192745",
+      "timestamp": 1782556192745,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7635553ffe0HDA1dyIZwFsBZ"
+    },
+    {
+      "id": "refl-1782556192831",
+      "timestamp": 1782556192831,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f76357beffeek3hV0FLhBA1qq"
+    },
+    {
+      "id": "refl-1782556192897",
+      "timestamp": 1782556192897,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7657caeffebe4LmOX43QN3bi"
+    },
+    {
+      "id": "refl-1782556192963",
+      "timestamp": 1782556192963,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f765e3ceffeMfjwQM4weNuUn6"
+    },
+    {
+      "id": "refl-1782556193015",
+      "timestamp": 1782556193015,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7632a71ffe9ce93XTg0o5oZf"
+    },
+    {
+      "id": "refl-1782556193069",
+      "timestamp": 1782556193069,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f765a35affeCDhGPaws8CIT30"
+    },
+    {
+      "id": "refl-1782556193143",
+      "timestamp": 1782556193143,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f765aa76ffe1r9a8mTqLhfBSc"
+    },
+    {
+      "id": "refl-1782556193146",
+      "timestamp": 1782556193146,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f765aaabffe2iKhrH0X1RAtPi"
+    },
+    {
+      "id": "refl-1782556193400",
+      "timestamp": 1782556193400,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7646fe0ffecK1xS1IORbmh0W"
+    },
+    {
+      "id": "refl-1782556193502",
+      "timestamp": 1782556193502,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f764204cffe0EePjELVFWaoir"
+    },
+    {
+      "id": "refl-1782556193580",
+      "timestamp": 1782556193580,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7649a8cffeiFsh3qT2ZzdEhg"
+    },
+    {
+      "id": "refl-1782556193678",
+      "timestamp": 1782556193678,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f764a40effesWzwWfN00vFNqW"
+    },
+    {
+      "id": "refl-1782556193728",
+      "timestamp": 1782556193728,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7632d61ffeULb15tFAcxplog"
+    },
+    {
+      "id": "refl-1782556193870",
+      "timestamp": 1782556193870,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f762bf3effemhEpptGzNI5Yyt"
+    },
+    {
+      "id": "refl-1782556193951",
+      "timestamp": 1782556193951,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f762cf39ffeHZT975Yow0Q2VB"
+    },
+    {
+      "id": "refl-1782556194034",
+      "timestamp": 1782556194034,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f762dc6cffeb4NhDzQ6M0rHf9"
+    },
+    {
+      "id": "refl-1782556194111",
+      "timestamp": 1782556194111,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f762cea6ffeUy7yYg8aKsjP6K"
+    },
+    {
+      "id": "refl-1782556194197",
+      "timestamp": 1782556194197,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f762ed02ffeMA9zzJuxT7jiwo"
+    },
+    {
+      "id": "refl-1782556194271",
+      "timestamp": 1782556194271,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f762e66effeiGzEFId1swRO4m"
+    },
+    {
+      "id": "refl-1782556194348",
+      "timestamp": 1782556194348,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f762e7aeffeY71ZYd65BzOdIg"
+    },
+    {
+      "id": "refl-1782556194423",
+      "timestamp": 1782556194423,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7630416ffe5UMuronDhzVgnY"
+    },
+    {
+      "id": "refl-1782556194501",
+      "timestamp": 1782556194501,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7632863ffe7XrZNCM2cwQ02r"
+    },
+    {
+      "id": "refl-1782556194619",
+      "timestamp": 1782556194619,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7648205ffe1xqGZ32G7yn85m"
+    },
+    {
+      "id": "refl-1782556194697",
+      "timestamp": 1782556194697,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7630b81ffep49Cgx8vMuflDJ"
+    },
+    {
+      "id": "refl-1782556194772",
+      "timestamp": 1782556194772,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7630f6dffe32ozg2CNKB7WEH"
+    },
+    {
+      "id": "refl-1782556194840",
+      "timestamp": 1782556194840,
+      "summary": "No significant findings",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "sessionId": "ses_0f7652ca2ffe5UTOSwIzpLEtTP"
     }
   ],
-  "updatedAt": "2026-06-27T10:14:29.841Z"
+  "updatedAt": "2026-06-27T10:29:54.840Z"
 }

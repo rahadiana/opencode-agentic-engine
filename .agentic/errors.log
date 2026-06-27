@@ -1,0 +1,4 @@
+[2026-06-27T10:24:34.509Z] [agentic_db] tool output error: ❌ Query failed: no such table: todos
+[2026-06-27T10:25:21.590Z] [agentic_db] tool output error: ❌ Query failed: no such table: state_store
+[2026-06-27T10:25:24.179Z] [agentic_db] tool output error: ❌ Query failed: no such table: agentic_state
+[2026-06-27T10:42:16.896Z] [agentic_finetune] tool output error: Error: 'jobId' is required for status action.
