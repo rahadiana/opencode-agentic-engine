@@ -6,3 +6,4 @@ logs/
 scripts/telegram.sh
 tsconfig.tsbuildinfo
 .agentic/store/
+.agentic/trace.jsonl
