@@ -112,7 +112,7 @@ const TOOL_CATEGORIES: ToolCategory[] = [
     label: "Research & Navigation",
     emoji: "🔍",
     description: "Understand codebase, find files, search knowledge before starting work",
-    tools: ["agentic_nav", "agentic_skill", "agentic_episodes", "agentic_router", "agentic_rag", "agentic_db", "agentic_context"],
+    tools: ["agentic_nav", "agentic_skill", "agentic_episodes", "agentic_router", "agentic_rag", "agentic_db", "agentic_context", "agentic_tools"],
   },
   {
     label: "Planning & Decomposition",
@@ -136,13 +136,13 @@ const TOOL_CATEGORIES: ToolCategory[] = [
     label: "Memory & Learning",
     emoji: "🧠",
     description: "Cross-session memory, skill extraction, fine-tuning, evolution, trace observability",
-    tools: ["agentic_evolve", "agentic_finetune", "agentic_dashboard", "agentic_model", "agentic_model_reset"],
+    tools: ["agentic_evolve", "agentic_finetune", "agentic_dashboard", "agentic_model", "agentic_model_reset", "agentic_memo"],
   },
   {
     label: "Communication & Output",
     emoji: "📤",
-    description: "Generate PR descriptions, clean up debate artifacts, messaging between agents",
-    tools: ["agentic_pr", "agentic_clean", "agentic_message", "agentic_mcp", "agentic_budget"],
+    description: "PR descriptions, inter-agent messaging, MCP/A2A protocol, budget limits, output formatting",
+    tools: ["agentic_pr", "agentic_clean", "agentic_message", "agentic_mcp", "agentic_mcp_server", "agentic_a2a", "agentic_budget"],
   },
 ]
 
@@ -377,6 +377,10 @@ function getToolUsageHint(toolName: string): string {
     agentic_finetune: "fine-tune model dari skill yang terkumpul",
     agentic_message: "kirim pesan antar agent role (review/approval)",
     agentic_mcp: "konek ke external server (DB/API) buat real data",
+    agentic_mcp_server: "start/stop MCP server — expose plugin tools ke external client",
+    agentic_a2a: "inter-agent communication — discover/delegate ke agent lain via A2A",
+    agentic_tools: "cari dan panggil tool dari semua protocol (MCP + A2A) dalam satu tempat",
+    agentic_memo: "Second Brain — simpan keputusan, TODOs, reflection, knowledge graph",
   }
   return hints[toolName] ?? ""
 }
