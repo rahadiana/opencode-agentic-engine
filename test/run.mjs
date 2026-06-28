@@ -7212,8 +7212,8 @@ const { LLMEngine, ModelRegistry } = await import(pluginDist)
   engine.setModelRegistry(registry)
 
   const chain = engine.previewFallbackChain("unrelated/model")
-  assertMPF(chain.includes("opencode/reg-model-a"), "MPF-6a: registry model included in chain")
-  assertMPF(chain.includes("opencode/reg-model-b"), "MPF-6b: both registry models included")
+  assertMPF(chain.includes("reg-model-a"), "MPF-6a: registry model included in chain")
+  assertMPF(chain.includes("reg-model-b"), "MPF-6b: both registry models included")
 }
 
 // MPF-7: resolveFallbackChain orders by reliability
@@ -7231,8 +7231,8 @@ const { LLMEngine, ModelRegistry } = await import(pluginDist)
   engine.setModelRegistry(registry)
 
   const chain = engine.previewFallbackChain("unrelated/model")
-  const goodIdx = chain.indexOf("opencode/good-model")
-  const okIdx = chain.indexOf("opencode/ok-model")
+  const goodIdx = chain.indexOf("good-model")
+  const okIdx = chain.indexOf("ok-model")
   assertMPF(goodIdx >= 0 && okIdx >= 0, "MPF-7a: both models in chain")
   assertMPF(goodIdx < okIdx, "MPF-7b: higher reliability model comes first")
 }
@@ -7254,8 +7254,8 @@ const { LLMEngine, ModelRegistry } = await import(pluginDist)
   engine.setModelRegistry(registry)
 
   const chain = engine.previewFallbackChain("unrelated/model")
-  assertMPF(!chain.includes("opencode/unstable-model"), "MPF-8a: unstable model excluded")
-  assertMPF(chain.includes("opencode/healthy-model"), "MPF-8b: healthy model included")
+  assertMPF(!chain.includes("unstable-model"), "MPF-8a: unstable model excluded")
+  assertMPF(chain.includes("healthy-model"), "MPF-8b: healthy model included")
 }
 
 // MPF-9: Empty config produces empty chain (no registry)

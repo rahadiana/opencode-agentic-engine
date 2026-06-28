@@ -40,11 +40,28 @@ export class ModelRegistry {
   }
 
   /**
-   * Normalize model name: bare names (no `/`) get "opencode/" prefix.
-   * Prevents double entries when same model is recorded with/without provider prefix.
+   * Resolve the canonical key for a model name, merging bare+prefixed duplicates.
+   * If both `model` and `opencode/${model}` exist, merge into the prefixed form
+   * and return it. Otherwise keep the given name — bare is fine for custom providers.
    */
-  private _normalize(model: string): string {
-    return model.includes("/") ? model : `opencode/${model}`
+  private _resolveKey(model: string): string {
+    if (model.includes("/")) return model
+    const prefixed = `opencode/${model}`
+    // Merge: if prefixed form exists, absorb bare stats into it, return prefixed
+    if (this.stats.has(prefixed)) {
+      const bare = this.stats.get(model)
+      if (bare) {
+        const p = this.stats.get(prefixed)!
+        p.totalCalls += bare.totalCalls
+        p.successCalls += bare.successCalls
+        p.failedCalls += bare.failedCalls
+        p.hallucinationCount += bare.hallucinationCount
+        if (bare.lastUsed > p.lastUsed) p.lastUsed = bare.lastUsed
+        this.stats.delete(model)
+      }
+      return prefixed
+    }
+    return model
   }
 
   registerAlias(alias: string, models: string[]): void {
@@ -52,7 +69,7 @@ export class ModelRegistry {
   }
 
   addModel(name: string): void {
-    name = this._normalize(name)
+    name = this._resolveKey(name)
     if (!this.stats.has(name)) {
       this.stats.set(name, {
         model: name,
@@ -73,7 +90,7 @@ export class ModelRegistry {
   }
 
   recordCall(model: string, success: boolean, latencyMs: number, taskType?: string, costUsd?: number): void {
-    model = this._normalize(model)
+    model = this._resolveKey(model)
     this.addModel(model)
     const stat = this.stats.get(model)!
     stat.totalCalls++
@@ -478,18 +495,29 @@ export class ModelRegistry {
   }
 
   fromJSON(data: Record<string, ModelStats>): void {
+    // Two-pass dedup: build canonical key map first
+    const merged = new Map<string, ModelStats>()
     for (const [key, val] of Object.entries(data)) {
-      const normalized = this._normalize(key)
-      // Merge if already exists (dedup bare + prefixed entry for same model)
-      const existing = this.stats.get(normalized)
-      if (existing && normalized !== key) {
+      // Determine canonical key: if bare name has a prefixed counterpart, merge
+      let canon = key
+      if (!key.includes("/")) {
+        const prefixed = `opencode/${key}`
+        if (data[prefixed] || merged.has(prefixed)) canon = prefixed
+      }
+      const existing = merged.get(canon)
+      if (existing) {
         existing.totalCalls += val.totalCalls
         existing.successCalls += val.successCalls
         existing.failedCalls += val.failedCalls
+        existing.hallucinationCount += val.hallucinationCount
         if (val.lastUsed > existing.lastUsed) existing.lastUsed = val.lastUsed
+        if (val.avgLatencyMs > existing.avgLatencyMs) existing.avgLatencyMs = val.avgLatencyMs
       } else {
-        this.stats.set(normalized, { ...val, model: normalized })
+        merged.set(canon, { ...val, model: canon })
       }
+    }
+    for (const [key, val] of merged) {
+      this.stats.set(key, val)
     }
   }
 }
