@@ -153,3 +153,55 @@ export function getStopWordStats(): {
     source: BASE_STOP_WORDS === FALLBACK_STOP_WORDS ? "fallback" : "stopwords-iso",
   }
 }
+
+// ─── Shared NLP Utilities (consolidated from vector-store.ts + semantic-cache.ts) ───
+
+/**
+ * Unicode-aware tokenizer with bigram support.
+ * If `stopWords` is provided, uses that set; otherwise uses the global STOP_WORDS.
+ */
+export function tokenize(text: string, stopWords?: Set<string>): string[] {
+  const sw = stopWords ?? STOP_WORDS
+  const words = text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter(t => t.length > 1 && !sw.has(t))
+
+  // Add bigrams for n-gram support
+  const bigrams: string[] = []
+  for (let i = 0; i < words.length - 1; i++) {
+    bigrams.push(words[i] + "_" + words[i + 1])
+  }
+
+  return [...words, ...bigrams]
+}
+
+/** Compute term frequency vector from token array */
+export function computeTf(tokens: string[]): Map<string, number> {
+  const tf = new Map<string, number>()
+  for (const t of tokens) {
+    tf.set(t, (tf.get(t) ?? 0) + 1)
+  }
+  return tf
+}
+
+/** Cosine similarity between two TF vectors */
+export function cosineSimilarity(a: Map<string, number>, b: Map<string, number>): number {
+  let dot = 0
+  let normA = 0
+  let normB = 0
+
+  for (const [term, valueA] of a) {
+    const valueB = b.get(term) ?? 0
+    dot += valueA * valueB
+    normA += valueA * valueA
+  }
+
+  for (const [, valueB] of b) {
+    normB += valueB * valueB
+  }
+
+  if (normA === 0 || normB === 0) return 0
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB))
+}

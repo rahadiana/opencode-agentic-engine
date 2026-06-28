@@ -573,7 +573,8 @@ const confidenceStore = new ConfidenceStore()
     findSkills: (query: string) => skillStore.find(query).map(s => ({ name: s.definition.meta.name, successRate: s.successRate })),
   })
   llmEngine.setMemoryOrchestrator(memoryOrchestrator)
-  new AgentLoop(llmEngine, { maxIterations: 10, autoRetry: true, maxRetries: 2, verifyAfterEach: false })
+  const agentLoop = new AgentLoop(llmEngine, { maxIterations: 10, autoRetry: true, maxRetries: 2, verifyAfterEach: false })
+  agentLoop.setEventBus(eventBus)
   const stateStore = new StateStore({ worktree })
   // SQLite backend — lebih cepat dari file JSON, support structured queries
   // Graceful fallback: jika better-sqlite3 (Node) atau bun:sqlite (Bun) gak available

@@ -787,6 +787,34 @@ export class SecondBrain {
           break
         }
 
+        // ── Gap #9: Feedback ──
+        case "feedback.recorded": {
+          const stepId = payload.stepId as string
+          const fb = payload.feedback as string
+          const model = payload.model as string
+          const taskType = payload.taskType as string
+          const errorCat = payload.errorCategory as string | undefined
+
+          // Negative feedback → high-priority TODO to review
+          if (fb === "negative") {
+            this.addTodo({
+              text: `Review failed step: ${stepId} (model: ${model}, task: ${taskType}${errorCat ? `, error: ${errorCat}` : ""})`,
+              priority: "high",
+              category: "feedback",
+              sessionId,
+            })
+          }
+
+          // Track in graph regardless of feedback type
+          this.addEdge({
+            source: "feedback",
+            target: stepId,
+            relation: `user_${fb}`,
+            metadata: { model, taskType, errorCategory: errorCat, timestamp: Date.now() },
+          })
+          break
+        }
+
         default:
           // Unknown events are silently ignored
           break

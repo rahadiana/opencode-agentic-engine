@@ -21,6 +21,8 @@ export interface ScoredResult {
   matchFields: string[]
 }
 
+import { tokenize } from "./stopwords.js"
+
 // ponytail: minimal stop set — avoids filtering domain words ("test", "code", "bug")
 // that are meaningful search tokens. Centralized stopwords.ts is too aggressive for
 // TF-IDF retrieval. Merge only when vector-store needs multilingual support.
@@ -41,23 +43,8 @@ const STOP_WORDS = new Set([
   "why",
 ])
 
-function tokenize(text: string): string[] {
-  // Use Unicode property escapes (\p{L} = any letter, \p{N} = any number)
-  // to support non-Latin scripts (Cyrillic, Arabic, CJK, etc.)
-  const words = text
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .split(/\s+/)
-    .filter(t => t.length > 1 && !STOP_WORDS.has(t))
-
-  // Add bigrams for n-gram support
-  const bigrams: string[] = []
-  for (let i = 0; i < words.length - 1; i++) {
-    bigrams.push(words[i] + "_" + words[i + 1])
-  }
-
-  return [...words, ...bigrams]
-}
+// ponytail: reuses shared tokenize() from stopwords.ts with local STOP_WORDS
+const _tokenize = (text: string) => tokenize(text, STOP_WORDS)
 
 function computeTf(term: string, docTokens: string[]): number {
   const count = docTokens.filter(t => t === term).length
@@ -81,7 +68,7 @@ export class VectorStore {
    * Index a single document. Idempotent — re-indexing replaces old entry.
    */
   index(doc: TfIdfDoc): void {
-    const tokens = tokenize(doc.title + " " + doc.content + " " + doc.keywords.join(" "))
+    const tokens =     _tokenize(doc.title + " " + doc.content + " " + doc.keywords.join(" "))
 
     // Check if this is a re-index (replace existing doc)
     const existing = this.docs.get(doc.id)
@@ -126,7 +113,7 @@ export class VectorStore {
     if (existing) {
       for (const [, ids] of this.titleIndex) ids.delete(doc.id)
     }
-    const titleWords = tokenize(doc.title)
+    const titleWords =     _tokenize(doc.title)
     for (const tw of titleWords) {
       const ids = this.titleIndex.get(tw) ?? new Set()
       ids.add(doc.id)
@@ -285,7 +272,7 @@ export class VectorStore {
    * Search within a category using TF-IDF scoring.
    */
   search(query: string, category: string, limit = 10): ScoredResult[] {
-    const qTokens = tokenize(query)
+    const qTokens =     _tokenize(query)
     return this.scoreCategory(qTokens, query, category, limit)
   }
 
@@ -293,7 +280,7 @@ export class VectorStore {
    * Search across all categories.
    */
   searchAll(query: string, limit = 10): ScoredResult[] {
-    const qTokens = tokenize(query)
+    const qTokens =     _tokenize(query)
     const results: ScoredResult[] = []
     for (const [category] of this.invertedIndex) {
       const catResults = this.scoreCategory(qTokens, query, category, limit)

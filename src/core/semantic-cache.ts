@@ -54,6 +54,7 @@ export interface SemanticCacheConfig {
 }
 
 // ─── Stop words (subset of the vector-store STOP_WORDS) ───
+import { tokenize, computeTf, cosineSimilarity } from "../memory/stopwords.js"
 
 const STOP_WORDS = new Set([
   "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
@@ -68,56 +69,15 @@ const STOP_WORDS = new Set([
   "how", "what", "when", "where", "which", "who", "why",
 ])
 
-// ─── Tokenizer (Unicode-aware, same approach as vector-store.ts) ───
+// ─── Tokenizer + TF-IDF — shared implementations from stopwords.ts ───
 
-function tokenize(text: string): string[] {
-  const words = text
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .split(/\s+/)
-    .filter(t => t.length > 1 && !STOP_WORDS.has(t))
+// ponytail: wraps shared tokenize() from stopwords.ts with local STOP_WORDS
+const _tokenize = (text: string) => tokenize(text, STOP_WORDS)
 
-  // Add bigrams for n-gram support
-  const bigrams: string[] = []
-  for (let i = 0; i < words.length - 1; i++) {
-    bigrams.push(`${words[i]}_${words[i + 1]}`)
-  }
-
-  return [...words, ...bigrams]
-}
-
-// ─── TF-IDF + Cosine Similarity ───
-
-function computeTf(tokens: string[]): Map<string, number> {
-  const tf = new Map<string, number>()
-  for (const t of tokens) {
-    tf.set(t, (tf.get(t) ?? 0) + 1)
-  }
-  return tf
-}
-
+/** Compute IDF for a term across a corpus (semantic-cache-specific) */
 function computeIdf(term: string, corpus: Array<{ tokens: string[] }>): number {
   const df = corpus.filter(doc => doc.tokens.includes(term)).length
   return Math.log((corpus.length + 1) / (df + 1)) + 1 // +1 smoothing
-}
-
-function cosineSimilarity(a: Map<string, number>, b: Map<string, number>): number {
-  let dot = 0
-  let normA = 0
-  let normB = 0
-
-  for (const [term, valueA] of a) {
-    const valueB = b.get(term) ?? 0
-    dot += valueA * valueB
-    normA += valueA * valueA
-  }
-
-  for (const [, valueB] of b) {
-    normB += valueB * valueB
-  }
-
-  if (normA === 0 || normB === 0) return 0
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB))
 }
 
 // ─── SemanticCache ───
@@ -144,7 +104,7 @@ export class SemanticCache {
       return null
     }
 
-    const queryTokens = tokenize(query)
+    const queryTokens = _tokenize(query)
     if (queryTokens.length === 0) {
       this.misses++
       return null
@@ -204,7 +164,7 @@ export class SemanticCache {
   set(query: string, response: LLMResponse): void {
     if (!query) return
 
-    const tokens = tokenize(query)
+    const tokens = _tokenize(query)
     if (tokens.length === 0) return
 
     // Evict if full
