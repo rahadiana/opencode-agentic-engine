@@ -4,16 +4,85 @@
 
 Berdasarkan paper **"The End of Software Engineering"** (arXiv:2606.05608).
 
-## Quick Start
+## Instalasi
+
+### Prasyarat
+
+- **Node.js** ≥ 20
+- **OpenCode** sudah terinstall di sistem
+
+### Cara 1 — Dari Source (Rekomendasi)
 
 ```bash
+# 1. Clone repo
+git clone https://github.com/rahadiana/opencode-agentic-engine.git
+cd opencode-agentic-engine
+
+# 2. Install dependencies
+npm install
+
+# 3. Build + auto-register ke OpenCode
 npm run build
 ```
 
-Pilih agent **"Agentic"** di OpenCode, lalu:
+Script `postbuild` otomatis menyalin plugin ke `~/.cache/opencode/packages/opencode-agentic-engine@latest/` — OpenCode akan mendeteksinya saat restart.
+
+### Cara 2 — Via `.opencode/opencode.json`
+
+Tambah ke file `.opencode/opencode.json` di proyek kamu:
+
+```json
+{
+  "plugin": ["opencode-agentic-engine@latest"]
+}
+```
+
+Pastikan plugin sudah di-*build* dan ter-copy ke cache OpenCode (lihat Cara 1).
+
+### Cara 3 — Drop-in Lokal
+
+Cocok untuk development atau testing tanpa registrasi global. Letakkan `dist/index.js` di:
+
+```
+.proyek-kamu/.opencode/plugins/agentic-engine/index.js
+```
+
+OpenCode auto-detect plugin dari folder `.opencode/plugins/`.
+
+### Verifikasi
+
+```bash
+# Cek apakah plugin terdaftar
+ls ~/.cache/opencode/packages/opencode-agentic-engine@latest/
+```
+
+Lalu buka OpenCode, pilih agent **"Agentic"**, dan coba:
+
+```
+agentic_status
+```
+
+### Update
+
+```bash
+git pull
+npm run build
+```
+
+## Quick Start
+
+Setelah terinstall, pilih agent **"Agentic"** di OpenCode, lalu:
 
 ```
 buat aplikasi POS dengan Express, Vue 3, dan SQLite
+```
+
+Atau coba tool langsung:
+
+```
+agentic_nav query="src/" showSummary=true
+agentic_plan goal="Buat fitur login"
+agentic_dashboard
 ```
 
 ## Dokumentasi Lengkap → [`docs/`](./docs/)

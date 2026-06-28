@@ -2,15 +2,18 @@
 
 ## Instalasi
 
-Plugin ini otomatis terdaftar saat OpenCode mendeteksi package di `~/.cache/opencode/packages/`.
+> 📖 Petunjuk instalasi lengkap (prasyarat, 3 cara install, verifikasi, update) ada di **[README.md](../README.md#instalasi)**.
+
+Intinya:
 
 ```bash
-# Build dari source
-npm run build
-
-# Auto-copy ke cache OpenCode
-  → otomatis lewat postbuild script
+git clone https://github.com/rahadiana/opencode-agentic-engine.git
+cd opencode-agentic-engine
+npm install
+npm run build    # build + auto-register ke OpenCode
 ```
+
+Lalu buka OpenCode dan pilih agent **"Agentic"**.
 
 ## Konfigurasi Awal
 
