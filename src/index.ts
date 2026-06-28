@@ -77,6 +77,9 @@ import { SchemaValidator } from "./core/skill-schema.js"
 import { parseFileEntries, writeFiles as writeFilesHelper } from "./core/execution-helpers.js"
 import { DslExecutor } from "./core/dsl-executor.js"
 import { SkillImprover } from "./core/skill-improver.js"
+import { ErrorRecovery } from "./core/error-recovery.js"
+import { AlignmentGate } from "./core/alignment-gate.js"
+import { EconomicModel } from "./core/economic-model.js"
 import { AttentionScheduler } from "./core/attention-scheduler.js"
 void AttentionScheduler // available via import for direct usage
 import { WorldModel } from "./core/world-model.js"
@@ -327,6 +330,9 @@ const createEngine: Plugin = async (input, _options) => {
   const budgetTracker = new BudgetTracker()
   executor.setBudgetTracker(budgetTracker)
   const verifier = new Verifier()
+  const errorRecovery = new ErrorRecovery()
+  const alignmentGate = new AlignmentGate()
+  const economicModel = new EconomicModel()
   const errorAnalyzer = new ErrorAnalyzer()
   const domainRegistry = new DomainRegistry()
   domainRegistry.register(genericDomain)
@@ -1482,6 +1488,54 @@ const confidenceStore = new ConfidenceStore()
             })
           }
 
+          // ── Gap #10: Alignment Check (auto-detect goal drift) ──
+          if (args.success && args.filesModified && args.filesModified.length > 0) {
+            const session_ = sessionStore.getOrCreate(context.sessionID)
+            const originalGoal = session_.plan?.intent?.goal ?? args.output
+            const alignmentResult = alignmentGate.checkAlignment(originalGoal, args.output, args.filesModified)
+            if (alignmentResult.driftDetected) {
+              response += `\n### 🎯 Alignment Check (Gap #10)\n`
+              response += `**Overall:** ${Math.round(alignmentResult.overallScore * 100)}% aligned\n`
+              for (const c of alignmentResult.checks) {
+                const icon = c.severity === "aligned" ? "✅" : c.severity === "drift_warning" ? "⚠️" : "❌"
+                response += `${icon} ${c.description}\n`
+              }
+              if (alignmentResult.recommendations.length > 0) {
+                response += "\n**Recommendations:**\n" + alignmentResult.recommendations.map(r => `- ${r}`).join("\n") + "\n"
+              }
+              if (!alignmentResult.passed) {
+                response += "\n⚠️ **Alignment check failed** — consider reviewing the step output against the original goal.\n"
+              }
+            }
+          }
+
+          // ── Gap #11: Economic Model — record outcome ──
+          if (args.filesModified && args.filesModified.length > 0) {
+            economicModel.recordOutcome({
+              taskId: args.stepId,
+              cost: 0, // budgetTracker tracks actual cost; placeholder for now
+              durationMs: Date.now() - startTime,
+              steps: 1,
+              success: args.success ?? false,
+              qualityScore: confidenceScore_?.overall,
+              timestamp: Date.now(),
+            })
+
+            // Record cost from budget tracker if available
+            const budgetState = budgetTracker.getState(["session"])
+            if (budgetState[0]) {
+              economicModel.recordOutcome({
+                taskId: args.stepId,
+                cost: budgetState[0].usage.totalCostUsd,
+                durationMs: Date.now() - startTime,
+                steps: 1,
+                success: args.success ?? false,
+                qualityScore: confidenceScore_?.overall,
+                timestamp: Date.now(),
+              })
+            }
+          }
+
           if (!args.success) {
             const modifiedFiles = executor.getAllFilesModified(context.sessionID)
             const analysis = await errorAnalyzer.analyzeDeep(args.error ?? args.output, modifiedFiles)
@@ -1842,12 +1896,17 @@ const confidenceStore = new ConfidenceStore()
             output += modifiedFiles.map(f => `- \`${f}\``).join("\n") + "\n"
           }
 
-          if (analysis.category === "compile" || analysis.category === "type") {
-            output += `\n### Recovery Plan\n1. Check the error output for exact file path and line number\n2. Fix the syntax/type issue\n3. Call \`agentic_execute\` with \`success: true\`\n`
-          } else if (analysis.category === "test") {
-            output += `\n### Recovery Plan\n1. Verify if the test expectation is still correct after changes\n2. Update code or test accordingly\n3. Retry the step\n`
-          } else {
-            output += `\n### Recovery Plan\n1. Review what the step was supposed to accomplish\n2. Check for unintended side effects in modified files\n3. Fix and retry\n`
+          // ── Gap #5: Error Recovery Plan ──
+          const recoveryPlan = errorRecovery.getRecoveryPlan(analysis, args.stepId, retriesUsed + 1)
+          output += `\n### 🩺 Recovery Plan (Gap #5)\n`
+          output += `**Action:** \`${recoveryPlan.action}\`\n`
+          output += `**Reason:** ${recoveryPlan.reason}\n`
+          if (recoveryPlan.target) output += `**Target:** \`${recoveryPlan.target}\`\n`
+          output += `**Priority:** ${recoveryPlan.priority === 1 ? "🔴 Immediate" : recoveryPlan.priority === 2 ? "🟡 Soon" : "🟢 Eventually"}\n`
+
+          const health = errorRecovery.getHealth()
+          if (health !== "healthy") {
+            output += `**System Health:** ⚠️ ${health}\n`
           }
 
           if (canRetry) {
@@ -3868,6 +3927,18 @@ const confidenceStore = new ConfidenceStore()
             output += `\n### 📊 Live Evaluation Score\n`
             output += liveEvaluator.formatReport(false)
           }
+
+          // ── Gap #5: Error Recovery Health ──
+          output += `\n### 🩺 Error Recovery (Gap #5)\n`
+          output += `${errorRecovery.getSummary()}\n`
+
+          // ── Gap #10: Alignment Status ──
+          output += `\n### 🎯 Alignment (Gap #10)\n`
+          output += `${alignmentGate.getSummary()}\n`
+
+          // ── Gap #11: Economic Model ──
+          output += `\n### 💰 Economics (Gap #11)\n`
+          output += `${economicModel.getSummary()}\n`
 
           return { output }
         },
@@ -6869,3 +6940,6 @@ export { StateStore, type StoreEntry, type StateNamespace } from "./core/state-s
 export { MCPServer, type MCPServerConfig, type MCPServerStatus } from "./core/mcp-server.js"
 export { ConfidenceScorer, ConfidenceStore, type ConfidenceScore, type ConfidenceDimensions, type ScoringSignals, type StepConfidenceRecord } from "./core/confidence-scorer.js"
 export { SecondBrain, initSecondBrain, type Decision, type Todo, type Reflection, type GraphEdge, type KnowledgeSnapshot } from "./memory/second-brain.js"
+export { ErrorRecovery } from "./core/error-recovery.js"
+export { AlignmentGate } from "./core/alignment-gate.js"
+export { EconomicModel } from "./core/economic-model.js"

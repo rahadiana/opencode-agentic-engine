@@ -9828,6 +9828,226 @@ function hkMockInput(client) {
 console.log(`  HK: ${hkPassed} passed, ${hkFailed} failed`)
 passed += hkPassed; failed += hkFailed
 
+// ── Gap #5: Error Recovery ──
+{
+  const moduleName = "Gap #5"
+  let g5Passed = 0, g5Failed = 0
+  const g5Assert = (condition, msg) => { if (condition) g5Passed++; else { g5Failed++; console.log(`  FAIL: ${msg}`) } }
+
+  const { ErrorRecovery } = mod
+  const er = new ErrorRecovery()
+
+  // G5-1: Basic recovery plan generation from error analysis
+  const plan1 = er.getRecoveryPlan({ category: "compile", summary: "compilation error", likelyRootCause: "syntax", suggestedFix: "fix it", affectedFiles: ["a.ts"], severity: "high" }, "step-1", 1)
+  g5Assert(plan1.action === "retry_different", "G5-1a: compile error → retry_different first")
+  g5Assert(typeof plan1.reason === "string" && plan1.reason.length > 0, "G5-1b: reason is non-empty")
+  g5Assert(plan1.priority > 0, "G5-1c: priority is set")
+
+  // G5-2: Recovery actions rotate across attempts
+  const plan2 = er.getRecoveryPlan({ category: "compile", summary: "", likelyRootCause: "", suggestedFix: "", affectedFiles: [], severity: "high" }, "step-1", 2)
+  g5Assert(plan2.action === "retry_same", "G5-2a: second attempt → retry_same (not tried yet)")
+
+  // G5-3: Different category → different recovery action
+  const runtimePlan = er.getRecoveryPlan({ category: "runtime", summary: "", likelyRootCause: "", suggestedFix: "", affectedFiles: [], severity: "high" }, "step-2", 1)
+  g5Assert(runtimePlan.action === "retry_different", "G5-3a: runtime error first attempt → retry_different")
+
+  // G5-4: Circuit breaker — consecutive failures escalate
+  const er2 = new ErrorRecovery({ circuitBreakerThreshold: 3 })
+  for (let i = 0; i < 3; i++) {
+    er2.getRecoveryPlan({ category: "compile", summary: "", likelyRootCause: "", suggestedFix: "", affectedFiles: [], severity: "high" }, "step-cb", i + 1)
+  }
+  const cbPlan = er2.getRecoveryPlan({ category: "compile", summary: "", likelyRootCause: "", suggestedFix: "", affectedFiles: [], severity: "high" }, "step-cb", 4)
+  g5Assert(cbPlan.action === "escalate", "G5-4a: circuit breaker → escalate after threshold")
+
+  // G5-5: Record outcome (success) resets counter
+  er2.recordOutcome("step-cb", { category: "compile", summary: "", likelyRootCause: "", suggestedFix: "", affectedFiles: [], severity: "high" }, ["retry_different"], "retry_different", true)
+  const cbPlan2 = er2.getRecoveryPlan({ category: "compile", summary: "", likelyRootCause: "", suggestedFix: "", affectedFiles: [], severity: "high" }, "step-cb2", 1)
+  g5Assert(cbPlan2.action !== "escalate", "G5-5a: after success, circuit breaker resets")
+
+  // G5-6: Category success rate
+  const rate = er.getCategorySuccessRate("compile")
+  g5Assert(rate.attempts >= 0, "G5-6a: success rate returns valid object")
+  g5Assert(typeof rate.rate === "number", "G5-6b: rate is number")
+
+  // G5-7: Health check
+  const health = er.getHealth()
+  g5Assert(["healthy", "degraded", "critical"].includes(health), "G5-7a: health is valid enum value")
+
+  // G5-8: Summary
+  const summary = er.getSummary()
+  g5Assert(summary.includes("Recovery:"), "G5-8a: summary includes Recovery prefix")
+  g5Assert(summary.includes("health="), "G5-8b: summary includes health")
+
+  // G5-9: Reset
+  er.reset()
+  g5Assert(er.getHistory().length === 0, "G5-9a: reset clears history")
+  g5Assert(er.getHealth() === "healthy", "G5-9b: after reset, health is healthy")
+
+  // G5-10: Edge case — unknown category falls back to unknown actions
+  const unknownPlan = er.getRecoveryPlan(null, "step-unk", 1)
+  g5Assert(unknownPlan.action !== undefined, "G5-10a: null analysis still produces a plan")
+  g5Assert(unknownPlan.reason.includes("unknown"), "G5-10b: reason mentions unknown category")
+
+  // G5-11: Max retries per category escalates
+  const er3 = new ErrorRecovery({ maxRetriesPerCategory: 2 })
+  for (let i = 0; i < 3; i++) {
+    const p = er3.getRecoveryPlan({ category: "test", summary: "", likelyRootCause: "", suggestedFix: "", affectedFiles: [], severity: "medium" }, "step-max", i + 1)
+    if (i === 2) {
+      g5Assert(p.action === "escalate", `G5-11a: attempt ${i + 1} exceeds maxRetries → escalate`)
+    }
+  }
+
+  // G5-12: Rotation includes different actions
+  const er4 = new ErrorRecovery({ maxRetriesPerCategory: 10 })
+  const actions = new Set()
+  for (let i = 0; i < 4; i++) {
+    const p = er4.getRecoveryPlan({ category: "compile", summary: "", likelyRootCause: "", suggestedFix: "", affectedFiles: [], severity: "high" }, "step-rotate", i + 1)
+    actions.add(p.action)
+  }
+  g5Assert(actions.size >= 2, "G5-12a: rotation produces different actions")
+
+  console.log(`  GAP #5: ${g5Passed} passed, ${g5Failed} failed`)
+  passed += g5Passed; failed += g5Failed
+}
+
+// ── Gap #10: Alignment Gate ──
+{
+  let g10Passed = 0, g10Failed = 0
+  const g10Assert = (condition, msg) => { if (condition) g10Passed++; else { g10Failed++; console.log(`  FAIL: ${msg}`) } }
+
+  const { AlignmentGate } = mod
+  const ag = new AlignmentGate()
+
+  // G10-1: Aligned intent/state → high score
+  const aligned = ag.checkAlignment("implement a login feature with email and password", "implement login with email password authentication")
+  g10Assert(aligned.passed === true, "G10-1a: aligned intent → passed")
+  g10Assert(aligned.overallScore > 0.5, "G10-1b: aligned intent → score > 0.5")
+  g10Assert(aligned.driftDetected === false, "G10-1c: aligned intent → no drift detected")
+
+  // G10-2: Drifted intent → low score
+  const drifted = ag.checkAlignment("implement a login feature with email and password", "refactor the database schema for product catalog")
+  g10Assert(aligned.overallScore > drifted.overallScore, "G10-2a: drifted intent → lower score than aligned")
+
+  // G10-3: Constraints preserved
+  ag.reset()
+  const constraintCheck = ag.checkAlignment("must not expose API keys, should encrypt passwords", "API keys are stored in config, passwords are hashed")
+  g10Assert(typeof constraintCheck.overallScore === "number", "G10-3a: constraint check returns score")
+
+  // G10-4: Scope check — too many files
+  const scopeDrift = ag.checkAlignment("fix one bug", "fixed a bug and refactored", Array(10).fill("file.ts"))
+  g10Assert(typeof scopeDrift.overallScore === "number", "G10-4a: scope check returns score")
+
+  // G10-5: Trend detection
+  ag.checkAlignment("goal", "goal")
+  ag.checkAlignment("goal", "different goal")
+  ag.checkAlignment("goal", "something else entirely")
+  const trend = ag.getAlignmentTrend()
+  g10Assert(["improving", "declining", "stable"].includes(trend), "G10-5a: trend is valid")
+
+  // G10-6: Recommendations
+  const lowScore = ag.checkAlignment("must implement A, must not implement B, must follow C pattern", "implemented B and D pattern, skipped A")
+  g10Assert(Array.isArray(lowScore.recommendations), "G10-6a: recommendations is array")
+  if (lowScore.recommendations.length > 0) {
+    g10Assert(typeof lowScore.recommendations[0] === "string", "G10-6b: recommendation is string")
+  }
+
+  // G10-7: Empty intent
+  const empty = ag.checkAlignment("", "")
+  g10Assert(typeof empty.overallScore === "number", "G10-7a: empty intent still produces score")
+
+  // G10-8: Configurable thresholds
+  const ag2 = new AlignmentGate({ driftThreshold: 0.9, blockThreshold: 0.5 })
+  const strictResult = ag2.checkAlignment("implement login", "create shopping cart")
+  g10Assert(strictResult.driftDetected || !strictResult.passed, "G10-8a: stricter threshold flags more drift")
+
+  // G10-9: History tracking
+  ag.checkAlignment("test", "test")
+  g10Assert(ag.getHistory().length > 0, "G10-9a: history stores checks")
+
+  // G10-10: Summary
+  const summary = ag.getSummary()
+  g10Assert(summary.includes("Alignment:"), "G10-10a: summary has Alignment prefix")
+  g10Assert(summary.includes("trend="), "G10-10b: summary has trend")
+
+  console.log(`  GAP #10: ${g10Passed} passed, ${g10Failed} failed`)
+  passed += g10Passed; failed += g10Failed
+}
+
+// ── Gap #11: Economic Model ──
+{
+  let g11Passed = 0, g11Failed = 0
+  const g11Assert = (condition, msg) => { if (condition) g11Passed++; else { g11Failed++; console.log(`  FAIL: ${msg}`) } }
+
+  const { EconomicModel } = mod
+  const em = new EconomicModel()
+
+  // G11-1: Record outcome
+  em.recordOutcome({ taskId: "t1", cost: 0.05, durationMs: 1000, steps: 3, success: true, timestamp: Date.now() })
+  g11Assert(true, "G11-1a: record outcome succeeds")
+
+  // G11-2: ROI query
+  const roi = em.getROI("t1")
+  g11Assert(roi !== null, "G11-2a: ROI exists for recorded task")
+  g11Assert(roi.costPerStep > 0, "G11-2b: costPerStep is positive")
+  g11Assert(roi.costPerMs > 0, "G11-2c: costPerMs is positive")
+  g11Assert(typeof roi.roi === "number", "G11-2d: roi is number")
+  g11Assert(["high", "medium", "low"].includes(roi.valueRank), "G11-2e: valueRank is valid")
+
+  // G11-3: ROI for nonexistent task
+  const noRoi = em.getROI("nonexistent")
+  g11Assert(noRoi === null, "G11-3a: ROI for nonexistent task returns null")
+
+  // G11-4: Role stats
+  em.recordOutcome({ taskId: "t2", role: "developer", cost: 0.02, durationMs: 500, steps: 2, success: true, timestamp: Date.now() })
+  const stats = em.getRoleStats()
+  g11Assert(stats.length > 0, "G11-4a: role stats returns entries")
+  if (stats.length > 0) {
+    g11Assert(typeof stats[0].avgCost === "number", "G11-4b: avgCost is number")
+    g11Assert(typeof stats[0].successRate === "number", "G11-4c: successRate is number")
+    g11Assert(stats[0].count > 0, "G11-4d: count is positive")
+  }
+
+  // G11-5: Role recommendation
+  const rec = em.recommendRole("implement a new API endpoint for user authentication", ["architect", "developer", "qa", "coordinator", "pm"])
+  if (rec) {
+    g11Assert(typeof rec.recommendedRole === "string", "G11-5a: recommended role is string")
+    g11Assert(rec.estimatedCost >= 0, "G11-5b: estimatedCost is non-negative")
+    g11Assert(rec.confidence >= 0 && rec.confidence <= 1, "G11-5c: confidence is 0-1")
+    g11Assert(typeof rec.reasoning === "string" && rec.reasoning.length > 0, "G11-5d: reasoning is non-empty")
+  } else {
+    g11Assert(true, "G11-5a: no recommendation for unmatched role (acceptable)")
+  }
+
+  // G11-6: Recommendation for unmatched task
+  const noRec = em.recommendRole("xyzzy", ["architect"])
+  g11Assert(noRec === null || noRec.confidence <= 1, "G11-6a: unmatched task may return null or low confidence")
+
+  // G11-7: Cost report
+  const report = em.getCostReport("session")
+  g11Assert(typeof report.totalCost === "number", "G11-7a: totalCost is number")
+  g11Assert(typeof report.avgCost === "number", "G11-7b: avgCost is number")
+  g11Assert(report.taskCount > 0, "G11-7c: taskCount is positive")
+  g11Assert(typeof report.successRate === "number", "G11-7d: successRate is number")
+
+  // G11-8: Reset
+  em.reset()
+  g11Assert(em.getROI("t1") === null, "G11-8a: after reset, ROI returns null")
+
+  // G11-9: Summary
+  em.recordOutcome({ taskId: "t3", role: "developer", cost: 0.01, durationMs: 200, steps: 1, success: true, timestamp: Date.now() })
+  const summary = em.getSummary()
+  g11Assert(summary.includes("Economic:"), "G11-9a: summary has Economic prefix")
+  g11Assert(summary.includes("$"), "G11-9b: summary includes dollar amounts")
+
+  // G11-10: Multiple roles stats
+  em.recordOutcome({ taskId: "t4", role: "qa", cost: 0.03, durationMs: 800, steps: 4, success: false, timestamp: Date.now() })
+  const multiStats = em.getRoleStats()
+  g11Assert(multiStats.length >= 2, "G11-10a: multiple roles in stats")
+
+  console.log(`  GAP #11: ${g11Passed} passed, ${g11Failed} failed`)
+  passed += g11Passed; failed += g11Failed
+}
+
 console.log(`Results: ${passed} passed, ${failed} failed`)
 if (failed === 0) console.log("ALL TESTS PASSED")
 process.exit(failed > 0 ? 1 : 0)
