@@ -8,10 +8,30 @@ Berdasarkan paper **"The End of Software Engineering"** (arXiv:2606.05608).
 
 ### Prasyarat
 
-- **Node.js** ≥ 20
 - **OpenCode** sudah terinstall di sistem
+- Plugin sudah dipublikasikan di npm registry sebagai `opencode-agentic-engine`
 
-### Cara 1 — Dari Source (Rekomendasi)
+### Cara 1 — Lewat OpenCode (Termudah) 🎯
+
+Tambahin ke file `.opencode/opencode.json` di proyek kamu:
+
+```json
+{
+  "plugin": ["opencode-agentic-engine@latest"]
+}
+```
+
+Simpan, restart OpenCode — selesai. OpenCode otomatis download dari npm registry.
+
+Atau kalau OpenCode-mu ada CLI, bisa juga:
+
+```bash
+opencode plugin add opencode-agentic-engine@latest
+```
+
+### Cara 2 — Build dari Source (Developer)
+
+Buat yang mau kontribusi / modifikasi sendiri:
 
 ```bash
 # 1. Clone repo
@@ -25,23 +45,11 @@ npm install
 npm run build
 ```
 
-Script `postbuild` otomatis menyalin plugin ke `~/.cache/opencode/packages/opencode-agentic-engine@latest/` — OpenCode akan mendeteksinya saat restart.
+Script `postbuild` otomatis nyalin hasil build ke `~/.cache/opencode/packages/opencode-agentic-engine@latest/`.
 
-### Cara 2 — Via `.opencode/opencode.json`
+### Cara 3 — Drop-in Lokal (Testing)
 
-Tambah ke file `.opencode/opencode.json` di proyek kamu:
-
-```json
-{
-  "plugin": ["opencode-agentic-engine@latest"]
-}
-```
-
-Pastikan plugin sudah di-*build* dan ter-copy ke cache OpenCode (lihat Cara 1).
-
-### Cara 3 — Drop-in Lokal
-
-Cocok untuk development atau testing tanpa registrasi global. Letakkan `dist/index.js` di:
+Buat development tanpa registrasi global, taruh `dist/index.js` di:
 
 ```
 .proyek-kamu/.opencode/plugins/agentic-engine/index.js
@@ -51,22 +59,23 @@ OpenCode auto-detect plugin dari folder `.opencode/plugins/`.
 
 ### Verifikasi
 
-```bash
-# Cek apakah plugin terdaftar
-ls ~/.cache/opencode/packages/opencode-agentic-engine@latest/
-```
-
-Lalu buka OpenCode, pilih agent **"Agentic"**, dan coba:
+Buka OpenCode, pilih agent **"Agentic"**, lalu coba:
 
 ```
 agentic_status
 ```
 
+Atau cek dari terminal:
+
+```bash
+ls ~/.cache/opencode/packages/opencode-agentic-engine@latest/
+```
+
 ### Update
 
 ```bash
-git pull
-npm run build
+# Kalau pake Cara 1 (npm) — tinggal restart OpenCode, dia auto-update
+# Kalau pake Cara 2 (source) — git pull && npm run build
 ```
 
 ## Quick Start
