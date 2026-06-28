@@ -2,14 +2,12 @@
 
 ## Instalasi
 
-> 📖 Petunjuk instalasi lengkap (prasyarat, 3 cara install, verifikasi, update) ada di **[README.md](../README.md#instalasi)**.
+> 📖 Petunjuk instalasi lengkap ada di **[README.md](../README.md#instalasi)**.
 
-Intinya — tinggal tambahin ke `.opencode/opencode.json` di proyek kamu:
+Intinya:
 
-```json
-{
-  "plugin": ["opencode-agentic-engine@latest"]
-}
+```bash
+opencode plugin opencode-agentic-engine@latest
 ```
 
 Restart OpenCode, pilih agent **"Agentic"**, selesai.
