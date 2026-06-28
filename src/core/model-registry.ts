@@ -39,11 +39,20 @@ export class ModelRegistry {
     this.modelAliases.set("capable", [])
   }
 
+  /**
+   * Normalize model name: bare names (no `/`) get "opencode/" prefix.
+   * Prevents double entries when same model is recorded with/without provider prefix.
+   */
+  private _normalize(model: string): string {
+    return model.includes("/") ? model : `opencode/${model}`
+  }
+
   registerAlias(alias: string, models: string[]): void {
     this.modelAliases.set(alias, models)
   }
 
   addModel(name: string): void {
+    name = this._normalize(name)
     if (!this.stats.has(name)) {
       this.stats.set(name, {
         model: name,
@@ -64,6 +73,7 @@ export class ModelRegistry {
   }
 
   recordCall(model: string, success: boolean, latencyMs: number, taskType?: string, costUsd?: number): void {
+    model = this._normalize(model)
     this.addModel(model)
     const stat = this.stats.get(model)!
     stat.totalCalls++
@@ -469,7 +479,17 @@ export class ModelRegistry {
 
   fromJSON(data: Record<string, ModelStats>): void {
     for (const [key, val] of Object.entries(data)) {
-      this.stats.set(key, val)
+      const normalized = this._normalize(key)
+      // Merge if already exists (dedup bare + prefixed entry for same model)
+      const existing = this.stats.get(normalized)
+      if (existing && normalized !== key) {
+        existing.totalCalls += val.totalCalls
+        existing.successCalls += val.successCalls
+        existing.failedCalls += val.failedCalls
+        if (val.lastUsed > existing.lastUsed) existing.lastUsed = val.lastUsed
+      } else {
+        this.stats.set(normalized, { ...val, model: normalized })
+      }
     }
   }
 }
