@@ -20,6 +20,7 @@ import { LLMEngine } from "./llm.js"
 import { BudgetTracker } from "./budget-tracker.js"
 import type { Planner } from "./planner.js"
 import { TimeoutError } from "./errors.js"
+import type { EventBus } from "./event-bus.js"
 import { DAGEngine, type DAGPlan, type DAGExecutionContext, type DAGNode, type NodeRunner } from "./dag-engine.js"
 import { ConfidenceScorer, ConfidenceStore, type ScoringSignals } from "./confidence-scorer.js"
 import { PlanningLayer } from "./planning-layer.js"
@@ -69,6 +70,9 @@ export class AgentLoop {
   private confidenceScorer?: ConfidenceScorer
   private confidenceStore?: ConfidenceStore
 
+  /** Event bus for Second Brain integration */
+  private eventBus?: EventBus
+
   /** Graph Harness 3 layers */
   private planningLayer: PlanningLayer
   private executionLayer: ExecutionLayer
@@ -99,6 +103,10 @@ export class AgentLoop {
   getPlanningLayer(): PlanningLayer { return this.planningLayer }
   getExecutionLayer(): ExecutionLayer { return this.executionLayer }
   getRecoveryLayer(): RecoveryLayer { return this.recoveryLayer }
+
+  setEventBus(eventBus: EventBus): void {
+    this.eventBus = eventBus
+  }
 
   setBudgetTracker(tracker: BudgetTracker): void {
     this.budgetTracker = tracker
@@ -170,6 +178,18 @@ export class AgentLoop {
     if (!validation.valid) {
       log.warn(`[AgentLoop] Plan validation warnings: ${validation.warnings.join(", ")}`)
     }
+
+    // Emit plan.created for Second Brain tracking
+    this.eventBus?.emit({
+      type: "plan.created",
+      payload: {
+        sessionID: sessionId,
+        planId: subtasks[0]?.id ?? "plan-1",
+        goal: plan.intent.goal,
+        subtaskCount: subtasks.length,
+        domain: "code",
+      },
+    })
 
     // DAG observer → legacy observer mapping
     this.executionLayer.addObserver({
@@ -302,6 +322,34 @@ export class AgentLoop {
         }
       }
 
+      // Emit step event for Second Brain tracking
+      if (result.success) {
+        this.eventBus?.emit({
+          type: "step.completed",
+          payload: {
+            sessionID: sessionId,
+            stepId: node.id,
+            output: result.output,
+            filesModified: result.filesModified,
+            success: true,
+            durationMs: 0,
+          },
+        })
+      } else {
+        this.eventBus?.emit({
+          type: "step.failed",
+          payload: {
+            sessionID: sessionId,
+            stepId: node.id,
+            output: result.output,
+            filesModified: result.filesModified,
+            error: result.error ?? "Unknown error",
+            errorCategory: "unknown",
+            durationMs: 0,
+          },
+        })
+      }
+
       // Record result in Executor (for backward compat)
       executor.recordResult(sessionId, {
         stepId: node.id,
@@ -385,6 +433,20 @@ export class AgentLoop {
       success: dagResult.success,
       summary: dagResult.summary,
     }
+
+    // ponytail: no wall-clock tracking in DAG runner; consumers don't depend on precise time
+    this.eventBus?.emit({
+      type: "plan.completed",
+      payload: {
+        sessionID: sessionId,
+        planId: subtasks[0]?.id ?? "plan-1",
+        goal: plan.intent.goal,
+        allStepIds: [...completedSteps, ...failedSteps],
+        allFilesModified: [],
+        totalDurationMs: 0,
+        allPassed: result.success,
+      },
+    })
 
     this.observers.forEach(o => o.onLoopComplete(result))
     return result

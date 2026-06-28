@@ -73,3 +73,15 @@ export function detectLoop(context: DAGExecutionContext, nodeId: string): boolea
   const identical = window.filter(c => c.hash === hash).length
   return identical > LOOP_DETECTION_MAX_IDENTICAL
 }
+
+// ── AbortSignal ──────────────────────────────────────────────────────
+
+/** Combine two AbortSignals into one (or-relationship) */
+export function combinedAbort(sig1: AbortSignal, sig2: AbortSignal): AbortSignal {
+  if (sig1.aborted || sig2.aborted) return AbortSignal.abort()
+  const controller = new AbortController()
+  const onAbort = () => controller.abort()
+  sig1.addEventListener("abort", onAbort, { once: true })
+  sig2.addEventListener("abort", onAbort, { once: true })
+  return controller.signal
+}

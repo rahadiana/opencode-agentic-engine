@@ -265,6 +265,20 @@ export interface EpisodeRecordedEvent {
   }
 }
 
+/** Feedback from user (Gap #9: continuous learning) */
+export interface FeedbackRecordedEvent {
+  type: "feedback.recorded"
+  payload: {
+    sessionID: string
+    stepId: string
+    feedback: "positive" | "negative"
+    model: string
+    taskType: string
+    /** Only for negative feedback */
+    errorCategory?: string
+  }
+}
+
 // ── Union type for all events ──
 
 export type AgenticEvent =
@@ -284,6 +298,7 @@ export type AgenticEvent =
   | TaskCompletedEvent
   | SkillExtractedEvent
   | EpisodeRecordedEvent
+  | FeedbackRecordedEvent
 
 // ── Producer → Consumer mapping ──
 
@@ -304,6 +319,7 @@ export const EVENT_PRODUCER_MAP: Record<string, string[]> = {
   "task.completed":            ["agentic_delegate"],
   "memory.skill.extracted":    ["SkillStore.extract()"],
   "memory.episode.recorded":   ["EpisodicStore.record()"],
+  "feedback.recorded":         ["agentic_execute", "agentic_auto"],
 }
 
 export const EVENT_CONSUMER_MAP: Record<string, string[]> = {
@@ -323,4 +339,5 @@ export const EVENT_CONSUMER_MAP: Record<string, string[]> = {
   "task.completed":            ["Orchestrator.advanceStage (if pipeline)", "agentic_message (notify downstream)"],
   "memory.skill.extracted":    ["Dashboard.skillStats"],
   "memory.episode.recorded":   ["Dashboard.episodeStats"],
+  "feedback.recorded":         ["ModelRegistry (auto-deprioritize model)", "ContinuousEvolution.feedStepResult", "SkillStore.reportFailure (if negative)"],
 }

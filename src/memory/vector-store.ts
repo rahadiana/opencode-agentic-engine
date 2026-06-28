@@ -21,6 +21,9 @@ export interface ScoredResult {
   matchFields: string[]
 }
 
+// ponytail: minimal stop set — avoids filtering domain words ("test", "code", "bug")
+// that are meaningful search tokens. Centralized stopwords.ts is too aggressive for
+// TF-IDF retrieval. Merge only when vector-store needs multilingual support.
 const STOP_WORDS = new Set([
   "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
   "of", "by", "with", "from", "as", "is", "was", "are", "were", "be",

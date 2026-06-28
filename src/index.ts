@@ -74,6 +74,7 @@ import { ToolRouter } from "./core/tool-router.js"
 import { ConfidenceScorer, ConfidenceStore, type ConfidenceScore } from "./core/confidence-scorer.js"
 import { codeIntentAnalyzer } from "./core/code-intent-analyzer.js"
 import { SchemaValidator } from "./core/skill-schema.js"
+import { parseFileEntries, writeFiles as writeFilesHelper } from "./core/execution-helpers.js"
 import { DslExecutor } from "./core/dsl-executor.js"
 import { SkillImprover } from "./core/skill-improver.js"
 import { AttentionScheduler } from "./core/attention-scheduler.js"
@@ -362,6 +363,11 @@ const createEngine: Plugin = async (input, _options) => {
     // Wrap execute with global error handler
     const wrappedExecute = async (args: any, context: any) => {
       try {
+        // Auto-set LLM session + tool context for model resolution
+        if (context?.sessionID) {
+          llmEngine.setSessionId(context.sessionID)
+        }
+        llmEngine.setToolContext(name)
         const result = await def.execute(args, context)
         return result
       } catch (err: any) {
@@ -771,19 +777,20 @@ const confidenceStore = new ConfidenceStore()
     }
   })
 
-  /** Helper: run the full self-evolution cycle and return a summary */
-  async function runAutoEvolve(): Promise<string> {
+  /** Helper: gather evolution data from stores and feed to selfEvolver */
+  async function gatherEvolutionData(): Promise<{
+    allEpisodes: import("./memory/episodic-store.js").Episode[]
+    allStepStates: Array<{ stepId: string; success: boolean; output: string }>
+    traces: Array<{ toolUsed: string; success: boolean; step: string }>
+  }> {
     await traceLogger.flush()
-
     const allSkills = skillStore.getAll()
     const allEpisodes = episodicStore.getRecent(50)
     const uniqueSessions = new Set(allEpisodes.map(e => e.sessionId))
-
     let allTasks: AgentTask[] = []
     for (const sid of uniqueSessions) {
       allTasks = allTasks.concat(coordinator.getTasks(sid))
     }
-
     const allStepStates: Array<{ stepId: string; success: boolean; output: string }> = []
     for (const sid of uniqueSessions) {
       const session = sessionStore.getOrCreate(sid)
@@ -791,34 +798,29 @@ const confidenceStore = new ConfidenceStore()
       for (const step of subtasks) {
         const state = executor.getStepState(sid, step.id)
         if (state?.result) {
-          allStepStates.push({
-            stepId: step.id,
-            success: state.result.success,
-            output: state.result.output,
-          })
+          allStepStates.push({ stepId: step.id, success: state.result.success, output: state.result.output })
         }
       }
     }
-
     const traces: Array<{ toolUsed: string; success: boolean; step: string }> = []
     const tracePath = `${worktree}/.agentic/trace.jsonl`
     try {
-      const content = readFileSync(tracePath, "utf-8")
-      for (const line of content.trim().split("\n").filter(Boolean)) {
+      for (const line of readFileSync(tracePath, "utf-8").trim().split("\n").filter(Boolean)) {
         const parsed = JSON.parse(line)
-        traces.push({
-          toolUsed: parsed.toolUsed ?? "unknown",
-          success: parsed.success ?? true,
-          step: parsed.step ?? "",
-        })
+        traces.push({ toolUsed: parsed.toolUsed ?? "unknown", success: parsed.success ?? true, step: parsed.step ?? "" })
       }
     } catch { /* no traces yet */ }
-
     selfEvolver.feedSkills(allSkills)
     selfEvolver.feedEpisodes(allEpisodes)
     selfEvolver.feedTasks(allTasks)
     selfEvolver.feedStepStates(allStepStates)
     selfEvolver.feedTraces(traces)
+    return { allEpisodes, allStepStates, traces }
+  }
+
+  /** Helper: run the full self-evolution cycle and return a summary */
+  async function runAutoEvolve(): Promise<string> {
+    await gatherEvolutionData()
 
     // Index trace entries ke TF-IDF vector store biar bisa di-search via agentic_rag tanpa bash
     try {
@@ -1037,8 +1039,6 @@ const confidenceStore = new ConfidenceStore()
           })).optional().describe("Manual subtask list. If omitted and autoDecompose is enabled, the planner will auto-generate steps."),
         },
         async execute(args, context) {
-          llmEngine.setSessionId(context.sessionID)
-          llmEngine.setToolContext('agentic_plan')
           let subtasks = args.subtasks ?? []
 
           if (subtasks.length === 0 && args.autoDecompose !== false) {
@@ -1308,8 +1308,6 @@ const confidenceStore = new ConfidenceStore()
           feedback: tool.schema.enum(["positive", "negative"]).optional().describe("User feedback on the result. Positive boosts skill confidence; negative triggers adaptation (Gap #9: continuous learning from feedback)"),
         },
         async execute(args, context) {
-          llmEngine.setSessionId(context.sessionID)
-          llmEngine.setToolContext('agentic_execute')
           const startTime = Date.now()
           const projectDir = ctxDir(context)
 
@@ -1699,6 +1697,19 @@ const confidenceStore = new ConfidenceStore()
             // Record feedback ke model yang dipake — biar model selection makin pinter
             const currentModel = llmEngine.getCurrentModel()
             const taskType = sessionStore.getOrCreate(context.sessionID).currentTaskType
+
+            // Emit feedback event for Second Brain + observability
+            eventBus.emit({
+              type: "feedback.recorded",
+              payload: {
+                sessionID: context.sessionID,
+                stepId: args.stepId,
+                feedback: args.feedback,
+                model: currentModel ?? "unknown",
+                taskType: taskType ?? "unknown",
+                errorCategory: isPositive ? undefined : "unknown",
+              },
+            })
             if (currentModel && taskType) {
               modelRegistry.recordUserFeedback(currentModel, taskType, isPositive)
               // Persist immediately so feedback survives restart
@@ -1779,8 +1790,6 @@ const confidenceStore = new ConfidenceStore()
           attemptedFix: tool.schema.string().optional().describe("What you tried to fix the error (if any)"),
         },
         async execute(args, context) {
-          llmEngine.setSessionId(context.sessionID)
-          llmEngine.setToolContext('agentic_reflect')
           const stepState = executor.getStepState(context.sessionID, args.stepId)
           if (!stepState || !stepState.result) {
             return { output: `No execution record for step "${args.stepId}". Has it been run via \`agentic_execute\`?` }
@@ -1858,8 +1867,6 @@ const confidenceStore = new ConfidenceStore()
           tier: tool.schema.enum(["fast", "standard", "deep"]).optional().describe("Verification tier: 'fast', 'standard', or 'deep' (default: 'deep')"),
         },
         async execute(args, context) {
-          llmEngine.setSessionId(context.sessionID)
-          llmEngine.setToolContext('agentic_verify')
           const projectDir = args.projectDir ?? ctxDir(context)
           const stepId = args.stepId ?? "full"
           const tier = (args.tier ?? "deep") as import("./core/verifier.js").VerificationTier
@@ -2043,8 +2050,6 @@ const confidenceStore = new ConfidenceStore()
           action: tool.schema.enum(["view", "compress"]).describe("'view' shows current context stats; 'compress' generates a compressed context prompt"),
         },
         async execute(args, context) {
-          llmEngine.setSessionId(context.sessionID)
-          llmEngine.setToolContext('agentic_context')
           const turns = sessionStore.getContext(context.sessionID, 100)
           const session = sessionStore.getOrCreate(context.sessionID)
           const allFiles = executor.getAllFilesModified(context.sessionID)
@@ -2390,8 +2395,6 @@ const confidenceStore = new ConfidenceStore()
           baseBranch: tool.schema.string().optional().describe("Base branch for PR creation (default: main)"),
         },
         async execute(args, context) {
-          llmEngine.setSessionId(context.sessionID)
-          llmEngine.setToolContext('agentic_pr')
           const session = sessionStore.getOrCreate(context.sessionID)
           const allFiles = executor.getAllFilesModified(context.sessionID)
 
@@ -3605,8 +3608,6 @@ const confidenceStore = new ConfidenceStore()
           abortOnFailure: tool.schema.boolean().optional().describe("Stop all tasks in phase if one fails (default: false)"),
         },
         async execute(args, context) {
-          llmEngine.setSessionId(context.sessionID)
-          llmEngine.setToolContext('agentic_parallel')
           const session = sessionStore.getOrCreate(context.sessionID)
           if (!session.plan) return { output: "No plan found. Create one with `agentic_plan` first." }
 
@@ -4072,52 +4073,7 @@ const confidenceStore = new ConfidenceStore()
             }
 
             case "evolve": {
-              await traceLogger.flush()
-
-              const allSkills = skillStore.getAll()
-              const allEpisodes = episodicStore.getRecent(50)
-
-              const uniqueSessions = new Set(allEpisodes.map(e => e.sessionId))
-              let allTasks: AgentTask[] = []
-              for (const sid of uniqueSessions) {
-                allTasks = allTasks.concat(coordinator.getTasks(sid))
-              }
-
-              const allStepStates: Array<{ stepId: string; success: boolean; output: string }> = []
-              for (const sid of uniqueSessions) {
-                const session = sessionStore.getOrCreate(sid)
-                const subtasks = session.plan?.intent.subtasks ?? []
-                for (const step of subtasks) {
-                  const state = executor.getStepState(sid, step.id)
-                  if (state?.result) {
-                    allStepStates.push({
-                      stepId: step.id,
-                      success: state.result.success,
-                      output: state.result.output,
-                    })
-                  }
-                }
-              }
-
-              const traces: Array<{ toolUsed: string; success: boolean; step: string }> = []
-              const tracePath = `${worktree}/.agentic/trace.jsonl`
-              try {
-                const content = readFileSync(tracePath, "utf-8")
-                for (const line of content.trim().split("\n").filter(Boolean)) {
-                  const parsed = JSON.parse(line)
-                  traces.push({
-                    toolUsed: parsed.toolUsed ?? "unknown",
-                    success: parsed.success ?? true,
-                    step: parsed.step ?? "",
-                  })
-                }
-              } catch { /* no traces yet */ }
-
-              selfEvolver.feedSkills(allSkills)
-              selfEvolver.feedEpisodes(allEpisodes)
-              selfEvolver.feedTasks(allTasks)
-              selfEvolver.feedStepStates(allStepStates)
-              selfEvolver.feedTraces(traces)
+              const { allEpisodes, allStepStates } = await gatherEvolutionData()
 
               // Feed execution data to MetaReasoner (Comparison 22)
               for (const state of allStepStates) {
@@ -4446,8 +4402,6 @@ const confidenceStore = new ConfidenceStore()
           verbose: tool.schema.boolean().optional().default(false).describe("Tampilkan progress debate real-time + full transcript per round"),
         },
         async execute(args, context) {
-          llmEngine.setSessionId(context.sessionID)
-          llmEngine.setToolContext('agentic_debate')
           const startTime = Date.now()
 
           // Model per-role di-resolve otomatis via toolName di debate-loop.ts:
@@ -4537,9 +4491,7 @@ const confidenceStore = new ConfidenceStore()
             description: tool.schema.string(),
           })).optional().describe("Optional custom categories (overrides defaults)"),
         },
-        async execute(args, context) {
-          llmEngine.setSessionId(context.sessionID)
-          llmEngine.setToolContext('agentic_router')
+        async execute(args, _context) {
           const startTime = Date.now()
 
           if (args.categories && Array.isArray(args.categories) && args.categories.length > 0) {
@@ -4575,9 +4527,7 @@ const confidenceStore = new ConfidenceStore()
           schema: tool.schema.string().optional().describe("Expected JSON schema description (e.g., 'array of {name, description}')"),
           stripDebate: tool.schema.boolean().optional().default(true).describe("Strip debate/review artifacts"),
         },
-        async execute(args, context) {
-          llmEngine.setSessionId(context.sessionID)
-          llmEngine.setToolContext('agentic_clean')
+        async execute(args, _context) {
           const startTime = Date.now()
 
           const result = await dataCleaner.clean({
@@ -4615,8 +4565,6 @@ const confidenceStore = new ConfidenceStore()
           type: tool.schema.enum(["episode", "skill"]).optional().default("episode").describe("Type of content to store"),
         },
         async execute(args, context) {
-          llmEngine.setSessionId(context.sessionID)
-
           switch (args.action) {
             case "search": {
               const q = args.query || ""
@@ -4875,9 +4823,7 @@ const confidenceStore = new ConfidenceStore()
           tool: tool.schema.string().optional().describe("Tool name to call on the server"),
           params: tool.schema.string().optional().describe("JSON string of tool arguments"),
         },
-        async execute(args, context) {
-          llmEngine.setSessionId(context.sessionID)
-
+        async execute(args, _context) {
           switch (args.action) {
             case "connect": {
               if (!args.transport) {
@@ -5419,6 +5365,25 @@ const confidenceStore = new ConfidenceStore()
           const skillStore = g.__opencode_skillStore
           const episodicStore = g.__opencode_episodicStore
 
+          // Helper: read fine-tuning config from configLoader
+          const getFtConfig = () => {
+            const cl = (globalThis as { __opencode_configLoader?: { get?: () => { fineTuning?: Record<string, unknown> } } }).__opencode_configLoader
+            return (cl?.get?.()?.fineTuning ?? {}) as Record<string, unknown>
+          }
+
+          // Helper: create configured FineTuningClient
+          const getClient = async (opts?: { model?: string }) => {
+            const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
+            const ftCfg = getFtConfig()
+            const client = new FTC({
+              apiKey: (ftCfg.apiKey as string) || undefined,
+              baseURL: (ftCfg.baseURL as string) || undefined,
+              model: opts?.model || (ftCfg.model as string) || undefined,
+            })
+            if (!client.isConfigured()) return null
+            return client
+          }
+
           switch (action) {
             case "prepare": {
               // Gather data
@@ -5486,19 +5451,8 @@ const confidenceStore = new ConfidenceStore()
             }
 
             case "upload": {
-              const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
-              // Get config from configLoader if available
-              const configLoader = (globalThis as { __opencode_configLoader?: { get?: () => { fineTuning?: { apiKey?: string; baseURL?: string; model?: string; trainingEpochs?: number; suffix?: string } } } }).__opencode_configLoader
-              const ftConfig = configLoader?.get?.()?.fineTuning ?? {}
-              const client = new FTC({
-                apiKey: ftConfig.apiKey || undefined,
-                baseURL: ftConfig.baseURL || undefined,
-                model: model || ftConfig.model || undefined,
-              })
-
-              if (!client.isConfigured()) {
-                return { output: "Error: OpenAI API key not configured. Set OPENAI_API_KEY env or fineTuning.apiKey in config." }
-              }
+              const client = await getClient({ model })
+              if (!client) return { output: "Error: OpenAI API key not configured. Set OPENAI_API_KEY env or fineTuning.apiKey in config." }
 
               if (!outputPath) {
                 return { output: "Error: 'outputPath' pointing to a .jsonl file is required for upload." }
@@ -5527,25 +5481,16 @@ const confidenceStore = new ConfidenceStore()
                 return { output: "Error: 'jobId' (training file ID) is required for create-job." }
               }
 
-              const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
-              const configLoader = (globalThis as { __opencode_configLoader?: { get?: () => { fineTuning?: { apiKey?: string; baseURL?: string; model?: string; trainingEpochs?: number; suffix?: string } } } }).__opencode_configLoader
-              const ftConfig = configLoader?.get?.()?.fineTuning ?? {}
-              const client = new FTC({
-                apiKey: ftConfig.apiKey || undefined,
-                baseURL: ftConfig.baseURL || undefined,
-                model: model || ftConfig.model || undefined,
-              })
-
-              if (!client.isConfigured()) {
-                return { output: "Error: OpenAI API key not configured." }
-              }
+              const client = await getClient({ model })
+              if (!client) return { output: "Error: OpenAI API key not configured." }
 
               try {
-                const job = await client.createJob(jobId, {
-                  model: model || ftConfig.model,
-                  trainingEpochs: epochs || ftConfig.trainingEpochs,
-                  suffix: suffix || ftConfig.suffix,
-                })
+                  const ftCfg = getFtConfig()
+                  const job = await client.createJob(jobId, {
+                    model: model || (ftCfg.model as string),
+                    trainingEpochs: epochs || (ftCfg.trainingEpochs as number),
+                    suffix: suffix || (ftCfg.suffix as string),
+                  })
                 return {
                   output: [
                     `✅ Fine-tuning job created`,
@@ -5566,17 +5511,8 @@ const confidenceStore = new ConfidenceStore()
                 return { output: "Error: 'jobId' is required for status action." }
               }
 
-              const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
-              const configLoader = (globalThis as { __opencode_configLoader?: { get?: () => { fineTuning?: { apiKey?: string; baseURL?: string; model?: string; trainingEpochs?: number; suffix?: string } } } }).__opencode_configLoader
-              const ftConfig = configLoader?.get?.()?.fineTuning ?? {}
-              const client = new FTC({
-                apiKey: ftConfig.apiKey || undefined,
-                baseURL: ftConfig.baseURL || undefined,
-              })
-
-              if (!client.isConfigured()) {
-                return { output: "Error: OpenAI API key not configured." }
-              }
+              const client = await getClient()
+              if (!client) return { output: "Error: OpenAI API key not configured." }
 
               try {
                 const job = await client.getJobStatus(jobId)
@@ -5599,17 +5535,8 @@ const confidenceStore = new ConfidenceStore()
             }
 
             case "list": {
-              const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
-              const configLoader = (globalThis as { __opencode_configLoader?: { get?: () => { fineTuning?: { apiKey?: string; baseURL?: string; model?: string; trainingEpochs?: number; suffix?: string } } } }).__opencode_configLoader
-              const ftConfig = configLoader?.get?.()?.fineTuning ?? {}
-              const client = new FTC({
-                apiKey: ftConfig.apiKey || undefined,
-                baseURL: ftConfig.baseURL || undefined,
-              })
-
-              if (!client.isConfigured()) {
-                return { output: "Error: OpenAI API key not configured." }
-              }
+              const client = await getClient()
+              if (!client) return { output: "Error: OpenAI API key not configured." }
 
               try {
                 const jobs = await client.listJobs()
@@ -5632,17 +5559,8 @@ const confidenceStore = new ConfidenceStore()
                 return { output: "Error: 'jobId' is required for cancel action." }
               }
 
-              const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
-              const configLoader = (globalThis as { __opencode_configLoader?: { get?: () => { fineTuning?: { apiKey?: string; baseURL?: string; model?: string; trainingEpochs?: number; suffix?: string } } } }).__opencode_configLoader
-              const ftConfig = configLoader?.get?.()?.fineTuning ?? {}
-              const client = new FTC({
-                apiKey: ftConfig.apiKey || undefined,
-                baseURL: ftConfig.baseURL || undefined,
-              })
-
-              if (!client.isConfigured()) {
-                return { output: "Error: OpenAI API key not configured." }
-              }
+              const client = await getClient()
+              if (!client) return { output: "Error: OpenAI API key not configured." }
 
               try {
                 const job = await client.cancelJob(jobId)
@@ -5656,19 +5574,9 @@ const confidenceStore = new ConfidenceStore()
 
             case "full-pipeline": {
               const { saveTrainingDataToFile, prepareFineTuningDataset } = await import("./memory/skill-training.js")
-              const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
 
-              const configLoader = (globalThis as { __opencode_configLoader?: { get?: () => { fineTuning?: { apiKey?: string; baseURL?: string; model?: string; trainingEpochs?: number; suffix?: string } } } }).__opencode_configLoader
-              const ftConfig = configLoader?.get?.()?.fineTuning ?? {}
-              const client = new FTC({
-                apiKey: ftConfig.apiKey || undefined,
-                baseURL: ftConfig.baseURL || undefined,
-                model: model || ftConfig.model || undefined,
-              })
-
-              if (!client.isConfigured()) {
-                return { output: "Error: OpenAI API key not configured. Set OPENAI_API_KEY env or fineTuning.apiKey in config." }
-              }
+              const client = await getClient({ model })
+              if (!client) return { output: "Error: OpenAI API key not configured. Set OPENAI_API_KEY env or fineTuning.apiKey in config." }
 
               const skills = skillStore?.getAll() ?? []
               const episodes = episodicStore?.getRecent(1000) ?? []
@@ -5688,10 +5596,11 @@ const confidenceStore = new ConfidenceStore()
               try {
                 const file = await client.uploadFile(savePath)
                 // Create job
+                const ftCfg = getFtConfig()
                 const job = await client.createJob(file.id, {
-                  model: model || ftConfig.model,
-                  trainingEpochs: epochs || ftConfig.trainingEpochs,
-                  suffix: suffix || ftConfig.suffix,
+                  model: model || (ftCfg.model as string),
+                  trainingEpochs: epochs || (ftCfg.trainingEpochs as number),
+                  suffix: suffix || (ftCfg.suffix as string),
                 })
 
                 return {
@@ -5721,19 +5630,9 @@ const confidenceStore = new ConfidenceStore()
 
             case "full-pipeline-wait": {
               const { saveTrainingDataToFile, prepareFineTuningDataset } = await import("./memory/skill-training.js")
-              const { FineTuningClient: FTC } = await import("./core/fine-tuning.js")
 
-              const configLoader = (globalThis as { __opencode_configLoader?: { get?: () => { fineTuning?: { apiKey?: string; baseURL?: string; model?: string; trainingEpochs?: number; suffix?: string } } } }).__opencode_configLoader
-              const ftConfig = configLoader?.get?.()?.fineTuning ?? {}
-              const client = new FTC({
-                apiKey: ftConfig.apiKey || undefined,
-                baseURL: ftConfig.baseURL || undefined,
-                model: model || ftConfig.model || undefined,
-              })
-
-              if (!client.isConfigured()) {
-                return { output: "Error: OpenAI API key not configured." }
-              }
+              const client = await getClient({ model })
+              if (!client) return { output: "Error: OpenAI API key not configured." }
 
               const skills = skillStore?.getAll() ?? []
               const episodes = episodicStore?.getRecent(1000) ?? []
@@ -5742,10 +5641,11 @@ const confidenceStore = new ConfidenceStore()
               await saveTrainingDataToFile(dataset, savePath)
 
               try {
+                const ftCfg = getFtConfig()
                 const result = await client.fullPipeline(savePath, {
-                  model: model || ftConfig.model,
-                  trainingEpochs: epochs || ftConfig.trainingEpochs,
-                  suffix: suffix || ftConfig.suffix,
+                  model: model || (ftCfg.model as string),
+                  trainingEpochs: epochs || (ftCfg.trainingEpochs as number),
+                  suffix: suffix || (ftCfg.suffix as string),
                 })
 
                 return {
@@ -5977,8 +5877,6 @@ const confidenceStore = new ConfidenceStore()
           maxSteps: tool.schema.number().optional().describe("Maximum number of steps (default: auto)"),
         },
         async execute(args, context) {
-          llmEngine.setSessionId(context.sessionID)
-          llmEngine.setToolContext('agentic_auto')
           const projectDir = ctxDir(context)
           const startTime = Date.now()
           const thorough = args.thorough !== false
@@ -6164,41 +6062,9 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
             const isSimple = args.goal.length < 80 && activeSteps.length < 3
             const maxTokens = isSimple ? 1024 : 2048
 
-            // ── Helper: parse LLM JSON output → {path, content}[] ──
-            function parseLLMOutput(output: string): Array<{ path: string; content: string }> {
-              const result: Array<{ path: string; content: string }> = []
-              try {
-                const parsed = JSON.parse(output)
-                if (parsed.files && Array.isArray(parsed.files)) {
-                  for (const f of parsed.files) {
-                    if (f.path && f.content) result.push({ path: f.path, content: f.content })
-                  }
-                }
-              } catch {
-                const fbRegex = /FILE:\s*(\S+)\n```(?:\w+)?\n([\s\S]*?)```/g
-                let fbMatch: RegExpExecArray | null
-                while ((fbMatch = fbRegex.exec(output)) !== null) {
-                  result.push({ path: fbMatch[1].replace(/^\/+/, ""), content: fbMatch[2] })
-                }
-                if (result.length === 0 && !output.includes("NO_CHANGES") && !output.includes('"noChanges"')) {
-                  const cbMatch = output.match(/```(?:\w+)?\n([\s\S]*?)```/)
-                  if (cbMatch) result.push({ path: relevantFiles[0]?.replace(/^\/+/, "") || "src/index.ts", content: cbMatch[1] })
-                }
-              }
-              return result
-            }
-
-            // ── Helper: write files to disk ──
-            function writeFiles(files: Array<{ path: string; content: string }>, target: string[]): void {
-              for (const fw of files) {
-                try {
-                  const absPath = join(projectDir, fw.path)
-                  mkdirSync(dirname(absPath), { recursive: true })
-                  writeFileSync(absPath, fw.content, "utf-8")
-                  target.push(fw.path)
-                } catch { /* skip bad paths */ }
-              }
-            }
+            // ── Helper: parse LLM JSON output → {path, content}[] (shared) ──
+            const parseLLMOutput = (output: string) =>
+              parseFileEntries(output, relevantFiles[0]?.replace(/^\/+/, "") || "src/index.ts")
 
             // Capture pre-change git state for rollback
             try {
@@ -6235,9 +6101,10 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
 
               if (hasNoLLM) break
 
-              // Parse & write files
+              // Parse & write files (shared helper with event emission)
               const filesToWrite = parseLLMOutput(output)
-              writeFiles(filesToWrite, allModified)
+              const writtenPaths = writeFilesHelper(filesToWrite, projectDir, context.sessionID, eventBus)
+              allModified.push(...writtenPaths)
 
               if (filesToWrite.length === 0) {
                 verifyNote = "⚠️ No files generated"
@@ -6436,7 +6303,6 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
         },
         execute: async (args: Record<string, unknown>, _context: Record<string, unknown>) => {
           const context = _context as Record<string, unknown>
-          llmEngine.setSessionId(context.sessionID as string)
           const sb = getSecondBrain()
           if (!sb) return { output: "Second Brain not initialized." }
 

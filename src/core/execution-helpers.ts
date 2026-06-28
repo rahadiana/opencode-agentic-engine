@@ -73,7 +73,7 @@ export function writeFiles(
  * Parse JSON output from LLM developer stage, extracting {path, content} entries.
  * Falls back to FILE: regex pattern if JSON parsing fails.
  */
-export function parseFileEntries(raw: string): FileWriteEntry[] {
+export function parseFileEntries(raw: string, fallbackPath?: string): FileWriteEntry[] {
   const files: FileWriteEntry[] = []
 
   // Try JSON first
@@ -103,7 +103,7 @@ export function parseFileEntries(raw: string): FileWriteEntry[] {
       (raw.includes("```") || raw.includes("\"files\""))) {
     const cbMatch = raw.match(/```(?:\w+)?\n([\s\S]*?)```/)
     if (cbMatch && raw.length > 100) {
-      files.push({ path: "src/generated.ts", content: cbMatch[1] })
+      files.push({ path: fallbackPath ?? "src/generated.ts", content: cbMatch[1] })
     }
   }
 

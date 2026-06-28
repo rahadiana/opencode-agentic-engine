@@ -9,7 +9,7 @@ Plugin OpenCode yang mengimplementasikan agentic software engineering workflow b
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
                     # postbuild: auto-copy ke ~/.cache/opencode/packages/ (jika ada)
-node test/run.mjs   # 1117+ unit tests (mock, no LLM needed)
+node test/run.mjs   # 1798+ unit tests (mock, no LLM needed)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
 node test/e2e-scenario.mjs # EvoClaw: 50-file codebase, 5 iterations
@@ -23,24 +23,30 @@ node test/e2e-llm.mjs       # LLM E2E: 19 tests (auto: OpenCode Free)
 
 ```
 src/
-├── index.ts                   # Plugin entry: registers 30 tools + 6 hooks
+├── index.ts                   # Plugin entry: registers 34 tools + 5 hooks
 ├── README.md                  # → Dokumentasi fungsi per folder untuk AI context
 │
-├── core/                      # Inti engine: planning, execution, verification
-│   ├── README.md              # Dokumentasi 63 file + 6 domain
+├── core/                      # Inti engine: planning, execution, verification (63 file + 6 domain)
+│   ├── README.md              # Dokumentasi fungsi per folder untuk AI context
 │   ├── agent-loop.ts          # Autonomous loop: plan → execute → verify → retry
-    │   ├── auto-retry.ts          # Exponential backoff + jitter retry logic
-    │   ├── bootstrap-knowledge.ts # Seeds RAG with high-confidence plugin docs
-    │   ├── budget-tracker.ts      # Token/steps/time/cost budget enforcement
+│   ├── agent-blueprint.ts     # Blueprint parser/resolver (A2A Agent Card)
+│   ├── auto-retry.ts          # Exponential backoff + jitter retry logic
+│   ├── bootstrap-knowledge.ts # Seeds RAG with high-confidence plugin docs
+│   ├── budget-tracker.ts      # Token/steps/time/cost budget enforcement
 │   ├── config.ts              # Plugin config, env vars, defaults
+│   ├── confidence-scorer.ts   # Multi-dimensional output confidence (Gap #2)
+│   ├── constraint-manifold.ts # Safety constraint enforcement (PEP)
+│   ├── dag-engine.ts          # DAG-based execution engine
+│   ├── dag-helpers.ts         # Pure helper functions for DAGEngine
 │   ├── data-cleaner.ts        # Strip debate artifacts, format output
 │   ├── debate-loop.ts         # Executor ↔ Critic AI debate for analysis
-│   ├── domain-registry.ts     # Domain-specific code generation (code/data/devops/..)
-    │   ├── error-analyzer.ts      # Categorizes errors (import/type/compile/test/runtime)
-    │   ├── errors.ts              # Custom error classes (TimeoutError, LLMError, etc.)
-    │   ├── event-bus.ts           # Pub/sub event bus for tool hooks
-│   ├── event-taxonomy.ts      # Event type taxonomy schema
+│   ├── domain-registry.ts     # Domain-specific code generation (code/data/devops/...)
+│   ├── error-analyzer.ts      # Categorizes errors (import/type/compile/test/runtime)
+│   ├── errors.ts              # Custom error classes (TimeoutError, LLMError, etc.)
+│   ├── event-bus.ts           # Pub/sub event bus for tool hooks
+│   ├── event-taxonomy.ts      # Event type taxonomy schema (18 event types)
 │   ├── execution-helpers.ts   # Shared execution primitives
+│   ├── execution-layer.ts     # DAG execution layer (Graph Harness)
 │   ├── executor.ts            # Step execution state, retry tracking
 │   ├── fine-tuning.ts         # Convert skills → training data pipeline
 │   ├── formal-model.ts        # Formal verification model
@@ -48,18 +54,32 @@ src/
 │   ├── id-chain.ts            # Chain-of-thought ID generation
 │   ├── intent-parser.ts       # Parses user intent → Plan structure
 │   ├── llm.ts                 # LLM integration (OpenAI-compatible API)
+│   ├── llm-types.ts           # LLM type definitions
 │   ├── mcp-client.ts          # MCP client for external tools/APIs
+│   ├── mcp-server.ts          # MCP server to expose plugin tools
+│   ├── meta-reasoner.ts       # Strategy adaptation (Gap #8)
 │   ├── model-registry.ts      # Per-role LLM model preferences
 │   ├── navigator.ts           # Codebase file scanning + relevance scoring
 │   ├── parallel.ts            # Dependency-based concurrency + conflict detection
 │   ├── planner.ts             # Auto-decompose (create/fix/refactor/test templates)
+│   ├── planner-critic.ts      # Self-reflection for plan quality
+│   ├── planning-layer.ts      # DAG planning layer (Graph Harness)
 │   ├── prompt-builder.ts      # Dynamic prompt construction
 │   ├── prompt-template.ts     # XML-based prompt templates (head/body/footer)
+│   ├── protocol-adapter.ts    # Unified MCP + A2A gateway
+│   ├── recovery-layer.ts      # DAG recovery layer (Graph Harness)
 │   ├── router-agent.ts        # Intent classification + routing
 │   ├── semantic-cache.ts      # Gap #7: TF-IDF + cosine similarity LLM response cache
+│   ├── simulation-engine.ts   # Simulated execution for what-if analysis
+│   ├── skill-improver.ts      # Mutation-based skill improvement
+│   ├── skill-schema.ts        # Skill output schema validation
+│   ├── state-store.ts         # Namespaced key-value persistence
 │   ├── task-classifier.ts     # Task type classification
 │   ├── tech-debt-scorer.ts    # Coupling/size/scope/patterns analysis
-│   └── verifier.ts            # Compile + test + Gap #4: multi-dimensional verification (security, perf, architecture, deps) with 3-tier system (fast/standard/deep)
+│   ├── tool-router.ts         # MCP + A2A unified tool routing
+│   ├── verifier.ts            # Compile + test + Gap #4: multi-dimensional verification (security, perf, architecture, deps) with 3-tier system (fast/standard/deep)
+│   ├── workflow-engine.ts     # Chained step execution
+│   ├── world-model.ts         # World model for semantic understanding
 │   └── domains/               # Domain-specific generators
 │       ├── code.ts, data-science.ts, devops.ts
 │       ├── generic.ts, mobile.ts, security.ts
@@ -67,6 +87,9 @@ src/
 ├── agents/                    # Multi-agent coordination
 │   ├── README.md              # Dokumentasi 7 file
 │   ├── agent-runtime.ts       # Agent sub-process spawner
+│   ├── a2a-client.ts          # A2A protocol client
+│   ├── a2a-server.ts          # A2A protocol server
+│   ├── a2a-types.ts           # A2A protocol types
 │   ├── coordinator.ts         # Delegates to agent roles, auto-suggests role, msg bus
 │   ├── orchestrator.ts        # Multi-agent workflow pipelines + cross-validation
 │   └── role-registry.ts       # Built-in + custom agent definitions (extensible)
@@ -86,11 +109,20 @@ src/
 │   ├── multi-index-rag.ts     # Multi-index RAG with category segregation
 │   ├── persistence.ts         # File-based JSON persistence
 │   ├── schema-version.ts      # Memory schema envelope + migration system
+│   ├── second-brain.ts        # Active memory: decisions, TODOs, reflection, graph
 │   ├── session-store.ts       # Conversation turns + plan + progress
 │   ├── skill-format.ts        # Self-describing agentic-skill/v1 schema
 │   ├── skill-store.ts         # Skill extraction, search, failure reporting
 │   ├── skill-training.ts      # Convert skill → training data (JSONL/instructions)
-│   └── vector-store.ts        # Vector similarity search
+│   ├── skill-extractor.ts     # Skill extraction from conversations
+│   ├── stopwords.ts           # Stop words for TF-IDF (58 languages)
+│   ├── vector-store.ts        # Vector similarity search
+│   ├── memory-orchestrator.ts # Multi-level memory coordination
+│   ├── memory-query-engine.ts # Structured memory queries
+│   ├── consolidation-scheduler.ts # Periodic memory consolidation
+│   ├── execution-tracer.ts    # Step execution tracing
+│   ├── sqlite-persistence.ts  # SQLite storage backend
+│   └── importance-index.ts    # Memory importance scoring
 │
 ├── evaluation/
 │   ├── README.md              # Dokumentasi 1 file
@@ -124,7 +156,13 @@ Konfigurasi plugin disimpan di `.agentic/config.json` (per project). Auto-create
 | `memory.forgetAfterDays` | `number` | `30` | Hapus memory setelah N hari |
 | `memory.search.keywordWeight` | `number` | `0.3` | Bobot keyword search |
 | `memory.search.vectorWeight` | `number` | `0.7` | Bobot vector search |
+| `memory.compressThreshold` | `number` | `500` | Threshold untuk auto-compress context |
+| `memory.stopWordsLanguages` | `string[]` | `["ind", "eng"]` | Bahasa untuk stop words filtering |
 | `agent.maxDelegationDepth` | `number` | `3` | Max depth delegasi agent |
+| `agent.defaultRole` | `string` | `"developer"` | Default role untuk agent tanpa spesifikasi |
+| `agent.requireSemanticCheck` | `boolean` | `false` | Wajibkan semantic check tiap execute |
+| `agent.blockOnHallucination` | `boolean` | `false` | Block step jika hallucination terdeteksi |
+| `agent.minSampleSize` | `number` | `5` | Minimum sample size untuk statistik model |
 | `agent.autoSkillExtract` | `boolean` | `true` | Auto-extract skill dari task sukses |
 | `agent.autoHallucinationCheck` | `boolean` | `true` | Auto-cek hallucination tiap execute |
 | `agent.hallucinationThreshold` | `number` | `0.3` | Threshold hallucination score |
@@ -163,7 +201,7 @@ Konfigurasi plugin disimpan di `.agentic/config.json` (per project). Auto-create
 
 ## Tools Detail
 
-### Agentic Tools (29)
+### Agentic Tools (34)
 
 Semua tool menggunakan prefix `agentic_`. Dikelompokkan berdasarkan Stage:
 
@@ -189,6 +227,8 @@ Semua tool menggunakan prefix `agentic_`. Dikelompokkan berdasarkan Stage:
 | `agentic_model` | `action` (set/get/list/clear), `role`, `model` | `{ output }` | **Set per-role model preference.** Disimpan ke `.agentic/models.json`. Model dikirim ke OpenCode SDK saat delegasi. |
 | `agentic_model_reset` | `action` (reset/reset-stale/reset-all), `model?` | `{ stats }` | Reset statistics model (reliability, hallucination). Pull emergency jika model degraded. |
 | `agentic_budget` | `action` (set/get/status/reset), limits | `{ limits, usage }` | Circuit breaker: batasi token/steps/time/cost. Per-scope (session/task). |
+| `agentic_db` | `action` (query/save/load/list/stats/tables/migrate) | `{ output }` | SQLite database backend. Query, save, load, list, stats. Structured queries support WHERE, JOIN, GROUP BY. |
+| `agentic_memo` | `action` (decision/todo/todo-done/list/reflect/graph) | `{ output }` | Second Brain: manage decisions (ADR), TODOs, run reflection, and inspect knowledge graph. |
 
 #### Stage III — Orchestration
 
@@ -203,6 +243,7 @@ Semua tool menggunakan prefix `agentic_`. Dikelompokkan berdasarkan Stage:
 | `agentic_dashboard` | — | `{ timeline, stats, anomalies }` | Observability: timeline, tool usage, anomaly detection, model reliability. |
 | `agentic_guard` | `stepId` | `{ claims, verified }` | Re-check hallucination untuk file/fungsi/import claims. Auto-run di execute. |
 | `agentic_finetune` | `action` (prepare/upload/create-job/status) | `{ job, status }` | Fine-tuning pipeline: convert skills → training data → upload OpenAI → monitor job. |
+| `agentic_tools` | `action` (search/call/list/stats) | `{ output }` | Unified tool discovery across MCP + A2A protocols. Search, call, and list tools from all connected backends. |
 
 #### Stage IV — Evolution
 
@@ -225,6 +266,7 @@ Semua tool menggunakan prefix `agentic_`. Dikelompokkan berdasarkan Stage:
 | `agentic_clean` | `text`, `format`, `schema?` | `{ cleaned, validJson }` | Strip debate artifacts + reformat. Regex first → LLM enhancement. |
 | `agentic_rag` | `action` (search/store/stats), `query` | `{ results }` | Multi-index RAG dengan category segregation. TF-IDF + vector hybrid search. |
 | `agentic_mcp` | `action` (connect/list/call/disconnect) | `{ tools, result }` | MCP client. Connect ke external servers (stdio/HTTP). Discover + call tools. |
+| `agentic_mcp_server` | `action` (start/stop/status/restart) | `{ output }` | Start or stop the MCP server that exposes plugin tools via standard MCP protocol. |
 | `agentic_a2a` | `action` (serve/stop/discover/delegate/list/ping/stats) | `{ output }` | A2A (Agent-to-Agent) protocol. Discover remote agents, delegate tasks, serve Agent Card. Google A2A standard untuk cross-framework interop. |
 
 ## Model Resolution
@@ -562,4 +604,18 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 - **P2 (Knowledge-First)**: Added `bootstrap-knowledge.ts` — seeds RAG with 10 high-confidence entries about plugin architecture, tools, and workflows
 - **P3 (UX)**: Cancelable debate loop via `AbortSignal` in `DebateConfig`. Documented alternative embedding providers (Ollama, etc.)
 - **1117+ unit tests** (was 744)
+
+### v0.5.4 — Ponytail Refactor + Second Brain Events + Gap #9 Feedback Events (2026-06-28)
+
+- **Ponytail refactor (src/index.ts)**: 3 redundancy removals — -189 baris net:
+  - `setSessionId`/`setToolContext` auto via `registryTool` wrapper (hilangkan 14× manual panggilan)
+  - `FineTuningClient` 7× → helper `getClient()` + `getFtConfig()`
+  - `runAutoEvolve` vs `evolve` → shared `gatherEvolutionData()`
+- **Ponytail refactor (codebase-wide)**: 3 more redundancy removals:
+  - `parseLLMOutput()` inline → `parseFileEntries()` dari `execution-helpers.ts` (+ `fallbackPath` param)
+  - `writeFiles()` inline → reuse `writeFiles()` dari `execution-helpers.ts` (+ event emission)
+  - `combinedAbort()` duplicate di `debate-loop.ts` + `dag-engine.ts` → shared di `dag-helpers.ts`
+- **Second Brain events**: `agent-loop.ts` now emits `plan.created`, `step.completed`, `step.failed`, `plan.completed` events — SecondBrain auto-tracks execution
+- **Gap #9 feedback events**: New `feedback.recorded` event emitted by `agentic_execute` on user feedback — enables observability + real-time adaptation
+- **1798+ unit tests** (was 1117) — net 0 regressions
 

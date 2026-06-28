@@ -12,7 +12,7 @@
 
 import type { Subtask } from "./intent-parser.js"
 import { TimeoutError, BudgetExceededError } from "./errors.js"
-import { computeBackoff, buildSummary, inferNodeType, detectLoop, LOOP_DETECTION_MAX_IDENTICAL } from "./dag-helpers.js"
+import { computeBackoff, buildSummary, inferNodeType, detectLoop, LOOP_DETECTION_MAX_IDENTICAL, combinedAbort } from "./dag-helpers.js"
 import { createLogger } from "../observability/logger.js"
 
 const log = createLogger("DAG")
@@ -687,12 +687,3 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-/** Combine two AbortSignals into one (or-relationship) */
-function combinedAbort(sig1: AbortSignal, sig2: AbortSignal): AbortSignal {
-  if (sig1.aborted || sig2.aborted) return AbortSignal.abort()
-  const controller = new AbortController()
-  const onAbort = () => controller.abort()
-  sig1.addEventListener("abort", onAbort, { once: true })
-  sig2.addEventListener("abort", onAbort, { once: true })
-  return controller.signal
-}

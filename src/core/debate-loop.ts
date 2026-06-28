@@ -2,6 +2,7 @@ import type { LLMEngine } from "./llm.js"
 import type { AgentRuntime, AgentContext } from "../agents/agent-runtime.js"
 import { TimeoutError } from "./errors.js"
 import { createLogger } from "../observability/logger.js"
+import { combinedAbort } from "./dag-helpers.js"
 
 const log = createLogger("DebateLoop")
 
@@ -487,16 +488,6 @@ export function formatDebateResult(result: DebateResult): string {
   }
 
   return lines.join("\n")
-}
-
-/** Combine two AbortSignals into one (or-relationship) */
-function combinedAbort(sig1: AbortSignal, sig2: AbortSignal): AbortSignal {
-  if (sig1.aborted || sig2.aborted) return AbortSignal.abort()
-  const controller = new AbortController()
-  const onAbort = () => controller.abort()
-  sig1.addEventListener("abort", onAbort, { once: true })
-  sig2.addEventListener("abort", onAbort, { once: true })
-  return controller.signal
 }
 
 function levenshteinDistance(a: string, b: string): number {
