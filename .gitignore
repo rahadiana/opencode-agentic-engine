@@ -5,3 +5,4 @@ logs/
 .omo/
 scripts/telegram.sh
 tsconfig.tsbuildinfo
+.agentic/store
