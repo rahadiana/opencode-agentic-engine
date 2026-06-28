@@ -8,7 +8,7 @@
   "description": "Multi-agent software engineering plugin for OpenCode — implements Stages I-IV from \"The End of Software Engineering\" (arXiv:2606.05608)",
   "type": "module",
   "license": "MIT",
-  "author": "rahadiana",
+  "author": "rahadiana nugraha <rahadiana.nugraha@gmail.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rahadiana/opencode-agentic-engine.git"
