@@ -37,9 +37,7 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE",
-    "AGENTS.md",
-    "TOOLS.md"
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc --emitDeclarationOnly && node esbuild.config.mjs",

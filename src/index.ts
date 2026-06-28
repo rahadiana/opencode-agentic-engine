@@ -69,6 +69,7 @@ import { ProtocolAdapter } from "./core/protocol-adapter.js"
 import { DynamicToolRegistry } from "./core/dynamic-tool-registry.js"
 import { MCPServer } from "./core/mcp-server.js"
 import { buildAgenticSystemInstructions, type ToolEntry } from "./core/prompt-builder.js"
+import { detectProjectContext, type ProjectContext } from "./core/project-context.js"
 import { type KnowledgeEntry } from "./core/prompt-template.js"
 import { ToolRouter } from "./core/tool-router.js"
 import { ConfidenceScorer, ConfidenceStore, type ConfidenceScore } from "./core/confidence-scorer.js"
@@ -213,6 +214,10 @@ const createEngine: Plugin = async (input, _options) => {
     const name = worktree.split("/").filter(Boolean).pop() || "unknown"
     return name.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 64)
   })()
+
+  // ── Project context (auto-detect language, framework, test patterns) ──
+  // Cached in .agentic/project-context.json, invalidated on config file changes.
+  const projectContext: ProjectContext = detectProjectContext(worktree)
 
   // ── Tool registry (shared between prompt builder and tool definitions) ──
   // Each description follows the MCP 6-component rubric from arXiv:2602.14878:
@@ -6638,6 +6643,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
           injection = buildAgenticSystemInstructions(pack, TOOL_REGISTRY, {
             isRouted: false,  // no subset — LLM decides which tool fits
             knowledgeEntries: knowledgeEntries.length > 0 ? knowledgeEntries : undefined,
+            projectContext,
           })
 
           // ── Gap #3: Code Intent Injection ──
@@ -6923,6 +6929,7 @@ export { PlanningLayer, type PlanVersion, type PlanValidationResult, type Planni
 export { ExecutionLayer, type ExecutionLayerConfig, type NodeExecutionResult, type PhaseExecutionResult, type ExecutionSnapshot } from "./core/execution-layer.js"
 export { RecoveryLayer, type RecoveryLevel, type RecoveryStatus, type RecoveryRecord, type RecoveryDecision, type RecoveryLayerConfig, type ReplanResult } from "./core/recovery-layer.js"
 export { buildAgentPrompt, buildAgenticSystemInstructions, buildGenericAgentPrompt } from "./core/prompt-builder.js"
+export { detectProjectContext, type ProjectContext, type DetectedLanguage, type DetectedFramework } from "./core/project-context.js"
 export { SessionStore } from "./memory/session-store.js"
 export { MemoryOrchestrator, type MemoryLevel, type MemoryEntry, type MemoryQuery, type MemoryQueryResult, type ConsolidationReport } from "./memory/memory-orchestrator.js"
 export { ConsolidationScheduler, type ConsolidationSchedule, type ConsolidationTrigger, type SchedulerStats, type ConsolidationCallback } from "./memory/consolidation-scheduler.js"

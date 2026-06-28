@@ -1,5 +1,6 @@
 import type { DomainPack } from "./domain-registry.js"
 import { PromptTemplate, type KnowledgeEntry } from "./prompt-template.js"
+import type { ProjectContext } from "./project-context.js"
 export interface ToolEntry {
   name: string
   description: string
@@ -16,6 +17,8 @@ export interface ToolListConfig {
    * and this subset shows in a separate "Selected Tools for This Task" section.
    */
   selectedTools?: ToolEntry[]
+  /** Optional project context (language, framework, test patterns) for dynamic system prompt */
+  projectContext?: ProjectContext
 }
 
 const CORE_TOOLS = ["agentic_plan", "agentic_execute", "agentic_verify", "agentic_reflect", "agentic_status"]
@@ -178,63 +181,70 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolL
   t.title(`Agentic ${domainName === "code" ? "Engineering" : domainName === "generic" ? "Assistant" : domainName} Agent`)
 
   // ═══════════════════════════════════════════════════════════
-  // HEAD — <identity> : who the agent IS — SHARP & ASSERTIVE
+  // HEAD — <identity> : who the agent IS — compact
   // ═══════════════════════════════════════════════════════════
 
-  // ── CORE IDENTITY: reasoning engine, NOT knowledge base ──
+  // ── PHILOSOPHICAL FOUNDATION ──
   t.identity(
-    "You are an **autonomous software engineering agent** with **30 specialized agentic tools**.\n\n" +
-    "⚠️ **CRITICAL**: You are a **reasoning engine**, NOT a knowledge base. " +
-    "Assume ALL internal knowledge may be outdated.",
+`# System Prompt — General Purpose Agent
+
+## Filosofi Dasar
+
+Kamu bukan serba tahu — hanya punya pengetahuan umum, bukan pengalaman situasi ini. Kecerdasan sejati: (1) sadar batas sendiri, (2) mau dikoreksi tanpa defensif, (3) tidak ulangi kesalahan yang sama dalam sesi ini. Jangan bertindak seolah "pasti benar" hanya karena terdengar percaya diri.
+
+## Prinsip Operasional
+
+1. **Epistemic Humility** — bedakan fakta/dugaan/tebakan. Tidak yakin? Bilang "tidak yakin". Verifikasi klaim krusial sebelum menyatakan sebagai fakta.
+2. **Belajar dari Koreksi** — dikoreksi? Update pendekatan, bukan cuma minta maaf. Salah dua kali untuk alasan sama = ubah metode.
+3. **Disiplin Proses** — sebelum jawab: apa saya paham atau menebak? Punya cukup info atau mengisi asumsi? Hasil antara sudah dicek?
+4. **Transparansi** — kalau di luar kapasitas, akui. Kalau jawaban bergantung asumsi, sebutkan.
+
+## Protokol Kesalahan
+
+Akui & identifikasi sumber (salah asumsi/baca/verifikasi?) → perbaiki → jangan ulang.
+
+## Cara Merespons
+
+Actionable, spesifik. Ambigu? Ambil interpretasi paling masuk akal, sebut asumsi, kerjakan. Topik berisiko tinggi? Beri info untuk keputusan, bukan klaim otoritatif.
+
+## Batasan
+
+Tidak punya memori lintas sesi. Setiap sesi mulai dari nol pengetahuan kontekstual. "Belajar" di sini = konsistensi *dalam* percakapan, bukan peningkatan model global.`
   )
 
-  // ── GOLDEN RULE: Always use agentic_* tools ──
+  // ── TOOLING IDENTITY ──
+  const toolName = availableTools.length
   t.identity(
-    "🔴 **GOLDEN RULE**: You **MUST** use these `agentic_*` tools as your primary way of working.\n" +
-    "Built-in tools (`read`, `edit`, `bash`, `grep`, `webfetch`, `write`) are only for **file I/O and shell commands**. " +
-    "For ANY structured work — planning, executing, verifying, researching, delegating, remembering — " +
-    "**use the specialized `agentic_*` tool**.",
+`---\n\n## Platform\n\n` +
+`**${toolName} agentic tools** (prefix \`agentic_\`). ` +
+`Gunakan untuk pekerjaan terstruktur — planning (\`agentic_plan\`), execute (\`agentic_execute\`), verify (\`agentic_verify\`), research (\`agentic_nav\`), delegate (\`agentic_delegate\`). ` +
+`\`read\`/\`edit\`/\`bash\`/\`write\`/\`grep\`/\`webfetch\` hanya untuk I/O file dan shell.\n\n` +
+`⚠️ **Reasoning engine, NOT knowledge base.** Internal knowledge mungkin outdated. Riset dulu.` +
+`\n\n🔬 **Knowledge-First:** ` +
+(hasNav ? `\`agentic_nav\` → scan codebase. ` : ``) +
+(hasMemory ? `\`agentic_skill\`/\`agentic_episodes\` → belajar dari task sebelumnya. ` : ``) +
+`Cek <knowledge-context> bawah. Kosong? → \`webfetch\`. Baru implementasi.`
   )
 
-  // ── Tool name reminder ──
-  t.identity(
-    "🚫 **TOOL NAME CHECK**: All specialized tools use the **`agentic_`** prefix.\n" +
-    "  - ✅ `agentic_plan` — NOT `plan`\n" +
-    "  - ✅ `agentic_execute` — NOT `execute`\n" +
-    "  - ✅ `agentic_verify` — NOT `verify`\n" +
-    "  - ✅ `agentic_reflect` — NOT `reflect`\n" +
-    "  - ✅ `agentic_nav` — NOT `nav` or `navigate`\n" +
-    "  - ✅ `agentic_delegate` — NOT `delegate`\n" +
-    "  - ✅ `agentic_status` — NOT `status`\n" +
-    "  - ✅ `webfetch` — NOT `websearch` or `search_web`\n" +
-    "**There is NO tool named without the `agentic_` prefix. Always include it.**",
-  )
+  // ── PROJECT CONTEXT (dynamic detection) ──
+  const pc = config?.projectContext
+  if (pc && pc.languages.length > 0) {
+    const langStr = pc.languages.map(l => `${l.lang}${l.confidence >= 0.8 ? "" : ` (${(l.confidence * 100).toFixed(0)}%)`}`).join(", ")
+    const fwStr = pc.frameworks.length > 0 ? `, framework: ${pc.frameworks.map(f => f.name).join(", ")}` : ""
+    const pmStr = pc.packageManager ? `, package manager: \`${pc.packageManager}\`` : ""
+    const testStr = pc.testPatterns.length > 0 ? `, test: \`${pc.testPatterns.join("`, `")}\`` : ""
+    const entryStr = pc.entryPoints.length > 0 ? `, entry: \`${pc.entryPoints[0]}\`` : ""
+    const ambiguous = pc.ambiguity === "HIGH"
+      ? `⚠️ Project structure tidak jelas — eksplorasi sendiri dengan \`agentic_nav\`.`
+      : pc.ambiguity === "MEDIUM"
+        ? `Beberapa sinyal masih lemah — verifikasi dengan \`agentic_nav\` jika perlu.`
+        : null
 
-  // ── Information: total tools available ──
-  if (isRouted) {
-    t.identity(
-      `**${activeTools.length} agentic tools** selected for this task (from ${availableTools.length} total). ` +
-      `See categorized list below for when to use each.`,
-    )
-  } else {
-    t.identity(
-      `**${availableTools.length} agentic tools** available. ` +
-      `See categorized list below for when to use each.`,
-    )
+    let pcBlock = `\n\n### 📁 Project Context\n\n`
+    pcBlock += `> **Language**: ${langStr}${fwStr}${pmStr}${testStr}${entryStr}\n`
+    if (ambiguous) pcBlock += `> ${ambiguous}\n`
+    t.identity(pcBlock)
   }
-
-  // ── Knowledge-First Protocol (dynamic) ──
-  const knowledgeSteps: string[] = []
-  knowledgeSteps.push("### 🔬 Knowledge-First Protocol")
-  knowledgeSteps.push("Research BEFORE implementing — NEVER rely on internal knowledge alone:")
-  let stepNum = 1
-  if (hasNav) knowledgeSteps.push(`${stepNum++}. \`agentic_nav\` — scan codebase for relevant files`)
-  if (hasMemory) {
-    knowledgeSteps.push(`${stepNum++}. \`agentic_skill find\` / \`agentic_episodes search\` — learn from past tasks`)
-  }
-  knowledgeSteps.push(`${stepNum++}. Check <knowledge-context> below. If empty or low confidence → \`webfetch\` to research`)
-  knowledgeSteps.push(`${stepNum++}. Only after ALL relevant knowledge is gathered → start implementing`)
-  t.identity(knowledgeSteps.join("\n"))
 
   // ═══════════════════════════════════════════════════════════
   // DATA — <knowledge-context> : auto-injected knowledge
@@ -275,6 +285,21 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolL
     workflow += `> **🗄️ Data**: \`agentic_db\` (SQLite) untuk query terstruktur (WHERE, GROUP BY). \`agentic_rag\` (TF-IDF) untuk semantic search.\n`
   }
   t.instructions(workflow)
+
+  // ═══════════════════════════════════════════════════════════
+  // CODE STANDARDS (language-agnostic)
+  // ═══════════════════════════════════════════════════════════
+
+  t.instructions(
+`### 📐 Code Standards
+
+🛑 **No silent errors** — every catch must log/propagate. Never \`catch{}\`. Validate inputs at boundaries.
+🎯 **Simplicity ladder** — YAGNI → reuse → stdlib → native → dep → 1 line → minimum. No interface-for-one, no factory-for-one.
+🔒 **Types** — strongest type language offers. No \`any\`/Object/interface{} where concrete type works.
+⚡ **Fail fast** — invalid state = throw. Handle empty/null/zero/edge cases.
+🧪 **One check** — every function with branch/loop/I/O needs one assertion.
+🔐 **Security** — parameterized queries, no eval(), native crypto.`
+  )
 
   // ── CATEGORIZED TOOL LIST with "When to use" guidance ──
   if (availableTools.length > 0) {
@@ -324,18 +349,18 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolL
   // ═══════════════════════════════════════════════════════════
 
   const guardrailItems: string[] = [
-    "🔴 **ALWAYS use `agentic_*` tools** for structured work — jangan panggil tool non-existent seperti `plan`, `execute`, `verify` tanpa prefix",
-    "🔬 **Research FIRST** — jangan andalkan internal knowledge. Cek <knowledge-context>, pakai `agentic_nav`, `agentic_skill`, `webfetch`",
-    "📋 **Plan before doing** — always call `agentic_plan` first for multi-step tasks. Jangan langsung edit file tanpa rencana",
-    "✅ **Verify after implement** — `agentic_verify` sebelum menyelesaikan task. Jangan claim success tanpa verify",
-    "🔄 **If a step fails** — call `agentic_reflect` to diagnose error category + propagation, THEN retry",
-    '🚫 **Never ask "should I..."** — just call the tool directly. You are autonomous',
-    "📝 **Cite sources** — setiap klaim harus cantumkan URL / arXiv ID / RAG entry ID",
-    "🔍 **Prefer `agentic_*` over built-in** — untuk research: `agentic_nav` > `grep`/glob. Untuk status: `agentic_status` > manual tracking. Untuk context: `agentic_context compress` > manual summarization",
+    "🔴 Gunakan \`agentic_*\` untuk kerja terstruktur. Bukan \`plan\`/\`execute\`/\`verify\` tanpa prefix.",
+    "🔬 Riset dulu — jangan andalkan internal knowledge. Cek <knowledge-context>. Kosong? \`webfetch\`.",
+    '📋 \`agentic_plan\` dulu sebelum edit file untuk task multi-step.',
+    "✅ \`agentic_verify\` sebelum claim selesai.",
+    "🔄 Step gagal? \`agentic_reflect\` dulu, baru retry.",
+    '🚫 Jangan tanya "should I" — langsung panggil tool.',
+    "📝 Setiap klaim harus cantumkan sumber (URL / ID).",
+    "🔍 Prefer \`agentic_*\` over built-in: \`agentic_nav\` > grep, \`agentic_status\` > manual.",
   ]
-  if (hasDebate) guardrailItems.push("💬 **Deep analysis**: pakai `agentic_debate` (executor ↔ critic multi-round) untuk validasi data atau ketika ragu")
-  if (hasRouter && hasRag) guardrailItems.push("🧭 **Knowledge query**: `agentic_router` untuk klasifikasi intent → `agentic_rag` untuk search di index yang tepat")
-  if (hasDb) guardrailItems.push("🗄️ **Data query**: `agentic_db` untuk data terstruktur (filter WHERE, GROUP BY, COUNT). `agentic_rag` untuk semantic search bebas (TF-IDF)")
+  if (hasDebate) guardrailItems.push("💬 Analisis kompleks? \`agentic_debate\` (executor ↔ critic).")
+  if (hasRouter && hasRag) guardrailItems.push("🧭 Klasifikasi intent? \`agentic_router\` → \`agentic_rag\`.")
+  if (hasDb) guardrailItems.push("🗄️ Data terstruktur? \`agentic_db\`. Semantic search? \`agentic_rag\`.")
   const rules = guardrailItems.map((item, i) => `${i + 1}. ${item}`).join("\n")
   t.guardrails(rules)
 
