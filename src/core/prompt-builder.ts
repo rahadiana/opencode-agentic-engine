@@ -29,7 +29,7 @@ export interface ToolListConfig {
 const CORE_TOOLS = ["agentic_plan", "agentic_execute", "agentic_verify", "agentic_reflect", "agentic_status"]
 const MEMORY_TOOLS = ["agentic_skill", "agentic_episodes", "agentic_context"]
 const DB_TOOLS = ["agentic_db"]
-const META_TOOLS = ["agentic_model", "agentic_dashboard", "agentic_evolve"]
+const META_TOOLS = ["agentic_model", "agentic_evolve"]
 
 /**
  * Build a complete agent prompt using PromptTemplate (XML-based head/body/footer).
@@ -144,13 +144,13 @@ const TOOL_CATEGORIES: ToolCategory[] = [
     label: "Memory & Learning",
     emoji: "🧠",
     description: "Cross-session memory, skill extraction, fine-tuning, evolution, trace observability",
-    tools: ["agentic_evolve", "agentic_finetune", "agentic_dashboard", "agentic_model", "agentic_model_reset", "agentic_memo"],
+    tools: ["agentic_evolve", "agentic_finetune", "agentic_status", "agentic_model", "agentic_memo"],
   },
   {
     label: "Communication & Output",
     emoji: "📤",
     description: "PR descriptions, inter-agent messaging, MCP/A2A protocol, budget limits, output formatting",
-    tools: ["agentic_pr", "agentic_clean", "agentic_message", "agentic_mcp", "agentic_mcp_server", "agentic_a2a", "agentic_budget"],
+    tools: ["agentic_pr", "agentic_clean", "agentic_message", "agentic_mcp", "agentic_a2a", "agentic_budget"],
   },
 ]
 
@@ -402,7 +402,7 @@ function getToolUsageHint(toolName: string): string {
     agentic_execute: "tandai step selesai + auto-verify setelah nulis kode",
     agentic_verify: "final check compile + lint + test + security sebelum PR",
     agentic_reflect: "debug step gagal — cari akar masalah + propagasi",
-    agentic_status: "cek progress, blocking, file changes di tengah eksekusi",
+    agentic_status: "cek progress, timeline, anomali, reliability model (detail='full' buat dashboard lengkap)",
     agentic_auto: "task sederhana — satu call langsung plan→execute→verify",
     agentic_delegate: "sub-task kompleks — assign ke architect/developer/QA",
     agentic_pipeline: "end-to-end fitur — chain PM→Architect→Developer→QA",
@@ -420,14 +420,13 @@ function getToolUsageHint(toolName: string): string {
     agentic_debate: "analisis kompleks — executor vs critic multi-round",
     agentic_clean: "bersihin output debate → markdown/json rapi",
     agentic_model: "ganti LLM model per role/tool/category",
-    agentic_model_reset: "reset statistik model yg degraded",
+    // agentic_model_reset: merged into agentic_model (action=reset)
     agentic_budget: "pasang limit token/steps/time biar gak runaway",
-    agentic_dashboard: "cek timeline, anomali, reliability model",
     agentic_evolve: "self-evolution — register role, export skill, evolve prompt",
     agentic_finetune: "fine-tune model dari skill yang terkumpul",
     agentic_message: "kirim pesan antar agent role (review/approval)",
     agentic_mcp: "konek ke external server (DB/API) buat real data",
-    agentic_mcp_server: "start/stop MCP server — expose plugin tools ke external client",
+    // agentic_mcp_server: merged into agentic_mcp (action=server-start|server-stop|server-status|server-restart)
     agentic_a2a: "inter-agent communication — discover/delegate ke agent lain via A2A",
     agentic_tools: "cari dan panggil tool dari semua protocol (MCP + A2A) dalam satu tempat",
     agentic_memo: "Second Brain — simpan keputusan, TODOs, reflection, knowledge graph",

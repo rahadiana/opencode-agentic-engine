@@ -235,7 +235,7 @@ const createEngine: Plugin = async (input, _options) => {
     { name: "agentic_pr", description: "Generate PR description from plan + step results. Use when task is complete and verified. Avoid if no plan was created. Key: `action` — \"generate\" (default) or \"create\" (via gh CLI)." },
     { name: "agentic_score", description: "Analyze technical debt: coupling, complexity, patterns. Use after refactoring or before finalizing. Key: `files` (optional — defaults to all modified)." },
     { name: "agentic_model", description: "Configure which LLM model per agent role for the session. Use to switch models without config file changes. Key: `action` (set/get/list/clear), `role`, `model` name." },
-    { name: "agentic_model_reset", description: "Reset model statistics to recover from degraded performance. Use when models become unreliable. Key: `action` (reset/reset-stale/reset-all), `model` name. Example: reset `model=\"gpt-4o\"`." },
+    // agentic_model_reset: merged into agentic_model (action=reset|reset-stale|reset-all)
     { name: "agentic_budget", description: "Set, view, or reset resource budget limits (tokens, steps, time, cost). Use to prevent runaway loops. Acts as circuit breaker for autonomous execution. Key: `action` (set/get/status/reset), `scope` (session/task). Example: budget `action=set maxSteps=10`." },
     { name: "agentic_delegate", description: "Assign work to architect/developer/QA/coordinator. Use for complex sub-tasks needing specialist context. Avoid for trivial edits. Key: `taskId`, `description`, `role`. Supports pipeline auto-advance." },
     { name: "agentic_pipeline", description: "Define and run multi-agent pipelines: PM → Architect → Developer → QA. Use for end-to-end feature development. Key: `action` (define/list/run/status/suggest), `stages`." },
@@ -243,7 +243,6 @@ const createEngine: Plugin = async (input, _options) => {
     { name: "agentic_parallel", description: "Analyze dependencies and run ready steps concurrently. Use for independent sub-tasks. Avoid on sequential tasks. Key: `action` analyze or execute." },
     { name: "agentic_skill", description: "Extract, search, and reuse skills from successful task patterns. Use to learn from past work. Key: `action` (extract/find/list), `query` (for find)." },
     { name: "agentic_episodes", description: "Search past session outcomes across projects. Use before planning similar tasks. Key: `action` (search/recent/stats), `query` (keywords)." },
-    { name: "agentic_dashboard", description: "View timeline, stats, anomaly detection, model reliability. Use for observability. No args needed. Combines trace + model + pattern data." },
     { name: "agentic_guard", description: "Re-check truthfulness of file/function/import claims. Auto-runs on execute — only call manually for re-audit. Key: `stepId` to re-check." },
     { name: "agentic_evolve", description: "Inspect system, register custom roles, export skills, manage prompts (Stage IV). Use for system administration. Key: `action` (inspect/register-role/evolve/read-prompt/edit-prompt)." },
     { name: "agentic_auto", description: "One-call autonomous loop: plan → execute → verify → retry. Use for simple, well-defined tasks. Avoid for complex multi-domain tasks — use pipeline instead. Key: `goal`, `thorough` (extra checks)." },
@@ -251,7 +250,7 @@ const createEngine: Plugin = async (input, _options) => {
     { name: "agentic_router", description: "Classify user intent into categories and route to the right knowledge index. Use before searching memory to scope results. Lightweight — keyword+LLM hybrid." },
     { name: "agentic_clean", description: "Strip debate artifacts and reformat raw text to clean markdown/JSON. Use after debate or multi-step analysis. Key: `format` (markdown/json/text), `schema` (validation)." },
     { name: "agentic_rag", description: "Store, search, and retrieve knowledge across category-segregated indexes. Use with agentic_router for scoped search. Key: `action` (search/store/stats/categories), `query`." },
-    { name: "agentic_mcp", description: "Connect to external servers (DB, APIs) via stdio/HTTP to call remote tools. Use when task needs real-world data (weather, DB, API). Key: `action` (connect/list/call/disconnect)." },
+    { name: "agentic_mcp", description: "MCP client + server. Connect to external servers (DB, APIs), call tools, or manage the MCP server (server-start/stop/status/restart). Key: `action` (connect/list/call/disconnect/server-start/server-stop)." },
     { name: "agentic_a2a", description: "Agent-to-Agent protocol: discover remote agents, delegate tasks, start/stop A2A server. Google A2A standard for cross-framework interoperability. Key: `action` (serve/discover/delegate/list/ping/stats)." },
     { name: "agentic_tools", description: "Unified tool search and calling across MCP + A2A protocols. Search for tools by keyword, auto-route calls, list all connections, view combined stats. Key: `action` (search/call/list/stats)." },
     { name: "agentic_finetune", description: "End-to-end pipeline: prepare training data from skills → upload to OpenAI → create/monitor jobs. Use to fine-tune models from agent experience. Key: `action` (prepare/save/upload/create-job/status)." },
@@ -1990,9 +1989,118 @@ const confidenceStore = new ConfidenceStore()
       }),
 
       agentic_status: registryTool("agentic_status", {
-        description: "Show execution dashboard: progress bar, health, blocked steps, dependency graph, retry history, and file change summary.",
-        args: {},
-        async execute(_args, context) {
+        description: "Show execution dashboard: progress bar, health, blocked steps, dependency graph, retry history, file change summary. Use detail='full' for comprehensive observability (timeline, anomalies, model reliability, cross-session patterns).",
+        args: {
+          detail: tool.schema.enum(["basic", "full"]).optional().describe("'basic' (default) shows execution status; 'full' includes comprehensive observability dashboard with trace timeline, anomalies, cross-session patterns, gap analysis"),
+        },
+        async execute(args, context) {
+          // ── If detail='full', run comprehensive dashboard (merged from agentic_dashboard) ──
+          if (args.detail === "full") {
+            const modelReliability = modelRegistry.getSummary()
+            let traceSection = ""
+
+            await traceLogger.flush()
+            const tracePath = `${worktree}/.agentic/trace.jsonl`
+            let traces: any[] = []
+            try {
+              const content = readFileSync(tracePath, "utf-8")
+              traces = content.trim().split("\n").filter(Boolean).map(l => JSON.parse(l))
+            } catch { /* no traces yet */ }
+
+            if (traces.length > 0) {
+              const data = dashboard.generate(traces, Date.now(), {
+                skillStore: {
+                  getAll: () => skillStore.getAll(),
+                  getLifecycleStats: () => skillStore.getLifecycleStats(),
+                  get size() { return skillStore.size },
+                },
+                constraintManifold: {
+                  snapshot: () => constraintManifold.snapshot(),
+                  getActiveModifications: () => constraintManifold.getActiveModifications(),
+                  getRecentViolations: () => constraintManifold.getRecentViolations(),
+                },
+                semanticCacheStats: llmEngine.getSemanticCacheStats(),
+                modelRegistry: {
+                  getAllScores: () => modelRegistry.getAllScores(),
+                },
+              })
+              traceSection = dashboard.formatForDisplay(data)
+            }
+
+            let output = traceSection || "### 📊 Execution Overview\n\nNo trace data available yet. Execute some steps first.\n"
+            output += `\n### 🤖 Model Reliability\n${modelReliability}\n`
+
+            try {
+              const ocModels = await llmEngine.listOpenCodeModels()
+              if (ocModels.length > 0) {
+                output += `\n### 🧠 Available Models (from OpenCode)\n`
+                const byProvider = new Map<string, string[]>()
+                for (const m of ocModels) {
+                  const list = byProvider.get(m.providerName) ?? []
+                  list.push(`\`${m.id}\``)
+                  byProvider.set(m.providerName, list)
+                }
+                for (const [provider, models] of byProvider) {
+                  output += `- **${provider}**: ${models.join(", ")}\n`
+                }
+              }
+            } catch { /* silent */ }
+
+            const allEpisodes = episodicStore.getRecent(200)
+            if (allEpisodes.length >= 3) {
+              const allSkills = skillStore.getAll().map(s => ({
+                name: s.definition.meta.name,
+                successRate: s.successRate,
+                usageCount: s.usageCount,
+              }))
+              const report = patternDiscovery.analyze(allEpisodes, [], allSkills)
+              if (report.errorPatterns.length > 0 || report.recommendations.length > 0) {
+                output += `\n### 🔍 Cross-Session Patterns (${report.totalSessions} sessions)\n`
+                if (report.errorPatterns.length > 0) {
+                  output += `\n**Recurring Errors:**\n`
+                  for (const ep of report.errorPatterns.slice(0, 3)) {
+                    output += `- \`${ep.category}\`: ${ep.sessionCount}/${report.totalSessions} sessions (${(ep.sessionAffinity * 100).toFixed(0)}%)\n`
+                  }
+                }
+                if (report.filePatterns.some(f => f.isHotSpot)) {
+                  output += `\n**Hot Spot Files:**\n`
+                  for (const fp of report.filePatterns.filter(f => f.isHotSpot).slice(0, 3)) {
+                    output += `- \`${fp.filePath}\`: modified in ${fp.sessionCount} sessions`
+                    if (fp.coChangedFiles.length > 0) {
+                      output += ` (co-changes: ${fp.coChangedFiles.slice(0, 2).map(c => `\`${c.filePath}\``).join(", ")})`
+                    }
+                    output += "\n"
+                  }
+                }
+                if (report.recommendations.length > 0) {
+                  const highRecs = report.recommendations.filter(r => r.priority === "high")
+                  if (highRecs.length > 0) {
+                    output += `\n**⚠️ High Priority Recommendations:**\n`
+                    for (const rec of highRecs.slice(0, 3)) {
+                      output += `- ${rec.description}\n`
+                    }
+                  }
+                }
+              }
+            }
+
+            const liveScore = liveEvaluator.computeScore()
+            if (liveScore.totalSteps > 0 || liveScore.totalDelegations > 0) {
+              output += `\n### 📊 Live Evaluation Score\n`
+              output += liveEvaluator.formatReport(false)
+            }
+
+            output += `\n### 🩺 Error Recovery (Gap #5)\n`
+            output += `${errorRecovery.getSummary()}\n`
+            output += `\n### 🎯 Alignment (Gap #10)\n`
+            output += `${alignmentGate.getSummary()}\n`
+            output += `\n### 💰 Economics (Gap #11)\n`
+            output += `${economicModel.getSummary()}\n`
+
+            return { output }
+          }
+
+          // ── Default: basic execution status (original agentic_status behavior) ──
           const progress = executor.getProgress(context.sessionID)
           const nextStep = executor.getNextStep(context.sessionID)
           const blockedSteps = executor.getBlockedSteps(context.sessionID)
@@ -3078,8 +3186,11 @@ const confidenceStore = new ConfidenceStore()
               if (s.definition.trigger.capability) line += `\n  Capability: \`${s.definition.trigger.capability}\``
               if (s.definition.logic) line += `\n  DSL: ${s.definition.logic.instructions.length} instructions`
               if (s.definition.input_schema) line += `\n  Input: ${Object.keys(s.definition.input_schema).length} fields`
+              // Show curator lifecycle
+              line += `\n  Lifecycle: ${curator.getLifecycle(s)}`
               return line
             }).join("\n")
+            output += `\n\n> 💡 Skills shown from all past sessions. Auto-inject (top-3 most relevant) happens automatically in your prompt.\n> Use \`agentic_skill action=capability query="...exact..."\` for exact-match lookup.`
             return { output }
           }
 
@@ -3102,13 +3213,14 @@ const confidenceStore = new ConfidenceStore()
       }),
 
       agentic_model: registryTool("agentic_model", {
-        description: "Configure per-role, per-tool, or per-category LLM model preferences. Use 'set' to assign a model. Use 'get' to check current assignment. Use 'list' to view all. Use 'clear' to remove. Accepts `role`, `tool`, or `category` parameter. Preferences are persisted to .agentic/models.json.",
+        description: "Configure per-role, per-tool, or per-category LLM model preferences. Use 'set' to assign a model. Use 'get' to check current assignment. Use 'list' to view all. Use 'clear' to remove. Use 'reset'/'reset-stale'/'reset-all' to recover from degraded model performance. Accepts `role`, `tool`, or `category` parameter. Preferences are persisted to .agentic/models.json.",
         args: {
-          action: tool.schema.enum(["set", "get", "list", "clear"]).describe("Action: set/get/list/clear model preference"),
+          action: tool.schema.enum(["set", "get", "list", "clear", "reset", "reset-stale", "reset-all"]).describe("Action: set/get/list/clear model preference, or reset/reset-stale/reset-all model statistics"),
           role: tool.schema.string().optional().describe("Agent role (architect, developer, qa, coordinator, pm)"),
           tool: tool.schema.string().optional().describe("Tool name (e.g. 'agentic_plan')"),
           category: tool.schema.string().optional().describe("Complexity category (quick, unspecified-low, unspecified-high, deep)"),
           model: tool.schema.string().optional().describe("Model name (e.g. 'gpt-4o', 'claude-sonnet-4-20250514') or 'auto' to auto-discover best model"),
+          staleDays: tool.schema.number().optional().describe("Days threshold for stale detection (for reset-stale, default: 7)"),
         },
         async execute(args, context) {
           const projectDir = ctxDir(context)
@@ -3427,49 +3539,27 @@ const confidenceStore = new ConfidenceStore()
             return { output: "Cleared all model preferences (roles, tools, and categories) for this session." }
           }
 
-          return { output: "Unknown action. Use 'set', 'get', 'list', or 'clear'." }
-        },
-      }),
-
-      agentic_model_reset: registryTool("agentic_model_reset", {
-        description: "Reset model statistics to recover from degraded performance. Use 'reset' to clear stats for a specific model. Use 'reset-stale' to auto-reset models not used in 7+ days. Use 'reset-all' for emergency recovery.",
-        args: {
-          action: tool.schema.enum(["reset", "reset-stale", "reset-all"]).describe("Action: reset (single model), reset-stale (auto-detect old models), reset-all (emergency)"),
-          model: tool.schema.string().optional().describe("Model name (required for 'reset' action)"),
-          staleDays: tool.schema.number().optional().describe("Days threshold for stale detection (default: 7)"),
-        },
-        async execute(args, _context) {
           if (args.action === "reset") {
             if (!args.model) return { output: "Provide a `model` name to reset (e.g. 'gpt-4o')." }
-            
             const beforeScore = modelRegistry.getScore(args.model)
             const deleted = modelRegistry.deleteModel(args.model)
-            
-            return { 
-              output: `✅ Removed \`${args.model}\` from registry\n\n**Before:** ${beforeScore ? `${(beforeScore.reliability * 100).toFixed(0)}% reliability, ${beforeScore.totalCalls} calls` : "No data"}\n**After:** ${deleted ? "Removed (call count will rebuild naturally)" : "Not found"}` 
-            }
+            return { output: `✅ Removed \`${args.model}\` from registry\n\n**Before:** ${beforeScore ? `${(beforeScore.reliability * 100).toFixed(0)}% reliability, ${beforeScore.totalCalls} calls` : "No data"}\n**After:** ${deleted ? "Removed (call count will rebuild naturally)" : "Not found"}` }
           }
 
           if (args.action === "reset-stale") {
             const staleDays = args.staleDays ?? 7
             const resetModels = modelRegistry.resetStaleModels(staleDays)
-            
-            if (resetModels.length === 0) {
-              return { output: `No stale models found (threshold: ${staleDays} days unused).` }
-            }
-            
+            if (resetModels.length === 0) return { output: `No stale models found (threshold: ${staleDays} days unused).` }
             return { output: `✅ Reset ${resetModels.length} stale model(s):\n${resetModels.map(m => `- \`${m}\``).join("\n")}\n\nThese models had not been used in ${staleDays}+ days.` }
           }
 
           if (args.action === "reset-all") {
             const allScores = modelRegistry.getAllScores()
-            for (const score of allScores) {
-              modelRegistry.deleteModel(score.model)
-            }
+            for (const score of allScores) modelRegistry.deleteModel(score.model)
             return { output: `⚠️ **EMERGENCY RESET:** Removed statistics for ${allScores.length} model(s).\n\nAll models now have clean slate. Use this only when all models are blocked.` }
           }
 
-          return { output: "Unknown action. Use 'reset', 'reset-stale', or 'reset-all'." }
+          return { output: "Unknown action. Use 'set', 'get', 'list', 'clear', 'reset', 'reset-stale', or 'reset-all'." }
         },
       }),
 
@@ -3852,129 +3942,6 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_dashboard: registryTool("agentic_dashboard", {
-        description: "Generate an observability dashboard from execution traces. Shows timeline, statistics, tool usage, anomaly detection, and model reliability (timeouts, retry storms, silent failures).",
-        args: {},
-        async execute(_args, _context) {
-          // Always show model reliability regardless of trace data
-          const modelReliability = modelRegistry.getSummary()
-          let traceSection = ""
-
-          // Read traces from file
-          await traceLogger.flush()
-          const tracePath = `${worktree}/.agentic/trace.jsonl`
-          let traces = []
-          try {
-            const content = readFileSync(tracePath, "utf-8")
-            traces = content.trim().split("\n").filter(Boolean).map(l => JSON.parse(l))
-          } catch { /* no traces yet */ }
-
-          if (traces.length > 0) {
-            const data = dashboard.generate(traces, Date.now(), {
-              skillStore: {
-                getAll: () => skillStore.getAll(),
-                getLifecycleStats: () => skillStore.getLifecycleStats(),
-                get size() { return skillStore.size },
-              },
-              constraintManifold: {
-                snapshot: () => constraintManifold.snapshot(),
-                getActiveModifications: () => constraintManifold.getActiveModifications(),
-                getRecentViolations: () => constraintManifold.getRecentViolations(),
-              },
-              semanticCacheStats: llmEngine.getSemanticCacheStats(),
-              modelRegistry: {
-                getAllScores: () => modelRegistry.getAllScores(),
-              },
-            })
-            traceSection = dashboard.formatForDisplay(data)
-          }
-
-          let output = traceSection || "### 📊 Execution Overview\n\nNo trace data available yet. Execute some steps first.\n"
-          output += `\n### 🤖 Model Reliability\n${modelReliability}\n`
-
-          // List models yang tersedia di OpenCode SDK
-          try {
-            const ocModels = await llmEngine.listOpenCodeModels()
-            if (ocModels.length > 0) {
-              output += `\n### 🧠 Available Models (from OpenCode)\n`
-              const byProvider = new Map<string, string[]>()
-              for (const m of ocModels) {
-                const list = byProvider.get(m.providerName) ?? []
-                list.push(`\`${m.id}\``)
-                byProvider.set(m.providerName, list)
-              }
-              for (const [provider, models] of byProvider) {
-                output += `- **${provider}**: ${models.join(", ")}\n`
-              }
-            }
-          } catch { /* silent */ }
-
-          // Cross-session pattern discovery
-          const allEpisodes = episodicStore.getRecent(200)
-          if (allEpisodes.length >= 3) {
-            const allSkills = skillStore.getAll().map(s => ({
-              name: s.definition.meta.name,
-              successRate: s.successRate,
-              usageCount: s.usageCount,
-            }))
-            const report = patternDiscovery.analyze(allEpisodes, [], allSkills)
-
-            if (report.errorPatterns.length > 0 || report.recommendations.length > 0) {
-              output += `\n### 🔍 Cross-Session Patterns (${report.totalSessions} sessions)\n`
-
-              if (report.errorPatterns.length > 0) {
-                output += `\n**Recurring Errors:**\n`
-                for (const ep of report.errorPatterns.slice(0, 3)) {
-                  output += `- \`${ep.category}\`: ${ep.sessionCount}/${report.totalSessions} sessions (${(ep.sessionAffinity * 100).toFixed(0)}%)\n`
-                }
-              }
-
-              if (report.filePatterns.some(f => f.isHotSpot)) {
-                output += `\n**Hot Spot Files:**\n`
-                for (const fp of report.filePatterns.filter(f => f.isHotSpot).slice(0, 3)) {
-                  output += `- \`${fp.filePath}\`: modified in ${fp.sessionCount} sessions`
-                  if (fp.coChangedFiles.length > 0) {
-                    output += ` (co-changes: ${fp.coChangedFiles.slice(0, 2).map(c => `\`${c.filePath}\``).join(", ")})`
-                  }
-                  output += "\n"
-                }
-              }
-
-              if (report.recommendations.length > 0) {
-                const highRecs = report.recommendations.filter(r => r.priority === "high")
-                if (highRecs.length > 0) {
-                  output += `\n**⚠️ High Priority Recommendations:**\n`
-                  for (const rec of highRecs.slice(0, 3)) {
-                    output += `- ${rec.description}\n`
-                  }
-                }
-              }
-            }
-          }
-
-          // Live evaluation score
-          const liveScore = liveEvaluator.computeScore()
-          if (liveScore.totalSteps > 0 || liveScore.totalDelegations > 0) {
-            output += `\n### 📊 Live Evaluation Score\n`
-            output += liveEvaluator.formatReport(false)
-          }
-
-          // ── Gap #5: Error Recovery Health ──
-          output += `\n### 🩺 Error Recovery (Gap #5)\n`
-          output += `${errorRecovery.getSummary()}\n`
-
-          // ── Gap #10: Alignment Status ──
-          output += `\n### 🎯 Alignment (Gap #10)\n`
-          output += `${alignmentGate.getSummary()}\n`
-
-          // ── Gap #11: Economic Model ──
-          output += `\n### 💰 Economics (Gap #11)\n`
-          output += `${economicModel.getSummary()}\n`
-
-          return { output }
-        },
-      }),
-
       agentic_guard: registryTool("agentic_guard", {
         description: "MANUAL re-run of the hallucination guard. NOTE: Guard already runs automatically inside `agentic_execute` on every successful step (if `autoHallucinationCheck: true` in config). This standalone tool is only needed for: (a) re-checking an older step after files changed, (b) auditing a step that was executed while auto-check was disabled, or (c) getting a detailed per-claim breakdown. Do NOT call redundantly — the auto-check already ran.",
         args: {
@@ -3995,7 +3962,8 @@ const confidenceStore = new ConfidenceStore()
             }
           }
 
-          let response = `## 🛡️ Hallucination Check: Step "${args.stepId}"\n\n`
+          let response = `⚠️ **Deprecation notice:** \`agentic_guard\` auto-runs inside \`agentic_execute\`. This standalone call is only needed for re-auditing old steps.\n\n`
+          response += `## 🛡️ Hallucination Check: Step "${args.stepId}"\n\n`
           response += `**Verdict:** ${check.passed ? "✅ All claims verified" : "❌ Unverified claims found"}\n\n`
           response += `**Summary:** ${check.summary}\n\n`
 
@@ -4913,9 +4881,9 @@ const confidenceStore = new ConfidenceStore()
 
       // ── Layer 1: MCP Client — connect to external tools/APIs ──
       agentic_mcp: registryTool("agentic_mcp", {
-        description: "MCP (Model Context Protocol) client. Connect to external servers (databases, APIs, tools) via stdio or HTTP, discover available tools, and call them. Lets agents interact with the real world.",
+        description: "MCP client + server management. Connect to external servers (DB, APIs), call tools, or start/stop the MCP server that exposes plugin tools. Use for real-world data or exposing tools to external clients.",
         args: {
-          action: tool.schema.enum(["connect", "list", "call", "disconnect", "disconnect-all"]).describe("Action: connect to a server, list connections, call a tool, or disconnect"),
+          action: tool.schema.enum(["connect", "list", "call", "disconnect", "disconnect-all", "server-start", "server-stop", "server-status", "server-restart"]).describe("Action: client actions (connect/list/call/disconnect) or server management (server-start/stop/status/restart)"),
           transport: tool.schema.enum(["stdio", "http", "https"]).optional().describe("Transport type (for connect)"),
           command: tool.schema.string().optional().describe("Executable path (for stdio connect)"),
           args: tool.schema.array(tool.schema.string()).optional().describe("Command arguments (for stdio connect)"),
@@ -4925,6 +4893,7 @@ const confidenceStore = new ConfidenceStore()
           server: tool.schema.string().optional().describe("Server name to call/disconnect"),
           tool: tool.schema.string().optional().describe("Tool name to call on the server"),
           params: tool.schema.string().optional().describe("JSON string of tool arguments"),
+          port: tool.schema.number().optional().describe("Port for MCP server (for server-start, default: auto-assign)"),
         },
         async execute(args, _context) {
           switch (args.action) {
@@ -5013,8 +4982,48 @@ const confidenceStore = new ConfidenceStore()
               return { output: "🔌 All MCP servers disconnected" }
             }
 
+            // ── Server management (merged from agentic_mcp_server) ──
+            case "server-start": {
+              if (mcpServer.getStatus().running) {
+                return { output: `MCP server already running on port ${mcpServer.port}` }
+              }
+              await mcpServer.start()
+              const url = `http://127.0.0.1:${mcpServer.port}`
+              return { output: `MCP server started on port ${mcpServer.port}\n\nClients can connect via: ${url}\n\nRegistered tools: ${dynamicToolRegistry.size}`, metadata: { port: mcpServer.port, toolCount: dynamicToolRegistry.size } }
+            }
+            case "server-stop": {
+              if (!mcpServer.getStatus().running) {
+                return { output: "MCP server is not running" }
+              }
+              await mcpServer.stop()
+              return { output: "MCP server stopped" }
+            }
+            case "server-restart": {
+              await mcpServer.stop()
+              await mcpServer.start()
+              return { output: `MCP server restarted on port ${mcpServer.port}` }
+            }
+            case "server-status": {
+              const status = mcpServer.getStatus()
+              if (!status.running) {
+                return { output: "MCP server is not running", metadata: { running: false } }
+              }
+              return {
+                output: [
+                  `## MCP Server Status`,
+                  `| Metric | Value |`,
+                  `|--------|-------|`,
+                  `| Running | ✅ Yes |`,
+                  `| Port | ${status.port} |`,
+                  `| Tools | ${status.toolCount} |`,
+                  `| Uptime | ${(status.uptimeMs / 1000).toFixed(0)}s |`,
+                ].join("\n"),
+                metadata: { running: true, port: status.port, toolCount: status.toolCount, uptimeMs: status.uptimeMs },
+              }
+            }
+
             default:
-              return { output: "Unknown action. Use: connect, list, call, disconnect, disconnect-all" }
+              return { output: "Unknown action. Use: connect, list, call, disconnect, disconnect-all, or server-start/stop/status/restart" }
           }
         },
       }),
@@ -5265,59 +5274,6 @@ const confidenceStore = new ConfidenceStore()
 
             default:
               return { output: "Unknown action. Use: serve, stop, discover, delegate, list, ping, stats" }
-          }
-        },
-      }),
-
-      // ── MCP Server: expose plugin tools via MCP protocol ──
-      agentic_mcp_server: registryTool("agentic_mcp_server", {
-        description: "Start or stop the MCP server that exposes plugin tools via standard MCP protocol. External MCP clients can discover and call plugin tools. Use 'status' to check server state.",
-        args: {
-          action: tool.schema.enum(["start", "stop", "status", "restart"]).describe("Action: start (start server), stop (stop server), status (check state), restart (stop + start)"),
-          port: tool.schema.number().optional().describe("Port for MCP server (default: auto-assign). Only used with action=start."),
-        },
-        async execute(args, _context) {
-          switch (args.action) {
-            case "start": {
-              if (mcpServer.getStatus().running) {
-                return { output: `MCP server already running on port ${mcpServer.port}` }
-              }
-              await mcpServer.start()
-              const url = `http://127.0.0.1:${mcpServer.port}`
-              return { output: `MCP server started on port ${mcpServer.port}\n\nClients can connect via: ${url}\n\nRegistered tools: ${dynamicToolRegistry.size}`, metadata: { port: mcpServer.port, toolCount: dynamicToolRegistry.size } }
-            }
-            case "stop": {
-              if (!mcpServer.getStatus().running) {
-                return { output: "MCP server is not running" }
-              }
-              await mcpServer.stop()
-              return { output: "MCP server stopped" }
-            }
-            case "restart": {
-              await mcpServer.stop()
-              await mcpServer.start()
-              return { output: `MCP server restarted on port ${mcpServer.port}` }
-            }
-            case "status": {
-              const status = mcpServer.getStatus()
-              if (!status.running) {
-                return { output: "MCP server is not running", metadata: { running: false } }
-              }
-              return {
-                output: [
-                  `## MCP Server Status`,
-                  `| Metric | Value |`,
-                  `|--------|-------|`,
-                  `| Running | ✅ Yes |`,
-                  `| Port | ${status.port} |`,
-                  `| Tools | ${status.toolCount} |`,
-                  `| Uptime | ${(status.uptimeMs / 1000).toFixed(0)}s |`,
-                ].join("\n"),
-                metadata: { running: true, port: status.port, toolCount: status.toolCount, uptimeMs: status.uptimeMs },
-              }
-            }
-            default:
-              return { output: "Unknown action. Use: start, stop, status, restart" }
           }
         },
       }),

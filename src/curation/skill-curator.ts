@@ -227,6 +227,10 @@ export class SkillCurator {
       blocks.push("")
     }
 
+    blocks.push(
+      "> 💡 *Don't see what you need? Use `agentic_skill find \"your keyword\"` to search across all skills.*\n",
+    )
+
     return blocks.join("\n")
   }
 

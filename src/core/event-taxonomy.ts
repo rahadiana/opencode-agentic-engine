@@ -167,7 +167,7 @@ export interface GuardCheckCompletedEvent {
     }>
   }
 }
-/** Consumers: ModelRegistry.recordHallucination (if failed), BudgetTracker (optional cost-adjust), agentic_dashboard */
+/** Consumers: ModelRegistry.recordHallucination (if failed), BudgetTracker (optional cost-adjust), agentic_status (detail=full) */
 
 // ── Namespace: task — agent delegation ──
 

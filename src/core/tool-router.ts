@@ -36,8 +36,8 @@ const TOOL_COLOCATIONS: Record<string, string[]> = {
   delegate: ["agentic_delegate", "agentic_message", "agentic_pipeline"],
   search: ["agentic_nav", "agentic_rag", "grep", "glob", "read"],
   memory: ["agentic_skill", "agentic_episodes", "agentic_context", "agentic_rag"],
-  debug: ["agentic_reflect", "agentic_guard", "agentic_dashboard", "grep", "read"],
-  evolve: ["agentic_evolve", "agentic_skill", "agentic_dashboard"],
+  debug: ["agentic_reflect", "agentic_guard", "agentic_status", "grep", "read"],
+  evolve: ["agentic_evolve", "agentic_skill", "agentic_status"],
 }
 
 // ── Tool consolidation: tools with overlapping roles (from evaluation notes) ──
@@ -67,7 +67,7 @@ const DEFAULT_METAS: Record<string, Partial<ToolMeta>> = {
   agentic_execute: { keywords: ["execute", "run", "do", "implement", "step-result", "record", "complete", "jalankan", "buat", "tulis"], category: "core" },
   agentic_reflect: { keywords: ["error", "fail", "debug", "analyze", "diagnose", "retry", "recover", "gagal", "salah", "error"], category: "analysis" },
   agentic_verify: { keywords: ["verify", "test", "compile", "lint", "validate", "check", "ci", "verifikasi", "tes", "cek"], category: "core" },
-  agentic_status: { keywords: ["status", "progress", "dashboard", "blocked", "health", "summary", "progres", "sejauh"], category: "core" },
+  agentic_status: { keywords: ["status", "progress", "dashboard", "blocked", "health", "summary", "progres", "sejauh", "timeline", "anomaly", "stats", "trace", "observability", "statistik"], category: "core" },
   agentic_nav: { keywords: ["search", "find", "file", "codebase", "scan", "explore", "lookup", "nav", "cari", "file"], category: "core" },
   agentic_context: { keywords: ["compress", "context", "token", "summary", "condense", "ringkas", "kompres"], category: "memory" },
   agentic_snapshot: { keywords: ["checkpoint", "snapshot", "save", "restore", "rollback", "backup", "simpan", "kembali"], category: "core" },
@@ -80,7 +80,7 @@ const DEFAULT_METAS: Record<string, Partial<ToolMeta>> = {
   agentic_parallel: { keywords: ["parallel", "concurrent", "race", "dependency", "simultaneous", "paralel", "bersamaan"], category: "coordination" },
   agentic_skill: { keywords: ["skill", "extract", "learn", "pattern", "template", "reuse", "pola", "kemampuan"], category: "memory" },
   agentic_episodes: { keywords: ["episode", "history", "past", "session", "memory", "recall", "riwayat", "sebelumnya"], category: "memory" },
-  agentic_dashboard: { keywords: ["dashboard", "timeline", "anomaly", "stats", "trace", "observability", "statistik"], category: "meta" },
+
   agentic_guard: { keywords: ["hallucination", "verify", "truth", "claim", "check", "audit", "halusinasi"], category: "analysis" },
   agentic_evolve: { keywords: ["evolve", "evolusi", "self-improve", "upgrade", "inspect", "register", "tingkatkan"], category: "meta" },
   agentic_auto: { keywords: ["auto", "autonomous", "loop", "one-shot", "automatic", "end-to-end", "otomatis"], category: "core" },

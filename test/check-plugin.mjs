@@ -121,9 +121,9 @@ async function main() {
     const expectedTools = [
       "agentic_plan", "agentic_execute", "agentic_reflect", "agentic_verify",
       "agentic_status", "agentic_nav", "agentic_context", "agentic_snapshot",
-      "agentic_pr", "agentic_score", "agentic_model", "agentic_model_reset",
+      "agentic_pr", "agentic_score", "agentic_model",
       "agentic_budget", "agentic_delegate", "agentic_pipeline", "agentic_message",
-      "agentic_parallel", "agentic_skill", "agentic_episodes", "agentic_dashboard",
+      "agentic_parallel", "agentic_skill", "agentic_episodes",
       "agentic_guard", "agentic_evolve", "agentic_auto", "agentic_debate",
       "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp",
       "agentic_finetune",

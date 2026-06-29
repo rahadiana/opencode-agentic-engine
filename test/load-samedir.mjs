@@ -67,7 +67,7 @@ const expected = [
   "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot",
   "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline",
   "agentic_message", "agentic_parallel",
-  "agentic_skill", "agentic_model", "agentic_model_reset", "agentic_budget", "agentic_episodes", "agentic_dashboard", "agentic_guard",
+  "agentic_skill", "agentic_model", "agentic_budget", "agentic_episodes", "agentic_guard",
   "agentic_evolve",
   "agentic_auto",
   "agentic_debate", "agentic_router",

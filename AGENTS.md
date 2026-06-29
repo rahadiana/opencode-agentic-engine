@@ -23,7 +23,7 @@ node test/e2e-llm.mjs       # LLM E2E: 19 tests (auto: OpenCode Free)
 
 ```
 src/
-├── index.ts                   # Plugin entry: registers 34 tools + 5 hooks
+├── index.ts                   # Plugin entry: registers 31 tools + 5 hooks
 ├── README.md                  # → Dokumentasi fungsi per folder untuk AI context
 │
 ├── core/                      # Inti engine: planning, execution, verification (63 file + 6 domain)
@@ -201,7 +201,7 @@ Konfigurasi plugin disimpan di `.agentic/config.json` (per project). Auto-create
 
 ## Tools Detail
 
-### Agentic Tools (34)
+### Agentic Tools (31)
 
 Semua tool menggunakan prefix `agentic_`. Dikelompokkan berdasarkan Stage:
 
@@ -213,7 +213,7 @@ Semua tool menggunakan prefix `agentic_`. Dikelompokkan berdasarkan Stage:
 | `agentic_execute` | `stepId`, `success`, `output`, `filesModified?` | `{ autoVerified }` | Tandai step selesai + auto-verify compile + auto-hallucination check + skill extraction. |
 | `agentic_reflect` | `stepId`, `errorDetails?`, `attemptedFix?` | `{ category, propagation, fix }` | Analisis error: import/type/compile/test/runtime + lacak propagasi ke step lain. |
 | `agentic_verify` | `stepId?`, `tier?` (fast/standard/deep) | `{ checks, passed }` | Multi-dimensi: compile + lint + test + security + perf + arch + deps. 3-tier system. |
-| `agentic_status` | — | `{ progress, blocked, health }` | Dashboard eksekusi: progress bar, dependency graph, retry history, file changes. |
+| `agentic_status` | `detail?` (basic/full) | `{ output }` | Dashboard eksekusi: progress, blocking, file changes. `detail=full` untuk timeline, anomali, gaps analysis (merged from agentic_dashboard). |
 
 #### Stage II — Intelligence
 
@@ -224,8 +224,7 @@ Semua tool menggunakan prefix `agentic_`. Dikelompokkan berdasarkan Stage:
 | `agentic_snapshot` | `action` (save/list/restore), `label?` | `{ snapshots }` | Checkpoint execution state. Save sebelum risky refactoring, restore jika gagal. |
 | `agentic_pr` | `action` (generate/create), `title?` | `{ prBody, url? }` | Generate PR description dari plan + step results. Create via `gh` CLI. |
 | `agentic_score` | `files?` | `{ score, breakdown }` | Tech debt analysis: coupling, file size, scope, code patterns. |
-| `agentic_model` | `action` (set/get/list/clear), `role`, `model` | `{ output }` | **Set per-role model preference.** Disimpan ke `.agentic/models.json`. Model dikirim ke OpenCode SDK saat delegasi. |
-| `agentic_model_reset` | `action` (reset/reset-stale/reset-all), `model?` | `{ stats }` | Reset statistics model (reliability, hallucination). Pull emergency jika model degraded. |
+| `agentic_model` | `action` (set/get/list/clear/reset/reset-stale/reset-all), `role`, `model` | `{ output }` | **Set per-role model preference.** Disimpan ke `.agentic/models.json`. Model dikirim ke OpenCode SDK saat delegasi. Action reset/reset-stale/reset-all untuk reset statistics model (merged from agentic_model_reset). |
 | `agentic_budget` | `action` (set/get/status/reset), limits | `{ limits, usage }` | Circuit breaker: batasi token/steps/time/cost. Per-scope (session/task). |
 | `agentic_db` | `action` (query/save/load/list/stats/tables/migrate) | `{ output }` | SQLite database backend. Query, save, load, list, stats. Structured queries support WHERE, JOIN, GROUP BY. |
 | `agentic_memo` | `action` (decision/todo/todo-done/list/reflect/graph) | `{ output }` | Second Brain: manage decisions (ADR), TODOs, run reflection, and inspect knowledge graph. |
@@ -240,7 +239,6 @@ Semua tool menggunakan prefix `agentic_`. Dikelompokkan berdasarkan Stage:
 | `agentic_parallel` | `action` (analyze/execute) | `{ phases, conflicts }` | Dependency-based concurrency. Conflict detection (same file). Kahn's algorithm phasing. |
 | `agentic_skill` | `action` (extract/find/list), `query` | `{ skills }` | Reusable skills: extract dari task sukses, search, list. Self-describing format. |
 | `agentic_episodes` | `action` (search/recent/stats), `query` | `{ episodes }` | Cross-session memory search. Cari task serupa dari session sebelumnya. |
-| `agentic_dashboard` | — | `{ timeline, stats, anomalies }` | Observability: timeline, tool usage, anomaly detection, model reliability. |
 | `agentic_guard` | `stepId` | `{ claims, verified }` | Re-check hallucination untuk file/fungsi/import claims. Auto-run di execute. |
 | `agentic_finetune` | `action` (prepare/upload/create-job/status) | `{ job, status }` | Fine-tuning pipeline: convert skills → training data → upload OpenAI → monitor job. |
 | `agentic_tools` | `action` (search/call/list/stats) | `{ output }` | Unified tool discovery across MCP + A2A protocols. Search, call, and list tools from all connected backends. |
@@ -265,8 +263,7 @@ Semua tool menggunakan prefix `agentic_`. Dikelompokkan berdasarkan Stage:
 | `agentic_router` | `input`, `categories?` | `{ category, confidence }` | Intent classifier. Keyword-based (fast) + LLM fallback. Route ke RAG index. |
 | `agentic_clean` | `text`, `format`, `schema?` | `{ cleaned, validJson }` | Strip debate artifacts + reformat. Regex first → LLM enhancement. |
 | `agentic_rag` | `action` (search/store/stats), `query` | `{ results }` | Multi-index RAG dengan category segregation. TF-IDF + vector hybrid search. |
-| `agentic_mcp` | `action` (connect/list/call/disconnect) | `{ tools, result }` | MCP client. Connect ke external servers (stdio/HTTP). Discover + call tools. |
-| `agentic_mcp_server` | `action` (start/stop/status/restart) | `{ output }` | Start or stop the MCP server that exposes plugin tools via standard MCP protocol. |
+| `agentic_mcp` | `action` (connect/list/call/disconnect/server-start/server-stop/server-status/server-restart) | `{ tools, result }` | MCP client + server. Connect ke external servers (stdio/HTTP). Server actions (merged from agentic_mcp_server): start/stop/status/restart. |
 | `agentic_a2a` | `action` (serve/stop/discover/delegate/list/ping/stats) | `{ output }` | A2A (Agent-to-Agent) protocol. Discover remote agents, delegate tasks, serve Agent Card. Google A2A standard untuk cross-framework interop. |
 
 ## Model Resolution
@@ -359,7 +356,7 @@ agentic_model clear tool=agentic_plan
 agentic_model clear category=deep
 
 # ── Reset statistics ──
-agentic_model_reset reset model="deepseek-chat"
+agentic_model reset model="deepseek-chat"
 ```
 
 ### File Persistence
@@ -407,7 +404,7 @@ OpenCode SDK → panggil 9router/StrongReason ✅
 Plugin otomatis track reliabilitas setiap model (per-model, bukan per-tool):
 
 ```
-agentic_dashboard
+agentic_status detail=full
   → Model Reliability:
     ✅ deepseek-chat — reliability: 85%, hallucinations: 3%, calls: 120
     ⚠️ gpt-4o — reliability: 62%, hallucinations: 8%, calls: 45
@@ -535,7 +532,7 @@ KNOWLEDGE-FIRST PROMPT INJECTION PIPELINE
   - `verifyAllDeep()` — 3-tier system: **fast** (compile only), **standard** (compile+lint+test), **deep** (all + security/perf/arch/deps)
   - `DeepVerificationConfig` — per-dimension enable/disable toggle
 - **`agentic_verify`**: Now calls `verifyAllDeep()` deep tier by default
-- **`agentic_dashboard`**: Model Reliability section added (tracks LLM call stats)
+- **`agentic_status` (detail=full)**: Model Reliability section added (tracks LLM call stats) — merged from agentic_dashboard
 - **Trace dedup**: Dedup guard in `trace-logger.ts` prevents consecutive duplicate entries — false positive loop anomaly resolved
 - **Agent loop**: Intermediate steps use `standard` tier, final verification uses `deep` tier
 - **707 unit tests** (was 663) — 44 new Gap #4 tests (G4-1a through G4-18c)

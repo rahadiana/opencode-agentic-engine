@@ -75,7 +75,7 @@ assert(typeof hooks.dispose === "function", "dispose hook registered")
 
 // 3. Tool registration (30 tools)
 console.log("\n[3] Tool registration")
-for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_model", "agentic_model_reset", "agentic_budget", "agentic_episodes", "agentic_parallel", "agentic_dashboard", "agentic_guard", "agentic_evolve", "agentic_auto", "agentic_debate", "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp", "agentic_mcp_server", "agentic_a2a", "agentic_finetune"]) {
+for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_model", "agentic_budget", "agentic_episodes", "agentic_parallel", "agentic_guard", "agentic_evolve", "agentic_auto", "agentic_debate", "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp", "agentic_a2a", "agentic_finetune"]) {
   const tool = hooks.tool?.[name]
   assert(tool && typeof tool.execute === "function", `"${name}" has execute()`)
   assert(typeof tool.description === "string" && tool.description.length > 0, `"${name}" has description`)
@@ -717,9 +717,9 @@ const plexExec = await hooks.tool.agentic_parallel.execute({ action: "execute" }
 const plexOut = typeof plexExec === "string" ? plexExec : plexExec.output
 assert(plexOut.includes("Execution") || plexOut.includes("passed") || plexOut.includes("Failed"), "parallel execute produces result")
 
-// 43. agentic_dashboard — observability
-console.log("\n[43] agentic_dashboard — observability")
-const dbResult = await hooks.tool.agentic_dashboard.execute({}, mockCtx(freshSid()))
+// 43. agentic_status — full dashboard (merged from agentic_dashboard)
+console.log("\n[43] agentic_status — full dashboard")
+const dbResult = await hooks.tool.agentic_status.execute({ detail: "full" }, mockCtx(freshSid()))
 const dbOut = typeof dbResult === "string" ? dbResult : dbResult.output
 assert(dbOut.length > 0, "dashboard produces output")
 
@@ -936,8 +936,8 @@ assert(statusOut52.includes("gpt") || statusOut52.includes("claude") || statusOu
 assert(statusOut52.includes("gpt-4o") || statusOut52.includes("gpt-4o-mini"), "specific client-discovered model gpt-4o present")
 assert(statusOut52.includes("claude-3-opus") || statusOut52.includes("claude-3-sonnet"), "specific client-discovered model claude present")
 
-// Verify dashboard always shows model reliability (even without trace data)
-const dashResp52 = await modelHooks52.tool.agentic_dashboard.execute({}, modelCtx52)
+// Verify dashboard always shows model reliability (merged into agentic_status detail=full)
+const dashResp52 = await modelHooks52.tool.agentic_status.execute({ detail: "full" }, modelCtx52)
 const dashOut52 = typeof dashResp52 === "string" ? dashResp52 : dashResp52.output || JSON.stringify(dashResp52)
 assert(typeof dashOut52 === "string" && dashOut52.length > 0, "dashboard returns output without error")
 assert(dashOut52.includes("Model Reliability"), "dashboard shows model reliability section")
@@ -1607,34 +1607,35 @@ assert(listAfterClearOut.includes("No model preferences"), "list shows empty aft
 
 assert(true, "agentic_model session model preference tests passed")
 
-// 66b. agentic_model_reset — reset model statistics
-console.log("\n[66b] agentic_model_reset — reset model stats")
+// 66b. agentic_model — reset model statistics (merged from agentic_model_reset)
+console.log("\n[66b] agentic_model — reset model stats (merged)")
 const mrSid = freshSid()
 const mrCtx = mockCtx(mrSid)
-assert(typeof hooks.tool.agentic_model_reset === "object", "agentic_model_reset tool registered")
-assert(typeof hooks.tool.agentic_model_reset.execute === "function", "agentic_model_reset has execute")
+assert(typeof hooks.tool.agentic_model === "object", "agentic_model tool registered (reset merged)")
+assert(typeof hooks.tool.agentic_model.execute === "function", "agentic_model has execute (reset merged)")
 
-// reset-all (safe in test)
-const resetAllRes = await hooks.tool.agentic_model_reset.execute({ action: "reset-all" }, mrCtx)
+// reset-all (safe in test) — now on agentic_model
+const resetAllRes = await hooks.tool.agentic_model.execute({ action: "reset-all" }, mrCtx)
 const resetAllOut = typeof resetAllRes === "string" ? resetAllRes : resetAllRes.output
-assert(resetAllOut.includes("EMERGENCY"), "reset-all confirms emergency reset")
+assert(resetAllOut.includes("EMERGENCY"), "reset-all confirms emergency reset on agentic_model")
 
 // reset without model
-const noModelReset = await hooks.tool.agentic_model_reset.execute({ action: "reset" }, mrCtx)
+const noModelReset = await hooks.tool.agentic_model.execute({ action: "reset" }, mrCtx)
 const noModelResetOut = typeof noModelReset === "string" ? noModelReset : noModelReset.output
-assert(noModelResetOut.includes("Provide a `model`"), "reset without model returns error")
+assert(noModelResetOut.includes("Provide a `model`"), "reset without model returns error on agentic_model")
 
 // reset-stale
-const staleRes = await hooks.tool.agentic_model_reset.execute({ action: "reset-stale" }, mrCtx)
+const staleRes = await hooks.tool.agentic_model.execute({ action: "reset-stale" }, mrCtx)
 const staleOut = typeof staleRes === "string" ? staleRes : staleRes.output
-assert(staleOut.includes("No stale") || staleOut.includes("Reset"), "reset-stale returns result")
+assert(staleOut.includes("No stale") || staleOut.includes("Reset"), "reset-stale returns result on agentic_model")
 
-// unknown action
-const unknownReset = await hooks.tool.agentic_model_reset.execute({ action: "unknown" }, mrCtx)
-const unknownResetOut = typeof unknownReset === "string" ? unknownReset : unknownReset.output
-assert(unknownResetOut.includes("Unknown action"), "unknown action returns error")
+// unknown action shows all options including reset
+const unknownModelAction = await hooks.tool.agentic_model.execute({ action: "unknown" }, mrCtx)
+const unknownModelOut = typeof unknownModelAction === "string" ? unknownModelAction : unknownModelAction.output
+assert(unknownModelOut.includes("Unknown action"), "unknown action returns error on agentic_model")
+assert(unknownModelOut.includes("reset"), "error message mentions reset actions")
 
-assert(true, "agentic_model_reset tests passed")
+assert(true, "agentic_model reset merge tests passed")
 
 // 66c. agentic_budget — budget limits (basic tool registration)
 console.log("\n[66c] agentic_budget — tool registration check")
@@ -1777,12 +1778,12 @@ const vfyGoodOut = typeof vfyGood === "string" ? vfyGood : (vfyGood.output || ""
 assert(vfyGoodOut.length > 0, "verify after execution returns output")
 assert(true, "agentic_verify edge case tests passed")
 
-// ── Coverage Expansion: agentic_dashboard ──
-console.log("\n[70] agentic_dashboard — coverage")
+// ── Coverage Expansion: agentic_status detail=full (merged from agentic_dashboard) ──
+console.log("\n[70] agentic_status — full dashboard coverage")
 const dashSid = freshSid()
 
 // Dashboard with no session data (empty)
-const dashEmpty = await hooks.tool.agentic_dashboard.execute({}, mockCtx(dashSid))
+const dashEmpty = await hooks.tool.agentic_status.execute({ detail: "full" }, mockCtx(dashSid))
 const dashEmpOut = typeof dashEmpty === "string" ? dashEmpty : (dashEmpty.output || "")
 assert(dashEmpOut.length > 0, "dashboard returns output even with no data")
 assert(dashEmpOut.includes("Model") || dashEmpOut.includes("model"), "dashboard shows model info")
@@ -1795,11 +1796,11 @@ await hooks.tool.agentic_plan.execute({
 await hooks.tool.agentic_execute.execute({
   stepId: "dash-1", success: true, output: "Done dashboard test",
 }, mockCtx(dashSid))
-const dashWithData = await hooks.tool.agentic_dashboard.execute({}, mockCtx(dashSid))
+const dashWithData = await hooks.tool.agentic_status.execute({ detail: "full" }, mockCtx(dashSid))
 const dashDataOut = typeof dashWithData === "string" ? dashWithData : (dashWithData.output || "")
 assert(dashDataOut.length > 0, "dashboard after execution returns output")
 assert(typeof dashWithData === "object", "dashboard returns object")
-assert(true, "agentic_dashboard edge case tests passed")
+assert(true, "agentic_status full dashboard tests passed")
 
 // ── Coverage Expansion: agentic_reflect ──
 console.log("\n[71] agentic_reflect — edge cases")
@@ -2885,52 +2886,52 @@ const mcpDiscAll = await hooks.tool.agentic_mcp.execute({
 }, mockCtx(freshSid()))
 assert(true, "agentic_mcp disconnect-all passed")
 
-// 91b. agentic_mcp_server — MCP server start/stop/status
-console.log("\n[91b] agentic_mcp_server — MCP server tool")
+// 91b. agentic_mcp — server start/stop/status (merged from agentic_mcp)
+console.log("\n[91b] agentic_mcp — server management (merged)")
 {
   const mcpSrvSid = freshSid()
 
-  // Status when not running
-  const statusOff = await hooks.tool.agentic_mcp_server.execute({
-    action: "status",
+  // Status when not running (server-status)
+  const statusOff = await hooks.tool.agentic_mcp.execute({
+    action: "server-status",
   }, mockCtx(mcpSrvSid))
   const statusOffOut = typeof statusOff === "string" ? statusOff : (statusOff.output || "")
-  assert(statusOffOut.includes("not running"), "91b-1 mcp_server status shows not running")
+  assert(statusOffOut.includes("not running"), "91b-1 mcp server-status shows not running")
 
-  // Start server
-  const started = await hooks.tool.agentic_mcp_server.execute({
-    action: "start",
+  // Start server (server-start)
+  const started = await hooks.tool.agentic_mcp.execute({
+    action: "server-start",
   }, mockCtx(mcpSrvSid))
   const startedOut = typeof started === "string" ? started : (started.output || "")
-  assert(startedOut.includes("started"), "91b-2 mcp_server start succeeds")
+  assert(startedOut.includes("started"), "91b-2 mcp server-start succeeds")
 
-  // Status while running
-  const statusOn = await hooks.tool.agentic_mcp_server.execute({
-    action: "status",
+  // Status while running (server-status)
+  const statusOn = await hooks.tool.agentic_mcp.execute({
+    action: "server-status",
   }, mockCtx(mcpSrvSid))
   const statusOnOut = typeof statusOn === "string" ? statusOn : (statusOn.output || "")
-  assert(statusOnOut.includes("Running") || statusOnOut.includes("✅"), "91b-3 mcp_server status shows running")
+  assert(statusOnOut.includes("Running") || statusOnOut.includes("✅"), "91b-3 mcp server-status shows running")
 
   // Start again (already running)
-  const startedAgain = await hooks.tool.agentic_mcp_server.execute({
-    action: "start",
+  const startedAgain = await hooks.tool.agentic_mcp.execute({
+    action: "server-start",
   }, mockCtx(mcpSrvSid))
   const startedAgainOut = typeof startedAgain === "string" ? startedAgain : (startedAgain.output || "")
-  assert(startedAgainOut.includes("already running"), "91b-4 mcp_server start again shows already running")
+  assert(startedAgainOut.includes("already running"), "91b-4 mcp server-start again shows already running")
 
-  // Stop server
-  const stopped = await hooks.tool.agentic_mcp_server.execute({
-    action: "stop",
+  // Stop server (server-stop)
+  const stopped = await hooks.tool.agentic_mcp.execute({
+    action: "server-stop",
   }, mockCtx(mcpSrvSid))
   const stoppedOut = typeof stopped === "string" ? stopped : (stopped.output || "")
-  assert(stoppedOut.includes("stopped"), "91b-5 mcp_server stop succeeds")
+  assert(stoppedOut.includes("stopped"), "91b-5 mcp server-stop succeeds")
 
-  // Status after stop
-  const statusAfter = await hooks.tool.agentic_mcp_server.execute({
-    action: "status",
+  // Status after stop (server-status)
+  const statusAfter = await hooks.tool.agentic_mcp.execute({
+    action: "server-status",
   }, mockCtx(mcpSrvSid))
   const statusAfterOut = typeof statusAfter === "string" ? statusAfter : (statusAfter.output || "")
-  assert(statusAfterOut.includes("not running"), "91b-6 mcp_server status shows stopped after stop")
+  assert(statusAfterOut.includes("not running"), "91b-6 mcp server-status shows stopped after stop")
 }
 
 // ── Stage V: Autonomous Loop ──
@@ -8543,36 +8544,36 @@ function dtr_assert(cond, msg) { if (cond) { dtr++ } else { console.error(`  ❌
   }
   const dtrHooks = await mod.AgenticEngine(paMockInput)
   // Access the dynamicToolRegistry via globalThis (set during plugin init)
-  // Or check that the plugin's agentic_mcp_server tool works with the registry
-  const status = await dtrHooks.tool.agentic_mcp_server.execute({ action: "status" }, mockCtx("dtr13-ctx"))
+  // Or check that the plugin's agentic_mcp tool works with the registry
+  const status = await dtrHooks.tool.agentic_mcp.execute({ action: "server-status" }, mockCtx("dtr13-ctx"))
   const statusOut = typeof status === "string" ? status : (status.output || "")
   // Status will show the registry has tools if registryTool registered them
   // Since registry starts empty and registryTool adds to it, status should show tool count >= 5
   // But the MCP server might not be started, so status just checks if registry is accessible
-  dtr_assert(typeof statusOut === "string", "DTR-13a agentic_mcp_server status works after plugin init")
+  dtr_assert(typeof statusOut === "string", "DTR-13a agentic_mcp server-status works after plugin init")
   
-  // Test agentic_mcp_server start with registered tools in registry
-  const startResult = await dtrHooks.tool.agentic_mcp_server.execute({ action: "start" }, mockCtx("dtr13-ctx2"))
+  // Test agentic_mcp server-start with registered tools in registry
+  const startResult = await dtrHooks.tool.agentic_mcp.execute({ action: "server-start" }, mockCtx("dtr13-ctx2"))
   const startOut = typeof startResult === "string" ? startResult : (startResult.output || "")
-  dtr_assert(startOut.includes("started") || startOut.includes("already running"), "DTR-13b agentic_mcp_server start succeeds")
+  dtr_assert(startOut.includes("started") || startOut.includes("already running"), "DTR-13b agentic_mcp server-start succeeds")
   
   // The status should show tool count > 0 because registryTool registered tools
-  const status2 = await dtrHooks.tool.agentic_mcp_server.execute({ action: "status" }, mockCtx("dtr13-ctx3"))
+  const status2 = await dtrHooks.tool.agentic_mcp.execute({ action: "server-status" }, mockCtx("dtr13-ctx3"))
   const status2Out = typeof status2 === "string" ? status2 : (status2.output || "")
   // If tool count is > 0, it should be visible in status output
   // Check metadata for toolCount if available, or just verify status works
-  dtr_assert(status2Out.includes("Running") || status2Out.includes("✅") || status2Out.includes("Tools"), "DTR-13c agentic_mcp_server shows running with tools")
+  dtr_assert(status2Out.includes("Running") || status2Out.includes("✅") || status2Out.includes("Tools"), "DTR-13c agentic_mcp server-status shows running with tools")
   
   // Stop server
-  await dtrHooks.tool.agentic_mcp_server.execute({ action: "stop" }, mockCtx("dtr13-ctx4"))
+  await dtrHooks.tool.agentic_mcp.execute({ action: "server-stop" }, mockCtx("dtr13-ctx4"))
   
   // Verify MCP discover + call cycle via HTTP
   // The MCP server should now have the 5 registered tools
   // Start the server and query tools/list via HTTP
-  await dtrHooks.tool.agentic_mcp_server.execute({ action: "start" }, mockCtx("dtr13-ctx5"))
+  await dtrHooks.tool.agentic_mcp.execute({ action: "server-start" }, mockCtx("dtr13-ctx5"))
   
   // Get the port from status metadata
-  const status3 = await dtrHooks.tool.agentic_mcp_server.execute({ action: "status" }, mockCtx("dtr13-ctx6"))
+  const status3 = await dtrHooks.tool.agentic_mcp.execute({ action: "server-status" }, mockCtx("dtr13-ctx6"))
   const status3Meta = status3?.metadata || {}
   const port = status3Meta.port
   if (port) {
@@ -8632,11 +8633,11 @@ function dtr_assert(cond, msg) { if (cond) { dtr++ } else { console.error(`  ❌
   }
   
   // Stop
-  await dtrHooks.tool.agentic_mcp_server.execute({ action: "stop" }, mockCtx("dtr13-ctx7"))
+  await dtrHooks.tool.agentic_mcp.execute({ action: "server-stop" }, mockCtx("dtr13-ctx7"))
   
   // Verify we can call via MCP for agentic_reflect with args
-  await dtrHooks.tool.agentic_mcp_server.execute({ action: "start" }, mockCtx("dtr13-ctx8"))
-  const status4 = await dtrHooks.tool.agentic_mcp_server.execute({ action: "status" }, mockCtx("dtr13-ctx9"))
+  await dtrHooks.tool.agentic_mcp.execute({ action: "server-start" }, mockCtx("dtr13-ctx8"))
+  const status4 = await dtrHooks.tool.agentic_mcp.execute({ action: "server-status" }, mockCtx("dtr13-ctx9"))
   const port2 = status4?.metadata?.port
   if (port2) {
     try {
@@ -8668,7 +8669,7 @@ function dtr_assert(cond, msg) { if (cond) { dtr++ } else { console.error(`  ❌
     }
   }
   
-  await dtrHooks.tool.agentic_mcp_server.execute({ action: "stop" }, mockCtx("dtr13-ctx10"))
+  await dtrHooks.tool.agentic_mcp.execute({ action: "server-stop" }, mockCtx("dtr13-ctx10"))
   dtrHooks.dispose?.()
 }
 

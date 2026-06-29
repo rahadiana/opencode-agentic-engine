@@ -473,13 +473,13 @@ async function suite10() {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// SUITE 11: agentic_dashboard — Real Observability Dashboard
+// SUITE 11: agentic_status detail=full (merged from agentic_dashboard)
 // ════════════════════════════════════════════════════════════════════
 
 async function suite11() {
-  suite("agentic_dashboard — Real Observability Dashboard")
+  suite("agentic_status detail=full (merged dashboard)")
 
-  const result1 = await runTool("agentic_dashboard", {})
+  const result1 = await runTool("agentic_status", { detail: "full" })
   ok(typeof result1.output === "string" && result1.output.length > 50,
     "dashboard returns comprehensive output")
   ok(result1.output.includes("Execution Overview") || result1.output.includes("Cross-Session") ||
@@ -610,17 +610,17 @@ async function suite15() {
 // ════════════════════════════════════════════════════════════════════
 
 async function suite16() {
-  suite("agentic_model_reset — Real Model Reset")
+  suite("agentic_model reset — Real Model Reset (via agentic_model action=reset)")
 
   // Reset-all (safe — only resets in-memory stats)
-  const resetResult = await runTool("agentic_model_reset", {
+  const resetResult = await runTool("agentic_model", {
     action: "reset-all",
   }, "reset-session")
   ok(typeof resetResult.output === "string" && resetResult.output.length > 10,
     "model_reset reset-all returns output")
 
   // Reset with specific model name
-  const resetModelResult = await runTool("agentic_model_reset", {
+  const resetModelResult = await runTool("agentic_model", {
     action: "reset",
     model: "gpt-4o",
   }, "reset-session")
@@ -628,7 +628,7 @@ async function suite16() {
     "model_reset specific model returns output")
 
   // Reset-stale
-  const staleResult = await runTool("agentic_model_reset", {
+  const staleResult = await runTool("agentic_model", {
     action: "reset-stale",
     staleDays: 1,
   }, "reset-session")
@@ -636,7 +636,7 @@ async function suite16() {
     "model_reset reset-stale returns output")
 
   // Invalid action
-  const invalidResult = await runTool("agentic_model_reset", {
+  const invalidResult = await runTool("agentic_model", {
     action: "invalid-action",
   }, "reset-session")
   ok(typeof invalidResult.output === "string" && invalidResult.output.length > 0,
