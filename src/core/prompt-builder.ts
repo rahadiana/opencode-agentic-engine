@@ -1,6 +1,7 @@
 import type { DomainPack } from "./domain-registry.js"
 import { PromptTemplate, type KnowledgeEntry } from "./prompt-template.js"
 import type { ProjectContext } from "./project-context.js"
+import type { SkillCurator } from "../curation/skill-curator.js"
 export interface ToolEntry {
   name: string
   description: string
@@ -19,6 +20,10 @@ export interface ToolListConfig {
   selectedTools?: ToolEntry[]
   /** Optional project context (language, framework, test patterns) for dynamic system prompt */
   projectContext?: ProjectContext
+  /** Optional skill curator for auto-injecting relevant skills into prompt */
+  curator?: SkillCurator
+  /** Current goal (used with curator for skill relevance matching) */
+  goal?: string
 }
 
 const CORE_TOOLS = ["agentic_plan", "agentic_execute", "agentic_verify", "agentic_reflect", "agentic_status"]
@@ -252,6 +257,26 @@ Tidak punya memori lintas sesi. Setiap sesi mulai dari nol pengetahuan kontekstu
 
   if (config?.knowledgeEntries && config.knowledgeEntries.length > 0) {
     t.injectKnowledge(config.knowledgeEntries)
+  }
+
+  // ── CURATOR: Auto-inject relevant skills from past sessions ──
+  if (config?.curator && config?.goal) {
+    const curator = config.curator
+    if (curator.getConfig().enabled) {
+      try {
+        const relevant = curator.injectRelevant(config.goal)
+        if (relevant.length > 0) {
+          const formatted = curator.formatInjectedSkills(relevant)
+          t.knowledge(formatted)
+        }
+      } catch (e: unknown) {
+        // Curator injection is best-effort — never block prompt building
+        const err = e instanceof Error ? e.message : String(e)
+        if (typeof process !== "undefined" && process.env?.NODE_ENV !== "test") {
+          console.warn(`[Agentic] Skill curator injection failed: ${err}`)
+        }
+      }
+    }
   }
 
   // ═══════════════════════════════════════════════════════════

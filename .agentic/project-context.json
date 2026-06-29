@@ -1,0 +1,34 @@
+{
+  "cachedAt": "2026-06-29T16:20:21.141Z",
+  "configSnapshots": {
+    "package.json": 1782749982968.305,
+    "tsconfig.json": 1782749982989.8254
+  },
+  "context": {
+    "languages": [
+      {
+        "lang": "TypeScript",
+        "confidence": 0.95,
+        "evidence": [
+          "package.json → devDependencies.typescript"
+        ]
+      },
+      {
+        "lang": "JavaScript",
+        "confidence": 0.75,
+        "evidence": [
+          "1 × JavaScript files in project"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "npm",
+    "testPatterns": [
+      "test/"
+    ],
+    "entryPoints": [
+      "src/index.ts"
+    ],
+    "ambiguity": "MEDIUM"
+  }
+}

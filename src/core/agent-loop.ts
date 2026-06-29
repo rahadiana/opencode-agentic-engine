@@ -26,6 +26,7 @@ import { ConfidenceScorer, ConfidenceStore, type ScoringSignals } from "./confid
 import { PlanningLayer } from "./planning-layer.js"
 import { ExecutionLayer } from "./execution-layer.js"
 import { RecoveryLayer, type RecoveryDecision } from "./recovery-layer.js"
+import { ToolGuardrailController, DEFAULT_GUARDRAIL_CONFIG, type ToolGuardrailConfig } from "./tool-guardrails.js"
 import { createLogger } from "../observability/logger.js"
 
 const log = createLogger("AgentLoop")
@@ -73,6 +74,9 @@ export class AgentLoop {
   /** Event bus for Second Brain integration */
   private eventBus?: EventBus
 
+  /** Tool Guardrails — loop detection for execution steps */
+  private guardrails: ToolGuardrailController
+
   /** Graph Harness 3 layers */
   private planningLayer: PlanningLayer
   private executionLayer: ExecutionLayer
@@ -91,6 +95,7 @@ export class AgentLoop {
     const dagEngine = new DAGEngine()
     this.planningLayer = new PlanningLayer(dagEngine)
     this.executionLayer = new ExecutionLayer(dagEngine)
+    this.guardrails = new ToolGuardrailController(DEFAULT_GUARDRAIL_CONFIG)
     this.recoveryLayer = new RecoveryLayer({
       maxRetries: config.maxRetries ?? 3,
       maxReplans: 2,
@@ -106,6 +111,16 @@ export class AgentLoop {
 
   setEventBus(eventBus: EventBus): void {
     this.eventBus = eventBus
+  }
+
+  /** Configure guardrail thresholds at runtime */
+  setGuardrailConfig(config: Partial<ToolGuardrailConfig>): void {
+    this.guardrails.updateConfig(config)
+  }
+
+  /** Access guardrails for external inspection (tests, dashboard) */
+  getGuardrails(): ToolGuardrailController {
+    return this.guardrails
   }
 
   setBudgetTracker(tracker: BudgetTracker): void {
@@ -144,6 +159,9 @@ export class AgentLoop {
     const completedSteps: string[] = []
     const failedSteps: string[] = []
     let iteration = 0
+
+    // Reset guardrails for this turn
+    this.guardrails.resetForTurn()
 
     // ── Setup ────────────────────────────────────────────────────────
 
@@ -226,6 +244,19 @@ export class AgentLoop {
         }
       }
 
+      // Tool guardrails: before-call check — detect infinite retry loops
+      const lastError = dagCtx.nodeStates.get(node.id)?.error
+      const beforeDecision = this.guardrails.beforeCall(node.id, lastError)
+      if (beforeDecision.action === "block" || beforeDecision.action === "halt") {
+        log.warn(`[Guardrails] ${beforeDecision.action} on step "${node.id}": ${beforeDecision.message}`)
+        return {
+          success: false,
+          output: beforeDecision.message,
+          filesModified: [],
+          error: `Guardrail ${beforeDecision.action}: ${beforeDecision.signal}`,
+        }
+      }
+
       let result: { success: boolean; output: string; filesModified: string[]; error?: string }
       try {
         result = await stepExecutor(subtask)
@@ -241,6 +272,25 @@ export class AgentLoop {
       // Track file changes
       if (result.filesModified && result.filesModified.length > 0) {
         depTracker.recordChange(sessionId, node.id, result.filesModified)
+      }
+
+      // Tool guardrails: after-call — update counters
+      this.guardrails.afterCall(
+        node.id,
+        result.success,
+        result.output,
+        result.filesModified ?? [],
+      )
+
+      // Tool guardrails: check idempotent-no-progress (read-only step with same result)
+      if (result.success) {
+        const idempotentDecision = this.guardrails.checkIdempotent(node.id)
+        if (idempotentDecision.action === "block" || idempotentDecision.action === "halt") {
+          log.warn(`[Guardrails] ${idempotentDecision.action} on step "${node.id}": ${idempotentDecision.message}`)
+          result.success = false
+          result.output = idempotentDecision.message
+          result.error = `Guardrail ${idempotentDecision.action}: ${idempotentDecision.signal}`
+        }
       }
 
       // Graph Harness §5.3: Verify intermediate steps NON-BLOCKING

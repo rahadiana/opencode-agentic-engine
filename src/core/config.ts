@@ -237,6 +237,26 @@ export interface AgentConfig {
   minSampleSize: number
   /** Gap #4 — per-dimension toggle for deep verification (all enabled by default) */
   deepVerification?: DeepVerificationAgentConfig
+  /** Tool guardrails: loop detection for agent execution steps */
+  toolGuardrails?: ToolGuardrailAgentConfig
+}
+
+/** Config for ToolGuardrailController — infinite loop detection */
+export interface ToolGuardrailAgentConfig {
+  /** Master kill-switch (default: true) */
+  enabled: boolean
+  /** Warn after N identical step+error retries (default: 2) */
+  exactRepeatWarn: number
+  /** Block after N identical retries, 0 = never (default: 5) */
+  exactRepeatBlock: number
+  /** Warn after N consecutive same-step failures (default: 3) */
+  sameStepFailWarn: number
+  /** Block after N same-step failures, 0 = never (default: 8) */
+  sameStepFailBlock: number
+  /** Block after N identical idempotent results (default: 3) */
+  idempotentNoProgressBlock: number
+  /** Hard stop: block means agent loop exits immediately (default: false) */
+  hardStop: boolean
 }
 
 export interface StorageConfig {
@@ -270,6 +290,24 @@ export interface AgenticConfigSchema {
   storage: StorageConfig
   /** Optional fine-tuning configuration */
   fineTuning?: FineTuningConfigSchema
+  /** Optional skill curator configuration */
+  curator?: CuratorConfigSchema
+}
+
+/** Curator config — skill lifecycle + auto-injection */
+export interface CuratorConfigSchema {
+  /** Master switch (default: true) */
+  enabled: boolean
+  /** Days of inactivity before marking a skill "stale" (default: 30) */
+  staleAfterDays: number
+  /** Days of inactivity before archiving a skill (default: 90) */
+  archiveAfterDays: number
+  /** Max skills to auto-inject into the system prompt (default: 3) */
+  maxSkillsInPrompt: number
+  /** Minimum TF-IDF similarity for a skill to be injected (default: 0.15) */
+  injectThreshold: number
+  /** Enable LLM-powered consolidation pass (default: false) */
+  consolidationEnabled: boolean
 }
 
 // ──────────────────────────────────────────────
@@ -308,12 +346,29 @@ export const DEFAULT_CONFIG: AgenticConfigSchema = {
       architecture: true,
       deps: true,
     },
+    toolGuardrails: {
+      enabled: true,
+      exactRepeatWarn: 2,
+      exactRepeatBlock: 5,
+      sameStepFailWarn: 3,
+      sameStepFailBlock: 8,
+      idempotentNoProgressBlock: 3,
+      hardStop: false,
+    },
   },
   storage: {
     traceRetentionDays: 7,
     skillMaxCount: 200,
   },
   fineTuning: undefined,
+  curator: {
+    enabled: true,
+    staleAfterDays: 30,
+    archiveAfterDays: 90,
+    maxSkillsInPrompt: 3,
+    injectThreshold: 0.15,
+    consolidationEnabled: false,
+  },
 }
 
 // ──────────────────────────────────────────────

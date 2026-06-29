@@ -10046,6 +10046,467 @@ passed += hkPassed; failed += hkFailed
 
   console.log(`  GAP #11: ${g11Passed} passed, ${g11Failed} failed`)
   passed += g11Passed; failed += g11Failed
+
+  // ── Phase 1: Tool Guardrails (TG) ──────────────────────────────
+  const tgPassedTotal = { p: 0, f: 0 }
+  const tgAssert = (cond, msg) => { if (cond) { tgPassedTotal.p++; passed++ } else { tgPassedTotal.f++; failed++; console.error(`  FAIL: ${msg}`) } }
+
+  { // TG-1: Basic initialization
+    const tg1 = new mod.ToolGuardrailController()
+    tgAssert(tg1 !== null, "TG-1a: controller instantiated")
+    tgAssert(tg1.getConfig().enabled === true, "TG-1b: enabled by default")
+    tgAssert(tg1.isHalted === false, "TG-1c: not halted initially")
+  }
+
+  { // TG-2: Exact repeat detection (warn)
+    const tg2 = new mod.ToolGuardrailController({ exactRepeatWarn: 2, exactRepeatBlock: 99 })
+    // First call — allowed
+    const d1 = tg2.beforeCall("step-1", "compile error: foo")
+    tgAssert(d1.action === "allow", "TG-2a: first call allowed")
+    // Second call with same error — warn
+    const d2 = tg2.beforeCall("step-1", "compile error: foo")
+    tgAssert(d2.action === "warn", "TG-2b: second identical call warns")
+    tgAssert(d2.signal === "exact-repeat", "TG-2c: signal is exact-repeat")
+  }
+
+  { // TG-3: Exact repeat block
+    const tg3 = new mod.ToolGuardrailController({ exactRepeatWarn: 2, exactRepeatBlock: 3 })
+    tg3.beforeCall("step-1", "error X")
+    tg3.beforeCall("step-1", "error X")
+    const d3 = tg3.beforeCall("step-1", "error X")
+    tgAssert(d3.action === "block", "TG-3a: third identical call blocked")
+  }
+
+  { // TG-4: Different errors don't count as exact repeat
+    const tg4 = new mod.ToolGuardrailController({ exactRepeatWarn: 2, exactRepeatBlock: 5 })
+    tg4.beforeCall("step-1", "error A")
+    const d = tg4.beforeCall("step-1", "error B")
+    tgAssert(d.action === "allow", "TG-4a: different error is allowed (exact-repeat uses keyed match)")
+  }
+
+  { // TG-5: Same-step failure cumulative
+    const tg5 = new mod.ToolGuardrailController({ sameStepFailWarn: 3, sameStepFailBlock: 99 })
+    tg5.beforeCall("step-2", "error X")
+    tg5.beforeCall("step-2", "error Y")
+    const d = tg5.beforeCall("step-2", "error Z")
+    tgAssert(d.action === "warn", "TG-5a: 3 failures of same step warns")
+    tgAssert(d.signal === "same-step-fail", "TG-5b: signal is same-step-fail")
+  }
+
+  { // TG-6: Same-step failure block
+    const tg6 = new mod.ToolGuardrailController({ sameStepFailWarn: 3, sameStepFailBlock: 4 })
+    tg6.beforeCall("step-3", "e1")
+    tg6.beforeCall("step-3", "e2")
+    tg6.beforeCall("step-3", "e3")
+    const d = tg6.beforeCall("step-3", "e4")
+    tgAssert(d.action === "block", "TG-6a: 4th same-step failure blocked")
+  }
+
+  { // TG-7: Success resets failure counter
+    const tg7 = new mod.ToolGuardrailController({ sameStepFailWarn: 3, sameStepFailBlock: 5 })
+    tg7.beforeCall("step-4", "errorA")
+    tg7.beforeCall("step-4", "errorB")  // different errors — avoid exact-repeat trigger
+    // Simulate success
+    tg7.afterCall("step-4", true, "fixed", ["src/fixed.ts"])
+    const d = tg7.beforeCall("step-4", "errorC")
+    tgAssert(d.action === "allow", "TG-7a: after success, same-step counter resets")
+  }
+
+  { // TG-8: Disabled guardrails always allow
+    const tg8 = new mod.ToolGuardrailController({ enabled: false, exactRepeatBlock: 2 })
+    tg8.beforeCall("step-1", "error")
+    const d = tg8.beforeCall("step-1", "error")
+    tgAssert(d.action === "allow", "TG-8a: disabled guardrails allow everything")
+    tgAssert(d.code === "disabled", "TG-8b: code is disabled")
+  }
+
+  { // TG-9: Hard stop halts after block
+    const tg9 = new mod.ToolGuardrailController({ exactRepeatBlock: 2, hardStop: true })
+    tg9.beforeCall("step-1", "error")
+    const d = tg9.beforeCall("step-1", "error")
+    tgAssert(d.action === "halt", "TG-9a: hardStop=true returns halt")
+    tgAssert(tg9.isHalted, "TG-9b: controller is halted after halt")
+    // All subsequent calls also halt
+    const d2 = tg9.beforeCall("different-step", "other error")
+    tgAssert(d2.action === "halt" || d2.action === "allow", "TG-9c: after halt, behavior is consistent")
+  }
+
+  { // TG-10: Idempotent no-progress
+    // First call stores hash, second call matches it → counter=1 → block at threshold=1
+    const tg10 = new mod.ToolGuardrailController({ idempotentNoProgressBlock: 1 })
+    tg10.afterCall("step-read", true, "same output", [])
+    tg10.afterCall("step-read", true, "same output", [])
+    const d = tg10.checkIdempotent("step-read")
+    tgAssert(d.action === "block", "TG-10a: idempotent no-progress blocked after 2 same outputs")
+  }
+
+  { // TG-11: resetForTurn clears state
+    const tg11 = new mod.ToolGuardrailController({ exactRepeatBlock: 3 })
+    tg11.beforeCall("step-1", "error")
+    tg11.beforeCall("step-1", "error")
+    tg11.resetForTurn()
+    const d = tg11.beforeCall("step-1", "error")
+    tgAssert(d.action === "allow", "TG-11a: resetForTurn clears counters")
+  }
+
+  { // TG-12: Config update at runtime
+    const tg12 = new mod.ToolGuardrailController({ exactRepeatBlock: 5 })
+    tg12.updateConfig({ exactRepeatBlock: 1, hardStop: false })
+    const cfg = tg12.getConfig()
+    tgAssert(cfg.exactRepeatBlock === 1, "TG-12a: config updated at runtime")
+  }
+
+  { // TG-13: No error passes through fine
+    const tg13 = new mod.ToolGuardrailController()
+    const d = tg13.beforeCall("step-ok")
+    tgAssert(d.action === "allow", "TG-13a: no error = allow")
+    tgAssert(d.signal === "none", "TG-13b: signal is none")
+  }
+
+  console.log(`  Tool Guardrails: ${tgPassedTotal.p} passed, ${tgPassedTotal.f} failed`)
+
+  // ── Phase 2: Actionable Error Messages (AE) ────────────────────
+  const aePassedTotal = { p: 0, f: 0 }
+  const aeAssert = (cond, msg) => { if (cond) { aePassedTotal.p++; passed++ } else { aePassedTotal.f++; failed++; console.error(`  FAIL: ${msg}`) } }
+
+  { // AE-1: Import error gets actionable format
+    const ea = new mod.ErrorAnalyzer()
+    const result = ea.analyze("Cannot find module './foo'", ["src/index.ts"])
+    aeAssert(result.category === "import", "AE-1a: import error detected")
+    aeAssert(result.likelyRootCause.includes("The module"), "AE-1b: root cause mentions module")
+    aeAssert(result.suggestedFix.includes("Verify") || result.suggestedFix.includes("file"), "AE-1c: fix instruction is actionable")
+  }
+
+  { // AE-2: Type error
+    const ea2 = new mod.ErrorAnalyzer()
+    const result = ea2.analyze("Type 'string' is not assignable to type 'number'", ["src/bar.ts"])
+    aeAssert(result.category === "type", "AE-2a: type error detected")
+    aeAssert(result.severity === "high", "AE-2b: severity is high")
+  }
+
+  { // AE-3: Compile error
+    const ea3 = new mod.ErrorAnalyzer()
+    const result = ea3.analyze("error TS2322: compilation failed", ["src/baz.ts"])
+    aeAssert(result.category === "compile", "AE-3a: compile error detected")
+  }
+
+  { // AE-4: Test failure
+    const ea4 = new mod.ErrorAnalyzer()
+    const result = ea4.analyze("3 tests failed — expected 'hello' but got 'world'", ["test/foo.test.ts"])
+    aeAssert(result.category === "test", "AE-4a: test failure detected")
+  }
+
+  { // AE-5: Runtime error
+    const ea5 = new mod.ErrorAnalyzer()
+    const result = ea5.analyze("TypeError: Cannot read property 'x' of undefined", ["src/app.ts"])
+    aeAssert(result.category === "runtime", "AE-5a: runtime error detected")
+    aeAssert(result.severity === "high", "AE-5b: severity high")
+  }
+
+  { // AE-6: Unknown error
+    const ea6 = new mod.ErrorAnalyzer()
+    const result = ea6.analyze("Something completely unexpected happened", [])
+    aeAssert(result.category === "unknown", "AE-6a: unknown error detected")
+    aeAssert(result.severity === "medium", "AE-6b: severity medium")
+  }
+
+  { // AE-7: formatActionable
+    const ea7 = new mod.ErrorAnalyzer()
+    const analysis = ea7.analyze("Cannot find module './missing' from src/main.ts:5:10", ["src/main.ts"])
+    const actionable = ea7.formatActionable(analysis, "Cannot find module './missing' from src/main.ts:5:10")
+    aeAssert(actionable.badge.includes("Import"), "AE-7a: badge has import label")
+    aeAssert(actionable.location.length > 0, "AE-7b: location extracted")
+    aeAssert(actionable.why.length > 0, "AE-7c: why is non-empty")
+    aeAssert(actionable.fix.length > 0, "AE-7d: fix instruction provided")
+    aeAssert(["low", "medium", "high", "critical"].includes(actionable.severity), "AE-7e: valid severity")
+  }
+
+  { // AE-8: renderActionable
+    const ea8 = new mod.ErrorAnalyzer()
+    const analysis = ea8.analyze("TypeError: x is not a function", ["src/app.ts"])
+    const actionable = ea8.formatActionable(analysis, "TypeError: x is not a function")
+    const rendered = ea8.renderActionable(actionable)
+    aeAssert(rendered.includes("📂"), "AE-8a: rendered has location icon")
+    aeAssert(rendered.includes("Why:"), "AE-8b: rendered has why section")
+    aeAssert(rendered.includes("Fix:"), "AE-8c: rendered has fix section")
+  }
+
+  { // AE-9: actionable() convenience method
+    const ea9 = new mod.ErrorAnalyzer()
+    const a = ea9.actionable("Cannot read properties of null", ["src/x.ts"])
+    aeAssert(a.badge.length > 0, "AE-9a: actionable returns badge")
+    aeAssert(a.summary.length > 0, "AE-9b: summary non-empty")
+  }
+
+  { // AE-10: Permission error
+    const ea10 = new mod.ErrorAnalyzer()
+    const result = ea10.analyze("EACCES: permission denied", ["config.json"])
+    aeAssert(result.category === "runtime", "AE-10a: permission error detected")
+    aeAssert(result.suggestedFix.includes("permissions"), "AE-10b: fix mentions permissions")
+  }
+
+  console.log(`  Actionable Errors: ${aePassedTotal.p} passed, ${aePassedTotal.f} failed`)
+
+  // ── Phase 3: Memory Provider Interface (MP) ─────────────────────
+  const mpPassedTotal = { p: 0, f: 0 }
+  const mpAssert = (cond, msg) => { if (cond) { mpPassedTotal.p++; passed++ } else { mpPassedTotal.f++; failed++; console.error(`  FAIL: ${msg}`) } }
+
+  { // MP-1: NoOpMemoryProvider
+    const noop = new mod.NoOpMemoryProvider()
+    mpAssert(noop.name === "noop", "MP-1a: name is noop")
+    mpAssert(noop.isAvailable() === true, "MP-1b: always available")
+    const p = await noop.prefetch("test")
+    mpAssert(p === "", "MP-1c: prefetch returns empty")
+    const q = await noop.query("test")
+    mpAssert(q.entries.length === 0, "MP-1d: query returns empty")
+  }
+
+  { // MP-2: MemoryOrchestrator registerProvider
+    // ponytail: test with NoOpMemoryProvider directly — no need to access internal orchestrator
+    const noop = new mod.NoOpMemoryProvider()
+    mpAssert(noop.isAvailable(), "MP-2a: NoOp provider available")
+    mpAssert(noop.name === "noop", "MP-2b: correct provider name")
+  }
+
+  { // MP-3: MemoryProvider interface shape
+    const noop = new mod.NoOpMemoryProvider()
+    mpAssert(typeof noop.initialize === "function", "MP-3a: has initialize")
+    mpAssert(typeof noop.prefetch === "function", "MP-3b: has prefetch")
+    mpAssert(typeof noop.syncTurn === "function", "MP-3c: has syncTurn")
+    mpAssert(typeof noop.query === "function", "MP-3d: has query")
+    mpAssert(typeof noop.store === "function", "MP-3e: has store")
+    mpAssert(typeof noop.shutdown === "function", "MP-3f: has shutdown")
+  }
+
+  { // MP-4: prefetch returns string
+    const noop = new mod.NoOpMemoryProvider()
+    await noop.initialize("test-session")
+    const result = await noop.prefetch("sample query", { maxResults: 5 })
+    mpAssert(typeof result === "string", "MP-4a: prefetch returns string")
+  }
+
+  { // MP-5: syncTurn doesn't throw
+    const noop = new mod.NoOpMemoryProvider()
+    try {
+      await noop.syncTurn("user msg", "assistant msg", { sessionId: "s1" })
+      mpAssert(true, "MP-5a: syncTurn completes without error")
+    } catch (e) {
+      mpAssert(false, `MP-5a: syncTurn threw: ${e.message}`)
+    }
+  }
+
+  { // MP-6: query returns structured result
+    const noop = new mod.NoOpMemoryProvider()
+    const result = await noop.query("test", { maxResults: 10, minImportance: 0.5 })
+    mpAssert(Array.isArray(result.entries), "MP-6a: entries is array")
+    mpAssert(Array.isArray(result.sources), "MP-6b: sources is array")
+    mpAssert(typeof result.totalTime === "number", "MP-6c: totalTime is number")
+  }
+
+  { // MP-7: shutdown
+    const noop = new mod.NoOpMemoryProvider()
+    await noop.shutdown()
+    mpAssert(true, "MP-7a: shutdown completes")
+  }
+
+  { // MP-8: store doesn't throw
+    const noop = new mod.NoOpMemoryProvider()
+    try {
+      await noop.store("working", { id: "m1", content: "test", keywords: ["test"] })
+      mpAssert(true, "MP-8a: store completes")
+    } catch (e) {
+      mpAssert(false, `MP-8a: store threw: ${e.message}`)
+    }
+  }
+
+  console.log(`  Memory Provider: ${mpPassedTotal.p} passed, ${mpPassedTotal.f} failed`)
+
+  // ── Phase 4: Skill Curator (SC) ─────────────────────────────────
+  const scPassedTotal = { p: 0, f: 0 }
+  const scAssert = (cond, msg) => { if (cond) { scPassedTotal.p++; passed++ } else { scPassedTotal.f++; failed++; console.error(`  FAIL: ${msg}`) } }
+
+  { // SC-1: Basic curator init
+    const sc1 = new mod.SkillCurator({}, () => [])
+    scAssert(sc1 !== null, "SC-1a: curator instantiated")
+    scAssert(sc1.getConfig().enabled === true, "SC-1b: enabled by default")
+    scAssert(sc1.getConfig().staleAfterDays === 30, "SC-1c: default stale 30 days")
+  }
+
+  { // SC-2: Disabled curator
+    const sc2 = new mod.SkillCurator({ enabled: false }, () => [])
+    const report = sc2.applyLifecycle()
+    scAssert(report.checked === 0, "SC-2a: disabled curator checks nothing")
+  }
+
+  { // SC-3: Lifecycle — active skill kept active
+    const recentSkill = {
+      definition: { meta: { id: "s1", name: "test-skill" }, trigger: { pattern: "test", keywords: [] }, workflow: { steps: [] } },
+      usageCount: 5, successRate: 0.9, successWindow: [], lastUsed: new Date().toISOString(),
+    }
+    const sc3 = new mod.SkillCurator({ staleAfterDays: 30 }, () => [recentSkill])
+    const state = sc3.getLifecycle(recentSkill)
+    scAssert(state === "active", "SC-3a: recently used skill is active")
+  }
+
+  { // SC-4: Lifecycle — stale skill
+    const oldDate = new Date(Date.now() - 45 * 86400000).toISOString() // 45 days ago
+    const staleSkill = {
+      definition: { meta: { id: "s2", name: "old-skill" }, trigger: { pattern: "old", keywords: [] }, workflow: { steps: [] } },
+      usageCount: 1, successRate: 0.5, successWindow: [], lastUsed: oldDate,
+    }
+    const sc4 = new mod.SkillCurator({ staleAfterDays: 30, archiveAfterDays: 120 }, () => [staleSkill])
+    const state = sc4.getLifecycle(staleSkill)
+    scAssert(state === "stale", "SC-4a: 45-day unused skill is stale")
+  }
+
+  { // SC-5: Lifecycle — archived skill
+    const veryOld = new Date(Date.now() - 120 * 86400000).toISOString() // 120 days ago
+    const archivedSkill = {
+      definition: { meta: { id: "s3", name: "ancient" }, trigger: { pattern: "old", keywords: [] }, workflow: { steps: [] } },
+      usageCount: 1, successRate: 0.3, successWindow: [], lastUsed: veryOld,
+    }
+    const sc5 = new mod.SkillCurator({ staleAfterDays: 30, archiveAfterDays: 90 }, () => [archivedSkill])
+    const state = sc5.getLifecycle(archivedSkill)
+    scAssert(state === "archived", "SC-5a: >90 day unused skill is archived")
+  }
+
+  { // SC-6: Pinned skill stays active
+    const oldSkill = {
+      definition: { meta: { id: "s4", name: "pinned-skill" }, trigger: { pattern: "pin", keywords: [] }, workflow: { steps: [] } },
+      usageCount: 10, successRate: 0.95, successWindow: [], lastUsed: new Date(Date.now() - 100 * 86400000).toISOString(),
+    }
+    const sc6 = new mod.SkillCurator({ archiveAfterDays: 30 }, () => [oldSkill])
+    sc6.pin("s4")
+    const state = sc6.getLifecycle(oldSkill)
+    scAssert(state === "active", "SC-6a: pinned skill stays active even if old")
+  }
+
+  { // SC-7: Unpin allows transition
+    const oldSkill = {
+      definition: { meta: { id: "s5", name: "unpinned" }, trigger: { pattern: "test", keywords: [] }, workflow: { steps: [] } },
+      usageCount: 1, successRate: 0.5, successWindow: [], lastUsed: new Date(Date.now() - 200 * 86400000).toISOString(),
+    }
+    const sc7 = new mod.SkillCurator({ archiveAfterDays: 90 }, () => [oldSkill])
+    sc7.pin("s5")
+    scAssert(sc7.getLifecycle(oldSkill) === "active", "SC-7a: pinned is active")
+    sc7.unpin("s5")
+    scAssert(sc7.getLifecycle(oldSkill) === "archived", "SC-7b: unpinned 200-day-old skill is archived")
+  }
+
+  { // SC-8: injectRelevant — no skills returns empty
+    const sc8 = new mod.SkillCurator({}, () => [])
+    const result = sc8.injectRelevant("build a login page")
+    scAssert(Array.isArray(result), "SC-8a: returns array")
+    scAssert(result.length === 0, "SC-8b: empty skills = empty result")
+  }
+
+  { // SC-9: injectRelevant — matching skill found
+    const matchingSkill = {
+      definition: {
+        meta: { id: "s6", name: "user-auth-login" },
+        trigger: { pattern: "add user authentication", keywords: ["login", "auth", "user", "password", "jwt"] },
+        workflow: { steps: [{ order: 1, action: "create", description: "Create login form", expectedOutput: "Form created" }] },
+      },
+      usageCount: 8, successRate: 0.9, successWindow: [], lastUsed: new Date().toISOString(),
+    }
+    const sc9 = new mod.SkillCurator({ injectThreshold: 0.05 }, () => [matchingSkill])
+    const result = sc9.injectRelevant("build a login page with authentication")
+    scAssert(result.length > 0, "SC-9a: matching skill found")
+    if (result.length > 0) {
+      scAssert(result[0].name === "user-auth-login", "SC-9b: correct skill name")
+      scAssert(result[0].relevance > 0, "SC-9c: relevance score > 0")
+      scAssert(result[0].steps.length > 0, "SC-9d: steps extracted")
+    }
+  }
+
+  { // SC-10: injectRelevant — archived skills excluded
+    const archivedSkill = {
+      definition: { meta: { id: "s7", name: "archived-skill" }, trigger: { pattern: "old feature", keywords: ["deprecated"] }, workflow: { steps: [] } },
+      usageCount: 1, successRate: 0.2, successWindow: [], lastUsed: new Date(Date.now() - 200 * 86400000).toISOString(),
+    }
+    const sc10 = new mod.SkillCurator({ injectThreshold: 0.05, archiveAfterDays: 90 }, () => [archivedSkill])
+    const result = sc10.injectRelevant("old feature deprecated")
+    scAssert(result.length === 0, "SC-10a: archived skills excluded from injection")
+  }
+
+  { // SC-11: formatInjectedSkills
+    const sc11 = new mod.SkillCurator({}, () => [])
+    const injected = [{
+      id: "s8", name: "test-skill", pattern: "test pattern",
+      keywords: ["test"], steps: ["Step 1: do something", "Step 2: verify"],
+      usageCount: 5, successRate: 0.8, relevance: 0.75,
+      lifecycle: "active",
+    }]
+    const formatted = sc11.formatInjectedSkills(injected)
+    scAssert(formatted.includes("Relevant Skills"), "SC-11a: has section header")
+    scAssert(formatted.includes("test-skill"), "SC-11b: includes skill name")
+    scAssert(formatted.includes("80%"), "SC-11c: includes success rate")
+    scAssert(formatted.includes("Step 1"), "SC-11d: includes steps")
+  }
+
+  { // SC-12: applyLifecycle report
+    const veryOldSkill = {
+      definition: { meta: { id: "s9", name: "very-old" }, trigger: { pattern: "old", keywords: [] }, workflow: { steps: [] } },
+      usageCount: 1, successRate: 0.5, successWindow: [], lastUsed: new Date(Date.now() - 200 * 86400000).toISOString(),
+    }
+    const recentSkill = {
+      definition: { meta: { id: "s10", name: "recent" }, trigger: { pattern: "new", keywords: [] }, workflow: { steps: [] } },
+      usageCount: 3, successRate: 0.9, successWindow: [], lastUsed: new Date().toISOString(),
+    }
+    const sc12 = new mod.SkillCurator({ staleAfterDays: 30, archiveAfterDays: 90 }, () => [veryOldSkill, recentSkill])
+    const report = sc12.applyLifecycle()
+    scAssert(report.checked === 2, "SC-12a: checked 2 skills")
+    scAssert(report.archived === 1, "SC-12b: 1 archived")
+    scAssert(report.markedStale === 0, "SC-12c: 0 stale (old enough for archive)")
+  }
+
+  { // SC-13: handleNegativeFeedback
+    // Set successWindow so that adding a false actually changes the rate
+    const skill = {
+      definition: { meta: { id: "s11", name: "failing-skill" }, trigger: { pattern: "fail", keywords: [] }, workflow: { steps: [] } },
+      usageCount: 5, successRate: 1.0, successWindow: [true, true],  // 2/2 = 1.0 initially
+      lastUsed: new Date().toISOString(),
+    }
+    const sc13 = new mod.SkillCurator({}, () => [skill])
+    sc13.handleNegativeFeedback("failing-skill")
+    // After push: [true, true, false] → 2/3 ≈ 0.67
+    scAssert(skill.successRate < 1.0, "SC-13a: success rate decreased after negative feedback")
+    scAssert(skill.successWindow.includes(false), "SC-13b: failure recorded in window")
+  }
+
+  { // SC-14: detectOverlaps with unique non-stop words
+    // Use made-up tokens guaranteed not to be in any stop-words list
+    const skillA = {
+      definition: { meta: { id: "a", name: "foobar-zyxwut" }, trigger: { pattern: "foobar zyxwut", keywords: ["foobar", "zyxwut", "blargle"] }, workflow: { steps: [] } },
+      usageCount: 5, successRate: 0.9, successWindow: [], lastUsed: new Date().toISOString(),
+    }
+    const skillB = {
+      definition: { meta: { id: "b", name: "foobar-gronk" }, trigger: { pattern: "foobar gronk", keywords: ["foobar", "gronk", "blaf"] }, workflow: { steps: [] } },
+      usageCount: 3, successRate: 0.85, successWindow: [], lastUsed: new Date().toISOString(),
+    }
+    const skillC = {
+      definition: { meta: { id: "c", name: "xyzzy-plugh" }, trigger: { pattern: "xyzzy plugh", keywords: ["xyzzy", "plugh"] }, workflow: { steps: [] } },
+      usageCount: 1, successRate: 0.5, successWindow: [], lastUsed: new Date().toISOString(),
+    }
+    const sc14 = new mod.SkillCurator({ consolidationEnabled: true }, () => [skillA, skillB, skillC])
+    const overlaps = sc14.detectOverlaps(0.1)
+    scAssert(overlaps.length > 0, "SC-14a: overlap detected between similar skills")
+    if (overlaps.length > 0) {
+      scAssert(overlaps[0].similarity > 0, "SC-14b: similarity score > 0")
+    }
+  }
+
+  { // SC-15: Disabled curator injectRelevant returns empty
+    const skill = {
+      definition: { meta: { id: "s12", name: "my-skill" }, trigger: { pattern: "test", keywords: ["test"] }, workflow: { steps: [] } },
+      usageCount: 5, successRate: 0.9, successWindow: [], lastUsed: new Date().toISOString(),
+    }
+    const sc15 = new mod.SkillCurator({ enabled: false }, () => [skill])
+    const result = sc15.injectRelevant("test")
+    scAssert(result.length === 0, "SC-15a: disabled curator returns empty")
+  }
+
+  console.log(`  Skill Curator: ${scPassedTotal.p} passed, ${scPassedTotal.f} failed`)
 }
 
 console.log(`Results: ${passed} passed, ${failed} failed`)

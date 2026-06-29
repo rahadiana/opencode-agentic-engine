@@ -28,6 +28,7 @@ import { AgentRuntime } from "./agents/agent-runtime.js"
 import type { AgentRole, AgentTask } from "./agents/coordinator.js"
 import { Orchestrator, type WorkflowPipeline } from "./agents/orchestrator.js"
 import { SkillStore } from "./memory/skill-store.js"
+import { SkillCurator } from "./curation/skill-curator.js"
 import { EpisodicStore } from "./memory/episodic-store.js"
 import { MemoryOrchestrator } from "./memory/memory-orchestrator.js"
 import { ConsolidationScheduler } from "./memory/consolidation-scheduler.js"
@@ -438,6 +439,10 @@ const createEngine: Plugin = async (input, _options) => {
   const git = new GitIntegration(worktree)
   const debtScorer = new TechDebtScorer()
   const skillStore = new SkillStore()
+  const curator = new SkillCurator(
+    config.curator ?? {},
+    () => skillStore.getAll(),
+  )
   const coordinator = new AgentCoordinator(skillStore)
   const orchestrator = new Orchestrator()
   for (const pipeline of orchestrator.getBuiltInPipelines()) {
@@ -586,6 +591,10 @@ const confidenceStore = new ConfidenceStore()
   llmEngine.setMemoryOrchestrator(memoryOrchestrator)
   const agentLoop = new AgentLoop(llmEngine, { maxIterations: 10, autoRetry: true, maxRetries: 2, verifyAfterEach: false })
   agentLoop.setEventBus(eventBus)
+  // Wire guardrails from config
+  if (config.agent.toolGuardrails) {
+    agentLoop.setGuardrailConfig(config.agent.toolGuardrails)
+  }
   const stateStore = new StateStore({ worktree })
   // SQLite backend — lebih cepat dari file JSON, support structured queries
   // Graceful fallback: jika better-sqlite3 (Node) atau bun:sqlite (Bun) gak available
@@ -1790,6 +1799,8 @@ const confidenceStore = new ConfidenceStore()
               } else {
                 // Penalize: report failure
                 skillStore.reportFailure(skill.definition.meta.id)
+                // Curator: mark skill for review
+                curator.handleNegativeFeedback(skill.definition.meta.name)
               }
             }
 
@@ -1836,6 +1847,21 @@ const confidenceStore = new ConfidenceStore()
           }
           if (chainResult.recoverySteps.length > 0) {
             response += `\n### 🔄 Recovery Available\nRetry #${chainResult.recoverySteps.length} — call \`agentic_reflect\` to diagnose before retrying.\n`
+          }
+
+          // ── Curator: periodic lifecycle maintenance (every ~10 successful executions) ──
+          if (args.success && curator.getConfig().enabled) {
+            try {
+              // ponytail: simple modulo counter — no persistent state needed
+              const execCount = executor.getExecutionCount(context.sessionID) ?? 0
+              if (execCount > 0 && execCount % 10 === 0) {
+                const lifecycleReport = curator.applyLifecycle()
+                if (lifecycleReport.markedStale > 0 || lifecycleReport.archived > 0) {
+                  response += `\n### 🧠 Skill Curator\n`
+                  response += `Checked ${lifecycleReport.checked} skills: ${lifecycleReport.markedStale} marked stale, ${lifecycleReport.archived} archived, ${lifecycleReport.reactivated} reactivated.\n`
+                }
+              }
+            } catch { /* curator lifecycle is best-effort */ }
           }
 
           return { output: response, metadata: { progress, nextStep: nextStep?.id, verifyResult } }
@@ -6644,6 +6670,8 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
             isRouted: false,  // no subset — LLM decides which tool fits
             knowledgeEntries: knowledgeEntries.length > 0 ? knowledgeEntries : undefined,
             projectContext,
+            curator,
+            goal: queryForRag,  // use the same query string for skill relevance
           })
 
           // ── Gap #3: Code Intent Injection ──
@@ -6929,6 +6957,9 @@ export { PlanningLayer, type PlanVersion, type PlanValidationResult, type Planni
 export { ExecutionLayer, type ExecutionLayerConfig, type NodeExecutionResult, type PhaseExecutionResult, type ExecutionSnapshot } from "./core/execution-layer.js"
 export { RecoveryLayer, type RecoveryLevel, type RecoveryStatus, type RecoveryRecord, type RecoveryDecision, type RecoveryLayerConfig, type ReplanResult } from "./core/recovery-layer.js"
 export { buildAgentPrompt, buildAgenticSystemInstructions, buildGenericAgentPrompt } from "./core/prompt-builder.js"
+export { ToolGuardrailController, DEFAULT_GUARDRAIL_CONFIG, type ToolGuardrailConfig, type GuardrailDecision } from "./core/tool-guardrails.js"
+export { SkillCurator, DEFAULT_CURATOR_CONFIG, type CuratorConfig, type InjectedSkill, type LifecycleReport, type CuratorLifecycleState } from "./curation/skill-curator.js"
+export { NoOpMemoryProvider, type MemoryProvider, type PrefetchOptions, type MemoryProviderStoreData, type MemoryProviderQueryResult } from "./memory/memory-provider.js"
 export { detectProjectContext, type ProjectContext, type DetectedLanguage, type DetectedFramework } from "./core/project-context.js"
 export { SessionStore } from "./memory/session-store.js"
 export { MemoryOrchestrator, type MemoryLevel, type MemoryEntry, type MemoryQuery, type MemoryQueryResult, type ConsolidationReport } from "./memory/memory-orchestrator.js"

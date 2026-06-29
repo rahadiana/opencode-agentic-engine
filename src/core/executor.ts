@@ -100,6 +100,13 @@ export class Executor {
     return this.maxRetries
   }
 
+  /** Get total number of steps executed in this session */
+  getExecutionCount(sessionId: string): number {
+    const state = this.states.get(sessionId)
+    if (!state) return 0
+    return state.completedSteps.size + state.failedSteps.size
+  }
+
   /** Get all retry policy summaries */
   getRetryPolicies(): Array<{ category: string; maxRetries: number }> {
     return [...this.retryPolicies.entries()]

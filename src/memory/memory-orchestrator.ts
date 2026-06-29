@@ -22,6 +22,7 @@ import { ImportanceIndex } from "./importance-index.js"
 import { ExecutionTracer } from "./execution-tracer.js"
 import { MemoryQueryEngine } from "./memory-query-engine.js"
 import type { MultiIndexRAG } from "./multi-index-rag.js"
+import type { MemoryProvider, PrefetchOptions, MemoryProviderQueryResult } from "./memory-provider.js"
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -136,6 +137,9 @@ export class MemoryOrchestrator {
   /** RAG store for knowledge-first semantic search */
   private ragStore?: MultiIndexRAG
 
+  /** External memory provider — pluggable backend (Honcho, Mem0, etc.) */
+  private externalProvider?: MemoryProvider
+
   constructor(
     workingMem: SessionStore,
     episodicStore: EpisodicStore,
@@ -164,6 +168,80 @@ export class MemoryOrchestrator {
       this.episodicStore,
       this.executionTracer,
     )
+  }
+
+  // ── Provider Registry (pluggable memory backends) ─────────────────
+
+  /** Register an external memory provider. Only one external provider at a time. */
+  registerProvider(provider: MemoryProvider): void {
+    this.externalProvider = provider
+  }
+
+  /** Get the currently registered external provider, if any */
+  getProvider(): MemoryProvider | undefined {
+    return this.externalProvider
+  }
+
+  /**
+   * Prefetch — recall context before each turn.
+   * Delegates to external provider if registered, otherwise returns empty string.
+   * Built-in prefetch happens separately via the vector/RAG subsystem.
+   */
+  async prefetch(query: string, opts?: PrefetchOptions): Promise<string> {
+    if (this.externalProvider?.isAvailable()) {
+      try {
+        return await this.externalProvider.prefetch(query, opts)
+      } catch (e) {
+        const log = (await import("../observability/logger.js")).createLogger("MemoryOrchestrator")
+        log.warn(`External provider prefetch failed: ${e}`)
+      }
+    }
+    return ""
+  }
+
+  /**
+   * Sync turn — persist after each turn.
+   * Delegates to external provider if registered.
+   */
+  async syncTurn(userContent: string, assistantContent: string, meta?: Record<string, unknown>): Promise<void> {
+    if (this.externalProvider?.isAvailable()) {
+      try {
+        await this.externalProvider.syncTurn(userContent, assistantContent, meta)
+      } catch (e) {
+        const log = (await import("../observability/logger.js")).createLogger("MemoryOrchestrator")
+        log.warn(`External provider syncTurn failed: ${e}`)
+      }
+    }
+  }
+
+  /**
+   * Query external provider — returns external results merged with built-in.
+   */
+  async queryExternal(queryText: string, opts?: PrefetchOptions): Promise<MemoryProviderQueryResult> {
+    if (this.externalProvider?.isAvailable()) {
+      try {
+        return await this.externalProvider.query(queryText, opts)
+      } catch (e) {
+        const log = (await import("../observability/logger.js")).createLogger("MemoryOrchestrator")
+        log.warn(`External provider query failed: ${e}`)
+      }
+    }
+    return { entries: [], totalTime: 0, sources: [] }
+  }
+
+  /**
+   * Shutdown — clean up all providers.
+   * Call at session end to flush queues, close connections.
+   */
+  async shutdownProviders(): Promise<void> {
+    if (this.externalProvider?.isAvailable()) {
+      try {
+        await this.externalProvider.shutdown()
+      } catch (e) {
+        const log = (await import("../observability/logger.js")).createLogger("MemoryOrchestrator")
+        log.warn(`External provider shutdown failed: ${e}`)
+      }
+    }
   }
 
   // ── Store ────────────────────────────────────────────────────────
