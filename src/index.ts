@@ -90,6 +90,7 @@ import { MetaReasoner } from "./core/meta-reasoner.js"
 import { BlueprintParser, BlueprintResolver, type ModelSpecMap } from "./core/agent-blueprint.js"
 import { ConstraintManifold } from "./core/constraint-manifold.js"
 import { autoUpdatePlugin } from "./core/plugin-updater.js"
+import { evaluateWorkflowPolicy, formatWorkflowPolicyDecisions, verificationEvidenceFailed } from "./core/workflow-policy.js"
 
 // ── Build-time version injected by esbuild define ──
 declare const __VERSION__: string
@@ -1059,7 +1060,9 @@ const confidenceStore = new ConfidenceStore()
           const errors = intentParser.validatePlan(plan)
 
           executor.initExecution(context.sessionID, plan)
-          sessionStore.getOrCreate(context.sessionID).plan = plan
+          const planSession = sessionStore.getOrCreate(context.sessionID)
+          planSession.plan = plan
+          planSession.artifacts.set("workflow:planned", String(Date.now()))
 
           // Wire up dependency tracking from plan — step-level
           for (const step of subtasks) {
@@ -1230,6 +1233,7 @@ const confidenceStore = new ConfidenceStore()
             success: true,
             durationMs: 0,
           })
+          sessionStore.getOrCreate(context.sessionID).artifacts.set("workflow:researched", String(Date.now()))
 
           return { output, metadata: { files, projectSummary: args.showSummary ? navigator.getSummary() : undefined } }
         },
@@ -1273,6 +1277,26 @@ const confidenceStore = new ConfidenceStore()
           
           const session = sessionStore.getOrCreate(context.sessionID)
           session.currentTaskType = taskType
+          const priorState = executor.getStepState(context.sessionID, args.stepId)
+          const isRetry = !!priorState?.result && !priorState.result.success && args.success
+          const prePolicyDecisions = evaluateWorkflowPolicy({
+            action: isRetry ? "retry" : "execute",
+            stepId: args.stepId,
+            filesModified: args.filesModified ?? [],
+            success: args.success,
+            hasPlan: !!session.plan,
+            hasResearch: session.artifacts.has("workflow:researched"),
+            hasReflection: session.artifacts.has(`workflow:reflected:${args.stepId}`),
+            hasVerificationEvidence: !!args.verificationEvidence,
+            verificationEvidenceFailed: verificationEvidenceFailed(args.verificationEvidence),
+          })
+          const blocked = prePolicyDecisions.some(d => d.severity === "block")
+          if (blocked) {
+            return {
+              output: `## Step ${args.stepId}: 🛑 BLOCKED by WorkflowPolicy\n\n${formatWorkflowPolicyDecisions(prePolicyDecisions)}\n\nFix the evidence/workflow issue, then call \`agentic_execute\` again.`,
+              metadata: { blocked: true, policy: prePolicyDecisions },
+            }
+          }
 
           if (args.filesModified && args.filesModified.length > 0) {
             depTracker.recordChange(context.sessionID, args.stepId, args.filesModified)
@@ -1310,6 +1334,8 @@ const confidenceStore = new ConfidenceStore()
           const newCheckpoints = checkpoints.evaluate(args.stepId, args.output, args.filesModified ?? [])
 
           let response = `## Step ${args.stepId}: ${args.success ? "✅ SUCCESS" : "❌ FAILED"}\n\n${args.output}\n`
+          const prePolicyText = formatWorkflowPolicyDecisions(prePolicyDecisions)
+          if (prePolicyText) response += `\n### WorkflowPolicy\n${prePolicyText}\n`
 
           if (newCheckpoints.length > 0) {
             response += `\n### ⚠️ Checkpoints\n`
@@ -1655,6 +1681,22 @@ const confidenceStore = new ConfidenceStore()
           const progress = executor.getProgress(context.sessionID)
           const nextStep = executor.getNextStep(context.sessionID)
 
+          if (args.success && !nextStep) {
+            const finalPolicyDecisions = evaluateWorkflowPolicy({
+              action: "finalize",
+              stepId: args.stepId,
+              filesModified: executor.getAllFilesModified(context.sessionID),
+              success: true,
+              hasPlan: !!session.plan,
+              hasResearch: session.artifacts.has("workflow:researched"),
+              hasVerificationEvidence: !!args.verificationEvidence || !!verifyResult?.passed || session.artifacts.has("workflow:verified"),
+              verificationEvidenceFailed: verificationEvidenceFailed(args.verificationEvidence),
+              confidence: confidenceScore_?.overall,
+            })
+            const finalPolicyText = formatWorkflowPolicyDecisions(finalPolicyDecisions)
+            if (finalPolicyText) response += `\n### WorkflowPolicy Final Gate\n${finalPolicyText}\n`
+          }
+
           response += `\n### Progress\n`
           response += `\`\`\`\n`
           response += `✅ Done:     ${progress.completed}\n`
@@ -1875,6 +1917,7 @@ const confidenceStore = new ConfidenceStore()
             output += `\n---\n🛑 **No retries remaining.** Consider adding a new plan step for this fix.`
           }
 
+          sessionStore.getOrCreate(context.sessionID).artifacts.set(`workflow:reflected:${args.stepId}`, String(Date.now()))
           return { output }
         },
       }),
@@ -1907,6 +1950,7 @@ const confidenceStore = new ConfidenceStore()
           ).join("\n\n")
 
           if (result.passed) {
+            sessionStore.getOrCreate(context.sessionID).artifacts.set("workflow:verified", String(Date.now()))
             return { output: `## ✅ Verification Passed\n\n${checkOutput}`, metadata: result }
           }
 

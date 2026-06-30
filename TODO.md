@@ -47,19 +47,22 @@ Do **not** solve this by only adding more prompt text. Weak models ignore long p
 
 ## P0 — Runtime WorkflowPolicy Gate
 
+Status: **started** in `49a2b03..HEAD` follow-up work. A minimal `src/core/workflow-policy.ts` now exists and is integrated into `agentic_execute` as an advisory runtime gate plus a hard block when `success: true` conflicts with failed `verificationEvidence`. Plan/navigation/reflection/verification state is recorded in session artifacts. Remaining P0 work should tighten enforcement gradually without breaking existing OpenCode workflows.
+
 Implement a small deterministic policy module, likely `src/core/workflow-policy.ts`.
 
 Purpose: turn prompt rules into runtime rules.
 
 Suggested policy checks:
 
-- Multi-step or risky task should have a plan before file edits.
-- Failed step should require reflection before retrying the same approach.
-- Final completion should require either:
+- Multi-step or risky task should have a plan before file edits. ✅ advisory warning in `agentic_execute`
+- Failed step should require reflection before retrying the same approach. ✅ policy supports this; current integration warns in advisory mode
+- Final completion should require either: ✅ advisory warning in `agentic_execute`
   - `agentic_verify` passed, or
   - explicit `verificationEvidence` on `agentic_execute`.
-- If confidence score is below threshold, final status should warn/block completion.
-- If no research/navigation was performed for a codebase task, warn before implementation.
+- If confidence score is below threshold, final status should warn/block completion. ✅ warning support in policy
+- If no research/navigation was performed for a codebase task, warn before implementation. ✅ advisory warning in `agentic_execute`
+- Never accept failed evidence as success. ✅ hard block in `agentic_execute`
 
 Keep first version small. Do not build a giant framework.
 
@@ -95,10 +98,10 @@ Tests:
 
 - Add unit tests in `test/run.mjs`:
   - allows simple execute with no files modified,
-  - warns/blocks final success without verification evidence,
-  - allows final success with `verificationEvidence`,
-  - requires reflect before retry after failure,
-  - low confidence completion produces warning.
+  - warns/blocks final success without verification evidence, ✅
+  - allows final success with `verificationEvidence`, ✅
+  - requires reflect before retry after failure, ⏳ policy supports; add stricter integration test once enforcement mode is configurable
+  - low confidence completion produces warning. ⏳ policy supports; add direct module tests or final gate fixture
 
 ## P1 — Schema-First LLM Boundary Audit
 

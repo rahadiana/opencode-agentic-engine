@@ -1565,6 +1565,39 @@ assert(evidenceOut.includes("Test") && evidenceOut.includes("100%"), "verificati
 assert(evidenceOut.includes("Tech Debt") && evidenceOut.includes("100%"), "verificationEvidence syncs tech debt confidence")
 assert(true, "agentic_execute feedback/evidence parameter tests passed")
 
+// 65b. WorkflowPolicy — runtime gate around execute/finalize
+console.log("\n[65b] WorkflowPolicy — execute/finalize gate")
+assert(readFileSync(new URL("../src/core/workflow-policy.ts", import.meta.url), "utf-8").includes("evaluateWorkflowPolicy"), "WorkflowPolicy module exists")
+const policyNoPlan = await hooks.tool.agentic_execute.execute({
+  stepId: "policy-no-plan", success: true, output: "Changed file without plan", filesModified: ["src/no-plan.ts"], autoVerify: false,
+}, mockCtx(freshSid()))
+const policyNoPlanOut = typeof policyNoPlan === "string" ? policyNoPlan : policyNoPlan.output
+assert(policyNoPlanOut.includes("WorkflowPolicy") && policyNoPlanOut.includes("plan-missing"), "WorkflowPolicy warns when file-changing execute has no plan")
+
+const policyBlocked = await hooks.tool.agentic_execute.execute({
+  stepId: "policy-bad-evidence", success: true, output: "Claim success despite failed tests", filesModified: ["src/bad.ts"], autoVerify: false,
+  verificationEvidence: { tests: [{ command: "npm test", passed: 1, failed: 1 }] },
+}, mockCtx(freshSid()))
+const policyBlockedOut = typeof policyBlocked === "string" ? policyBlocked : policyBlocked.output
+assert(policyBlockedOut.includes("BLOCKED by WorkflowPolicy") && policyBlockedOut.includes("evidence-failed"), "WorkflowPolicy blocks success with failing verification evidence")
+
+const finalPolicySid = freshSid()
+await hooks.tool.agentic_plan.execute({ goal: "One step final policy", subtasks: [{ id: "final-1", description: "final", dependsOn: [] }] }, mockCtx(finalPolicySid))
+const finalPolicy = await hooks.tool.agentic_execute.execute({
+  stepId: "final-1", success: true, output: "Final changed files", filesModified: ["src/final.ts"], autoVerify: false,
+}, mockCtx(finalPolicySid))
+const finalPolicyOut = typeof finalPolicy === "string" ? finalPolicy : finalPolicy.output
+assert(finalPolicyOut.includes("WorkflowPolicy Final Gate") && finalPolicyOut.includes("verification-missing"), "WorkflowPolicy warns final completion without verification evidence")
+
+const finalEvidenceSid = freshSid()
+await hooks.tool.agentic_plan.execute({ goal: "One step final policy with evidence", subtasks: [{ id: "final-ok", description: "final", dependsOn: [] }] }, mockCtx(finalEvidenceSid))
+const finalEvidence = await hooks.tool.agentic_execute.execute({
+  stepId: "final-ok", success: true, output: "Final changed files with evidence", filesModified: ["src/final-ok.ts"], autoVerify: false,
+  verificationEvidence: { build: "passed", tests: [{ command: "npm test", passed: 2, failed: 0 }] },
+}, mockCtx(finalEvidenceSid))
+const finalEvidenceOut = typeof finalEvidence === "string" ? finalEvidence : finalEvidence.output
+assert(!finalEvidenceOut.includes("verification-missing"), "WorkflowPolicy accepts final completion with verificationEvidence")
+
 // 66. agentic_model — session-seeded model preference
 console.log("\n[66] agentic_model — session model preference")
 const modelSid = freshSid()
