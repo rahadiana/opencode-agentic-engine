@@ -4,7 +4,7 @@
 
 ```
 src/
-├── index.ts              # Plugin entry: 34 tools + 5 hooks
+├── index.ts              # Plugin entry: 31 tools + 5 hooks
 ├── README.md             # Dokumentasi fungsi per folder (AI context)
 │
 ├── core/                 # Inti engine: planning, execution, verification

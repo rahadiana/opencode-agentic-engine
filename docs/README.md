@@ -12,7 +12,7 @@ Berdasarkan paper **"The End of Software Engineering"** (arXiv:2606.05608).
 |---------|-----------|
 | [Getting Started](getting-started.md) | Instalasi, setup, first run |
 | [Features](features/README.md) | Semua fitur per Stage (I–V) |
-| [Tools Reference](features/tools.md) | 34 tools — fungsi, usage, hint |
+| [Tools Reference](features/tools.md) | 31 tools — fungsi, usage, hint |
 | [Guide: Workflow](guide/workflow.md) | Plan → Execute → Verify → Retry |
 | [Guide: Multi-Agent](guide/multi-agent.md) | Delegasi, pipeline, messaging |
 | [Guide: Memory & Skills](guide/memory.md) | Cross-session, skill extraction |

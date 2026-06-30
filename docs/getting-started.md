@@ -75,7 +75,7 @@ agentic_model list
 
 ## Next Steps
 
-- [Pelajari semua 34 tools](features/tools.md)
+- [Pelajari semua 31 tools](features/tools.md)
 - [Pahami workflow](guide/workflow.md)
 - [Setting multi-agent pipeline](guide/multi-agent.md)
 - [Konfigurasi lengkap](config.md)

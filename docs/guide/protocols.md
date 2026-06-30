@@ -112,7 +112,7 @@ agentic_tools action="stats"
 │       │            │                 │              │
 │       ▼            ▼                 ▼              │
 │  ┌─────────────────────────────────────────┐        │
-│  │        34 agentic_* Tools               │        │
+│  │        31 agentic_* Tools               │        │
 │  │  (plan, execute, verify, nav, ...)      │        │
 │  └─────────────────────────────────────────┘        │
 │                                                      │

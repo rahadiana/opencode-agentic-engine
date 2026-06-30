@@ -1,4 +1,4 @@
-# Tools Reference — 34 Agentic Tools
+# Tools Reference — 31 Agentic Tools
 
 Semua tool menggunakan prefix `agentic_`. Daftar lengkap fungsi, parameter, dan contoh penggunaan.
 
