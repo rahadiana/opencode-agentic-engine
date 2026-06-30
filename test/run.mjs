@@ -83,14 +83,20 @@ for (const name of expectedAgenticTools) {
 }
 assert(Object.keys(hooks.tool || {}).filter(t => t.startsWith("agentic_")).length === expectedAgenticTools.length, "registered agentic tool count matches expected list")
 
-// 3b. ToolRouter metadata stays in sync with canonical tools
-console.log("\n[3b] ToolRouter metadata sync")
-const toolRouterSrc = readFileSync(new URL("../src/core/tool-router.ts", import.meta.url), "utf-8")
-const routerMetaNames = [...toolRouterSrc.matchAll(/^\s*(agentic_[a-z0-9_]+): \{ keywords:/gm)].map(m => m[1])
+// 3b. Tool catalog (single source of truth) stays in sync with registered tools
+console.log("\n[3b] Tool catalog sync")
+const toolCatalogSrc = readFileSync(new URL("../src/core/tool-catalog.ts", import.meta.url), "utf-8")
+const catalogNames = [...toolCatalogSrc.matchAll(/name:\s*"(agentic_[a-z0-9_]+)"/g)].map(m => m[1])
 for (const name of expectedAgenticTools) {
-  assert(routerMetaNames.includes(name), `ToolRouter metadata includes ${name}`)
+  assert(catalogNames.includes(name), `Tool catalog entry exists for ${name}`)
 }
-assert(routerMetaNames.length === expectedAgenticTools.length, "ToolRouter metadata count matches registered tools")
+assert(catalogNames.length === expectedAgenticTools.length, "Tool catalog entry count matches registered tools")
+// Also verify catalog entries have keywords and category
+for (const name of expectedAgenticTools) {
+  const entrySrc = toolCatalogSrc.match(new RegExp(`\\{ name: "${name}",[^}]+\\}`, 's'))
+  assert(entrySrc && entrySrc[0].includes("keywords:"), `${name} catalog entry has keywords`)
+  assert(entrySrc && entrySrc[0].includes("category:"), `${name} catalog entry has category`)
+}
 
 // 4. agentic_plan — auto-decompose feature
 console.log("\n[4] agentic_plan — auto-decompose (create feature)")

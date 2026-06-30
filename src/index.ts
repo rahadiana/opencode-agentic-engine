@@ -70,6 +70,7 @@ import { ProtocolAdapter } from "./core/protocol-adapter.js"
 import { DynamicToolRegistry } from "./core/dynamic-tool-registry.js"
 import { MCPServer } from "./core/mcp-server.js"
 import { buildAgenticSystemInstructions, type ToolEntry } from "./core/prompt-builder.js"
+import { AGENTIC_TOOL_REGISTRY } from "./core/tool-catalog.js"
 import { detectProjectContext, type ProjectContext } from "./core/project-context.js"
 import { type KnowledgeEntry } from "./core/prompt-template.js"
 import { ToolRouter } from "./core/tool-router.js"
@@ -221,42 +222,8 @@ const createEngine: Plugin = async (input, _options) => {
   const projectContext: ProjectContext = detectProjectContext(worktree)
 
   // ── Tool registry (shared between prompt builder and tool definitions) ──
-  // Each description follows the MCP 6-component rubric from arXiv:2602.14878:
-  // Purpose + Guidelines + Limitations + Parameter Explanation + Length + Examples
-  const TOOL_REGISTRY: ToolEntry[] = [
-    { name: "agentic_plan", description: "Break a goal into subtasks. Use when starting any multi-step task. Avoid on single-step tasks — just execute directly. Key: `goal` (what to accomplish), `autoDecompose` (auto-breakdown). Example: plan `goal=\"add auth\"` → 4 steps." },
-    { name: "agentic_execute", description: "Mark a step complete with auto-verify. Use after finishing each subtask. Avoid claiming success when verification failed. Key: `stepId` (from plan), `filesModified` (for dependency tracking). Example: execute `stepId=\"step-1\" success=true`." },
-    { name: "agentic_reflect", description: "Analyze a failed step: error category + propagation trace. Use when execute returned failed or compile error. Avoid on success steps. Key: `stepId` (the failed step), `errorDetails` (stack trace). Example: reflect `stepId=\"step-1\"`." },
-    { name: "agentic_verify", description: "Run compile + lint + test suite. Use before final commit or after major changes. Avoid per-file — use execute's auto-verify for incremental checks. Key: `projectDir` (defaults to worktree). Example: verify `stepId=\"final\"`." },
-    { name: "agentic_status", description: "Show execution progress, blocked steps, file changes, model reliability. Use to check what's left or blocked. No args needed." },
-    { name: "agentic_nav", description: "Scan codebase for relevant files by keyword. Use before implementing to understand structure. Avoid for file content — use `read` instead. Key: `query` (feature/module name), `showSummary` (full structure). Example: nav `query=\"auth\"`." },
-    { name: "agentic_context", description: "Compress conversation when approaching token limits. Use to free context window. Key: `action` — \"view\" to check size, \"compress\" to compact." },
-    { name: "agentic_snapshot", description: "Save/restore execution checkpoints. Use before risky refactoring. Key: `action` (save/list/restore), `label` (name). Example: snapshot `action=\"save\" label=\"before-auth-refactor\"`." },
-    { name: "agentic_pr", description: "Generate PR description from plan + step results. Use when task is complete and verified. Avoid if no plan was created. Key: `action` — \"generate\" (default) or \"create\" (via gh CLI)." },
-    { name: "agentic_score", description: "Analyze technical debt: coupling, complexity, patterns. Use after refactoring or before finalizing. Key: `files` (optional — defaults to all modified)." },
-    { name: "agentic_model", description: "Configure which LLM model per agent role for the session. Use to switch models without config file changes. Key: `action` (set/get/list/clear), `role`, `model` name." },
-    // agentic_model_reset: merged into agentic_model (action=reset|reset-stale|reset-all)
-    { name: "agentic_budget", description: "Set, view, or reset resource budget limits (tokens, steps, time, cost). Use to prevent runaway loops. Acts as circuit breaker for autonomous execution. Key: `action` (set/get/status/reset), `scope` (session/task). Example: budget `action=set maxSteps=10`." },
-    { name: "agentic_delegate", description: "Assign work to architect/developer/QA/coordinator. Use for complex sub-tasks needing specialist context. Avoid for trivial edits. Key: `taskId`, `description`, `role`. Supports pipeline auto-advance." },
-    { name: "agentic_pipeline", description: "Define and run multi-agent pipelines: PM → Architect → Developer → QA. Use for end-to-end feature development. Key: `action` (define/list/run/status/suggest), `stages`." },
-    { name: "agentic_message", description: "Send messages between agent roles, request reviews, check inbox. Use in multi-agent workflows. Key: `action` (send/inbox/conversation/mark-read), `to`, `message`." },
-    { name: "agentic_parallel", description: "Analyze dependencies and run ready steps concurrently. Use for independent sub-tasks. Avoid on sequential tasks. Key: `action` analyze or execute." },
-    { name: "agentic_skill", description: "Extract, search, and reuse skills from successful task patterns. Use to learn from past work. Key: `action` (extract/find/list), `query` (for find)." },
-    { name: "agentic_episodes", description: "Search past session outcomes across projects. Use before planning similar tasks. Key: `action` (search/recent/stats), `query` (keywords)." },
-    { name: "agentic_guard", description: "Re-check truthfulness of file/function/import claims. Auto-runs on execute — only call manually for re-audit. Key: `stepId` to re-check." },
-    { name: "agentic_evolve", description: "Inspect system, register custom roles, export skills, manage prompts (Stage IV). Use for system administration. Key: `action` (inspect/register-role/evolve/read-prompt/edit-prompt)." },
-    { name: "agentic_auto", description: "One-call autonomous loop: plan → execute → verify → retry. Use for simple, well-defined tasks. Avoid for complex multi-domain tasks — use pipeline instead. Key: `goal`, `thorough` (extra checks)." },
-    { name: "agentic_debate", description: "Multi-turn executor ↔ critic debate for deep analysis. Use for complex analysis, data validation, or when uncertain. Avoid for simple fact lookup — use websearch instead. Key: `task`, `maxRounds` (max 5)." },
-    { name: "agentic_router", description: "Classify user intent into categories and route to the right knowledge index. Use before searching memory to scope results. Lightweight — keyword+LLM hybrid." },
-    { name: "agentic_clean", description: "Strip debate artifacts and reformat raw text to clean markdown/JSON. Use after debate or multi-step analysis. Key: `format` (markdown/json/text), `schema` (validation)." },
-    { name: "agentic_rag", description: "Store, search, and retrieve knowledge across category-segregated indexes. Use with agentic_router for scoped search. Key: `action` (search/store/stats/categories), `query`." },
-    { name: "agentic_mcp", description: "MCP client + server. Connect to external servers (DB, APIs), call tools, or manage the MCP server (server-start/stop/status/restart). Key: `action` (connect/list/call/disconnect/server-start/server-stop)." },
-    { name: "agentic_a2a", description: "Agent-to-Agent protocol: discover remote agents, delegate tasks, start/stop A2A server. Google A2A standard for cross-framework interoperability. Key: `action` (serve/discover/delegate/list/ping/stats)." },
-    { name: "agentic_tools", description: "Unified tool search and calling across MCP + A2A protocols. Search for tools by keyword, auto-route calls, list all connections, view combined stats. Key: `action` (search/call/list/stats)." },
-    { name: "agentic_finetune", description: "End-to-end pipeline: prepare training data from skills → upload to OpenAI → create/monitor jobs. Use to fine-tune models from agent experience. Key: `action` (prepare/save/upload/create-job/status)." },
-    { name: "agentic_db", description: "SQLite database backend untuk persistence — query, save, load, stats. Lebih cepat dari file JSON. Support structured queries dengan WHERE, JOIN, GROUP BY." },
-    { name: "agentic_memo", description: "Second Brain: record ADR decisions, manage TODOs, run reflection, and inspect knowledge graph. Key: `action` (decision/todo/todo-done/list/reflect/graph)." },
-  ]
+  // Single source of truth: src/core/tool-catalog.ts
+  const TOOL_REGISTRY: ToolEntry[] = AGENTIC_TOOL_REGISTRY
 
   // ── Sub-agent detection (dynamic via RoleRegistry + fallback signatures) ──
   // Sub-agents have limited tool sets and role-specific prompts. Injecting the

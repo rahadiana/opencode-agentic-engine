@@ -1,3 +1,4 @@
+import { AGENTIC_TOOL_CATALOG } from "./tool-catalog.js"
 import type { ToolEntry } from "./prompt-builder.js"
 
 // ── Enhanced tool metadata for routing ────────────────────────────
@@ -59,42 +60,6 @@ const TOOL_ANTI_KEYWORDS: Record<string, string[]> = {
   agentic_debate: ["search", "lookup", "find", "fetch", "simple fact"],
   agentic_reflect: ["success", "completed", "done"],
   agentic_guard: ["create", "implement", "write", "build"],
-}
-
-// ── Default enhanced metadata for all agentic tools ────────────────
-const DEFAULT_METAS: Record<string, Partial<ToolMeta>> = {
-  agentic_plan: { keywords: ["plan", "decompose", "break-down", "step", "subtask", "template", "rencana", "langkah", "tahap"], category: "core" },
-  agentic_execute: { keywords: ["execute", "run", "do", "implement", "step-result", "record", "complete", "jalankan", "buat", "tulis"], category: "core" },
-  agentic_reflect: { keywords: ["error", "fail", "debug", "analyze", "diagnose", "retry", "recover", "gagal", "salah", "error"], category: "analysis" },
-  agentic_verify: { keywords: ["verify", "test", "compile", "lint", "validate", "check", "ci", "verifikasi", "tes", "cek"], category: "core" },
-  agentic_status: { keywords: ["status", "progress", "dashboard", "blocked", "health", "summary", "progres", "sejauh", "timeline", "anomaly", "stats", "trace", "observability", "statistik"], category: "core" },
-  agentic_nav: { keywords: ["search", "find", "file", "codebase", "scan", "explore", "lookup", "nav", "cari", "file"], category: "core" },
-  agentic_context: { keywords: ["compress", "context", "token", "summary", "condense", "ringkas", "kompres"], category: "memory" },
-  agentic_snapshot: { keywords: ["checkpoint", "snapshot", "save", "restore", "rollback", "backup", "simpan", "kembali"], category: "core" },
-  agentic_pr: { keywords: ["pull-request", "pr", "github", "merge", "commit", "git", "description"], category: "core" },
-  agentic_score: { keywords: ["debt", "quality", "score", "coupling", "maintainability", "tech-debt", "skor", "kualitas"], category: "analysis" },
-  agentic_model: { keywords: ["model", "llm", "config", "provider", "gpt", "claude"], category: "meta" },
-  agentic_budget: { keywords: ["budget", "limit", "cost", "token", "steps", "time", "circuit-breaker", "biaya", "batas"], category: "meta" },
-  agentic_delegate: { keywords: ["delegate", "assign", "agent", "role", "architect", "developer", "qa", "delegasi", "tugaskan"], category: "coordination" },
-  agentic_pipeline: { keywords: ["pipeline", "workflow", "chain", "stage", "pm", "architect", "alur"], category: "coordination" },
-  agentic_message: { keywords: ["message", "inbox", "conversation", "review", "ask", "notify", "pesan", "kirim"], category: "coordination" },
-  agentic_parallel: { keywords: ["parallel", "concurrent", "race", "dependency", "simultaneous", "paralel", "bersamaan"], category: "coordination" },
-  agentic_skill: { keywords: ["skill", "extract", "learn", "pattern", "template", "reuse", "pola", "kemampuan"], category: "memory" },
-  agentic_episodes: { keywords: ["episode", "history", "past", "session", "memory", "recall", "riwayat", "sebelumnya"], category: "memory" },
-
-  agentic_guard: { keywords: ["hallucination", "verify", "truth", "claim", "check", "audit", "halusinasi"], category: "analysis" },
-  agentic_evolve: { keywords: ["evolve", "evolusi", "self-improve", "upgrade", "inspect", "register", "tingkatkan"], category: "meta" },
-  agentic_auto: { keywords: ["auto", "autonomous", "loop", "one-shot", "automatic", "end-to-end", "otomatis"], category: "core" },
-  agentic_debate: { keywords: ["debate", "discuss", "argue", "analysis", "critic", "review-loop", "debat", "bahas"], category: "analysis" },
-  agentic_router: { keywords: ["classify", "route", "intent", "categorize", "direct", "klasifikasi"], category: "blueprint" },
-  agentic_clean: { keywords: ["clean", "strip", "format", "reformat", "remove-artifact", "bersihkan"], category: "blueprint" },
-  agentic_rag: { keywords: ["rag", "search", "knowledge", "store", "retrieve", "index", "cari", "pengetahuan", "ingat", "memori", "lama", "sejarah"], category: "memory" },
-  agentic_db: { keywords: ["database", "sqlite", "sql", "query", "save", "load", "table", "db", "persist", "basis-data"], category: "memory" },
-  agentic_memo: { keywords: ["memo", "decision", "adr", "todo", "second-brain", "graph", "reflection", "keputusan", "catatan"], category: "memory" },
-  agentic_mcp: { keywords: ["mcp", "external", "connect", "server", "api", "tool-call", "eksternal"], category: "blueprint" },
-  agentic_a2a: { keywords: ["a2a", "agent", "discover", "serve", "interop", "delegate"], category: "blueprint" },
-  agentic_tools: { keywords: ["tools", "unified", "search", "discover", "protocol", "gateway", "mcp", "a2a"], category: "blueprint" },
-  agentic_finetune: { keywords: ["finetune", "fine-tune", "training", "dataset", "openai", "model"], category: "blueprint" },
 }
 
 // ── Anti-keyword penalty (from "To Call or Not to Call" framework) ──
@@ -180,12 +145,12 @@ export class ToolRouter {
   private lastTool: string | null = null
 
   constructor() {
-    for (const [name, meta] of Object.entries(DEFAULT_METAS)) {
-      this.metas.set(name, {
-        name,
-        description: "",
-        keywords: meta.keywords ?? [],
-        category: meta.category ?? "blueprint",
+    for (const entry of AGENTIC_TOOL_CATALOG) {
+      this.metas.set(entry.name, {
+        name: entry.name,
+        description: entry.description,
+        keywords: entry.keywords,
+        category: entry.category,
         usageCount: 0,
         successRate: 1.0,
         avgLatencyMs: 0,
