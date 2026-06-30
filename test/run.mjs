@@ -881,6 +881,26 @@ assert(mod.parseReflectionPayload(JSON.stringify({ summary: "ok", conflicts: [],
 // Malformed: missing field
 assert(mod.parseReflectionPayload(JSON.stringify({ summary: "ok", conflicts: [] })) === null, "P1-reflection rejects missing fields")
 
+console.log("\n[42j] writeFiles — path traversal guard")
+{
+  const os = await import("node:os")
+  const fs = await import("node:fs")
+  const path = await import("node:path")
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "wf-test-"))
+  // Normal file should be written
+  const written1 = mod.writeFiles([{ path: "src/ok.ts", content: "ok" }], tmpDir, "test-sid")
+  assert(written1.length === 1 && written1[0] === "src/ok.ts", "P1-writeFiles writes normal path")
+  assert(fs.existsSync(path.join(tmpDir, "src/ok.ts")), "P1-writeFiles file actually exists")
+  // Traversal path should be rejected
+  const written2 = mod.writeFiles([{ path: "../../etc/evil", content: "bad" }], tmpDir, "test-sid")
+  assert(written2.length === 0, "P1-writeFiles rejects traversal path")
+  // Absolute path should be rejected
+  const written3 = mod.writeFiles([{ path: "/etc/passwd", content: "bad" }], tmpDir, "test-sid")
+  assert(written3.length === 0, "P1-writeFiles rejects absolute path")
+  // Cleanup
+  fs.rmSync(tmpDir, { recursive: true, force: true })
+}
+
 // 43. agentic_status — full dashboard (merged from agentic_dashboard)
 console.log("\n[43] agentic_status — full dashboard")
 const dbResult = await hooks.tool.agentic_status.execute({ detail: "full" }, mockCtx(freshSid()))

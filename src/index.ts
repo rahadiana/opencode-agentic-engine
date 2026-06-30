@@ -6940,3 +6940,4 @@ export { SecondBrain, initSecondBrain, parseReflectionPayload, type ReflectionPa
 export { ErrorRecovery } from "./core/error-recovery.js"
 export { AlignmentGate } from "./core/alignment-gate.js"
 export { EconomicModel } from "./core/economic-model.js"
+export { writeFiles, type FileWriteEntry } from "./core/execution-helpers.js"

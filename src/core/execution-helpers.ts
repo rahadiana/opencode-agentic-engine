@@ -5,7 +5,7 @@
  * Kedua fungsi ini blocking → cocok untuk enforcement yang harus menahan (budget, guard).
  */
 import { mkdirSync, writeFileSync } from "node:fs"
-import { join, dirname } from "node:path"
+import { dirname, resolve, relative } from "node:path"
 import type { EventBus } from "./event-bus.js"
 import type { BudgetTracker } from "./budget-tracker.js"
 import type { HallucinationGuard } from "../drift/hallucination-guard.js"
@@ -42,7 +42,14 @@ export function writeFiles(
   const written: string[] = []
   const failed: string[] = []
   for (const f of files) {
-    const absPath = join(projectDir, f.path)
+    const absPath = resolve(projectDir, f.path)
+    // Security: reject paths that escape projectDir
+    const rel = relative(projectDir, absPath)
+    if (rel.startsWith("..") || rel.startsWith("/")) {
+      log.warn(`Skipping file with path traversal: ${f.path}`)
+      failed.push(f.path)
+      continue
+    }
     try {
       mkdirSync(dirname(absPath), { recursive: true })
       writeFileSync(absPath, f.content, "utf-8")
