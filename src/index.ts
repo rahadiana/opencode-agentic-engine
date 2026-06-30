@@ -2169,6 +2169,17 @@ const confidenceStore = new ConfidenceStore()
             output += `\n### 💰 Economics (Gap #11)\n`
             output += `${economicModel.getSummary()}\n`
 
+            // ── Tool usage stats ──
+            const toolStats = toolUsageTracker.getStats()
+            if (toolStats.length > 0) {
+              output += `\n### 🛠️ Tool Effectiveness\n`
+              output += `| Tool | Calls | Success | Rate | Avg (ms) |\n`
+              output += `|------|-------|---------|------|----------|\n`
+              for (const s of toolStats.slice(0, 10)) {
+                output += `| ${s.toolName} | ${s.totalCalls} | ${s.successCount} | ${(s.successRate * 100).toFixed(0)}% | ${s.avgDurationMs} |\n`
+              }
+            }
+
             return { output }
           }
 

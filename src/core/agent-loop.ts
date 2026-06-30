@@ -45,6 +45,8 @@ export interface AgentLoopConfig {
   maxParallelism?: number
   /** Abort remaining steps in phase if one fails (default: false) */
   abortOnFailure?: boolean
+  /** Output threshold in chars before warning about context pressure (default: 8000) */
+  contextThreshold?: number
 }
 
 export interface LoopResult {
@@ -97,6 +99,12 @@ export class AgentLoop {
   /** ToolUsageTracker — per-tool effectiveness */
   private toolUsageTracker?: ToolUsageTracker
 
+  /** Context output threshold — warn when exceeded */
+  private contextThreshold: number
+
+  /** Cumulative output length in current loop */
+  private cumulativeOutput = 0
+
   /** Graph Harness 3 layers */
   private planningLayer: PlanningLayer
   private executionLayer: ExecutionLayer
@@ -111,7 +119,9 @@ export class AgentLoop {
       verifyAfterEach: config.verifyAfterEach ?? true,
       maxParallelism: config.maxParallelism,
       abortOnFailure: config.abortOnFailure ?? false,
+      contextThreshold: config.contextThreshold ?? 8000,
     }
+    this.contextThreshold = config.contextThreshold ?? 8000
     const dagEngine = new DAGEngine()
     this.planningLayer = new PlanningLayer(dagEngine)
     this.executionLayer = new ExecutionLayer(dagEngine)
@@ -468,6 +478,12 @@ export class AgentLoop {
         } catch { /* non-fatal */ }
       }
 
+      // ── Context pressure tracking (Item #7) ──
+      this.cumulativeOutput += (result.output?.length ?? 0)
+      if (this.cumulativeOutput > this.contextThreshold) {
+        log.warn(`[AgentLoop] Context pressure: ~${this.cumulativeOutput} chars accumulated, consider compression`)
+      }
+
       // ── WorldModel: update beliefs about files (Gap #4) ──
       // ponytail: minimal observe call — key=file path, fact=outcome, confidence based on success
       if (this.worldModel && result.filesModified.length > 0) {
@@ -574,6 +590,25 @@ export class AgentLoop {
         }
       }
       dagResult.escalationRequired = true
+    }
+
+    // ── MetaReasoner: adapt strategy post-execution (Gap #8) ──
+    // ponytail: adapt every run, only log if changes were applied
+    if (this.metaReasoner) {
+      try {
+        const adaptation = this.metaReasoner.adapt()
+        if (adaptation.adapted) {
+          log.info(`[AgentLoop] Strategy adapted: ${adaptation.config.label} v${adaptation.changes.length} change(s)`)
+          for (const c of adaptation.changes) {
+            log.info(`  ${c.name}: ${c.from} → ${c.to} (${c.reason})`)
+          }
+        }
+        if (adaptation.rolledBack && adaptation.warnings.length > 0) {
+          log.warn(`[AgentLoop] Strategy rolled back: ${adaptation.warnings[0]}`)
+        }
+      } catch (e) {
+        log.warn(`[AgentLoop] MetaReasoner adapt: ${e}`)
+      }
     }
 
     // ── Build result ────────────────────────────────────────────────
