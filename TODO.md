@@ -169,6 +169,29 @@ Status: **complete**. Four procedural checklists added to `bootstrap-knowledge.t
 
 Each checklist uses STEP 1/2/3... format so weak models can follow sequentially. Checklists are tagged with `checklist`, `procedure`, `step-by-step` for RAG discoverability.
 
+## P4 — Test Coverage Gaps
+
+Status: **in progress**. Added tests for 4 previously untested modules exported by `index.ts`:
+
+| Module | Tests | Status |
+|--------|-------|--------|
+| `PromptTemplate` | 20 tests (PT-1..PT-10) | ✅ |
+| `detectProjectContext` | 11 tests (PC-1..PC-2) | ✅ |
+| `buildAgentPrompt` / `buildAgenticSystemInstructions` / `buildGenericAgentPrompt` | 13 tests (PB-1..PB-6) | ✅ |
+| `ToolRouter` | 19 tests (TR-1..TR-13) | ✅ |
+
+Remaining untested modules (internal, not exported from index.ts):
+- `plugin-updater.ts` — internal (not exported)
+- `code-intent-analyzer.ts` — internal (not exported)
+- `prompt-builder.ts` — partially tested via exported functions
+- `prompt-template.ts` — fully tested via exported `PromptTemplate`
+- `project-context.ts` — fully tested via exported `detectProjectContext`
+- `tool-router.ts` — fully tested via exported `ToolRouter`
+
+Also fixed:
+- Duplicate test section `[87]` renamed to `[87b]` (debate loop)
+- Duplicate test section `[P4]` renamed to `[P4b]` (Phase 4)
+
 ## Verification Commands
 
 Run at minimum:
@@ -199,12 +222,45 @@ git status --short
 git diff --stat
 ```
 
-## Suggested First Task for Next Agent
+## P0–P3 Design Archive
 
-Implement **P0 Runtime WorkflowPolicy Gate** minimally:
+The sections below are kept for design reference. All items are implemented and tested.
 
-1. Add `src/core/workflow-policy.ts`.
-2. Add tests in `test/run.mjs`.
-3. Integrate first into `agentic_execute` only.
-4. Run build + tests.
-5. If clean, commit and push.
+### P0 — Runtime WorkflowPolicy Gate
+
+A minimal `src/core/workflow-policy.ts` integrated into `agentic_execute` as an advisory runtime gate plus a hard block when `success: true` conflicts with failed `verificationEvidence`. Config: `agent.workflowPolicyMode: "advisory" | "strict"`.
+
+Policy checks implemented:
+- Multi-step/risky task should have plan before edits ✅
+- Failed step requires reflection before retry ✅
+- Final completion requires verification evidence ✅
+- Low confidence warns/blocks completion ✅
+- No research warns before implementation ✅
+- Failed evidence never accepted as success ✅
+
+### P1 — Schema-First LLM Boundary Audit
+
+Eight structured JSON boundaries hardened:
+1. `ParallelExecutor.llmStepRunner` — SchemaValidator on file-write JSON
+2. `Orchestrator.runSemanticValidation` — cross-validation JSON schema gate
+3. `RouterAgent.route` — keyword fallback on invalid JSON
+4. `PlannerCritic` — candidate plans/scores/refinements validated
+5. `DataCleaner.validate` — fail-closed on malformed output
+6. Delegate step runner — reuses `parseLLMStepImplementation`
+7. `SecondBrain.reflect` — `parseReflectionPayload` type validation
+8. `writeFiles` — path traversal guard (`resolve`+`relative`)
+
+### P2 — Dumb Model Mode
+
+Config flag `agent.dumbModelMode: boolean` (default `false`). When `true`:
+- `workflowPolicyMode` forced to `"strict"`
+- `hallucinationThreshold` capped at `0.2`
+- `blockOnHallucination` forced `true`
+
+### P3 — Procedural Skill Injection
+
+Four checklists seeded into RAG on init:
+1. Add new `agentic_` tool (10 steps)
+2. Update OpenCode plugin tests (8 steps)
+3. Verify prompt injection changes (8 steps)
+4. Recover TypeScript build failures (8 steps)

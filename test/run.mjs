@@ -2990,7 +2990,7 @@ assert(g7_shortHit?.text === "result", "G7-13b single word query hits properly")
 assert(true, "Gap #7 Semantic Cache tests passed")
 
 // ── Layer 2: Debate Loop ──
-console.log("\n[87] agentic_debate — debate loop")
+console.log("\n[87b] agentic_debate — debate loop")
 const debateSid2 = freshSid()
 
 // Happy path: simple debate task
@@ -6732,7 +6732,7 @@ console.log(`  Phase 3A: ${p3a} passed, ${p3af} failed`)
 passed += p3a; failed += p3af
 
 // ── Phase 4A: Skill Maturation Lifecycle ─────────────────────
-console.log("\n[P4] Phase 4 — Evolution & Safety")
+console.log("\n[P4b] Phase 4 — Evolution & Safety")
 const CM = mod.ConstraintManifold
 let p4 = 0, p4f = 0
 const p4Ok = (name, fn) => { try { fn(); p4++; } catch (e) { console.error(`  FAIL: ${name}: ${e.message}`); p4f++; } }
@@ -10804,6 +10804,265 @@ passed += hkPassed; failed += hkFailed
   }
 
   console.log(`  Skill Curator: ${scPassedTotal.p} passed, ${scPassedTotal.f} failed`)
+}
+
+// ── PromptTemplate ─────────────────────────────────────
+{
+  let ptPassed = 0, ptFailed = 0
+  const ptAssert = (c, m) => { if (c) ptPassed++; else { ptFailed++; console.log(`  FAIL: ${m}`) } }
+
+  // PT-1: PromptTemplate renders with identity
+  const t1 = new mod.PromptTemplate()
+  t1.title("Test Agent")
+  t1.identity("You are a test agent.")
+  const r1 = t1.render()
+  ptAssert(r1.includes("# Test Agent"), "PT-1a: title in output")
+  ptAssert(r1.includes("<identity>"), "PT-1b: identity tag")
+  ptAssert(r1.includes("You are a test agent."), "PT-1c: identity content")
+
+  // PT-2: PromptTemplate renders knowledge-context
+  const t2 = new mod.PromptTemplate()
+  t2.injectKnowledge([{ source: "test-source", confidence: 0.85, content: "test knowledge content" }])
+  const r2 = t2.render()
+  ptAssert(r2.includes("<knowledge-context>"), "PT-2a: knowledge-context tag")
+  ptAssert(r2.includes("test-source"), "PT-2b: source in output")
+  ptAssert(r2.includes("HIGH"), "PT-2c: confidence label for 0.85")
+
+  // PT-3: PromptTemplate with all sections
+  const t3 = new mod.PromptTemplate()
+  t3.identity("id")
+  t3.instructions("instr")
+  t3.guardrails("guard")
+  const r3 = t3.render()
+  ptAssert(r3.includes("<instructions>"), "PT-3a: instructions tag")
+  ptAssert(r3.includes("<guardrails>"), "PT-3b: guardrails tag")
+
+  // PT-4: Empty template renders default
+  const t4 = new mod.PromptTemplate()
+  const r4 = t4.render()
+  ptAssert(r4.includes("Agentic Assistant"), "PT-4a: default identity")
+
+  // PT-5: injectKnowledge with empty array is no-op
+  const t5 = new mod.PromptTemplate()
+  t5.identity("test")
+  t5.injectKnowledge([])
+  ptAssert(!t5.render().includes("KNOWLEDGE"), "PT-5a: empty knowledge not rendered")
+
+  // PT-6: renderWithFrontmatter adds YAML
+  const t6 = new mod.PromptTemplate()
+  t6.identity("test")
+  const r6 = t6.renderWithFrontmatter("desc here")
+  ptAssert(r6.startsWith("---\n"), "PT-6a: starts with YAML frontmatter")
+  ptAssert(r6.includes("description: desc here"), "PT-6b: description in frontmatter")
+
+  // PT-7: condition guards — when=false
+  const t7 = new mod.PromptTemplate()
+  t7.identity("shown", true)
+  t7.identity("hidden", false)
+  const r7 = t7.render()
+  ptAssert(r7.includes("shown"), "PT-7a: shown identity present")
+  ptAssert(!r7.includes("hidden"), "PT-7b: hidden identity absent")
+
+  // PT-8: knowledge with custom category
+  const t8 = new mod.PromptTemplate()
+  t8.injectKnowledge([{ source: "cat-test", confidence: 0.5, content: "cat content", category: "test-cat" }])
+  const r8 = t8.render()
+  ptAssert(r8.includes('category="test-cat"'), "PT-8a: category attribute in source tag")
+
+  // PT-9: confidence label thresholds
+  const t9 = new mod.PromptTemplate()
+  t9.injectKnowledge([
+    { source: "a", confidence: 0.9, content: "high conf" },
+    { source: "b", confidence: 0.7, content: "mid conf" },
+    { source: "c", confidence: 0.4, content: "low conf" },
+    { source: "d", confidence: 0.1, content: "unknown conf" },
+  ])
+  const r9 = t9.render()
+  ptAssert(r9.includes('reliability="HIGH"'), "PT-9a: HIGH for 0.9")
+  ptAssert(r9.includes('reliability="MEDIUM"'), "PT-9b: MEDIUM for 0.7")
+  ptAssert(r9.includes('reliability="LOW"'), "PT-9c: LOW for 0.4")
+  ptAssert(r9.includes('reliability="UNKNOWN"'), "PT-9d: UNKNOWN for 0.1")
+
+  // PT-10: multiple knowledge entries all rendered
+  ptAssert((r9.match(/<source url=/g) || []).length === 4, "PT-10a: all 4 sources rendered")
+
+  console.log(`  PromptTemplate: ${ptPassed} passed, ${ptFailed} failed`)
+  passed += ptPassed; failed += ptFailed
+}
+
+// ── ProjectContext ─────────────────────────────────────
+{
+  let pcPassed = 0, pcFailed = 0
+  const pcAssert = (c, m) => { if (c) pcPassed++; else { pcFailed++; console.log(`  FAIL: ${m}`) } }
+
+  // PC-1: detectProjectContext returns structured result
+  const ctx = mod.detectProjectContext("/tmp")
+  pcAssert(Array.isArray(ctx.languages), "PC-1a: languages is array")
+  pcAssert(Array.isArray(ctx.frameworks), "PC-1b: frameworks is array")
+  pcAssert(typeof ctx.ambiguity === "string", "PC-1c: ambiguity is string")
+  pcAssert(["LOW", "MEDIUM", "HIGH"].includes(ctx.ambiguity), "PC-1d: valid ambiguity value")
+  pcAssert(typeof ctx.packageManager === "string" || ctx.packageManager === null, "PC-1e: packageManager is string|null")
+  pcAssert(Array.isArray(ctx.testPatterns), "PC-1f: testPatterns is array")
+  pcAssert(Array.isArray(ctx.entryPoints), "PC-1g: entryPoints is array")
+  pcAssert(typeof ctx.cachedAt === "string", "PC-1h: cachedAt is string")
+
+  // PC-2: detectProjectContext detects current project
+  const selfDir = new URL("..", import.meta.url).pathname
+  const selfCtx = mod.detectProjectContext(selfDir)
+  const tsLang = selfCtx.languages.find(l => l.lang === "TypeScript")
+  pcAssert(tsLang && tsLang.confidence > 0.5, "PC-2a: detects TypeScript in project")
+  const hasNpm = selfCtx.packageManager === "npm"
+  pcAssert(hasNpm, "PC-2b: detects npm package manager")
+  pcAssert(selfCtx.testPatterns.length > 0, "PC-2c: detects test patterns")
+
+  console.log(`  ProjectContext: ${pcPassed} passed, ${pcFailed} failed`)
+  passed += pcPassed; failed += pcFailed
+}
+
+// ── PromptBuilder ──────────────────────────────────────
+{
+  let pbPassed = 0, pbFailed = 0
+  const pbAssert = (c, m) => { if (c) pbPassed++; else { pbFailed++; console.log(`  FAIL: ${m}`) } }
+
+  const mockAllTools = [
+    { name: "agentic_plan", description: "Plan tool" },
+    { name: "agentic_execute", description: "Execute tool" },
+    { name: "agentic_verify", description: "Verify tool" },
+    { name: "agentic_reflect", description: "Reflect tool" },
+    { name: "agentic_status", description: "Status tool" },
+    { name: "agentic_nav", description: "Nav tool" },
+    { name: "agentic_skill", description: "Skill tool" },
+    { name: "agentic_episodes", description: "Episodes tool" },
+    { name: "agentic_context", description: "Context tool" },
+    { name: "agentic_db", description: "DB tool" },
+    { name: "agentic_model", description: "Model tool" },
+    { name: "agentic_evolve", description: "Evolve tool" },
+    { name: "agentic_auto", description: "Auto tool" },
+    { name: "agentic_debate", description: "Debate tool" },
+    { name: "agentic_router", description: "Router tool" },
+    { name: "agentic_rag", description: "RAG tool" },
+    { name: "agentic_custom", description: "Custom tool" },
+  ]
+  const mockDomain = {
+    name: "code",
+    tools: ["agentic_plan", "agentic_execute", "agentic_verify", "agentic_reflect", "agentic_status", "agentic_nav", "agentic_skill", "agentic_episodes", "agentic_context", "agentic_db", "agentic_model", "agentic_evolve", "agentic_auto", "agentic_debate", "agentic_router", "agentic_rag"],
+  }
+
+  // PB-1: buildAgentPrompt renders with frontmatter
+  const prompt1 = mod.buildAgentPrompt(mockDomain, mockAllTools)
+  pbAssert(prompt1.startsWith("---\n"), "PB-1a: starts with frontmatter")
+  pbAssert(prompt1.includes("description: Agentic software engineering assistant"), "PB-1b: correct description")
+  pbAssert(prompt1.includes("agentic_plan"), "PB-1c: includes plan tool")
+  pbAssert(prompt1.includes("<identity>"), "PB-1d: identity section")
+
+  // PB-2: buildAgenticSystemInstructions — no frontmatter
+  const prompt2 = mod.buildAgenticSystemInstructions(mockDomain, mockAllTools)
+  pbAssert(!prompt2.startsWith("---"), "PB-2a: no frontmatter")
+  pbAssert(prompt2.includes("agentic_plan"), "PB-2b: includes tool reference")
+
+  // PB-3: buildAgenticSystemInstructions with selected tools
+  const prompt3 = mod.buildAgenticSystemInstructions(mockDomain, mockAllTools, {
+    selectedTools: [{ name: "agentic_nav", description: "Nav tool" }],
+    isRouted: true,
+  })
+  pbAssert(prompt3.includes("Recommended Tools"), "PB-3a: recommended tools section shown when routed")
+
+  // PB-4: buildAgenticSystemInstructions with project context
+  const prompt4 = mod.buildAgenticSystemInstructions(mockDomain, mockAllTools, {
+    projectContext: { languages: [{ lang: "TypeScript", confidence: 0.95, evidence: ["test"] }], frameworks: [], packageManager: "npm", testPatterns: ["test/"], entryPoints: ["index.ts"], ambiguity: "LOW", cachedAt: new Date().toISOString() },
+  })
+  pbAssert(prompt4.includes("Project Context"), "PB-4a: project context section shown")
+  pbAssert(prompt4.includes("TypeScript"), "PB-4b: language shown")
+
+  // PB-5: buildGenericAgentPrompt
+  const prompt5 = mod.buildGenericAgentPrompt(mockAllTools)
+  pbAssert(prompt5.startsWith("---\n"), "PB-5a: frontmatter")
+  pbAssert(prompt5.includes("Agentic Assistant"), "PB-5b: title")
+  pbAssert(prompt5.includes("agentic_plan"), "PB-5c: includes plan")
+
+  // PB-6: buildAgenticSystemInstructions guards pipeline/parallel hints
+  const prompt6 = mod.buildAgenticSystemInstructions(mockDomain, mockAllTools, {
+    selectedTools: [{ name: "agentic_pipeline", description: "Pipeline" }],
+    isRouted: true,
+  })
+  pbAssert(prompt6.includes("Multi-agent"), "PB-6a: pipeline hint present")
+
+  console.log(`  PromptBuilder: ${pbPassed} passed, ${pbFailed} failed`)
+  passed += pbPassed; failed += pbFailed
+}
+
+// ── ToolRouter ──────────────────────────────────────────
+{
+  let trPassed = 0, trFailed = 0
+  const trAssert = (c, m) => { if (c) trPassed++; else { trFailed++; console.log(`  FAIL: ${m}`) } }
+
+  const router = new mod.ToolRouter()
+
+  // TR-1: ToolRouter constructs with catalog tools
+  const stats = router.getStats()
+  const toolCount = Object.keys(stats).length
+  trAssert(toolCount >= 31, "TR-1a: at least 31 tools in router")
+  trAssert(stats["agentic_plan"] !== undefined, "TR-1b: agentic_plan present")
+  trAssert(stats["agentic_execute"] !== undefined, "TR-1c: agentic_execute present")
+
+  // TR-2: selectTools returns top tools for a query
+  const result1 = router.selectTools({ taskInput: "plan a feature", recentTools: [], domain: "code", isSubAgent: false })
+  trAssert(result1.selected.length > 0, "TR-2a: selectTools returns tools")
+  trAssert(result1.selected.some(t => t.name === "agentic_plan"), "TR-2b: agentic_plan in top results for plan query")
+
+  // TR-3: selectTools with debug query
+  const result2 = router.selectTools({ taskInput: "debug this error", recentTools: [], domain: "code", isSubAgent: false })
+  trAssert(result2.selected.some(t => t.name === "agentic_reflect" || t.name === "agentic_guard"), "TR-3a: debug tools for debug query")
+
+  // TR-4: selectTools with search query
+  const result3 = router.selectTools({ taskInput: "search for file", recentTools: [], domain: "code", isSubAgent: false })
+  trAssert(result3.selected.some(t => t.name === "agentic_nav"), "TR-4a: nav tool for search query")
+
+  // TR-5: recordCall and transition probability
+  router.recordCall("agentic_plan", true, 100)
+  router.recordCall("agentic_execute", true, 200)
+  const prob = router.getTransitionProbability("agentic_plan", "agentic_execute")
+  trAssert(prob > 0, "TR-5a: transition probability recorded")
+
+  // TR-6: selectTools with recent tools (colocation)
+  const result4 = router.selectTools({ taskInput: "fix bug", recentTools: ["agentic_plan", "agentic_execute"], domain: "code", isSubAgent: false })
+  trAssert(result4.selected.some(t => t.name === "agentic_verify"), "TR-6a: colocation pulls in verify")
+
+  // TR-7: setDescriptions
+  router.setDescriptions([{ name: "agentic_plan", description: "New description" }])
+  const stats2 = router.getStats()
+  trAssert(stats2["agentic_plan"] !== undefined, "TR-7a: description updated")
+
+  // TR-8: buildConsolidationHint
+  const hint = router.buildConsolidationHint("agentic_auto")
+  trAssert(hint.length > 0, "TR-8a: consolidation hint for agentic_auto")
+  trAssert(router.buildConsolidationHint("nonexistent") === "", "TR-8b: empty hint for unknown tool")
+
+  // TR-9: getConsolidationMap
+  const map = router.getConsolidationMap()
+  trAssert(map["agentic_auto"] !== undefined, "TR-9a: consolidation map contains agentic_auto")
+
+  // TR-10: buildToolList formats correctly
+  const list = router.buildToolList(result1.selected)
+  trAssert(list.includes("agentic_plan"), "TR-10a: tool list contains plan")
+  trAssert(list.includes("**agentic_plan**"), "TR-10b: bold formatting")
+
+  // TR-11: buildAlwaysExposeHint
+  const hint2 = router.buildAlwaysExposeHint()
+  trAssert(hint2.includes("read"), "TR-11a: always expose includes read")
+  trAssert(hint2.includes("edit"), "TR-11b: always expose includes edit")
+
+  // TR-12: task type inference via colocation groups
+  const result5 = router.selectTools({ taskInput: "create a new module", recentTools: [], domain: "code", isSubAgent: false })
+  trAssert(result5.selected.some(t => t.name === "agentic_execute"), "TR-12a: implement task pulls execute")
+
+  // TR-13: setAllocatedToolCount
+  router.setAllocatedToolCount(5)
+  const result6 = router.selectTools({ taskInput: "search", recentTools: [], domain: "code", isSubAgent: false })
+  trAssert(result6.selected.length <= 15, "TR-13a: allocated tool count respected")
+
+  console.log(`  ToolRouter: ${trPassed} passed, ${trFailed} failed`)
+  passed += trPassed; failed += trFailed
 }
 
 console.log(`Results: ${passed} passed, ${failed} failed`)
