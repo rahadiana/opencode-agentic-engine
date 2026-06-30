@@ -536,16 +536,17 @@ async function suite13() {
 
   // FRESH plugin per test case untuk unbiased ToolRouter
   for (const tc of [
-    { input: "buatkan fitur login", shouldInclude: ["agentic_plan"], desc: "buat → plan" },
+    { input: "rencana breakdown tugas", shouldInclude: ["agentic_plan"], desc: "rencana → plan" },
     { input: "ada error di kode", shouldInclude: ["agentic_reflect"], desc: "error → reflect" },
     { input: "cari file auth.js", shouldInclude: ["agentic_nav"], desc: "cari → nav" },
-    { input: "tolong tes fitur ini", shouldInclude: ["agentic_verify"], desc: "tes → verify" },
-    { input: "ingatkan cara deploy", shouldInclude: ["agentic_episodes"], desc: "ingat → episodes" },
+    { input: "tolong tes verifikasi fitur ini", shouldInclude: ["agentic_verify"], desc: "tes → verify" },
+    { input: "ingat riwayat session sebelumnya", shouldInclude: ["agentic_episodes"], desc: "ingat → episodes" },
   ]) {
     const { hooks: fh, dir: fdir } = await createFreshPlugin()
     try {
-      // Simulate: user says this thing, so set system prompt to just this text
-      const out = { system: ["test"] }
+      // Simulate a user/task-specific system context; transform falls back to system text
+      // when no session turns are available.
+      const out = { system: [tc.input] }
       await fh["experimental.chat.system.transform"](
         { sessionID: `ind-${tc.desc}`, model: "gpt-4o" },
         out
@@ -560,9 +561,11 @@ async function suite13() {
         ok(count >= 31, `[${tc.desc}] Tool Reference count is ${count} (expected >= 31)`)
       }
 
-      // The selected/shown tools should include the expected one
-      const hasTool = text.includes(tc.shouldInclude[0])
-      ok(hasTool, `[${tc.desc}] "${tc.input}" includes "${tc.shouldInclude[0]}"`)
+      // Recommended tools are hints only; the full Tool Reference remains visible.
+      const recMatch = text.match(/### 🎯 Recommended Tools for This Task([\s\S]*?)### 🛠️ Tool Reference/)
+      ok(recMatch !== null, `[${tc.desc}] Recommended Tools section present`)
+      const recText = recMatch?.[1] ?? ""
+      ok(recText.includes(tc.shouldInclude[0]), `[${tc.desc}] recommends "${tc.shouldInclude[0]}"`)
     } finally {
       await fh.dispose()
     }

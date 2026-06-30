@@ -13,9 +13,8 @@ export interface ToolListConfig {
   /** Optional knowledge entries to auto-inject into <knowledge-context> section */
   knowledgeEntries?: KnowledgeEntry[]
   /**
-   * ToolRouter-selected subset (only used when isRouted=true).
-   * When provided, ALL domain tools still show in "Available Tools" section,
-   * and this subset shows in a separate "Selected Tools for This Task" section.
+   * ToolRouter-selected subset. This is only a recommendation section;
+   * ALL domain tools still show in the Tool Reference section.
    */
   selectedTools?: ToolEntry[]
   /** Optional project context (language, framework, test patterns) for dynamic system prompt */
@@ -325,6 +324,25 @@ Tidak punya memori lintas sesi. Setiap sesi mulai dari nol pengetahuan kontekstu
 🧪 **One check** — every function with branch/loop/I/O needs one assertion.
 🔐 **Security** — parameterized queries, no eval(), native crypto.`
   )
+
+  // ── RECOMMENDED TOOLS: ranking only, never hides the full tool list ──
+  if (config?.selectedTools && config.selectedTools.length > 0) {
+    const recommended = config.selectedTools
+      .filter(t => availableTools.some(a => a.name === t.name))
+      .slice(0, 5)
+
+    if (recommended.length > 0) {
+      let recommendedSection = `### 🎯 Recommended Tools for This Task\n\n`
+      recommendedSection += `These are routing hints only — all ${availableTools.length} agentic tools remain available.\n\n`
+      for (const tool of recommended) {
+        const shortDesc = tool.description.length > 100
+          ? tool.description.slice(0, 97) + "..."
+          : tool.description
+        recommendedSection += `- **\`${tool.name}\`** — ${shortDesc}\n`
+      }
+      t.instructions(recommendedSection)
+    }
+  }
 
   // ── CATEGORIZED TOOL LIST with "When to use" guidance ──
   if (availableTools.length > 0) {

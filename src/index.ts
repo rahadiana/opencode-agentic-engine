@@ -6622,9 +6622,17 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
             }
           } catch { /* non-fatal */ }
 
-          // ── Tool selection: kirim SEMUA tools — LLM modern pinter milih sendiri ──
+          // ── Tool recommendation: keep ALL tools visible, add ranked hints only ──
+          const recommendedTools = toolRouter.selectTools({
+            taskInput: queryForRag,
+            recentTools: recentToolCalls,
+            domain: pack.name,
+            isSubAgent: false,
+          }, 5).selected
+
           injection = buildAgenticSystemInstructions(pack, TOOL_REGISTRY, {
             isRouted: false,  // no subset — LLM decides which tool fits
+            selectedTools: recommendedTools,
             knowledgeEntries: knowledgeEntries.length > 0 ? knowledgeEntries : undefined,
             projectContext,
             curator,
