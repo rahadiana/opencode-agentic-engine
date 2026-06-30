@@ -11,7 +11,7 @@ import { securityDomain } from "./core/domains/security.js"
 import { devopsDomain } from "./core/domains/devops.js"
 import { dataScienceDomain } from "./core/domains/data-science.js"
 import { mobileDomain } from "./core/domains/mobile.js"
-import { IntentParser, type TaskIntent } from "./core/intent-parser.js"
+import { IntentParser, type TaskIntent, type Subtask } from "./core/intent-parser.js"
 import { Executor } from "./core/executor.js"
 import { Verifier } from "./core/verifier.js"
 import { ErrorAnalyzer } from "./core/error-analyzer.js"
@@ -85,6 +85,7 @@ import { ConstraintManifold } from "./core/constraint-manifold.js"
 import { WorldModel } from "./core/world-model.js"
 import { SimulationEngine, type SimulatedStep } from "./core/simulation-engine.js"
 import { MetaReasoner } from "./core/meta-reasoner.js"
+import { ToolUsageTracker } from "./core/tool-usage-tracker.js"
 import { BlueprintParser, BlueprintResolver, type ModelSpecMap } from "./core/agent-blueprint.js"
 import { autoUpdatePlugin } from "./core/plugin-updater.js"
 import { evaluateWorkflowPolicy, formatWorkflowPolicyDecisions, verificationEvidenceFailed } from "./core/workflow-policy.js"
@@ -505,8 +506,16 @@ const confidenceStore = new ConfidenceStore()
     findSkills: (query: string) => skillStore.find(query).map(s => ({ name: s.definition.meta.name, successRate: s.successRate })),
   })
   llmEngine.setMemoryOrchestrator(memoryOrchestrator)
+  // ── MetaReasoner (Comparison 22: Meta-Reasoning Strategy) ──
+  const metaReasoner = new MetaReasoner()
+  const toolUsageTracker = new ToolUsageTracker()
   const agentLoop = new AgentLoop(llmEngine, { maxIterations: 10, autoRetry: true, maxRetries: 2, verifyAfterEach: false })
   agentLoop.setEventBus(eventBus)
+  agentLoop.setMetaReasoner(metaReasoner)
+  agentLoop.setSimulationEngine(simulationEngine)
+  agentLoop.setWorldModel(worldModel)
+  agentLoop.setPatternDiscovery(patternDiscovery)
+  agentLoop.setToolUsageTracker(toolUsageTracker)
   // Wire guardrails from config
   if (config.agent.toolGuardrails) {
     agentLoop.setGuardrailConfig(config.agent.toolGuardrails)
@@ -633,9 +642,6 @@ const confidenceStore = new ConfidenceStore()
     if (!skillRecord || !skillRecord.definition.logic?.instructions) return null
     return { instructions: skillRecord.definition.logic.instructions }
   })
-
-  // ── MetaReasoner (Comparison 22: Meta-Reasoning Strategy) ──
-  const metaReasoner = new MetaReasoner()
 
   // ── ConstraintManifold (Phase 4C: Safety by design) — used by dashboard ──
   const constraintManifold = new ConstraintManifold()
@@ -6069,6 +6075,8 @@ const confidenceStore = new ConfidenceStore()
               }
             }
           } catch { /* non-fatal */ }
+          // Record research artifact for WorkflowPolicy
+          sessionStore.getOrCreate(context.sessionID).artifacts.set("workflow:researched", String(Date.now()))
 
           // ═══════════════════════════════════════════════
           // PHASE 2: Plan — decompose goal into steps
@@ -6119,6 +6127,8 @@ const confidenceStore = new ConfidenceStore()
           intentParser.validatePlan(plan)
           executor.initExecution(context.sessionID, plan)
           sessionStore.getOrCreate(context.sessionID).plan = plan
+          // Record plan artifact for WorkflowPolicy
+          sessionStore.getOrCreate(context.sessionID).artifacts.set("workflow:planned", String(Date.now()))
 
           // ═══════════════════════════════════════════════
           // PHASE 3: Implement — pipeline delegation or fast LLM
@@ -6138,6 +6148,7 @@ const confidenceStore = new ConfidenceStore()
           const hasSimpleKeywords = /\b(fix|typo|comment|rename|change|update|bump|remove|delete|add\s+\w+\s+to)\b/i.test(args.goal)
           const isSimpleOrTrivial = (args.goal.length < 100 && hasSimpleKeywords) || (!hasComplexKeywords && args.goal.length < 60) || activeSteps.length <= 1
           const usePipeline = thorough && !isSimpleOrTrivial && pipeline && pipeline.stages.length >= 2 && activeSteps.length >= 2
+          const useAgentLoop = thorough && !usePipeline && !isSimpleOrTrivial && activeSteps.length >= 2
 
           const allModified: string[] = []
           const completedSteps: string[] = []
@@ -6193,6 +6204,87 @@ const confidenceStore = new ConfidenceStore()
               })
               completedSteps.push(step.id)
             }
+          } else if (useAgentLoop) {
+            // ── AgentLoop path: DAG-based execution for complex tasks ──
+            // AgentLoop handles per-step execution, verification, confidence scoring,
+            // recovery, and emits events for Second Brain tracking.
+            const stepExecutor = async (subtask: Subtask): Promise<{ success: boolean; output: string; filesModified: string[]; error?: string }> => {
+              const subtaskGoal = subtask.description
+              const llmSystemPrompt = `Return JSON array of {path, content}. Write COMPLETE file contents.
+        Rules: ESM imports (.js) · match existing patterns · valid imports
+        {"files":[{"path":"src/x.ts","content":"..."}]} or {"noChanges":true}`
+
+              const fileContentsForSubtask: Record<string, string> = {}
+              for (const f of relevantFiles) {
+                try { fileContentsForSubtask[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 150) } catch { /* skip */ }
+              }
+              const filesBlockForSubtask = Object.entries(fileContentsForSubtask)
+                .map(([p, c]) => `${p}:\n${c.slice(0, 100)}`).join("\n---\n")
+
+              const userPrompt = `${subtaskGoal}\n${codebaseSummary.slice(0, 100)}\n\n${filesBlockForSubtask || "(new)"}`
+              const llmResult = await llmEngine.call({
+                systemPrompt: llmSystemPrompt,
+                userPrompt,
+                temperature: 0.2,
+                maxTokens: 2048,
+                jsonMode: true,
+              })
+              const output = llmResult.content || ""
+              if (output.includes("[NO_LLM]") || output === "NO_LLM") {
+                hasNoLLM = true
+                return { success: false, output: "No LLM", filesModified: [], error: "No LLM (mock)" }
+              }
+              const filesToWrite = parseFileEntries(output, relevantFiles[0]?.replace(/^\/+/, "") || "src/index.ts")
+              const writtenPaths = writeFilesHelper(filesToWrite, projectDir, context.sessionID, eventBus)
+              allModified.push(...writtenPaths)
+              return {
+                success: writtenPaths.length > 0 || filesToWrite.some((f: any) => f.noChanges),
+                output: `Generated ${writtenPaths.length} files`,
+                filesModified: writtenPaths,
+                error: writtenPaths.length === 0 ? "No files generated" : undefined,
+              }
+            }
+
+            // Init AgentLoop state
+            const planSubtaskList: Subtask[] = activeSteps.map(s => ({
+              id: s.id, description: s.description,
+              dependsOn: s.dependsOn ?? [],
+              verificationCriteria: s.verificationCriteria ?? [],
+              domain: undefined,
+            }))
+            executor.initExecution(context.sessionID, {
+              intent: {
+                goal: args.goal, subtasks: planSubtaskList,
+                constraints: args.constraints ?? [],
+                context: { relevantFiles: [], dependencies: [] },
+              },
+              estimatedSteps: planSubtaskList.length,
+              complexity: planSubtaskList.length <= 3 ? "low" : planSubtaskList.length <= 8 ? "medium" : "high",
+              warnings: [],
+            } as any)
+
+            const loopResult = await agentLoop.runLoop(
+              context.sessionID,
+              executor,
+              verifier,
+              errorAnalyzer,
+              depTracker,
+              projectDir,
+              stepExecutor,
+              async (fix: string) => {
+                try {
+                  const filesToWrite = parseFileEntries(fix, "src/index.ts")
+                  const writtenPaths = writeFilesHelper(filesToWrite, projectDir, context.sessionID, eventBus)
+                  allModified.push(...writtenPaths)
+                  return writtenPaths.length > 0
+                } catch { return false }
+              },
+            )
+            verifyPassed = loopResult.success
+            completedSteps.push(...loopResult.completedSteps)
+            verifyNote = loopResult.success
+              ? `✅ AgentLoop: ${loopResult.completedSteps.length} steps`
+              : `⚠️ AgentLoop: ${loopResult.completedSteps.length} ok, ${loopResult.failedSteps.length} failed`
           } else {
             // ── Fast path: monolithic LLM call with adaptive retry loop ──
             const systemPrompt = `Return JSON array of {path, content}. Write COMPLETE file contents.
@@ -6327,6 +6419,33 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
             }
           }
 
+          // ═══════════════════════════════════════════════
+          // WorkflowPolicy Final Gate (P0)
+          // ═══════════════════════════════════════════════
+          const autoSession = sessionStore.getOrCreate(context.sessionID)
+          const autoAgentCfg = configLoader.get().agent
+          const autoWfMode = autoAgentCfg.dumbModelMode ? "strict" : (autoAgentCfg.workflowPolicyMode ?? "advisory")
+          // verification evidence from whichever path actually ran
+          const autoHasVerify = verifyPassed
+            || (useAgentLoop && completedSteps.length > 0)
+            || (usePipeline && allModified.length > 0 && hasNoLLM === false)
+          if (autoHasVerify) {
+            autoSession.artifacts.set("workflow:verified", String(Date.now()))
+          }
+          const autoFinalDecisions = evaluateWorkflowPolicy({
+            action: "finalize",
+            stepId: "auto",
+            filesModified: allModified,
+            success: !hasNoLLM && allModified.length > 0,
+            hasPlan: true,
+            hasResearch: true,
+            hasVerificationEvidence: autoHasVerify,
+          }, { mode: autoWfMode })
+          const autoBlocked = autoFinalDecisions.some(d => d.severity === "block")
+          if (autoBlocked) {
+            verifyNote = "🛑 " + formatWorkflowPolicyDecisions(autoFinalDecisions.filter(d => d.severity === "block"))
+          }
+          // ponytail: autoFinalDecisions already used for block check above, no need to format again
           // ─── POST-PHASE: hanya kalau thorough ───
           // Guard + debate + post-processing semuanya fire-and-forget
           // supaya gak ngeblok response utama
@@ -7000,6 +7119,7 @@ export { AttentionScheduler, type AgentScheduleConfig, type AgentScheduleState, 
 export { WorldModel, type WorldSnapshot, type Belief, type Entity, type Relation, type WorldModelConfig, type BeliefEvidence, type BeliefUpdateResult } from "./core/world-model.js"
 export { SimulationEngine, type SimulationInput, type SimulationResult, type SimulatedStep, type SimulatedStepResult, type SimulationConfig } from "./core/simulation-engine.js"
 export { MetaReasoner, createDefaultStrategy, type StrategyConfig, type StrategyParam, type PerformanceRecord, type StrategyVersion, type AdaptationResult, type MetaReasonerConfig } from "./core/meta-reasoner.js"
+export { ToolUsageTracker, type ToolUsageRecord, type ToolUsageStats } from "./core/tool-usage-tracker.js"
 export { DAGEngine, type DAGNode, type DAGPlan, type DAGNodeType, type NodeStatus, type DAGExecutionContext, type DAGResult, type ExecutionPhase, type RetryStrategy, type RecoveryStrategy, type NodeRunner, type DAGObserver } from "./core/dag-engine.js"
 export { PlanningLayer, type PlanVersion, type PlanValidationResult, type PlanningLayerConfig } from "./core/planning-layer.js"
 export { ExecutionLayer, type ExecutionLayerConfig, type NodeExecutionResult, type PhaseExecutionResult, type ExecutionSnapshot } from "./core/execution-layer.js"

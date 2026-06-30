@@ -63,6 +63,13 @@ const TOP_N_FILES = 200
 export class PatternDiscovery {
   private processedSessionIds = new Set<string>()
   private errorFixMemory = new Map<string, { suggestion: string; successCount: number }>()
+  /** Cached last error patterns for real-time lookup */
+  private lastErrorPatterns: ErrorPattern[] = []
+
+  /** Get cached error patterns from last analysis */
+  getErrorPatterns(): ErrorPattern[] {
+    return this.lastErrorPatterns
+  }
 
   analyze(
     episodes: Episode[],
@@ -90,6 +97,8 @@ export class PatternDiscovery {
     for (const sid of sessionIds) {
       this.processedSessionIds.add(sid)
     }
+
+    this.lastErrorPatterns = errorPatterns
 
     return {
       timestamp: new Date().toISOString(),

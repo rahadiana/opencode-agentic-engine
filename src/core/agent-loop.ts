@@ -26,6 +26,11 @@ import { ConfidenceScorer, ConfidenceStore, type ScoringSignals } from "./confid
 import { PlanningLayer } from "./planning-layer.js"
 import { ExecutionLayer } from "./execution-layer.js"
 import { RecoveryLayer, type RecoveryDecision } from "./recovery-layer.js"
+import { MetaReasoner } from "./meta-reasoner.js"
+import { SimulationEngine } from "./simulation-engine.js"
+import { WorldModel } from "./world-model.js"
+import { PatternDiscovery } from "../drift/pattern-discovery.js"
+import { ToolUsageTracker } from "./tool-usage-tracker.js"
 import { ToolGuardrailController, DEFAULT_GUARDRAIL_CONFIG, type ToolGuardrailConfig } from "./tool-guardrails.js"
 import { createLogger } from "../observability/logger.js"
 
@@ -76,6 +81,21 @@ export class AgentLoop {
 
   /** Tool Guardrails — loop detection for execution steps */
   private guardrails: ToolGuardrailController
+
+  /** MetaReasoner — strategy adaptation (Gap #8) */
+  private metaReasoner?: MetaReasoner
+
+  /** SimulationEngine — pre-execution plan validation */
+  private simulationEngine?: SimulationEngine
+
+  /** WorldModel — belief state about the codebase */
+  private worldModel?: WorldModel
+
+  /** PatternDiscovery — recurring error pattern detection */
+  private patternDiscovery?: PatternDiscovery
+
+  /** ToolUsageTracker — per-tool effectiveness */
+  private toolUsageTracker?: ToolUsageTracker
 
   /** Graph Harness 3 layers */
   private planningLayer: PlanningLayer
@@ -142,6 +162,27 @@ export class AgentLoop {
     this.confidenceStore = store
   }
 
+  setMetaReasoner(mr: MetaReasoner): void {
+    this.metaReasoner = mr
+  }
+
+  setSimulationEngine(se: SimulationEngine): void {
+    this.simulationEngine = se
+  }
+
+  setWorldModel(wm: WorldModel): void {
+    this.worldModel = wm
+  }
+
+  setPatternDiscovery(pd: PatternDiscovery): void {
+    this.patternDiscovery = pd
+  }
+
+  setToolUsageTracker(tracker: ToolUsageTracker): void {
+    this.toolUsageTracker = tracker
+  }
+
+  /** Set workflow state provider for runtime policy enforcement */
   addObserver(observer: LoopObserver): void {
     this.observers.push(observer)
   }
@@ -208,6 +249,33 @@ export class AgentLoop {
         domain: "code",
       },
     })
+
+    // ── Simulation before execution (Gap #3: pre-validate plan) ──
+    if (this.simulationEngine && subtasks.length > 0) {
+      try {
+        const simSteps = subtasks.map((s, _i) => ({
+          stepId: s.id,
+          description: s.description,
+          complexity: Math.min(10, Math.max(1, Math.ceil(s.description.length / 50))),
+          predictedSuccess: 0.7,
+          estimatedTokens: 500 + s.description.length,
+          dependsOn: s.dependsOn ?? [],
+        }))
+        const simResult = this.simulationEngine.simulate({
+          planId: subtasks[0]?.id ?? "plan-1",
+          steps: simSteps,
+          goal: plan.intent.goal,
+        })
+        if (!simResult.recommended) {
+          log.warn(`[AgentLoop] Simulation: plan score ${simResult.score.toFixed(2)} (below recommend threshold)`)
+          for (const w of simResult.warnings) {
+            log.warn(`[AgentLoop] Simulation warning: ${w}`)
+          }
+        }
+      } catch (e) {
+        log.warn(`[AgentLoop] Simulation failed: ${e}`)
+      }
+    }
 
     // DAG observer → legacy observer mapping
     this.executionLayer.addObserver({
@@ -369,6 +437,52 @@ export class AgentLoop {
             result.output = `${warnMsg}\n\n${result.output}`
             log.warn(`[AgentLoop] ${warnMsg} for step ${node.id}`)
           }
+        }
+      }
+
+      // ── MetaReasoner: record step performance (Gap #8) ──
+      if (this.metaReasoner) {
+        try {
+          this.metaReasoner.recordExecution({
+            taskId: node.id,
+            success: result.success,
+            retries: dagCtx.nodeStates.get(node.id)?.retryCount ?? 0,
+            tokensUsed: result.output.length,
+            timestamp: Date.now(),
+          })
+        } catch (e) {
+          log.warn(`[AgentLoop] MetaReasoner record failed: ${e}`)
+        }
+      }
+
+      // ── ToolUsageTracker: record tool effectiveness ──
+      if (this.toolUsageTracker) {
+        try {
+          this.toolUsageTracker.record({
+            toolName: `step:${node.id}`,
+            taskCategory: plan.intent.goal.slice(0, 80),
+            success: result.success,
+            durationMs: 0,
+            timestamp: Date.now(),
+          })
+        } catch { /* non-fatal */ }
+      }
+
+      // ── WorldModel: update beliefs about files (Gap #4) ──
+      // ponytail: minimal observe call — key=file path, fact=outcome, confidence based on success
+      if (this.worldModel && result.filesModified.length > 0) {
+        try {
+          for (const f of result.filesModified) {
+            this.worldModel.observe(
+              `file:${f}`,
+              `${f}:${result.success ? "ok" : "fail"}`,
+              result.success ? 0.8 : 0.2,
+              result.success ? "execution_result" : "execution_failure",
+              "file_state",
+            )
+          }
+        } catch (e) {
+          log.warn(`[AgentLoop] WorldModel update: ${e}`)
         }
       }
 
@@ -582,6 +696,21 @@ export class AgentLoop {
     if (!node) return
 
     const errorText = dagCtx.nodeStates.get(nodeId)?.error ?? "Unknown error"
+
+    // ponytail: inline pattern discovery check — no new abstraction
+    if (this.patternDiscovery && errorText !== "Unknown error") {
+      try {
+        const patterns = this.patternDiscovery.getErrorPatterns()
+        const matchedPattern = patterns.find(p =>
+          p.category && errorText.toLowerCase().includes(p.category.toLowerCase())
+        )
+        if (matchedPattern) {
+          log.warn(`[AgentLoop] Recurring error pattern: ${matchedPattern.category} (${matchedPattern.totalOccurrences}×)`)
+        }
+      } catch (e) {
+        log.warn(`[AgentLoop] PatternDiscovery check: ${e}`)
+      }
+    }
 
     const decision: RecoveryDecision = this.recoveryLayer.decide(node, dagCtx, errorText)
 
