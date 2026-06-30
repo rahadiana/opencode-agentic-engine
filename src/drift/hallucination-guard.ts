@@ -13,6 +13,8 @@ export interface HallucinationCheck {
   passed: boolean
   claims: ClaimResult[]
   summary: string
+  /** Average confidence across all claims (0-1) */
+  overallConfidence: number
 }
 
 export interface ClaimResult {
@@ -22,6 +24,8 @@ export interface ClaimResult {
   actual?: string
   expected?: string
   severity?: "error" | "warning"
+  /** Confidence in this verification (0-1): 1.0=disk proof, 0.7=regex match, 0.5=best guess */
+  confidence: number
 }
 
 export class HallucinationGuard {
@@ -41,13 +45,15 @@ export class HallucinationGuard {
       const exists = resolved ? existsSync(resolved) : false
       // File claimed but just doesn't exist yet (e.g., temp file or about-to-be-created)
       const isKnownModified = modifiedSet.has(claim) || modifiedSet.has(claim.replace(/^\.\//, ""))
+      const verified = exists || isKnownModified
       claims.push({
         claim,
         type: "file_exists",
-        verified: exists || isKnownModified,
+        verified,
         actual: exists ? "exists" : "does not exist",
         expected: "exists",
         severity: isKnownModified && !exists ? "warning" : "error",
+        confidence: exists ? 1.0 : isKnownModified ? 0.5 : 0.3,
       })
     }
 
@@ -61,6 +67,7 @@ export class HallucinationGuard {
         verified: found,
         actual: found ? "found" : "not found",
         expected: "found",
+        confidence: found ? 0.7 : 0.4,
       })
     }
 
@@ -82,6 +89,7 @@ export class HallucinationGuard {
         verified: exists,
         actual: exists ? "exists" : "missing",
         expected: "exists",
+        confidence: exists ? 0.8 : 0.3,
       })
     }
 
@@ -95,16 +103,21 @@ export class HallucinationGuard {
         verified: sigValid,
         actual: sigValid ? "signature matches" : "signature mismatch or not found",
         expected: "signature exists",
+        confidence: sigValid ? 0.7 : 0.3,
       })
     }
 
     const criticalFails = claims.filter(c => !c.verified && c.severity !== "warning")
     const passed = criticalFails.length === 0
     const totalFails = claims.filter(c => !c.verified).length
+    const overallConfidence = claims.length > 0
+      ? claims.reduce((s, c) => s + c.confidence, 0) / claims.length
+      : 1
 
     return {
       passed,
       claims,
+      overallConfidence,
       summary: passed
         ? "All claims verified."
         : `${totalFails} unverified claim(s) found. ${criticalFails.length} critical, ${totalFails - criticalFails.length} warnings.`,

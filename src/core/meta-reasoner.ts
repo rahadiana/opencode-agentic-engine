@@ -131,9 +131,20 @@ export function createDefaultStrategy(label: string = "balanced"): StrategyConfi
 
 // ── MetaReasoner Class ──────────────────────────────────────────────────
 
+export interface AdaptationSummary {
+  version: number
+  configLabel: string
+  changes: Array<{ name: string; from: number; to: number; reason: string }>
+  rolledBack: boolean
+  successRate: number
+  totalRuns: number
+  timestamp: number
+}
+
 export class MetaReasoner {
   // ponytail: cap versions to prevent unbounded growth
   private static readonly MAX_VERSIONS = 100
+  private static readonly MAX_ADAPTATION_HISTORY = 50
 
   private versions: StrategyVersion[] = []
   private currentConfig: StrategyConfig
@@ -141,6 +152,8 @@ export class MetaReasoner {
   private config: Required<MetaReasonerConfig>
   private adaptationCount = 0
   private totalRuns = 0
+  /** Stored adaptation history for downstream consumers */
+  private adaptationHistory: AdaptationSummary[] = []
 
   constructor(initialConfig?: StrategyConfig, options: MetaReasonerConfig = {}) {
     this.config = { ...DEFAULTS, ...options }
@@ -299,13 +312,15 @@ export class MetaReasoner {
       this._trimVersions()
     }
 
-    return {
+    const result: AdaptationResult = {
       config: this.currentConfig,
       changes,
       rolledBack: false,
       adapted,
       warnings,
     }
+    this._recordAdaptationSummary(result)
+    return result
   }
 
   /** Rollback to previous strategy version */
@@ -412,13 +427,38 @@ export class MetaReasoner {
     })
     this._trimVersions()
 
-    return {
+    const result: AdaptationResult = {
       config: this.currentConfig,
       changes: [],
       rolledBack: true,
       adapted: false,
       warnings: [`Performance degraded by ${Math.abs(degradation).toFixed(2)}. Rolled back to version ${prevVersion.version}`],
     }
+    this._recordAdaptationSummary(result)
+    return result
+  }
+
+  /** Record adaptation summary for downstream consumers */
+  private _recordAdaptationSummary(result: AdaptationResult): void {
+    if (!result.adapted && !result.rolledBack) return
+    const perf = this.getCurrentPerformance()
+    this.adaptationHistory.push({
+      version: this.versions.length,
+      configLabel: result.config.label,
+      changes: result.changes.map(c => ({ ...c })),
+      rolledBack: result.rolledBack,
+      successRate: perf.successRate,
+      totalRuns: perf.totalRuns,
+      timestamp: Date.now(),
+    })
+    if (this.adaptationHistory.length > MetaReasoner.MAX_ADAPTATION_HISTORY) {
+      this.adaptationHistory = this.adaptationHistory.slice(-MetaReasoner.MAX_ADAPTATION_HISTORY)
+    }
+  }
+
+  /** Get stored adaptation history for dashboard/observability */
+  getAdaptationHistory(): AdaptationSummary[] {
+    return [...this.adaptationHistory]
   }
 
   /** Trim versions array to prevent unbounded growth */

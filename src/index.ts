@@ -7121,6 +7121,7 @@ export {
   type JsonRpcResponse,
 } from "./agents/a2a-types.js"
 
+export { HallucinationGuard, type HallucinationCheck, type ClaimResult } from "./drift/hallucination-guard.js"
 export { ErrorAnalyzer } from "./core/error-analyzer.js"
 export { RoleRegistry } from "./agents/role-registry.js"
 export { VectorStore } from "./memory/vector-store.js"

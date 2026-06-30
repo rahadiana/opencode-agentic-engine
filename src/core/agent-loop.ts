@@ -708,6 +708,13 @@ export class AgentLoop {
             log.info(`  ${c.name}: ${c.from} → ${c.to} (${c.reason})`)
           }
           adaptedStrategy = { label: adaptation.config.label, changes: adaptation.changes.map(c => ({ name: c.name, from: c.from, to: c.to, reason: c.reason })) }
+
+          // Feed back adaptation into loop behavior: if success rate is low, increase retry budget
+          const perf = this.metaReasoner.getCurrentPerformance()
+          if (perf.successRate < 0.5 && this.config.maxRetries < 5) {
+            this.config.maxRetries++
+            log.warn(`[AgentLoop] Low success rate (${(perf.successRate * 100).toFixed(0)}%) — increasing maxRetries to ${this.config.maxRetries}`)
+          }
         }
         if (adaptation.rolledBack && adaptation.warnings.length > 0) {
           log.warn(`[AgentLoop] Strategy rolled back: ${adaptation.warnings[0]}`)
