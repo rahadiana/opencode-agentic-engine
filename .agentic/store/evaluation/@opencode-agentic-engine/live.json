@@ -1,0 +1,17 @@
+{
+  "key": "live",
+  "data": {
+    "stepResults": [],
+    "errorRecoveries": [],
+    "navigations": [
+      {
+        "query": ".",
+        "resultsCount": 0,
+        "focused": false
+      }
+    ],
+    "delegations": [],
+    "skillLookups": []
+  },
+  "updatedAt": "2026-06-30T06:45:10.257Z"
+}

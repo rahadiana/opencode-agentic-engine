@@ -1,0 +1,896 @@
+{
+  "key": "live",
+  "data": {
+    "stepResults": [
+      {
+        "stepId": "inventory-tools",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782802832770
+      },
+      {
+        "stepId": "inventory-tools",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782802832771
+      },
+      {
+        "stepId": "confidence-sync-tests-docs",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782803501220
+      },
+      {
+        "stepId": "sync-tests-docs",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782803501223
+      },
+      {
+        "stepId": "sync-tests-docs",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782803501226
+      },
+      {
+        "stepId": "confidence-verify",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782804070597
+      },
+      {
+        "stepId": "verify",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782804070600
+      },
+      {
+        "stepId": "verify",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782804070601
+      },
+      {
+        "stepId": "search-stale-references",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782804759605
+      },
+      {
+        "stepId": "search-stale-references",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782804759606
+      },
+      {
+        "stepId": "confidence-patch-stale-references",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782804770328
+      },
+      {
+        "stepId": "patch-stale-references",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782804770330
+      },
+      {
+        "stepId": "patch-stale-references",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782804770331
+      },
+      {
+        "stepId": "confidence-verify-audit",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782804779351
+      },
+      {
+        "stepId": "verify-audit",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782804779353
+      },
+      {
+        "stepId": "verify-audit",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782804779354
+      },
+      {
+        "stepId": "audit-tool-router-metadata",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782806544888
+      },
+      {
+        "stepId": "audit-tool-router-metadata",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782806544889
+      },
+      {
+        "stepId": "confidence-patch-tool-router-metadata",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782806625551
+      },
+      {
+        "stepId": "patch-tool-router-metadata",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782806625553
+      },
+      {
+        "stepId": "patch-tool-router-metadata",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782806625554
+      },
+      {
+        "stepId": "confidence-test-tool-router-metadata",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782806688859
+      },
+      {
+        "stepId": "test-tool-router-metadata",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782806688861
+      },
+      {
+        "stepId": "test-tool-router-metadata",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782806688862
+      },
+      {
+        "stepId": "audit-agent-permissions",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782807116699
+      },
+      {
+        "stepId": "audit-agent-permissions",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782807116701
+      },
+      {
+        "stepId": "confidence-patch-agent-permissions",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782807266672
+      },
+      {
+        "stepId": "patch-agent-permissions",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782807266673
+      },
+      {
+        "stepId": "patch-agent-permissions",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782807266674
+      },
+      {
+        "stepId": "confidence-verify-agent-permissions",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782807349957
+      },
+      {
+        "stepId": "verify-agent-permissions",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782807349959
+      },
+      {
+        "stepId": "verify-agent-permissions",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782807349960
+      },
+      {
+        "stepId": "confidence-refactor-extract",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782808727994
+      },
+      {
+        "stepId": "refactor-extract",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782808727996
+      },
+      {
+        "stepId": "refactor-extract",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782808727997
+      },
+      {
+        "stepId": "confidence-split-index-plugin-updater",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782809594856
+      },
+      {
+        "stepId": "split-index-plugin-updater",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782809594858
+      },
+      {
+        "stepId": "split-index-plugin-updater",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782809594860
+      },
+      {
+        "stepId": "confidence-test-audit",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782811095750
+      },
+      {
+        "stepId": "test-audit",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782811095751
+      },
+      {
+        "stepId": "test-audit",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782811095752
+      },
+      {
+        "stepId": "test-write",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782811104440
+      },
+      {
+        "stepId": "test-write",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782811104441
+      },
+      {
+        "stepId": "test-verify",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782811122154
+      },
+      {
+        "stepId": "test-verify",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782811122155
+      },
+      {
+        "stepId": "confidence-safe-status-sync",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782811774944
+      },
+      {
+        "stepId": "safe-status-sync",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782811774946
+      },
+      {
+        "stepId": "safe-status-sync",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782811774948
+      },
+      {
+        "stepId": "confidence-create-execute",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782813713698
+      },
+      {
+        "stepId": "create-execute",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782813713700
+      },
+      {
+        "stepId": "create-execute",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782813713701
+      },
+      {
+        "stepId": "create-plan",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782813722814
+      },
+      {
+        "stepId": "create-plan",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782813722816
+      },
+      {
+        "stepId": "confidence-create-review",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782813748196
+      },
+      {
+        "stepId": "create-review",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782813748197
+      },
+      {
+        "stepId": "create-review",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782813748199
+      },
+      {
+        "stepId": "research-gather",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782814891051
+      },
+      {
+        "stepId": "research-gather",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782814891052
+      },
+      {
+        "stepId": "confidence-research-synthesize",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782814903965
+      },
+      {
+        "stepId": "research-synthesize",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782814903967
+      },
+      {
+        "stepId": "research-synthesize",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782814903968
+      },
+      {
+        "stepId": "confidence-research-conclude",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782814963202
+      },
+      {
+        "stepId": "research-conclude",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782814963203
+      },
+      {
+        "stepId": "research-conclude",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782814963205
+      },
+      {
+        "stepId": "p0-config-research",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782815312740
+      },
+      {
+        "stepId": "p0-config-research",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782815312741
+      },
+      {
+        "stepId": "confidence-p0-strict-implement",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782815483030
+      },
+      {
+        "stepId": "p0-strict-implement",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782815483032
+      },
+      {
+        "stepId": "p0-strict-implement",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782815483033
+      },
+      {
+        "stepId": "confidence-p0-strict-verify",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782815606694
+      },
+      {
+        "stepId": "p0-strict-verify",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782815606696
+      },
+      {
+        "stepId": "p0-strict-verify",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782815606697
+      },
+      {
+        "stepId": "confidence-test-write",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782816160543
+      },
+      {
+        "stepId": "test-write",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782816160548
+      },
+      {
+        "stepId": "test-write",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782816160550
+      },
+      {
+        "stepId": "test-audit",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782816171637
+      },
+      {
+        "stepId": "test-audit",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782816171638
+      },
+      {
+        "stepId": "confidence-test-verify",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782816194571
+      },
+      {
+        "stepId": "test-verify",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782816194573
+      },
+      {
+        "stepId": "test-verify",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782816194575
+      },
+      {
+        "stepId": "confidence-review-audit",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782816697358
+      },
+      {
+        "stepId": "review-audit",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782816697363
+      },
+      {
+        "stepId": "review-audit",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782816697365
+      },
+      {
+        "stepId": "confidence-review-report",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782816893922
+      },
+      {
+        "stepId": "review-report",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782816893924
+      },
+      {
+        "stepId": "review-report",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782816893925
+      },
+      {
+        "stepId": "confidence-review-fix",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782816907127
+      },
+      {
+        "stepId": "review-fix",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782816907129
+      },
+      {
+        "stepId": "review-fix",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782816907130
+      },
+      {
+        "stepId": "p1-router-audit",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782817619508
+      },
+      {
+        "stepId": "p1-router-audit",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782817619510
+      },
+      {
+        "stepId": "confidence-p1-router-implement",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782817691467
+      },
+      {
+        "stepId": "p1-router-implement",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782817691470
+      },
+      {
+        "stepId": "p1-router-implement",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782817691471
+      },
+      {
+        "stepId": "confidence-p1-router-tests",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782817702121
+      },
+      {
+        "stepId": "p1-router-tests",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782817702123
+      },
+      {
+        "stepId": "p1-router-tests",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782817702125
+      },
+      {
+        "stepId": "confidence-p1-router-verify",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782817863311
+      },
+      {
+        "stepId": "p1-router-verify",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782817863313
+      },
+      {
+        "stepId": "p1-router-verify",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782817863315
+      },
+      {
+        "stepId": "p1-planner-critic-audit",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818109896
+      },
+      {
+        "stepId": "p1-planner-critic-audit",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818109897
+      },
+      {
+        "stepId": "confidence-p1-planner-critic-implement",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818182994
+      },
+      {
+        "stepId": "p1-planner-critic-implement",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818182996
+      },
+      {
+        "stepId": "p1-planner-critic-implement",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818182998
+      },
+      {
+        "stepId": "confidence-p1-planner-critic-tests",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818194607
+      },
+      {
+        "stepId": "p1-planner-critic-tests",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818194609
+      },
+      {
+        "stepId": "p1-planner-critic-tests",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818194611
+      },
+      {
+        "stepId": "confidence-p1-planner-critic-verify",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818222008
+      },
+      {
+        "stepId": "p1-planner-critic-verify",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818222010
+      },
+      {
+        "stepId": "p1-planner-critic-verify",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818222012
+      },
+      {
+        "stepId": "p1-data-cleaner-audit",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818497208
+      },
+      {
+        "stepId": "p1-data-cleaner-audit",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818497209
+      },
+      {
+        "stepId": "confidence-p1-data-cleaner-implement",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818565338
+      },
+      {
+        "stepId": "p1-data-cleaner-implement",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818565341
+      },
+      {
+        "stepId": "p1-data-cleaner-implement",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818565342
+      },
+      {
+        "stepId": "confidence-p1-data-cleaner-tests",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818576373
+      },
+      {
+        "stepId": "p1-data-cleaner-tests",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818576375
+      },
+      {
+        "stepId": "p1-data-cleaner-tests",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818576375
+      },
+      {
+        "stepId": "confidence-p1-data-cleaner-verify",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818600748
+      },
+      {
+        "stepId": "p1-data-cleaner-verify",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818600750
+      },
+      {
+        "stepId": "p1-data-cleaner-verify",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782818600752
+      },
+      {
+        "stepId": "confidence-p1-delegate-runner",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782819583353
+      },
+      {
+        "stepId": "p1-delegate-runner",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782819583354
+      },
+      {
+        "stepId": "p1-delegate-runner",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782819583358
+      },
+      {
+        "stepId": "confidence-p1-secondbrain-reflect",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782819592602
+      },
+      {
+        "stepId": "p1-secondbrain-reflect",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782819592603
+      },
+      {
+        "stepId": "p1-secondbrain-reflect",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782819592605
+      },
+      {
+        "stepId": "confidence-p1-build-test",
+        "success": false,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782819617122
+      },
+      {
+        "stepId": "p1-build-test",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782819617123
+      },
+      {
+        "stepId": "p1-build-test",
+        "success": true,
+        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
+        "timestamp": 1782819617125
+      }
+    ],
+    "errorRecoveries": [
+      {
+        "errorId": "reflect-p0-strict-implement",
+        "recovered": true
+      }
+    ],
+    "navigations": [
+      {
+        "query": "project structure architecture tools tests entry point package scripts README",
+        "resultsCount": 12,
+        "focused": false
+      },
+      {
+        "query": "tool registration hooks expected tool list dropin load-samedir README tools count index registryTool config chat.params experimental.chat.system.transform",
+        "resultsCount": 20,
+        "focused": false
+      },
+      {
+        "query": "tool registry agentic tools MCP A2A agent loop LLMEngine model agnostic OpenCode SDK hooks",
+        "resultsCount": 12,
+        "focused": false
+      },
+      {
+        "query": "tool catalog TOOL_REGISTRY DEFAULT_METAS expectedAgenticTools registryTool PromptBuilder availableTools",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "add new feature for user authentication",
+        "resultsCount": 1,
+        "focused": true
+      },
+      {
+        "query": "tool catalog",
+        "resultsCount": 3,
+        "focused": true
+      },
+      {
+        "query": "src index plugin registry hooks tool catalog createEngine",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "agentic_execute ConfidenceScorer verificationEvidence confidenceStore execute tool args",
+        "resultsCount": 8,
+        "focused": true
+      },
+      {
+        "query": "system prompt prompt-builder instructions guardrails knowledge-first smart agentic agnostic",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "LLMEngine fallback schema validation DSL executor agent loop verifier confidence prompt dumb model deterministic scaffolding",
+        "resultsCount": 12,
+        "focused": false
+      },
+      {
+        "query": "TODO WorkflowPolicy agentic_execute agent-loop executor verifier dsl-validator",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "workflow-policy config agent.workflowPolicyMode ConfigLoader default config tests",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "TODO P1 schema LLM boundaries llmEngine.call validation parser",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "P1 Schema-First LLM Boundary Audit orchestrator router planner malformed LLM output validation",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "TODO P1 schema-first LLM boundary router-agent planner-critic llmEngine.call",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "planner-critic schema-first LLM boundary candidate plan critic refinement JSON parsing",
+        "resultsCount": 8,
+        "focused": true
+      },
+      {
+        "query": "P1 schema-first LLM boundary data-cleaner llmEngine.call JSON parsing clean format",
+        "resultsCount": 8,
+        "focused": true
+      }
+    ],
+    "delegations": [],
+    "skillLookups": [
+      {
+        "found": true
+      },
+      {
+        "found": true
+      }
+    ]
+  },
+  "updatedAt": "2026-06-30T12:14:28.698Z"
+}
