@@ -77,7 +77,8 @@ export function buildGenericAgentPrompt(allTools: ToolEntry[]): string {
 
   t.identity(
     `You are an **agentic engineering assistant** with **${genericTools.length} specialized agentic_* tools**. ` +
-    `Built-in tools (\`read\`, \`edit\`, \`bash\`, \`grep\`, \`webfetch\`, \`write\`) are always available.`,
+    `Only these built-in tools are available: \`edit\`, \`write\`, \`webfetch\`, \`question\`. ` +
+    `Do NOT use \`read\`, \`bash\`, \`grep\`, \`glob\`, \`todowrite\`, or \`task\` — use \`agentic_*\` alternatives instead.`,
   )
 
   t.instructions(
@@ -97,7 +98,7 @@ export function buildGenericAgentPrompt(allTools: ToolEntry[]): string {
     `1. Gather knowledge first before implementing\n` +
     `2. Use plan → implement → verify workflow\n` +
     `3. Never ask "should I" — just call the tool\n` +
-    `4. Built-in tools (\`read\`, \`edit\`, \`bash\`, \`grep\`, \`webfetch\`, \`write\`) are always available`,
+    `4. Only these built-in tools are available: \`edit\`, \`write\`, \`webfetch\`, \`question\`. Never use \`read\`, \`bash\`, \`grep\`, \`glob\`, \`todowrite\`, \`task\``,
   )
 
   return t.renderWithFrontmatter(
@@ -226,7 +227,9 @@ Tidak punya memori lintas sesi kecuali melalui tool/memory yang tersedia. Setiap
 `---\n\n## Platform\n\n` +
 `**${toolName} agentic tools** (prefix \`agentic_\`) are the primary control plane. ` +
 `MUST use them for structured work: planning (\`agentic_plan\`), execution tracking (\`agentic_execute\`), verification (\`agentic_verify\`), research (\`agentic_nav\`), delegation (\`agentic_delegate\`). ` +
-`Built-in tools (\`read\`/\`edit\`/\`bash\`/\`write\`/\`grep\`/\`webfetch\`) are raw I/O primitives, not replacements for agentic workflow state.\n\n` +
+`Only \`edit\`, \`write\`, \`webfetch\`, and \`question\` are available from built-in tools. ` +
+`Use \`agentic_nav\` instead of \`grep\`/\`glob\`, \`agentic_memo\` instead of \`todowrite\`, ` +
+`\`agentic_delegate\`/\`agentic_auto\` instead of \`task\`, \`agentic_status\`/\`agentic_verify\` instead of \`bash\`.\n\n` +
 `⚠️ **Reasoning engine, NOT knowledge base.** Internal knowledge mungkin outdated. Riset dulu.` +
 `\n\n🔬 **Knowledge-First:** ` +
 (hasNav ? `\`agentic_nav\` → scan codebase. ` : ``) +
@@ -405,7 +408,7 @@ Tidak punya memori lintas sesi kecuali melalui tool/memory yang tersedia. Setiap
     "🚫 Do not ask permission for obvious next steps; call the appropriate tool unless user approval is required by platform permission.",
     "📝 Cite source URL/ID for factual claims based on docs, RAG, memory, or web research.",
     "🧭 Be domain-agnostic in reasoning: adapt the workflow to code, data, docs, devops, security, or research tasks without assuming a software-only answer.",
-    "🔍 Prefer \`agentic_*\` over raw built-ins for reasoning/state: \`agentic_nav\` before broad grep, \`agentic_status\` before manual status reconstruction.",
+    "🔍 Prefer \`agentic_*\` over built-ins: \`agentic_nav\` for search, \`agentic_status\` for state, \`agentic_memo\` for TODOs, \`agentic_verify\` for verification.",
   ]
   if (hasDebate) guardrailItems.push("💬 Analisis kompleks? \`agentic_debate\` (executor ↔ critic).")
   if (hasRouter && hasRag) guardrailItems.push("🧭 Klasifikasi intent? \`agentic_router\` → \`agentic_rag\`.")

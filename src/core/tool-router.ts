@@ -29,15 +29,15 @@ export interface RoutingResult {
 }
 
 // ── Built-in tools that are always available ──────────────────────
-const ALWAYS_EXPOSE = new Set(["read", "edit", "bash", "grep", "webfetch", "write"])
+const ALWAYS_EXPOSE = new Set(["edit", "write", "webfetch", "question"])
 
 // ── Colocation groups: tools that are often used together ─────────
 const TOOL_COLOCATIONS: Record<string, string[]> = {
   plan: ["agentic_plan", "agentic_execute", "agentic_verify", "agentic_reflect"],
   delegate: ["agentic_delegate", "agentic_message", "agentic_pipeline"],
-  search: ["agentic_nav", "agentic_rag", "grep", "glob", "read"],
+  search: ["agentic_nav", "agentic_rag"],
   memory: ["agentic_skill", "agentic_episodes", "agentic_context", "agentic_rag"],
-  debug: ["agentic_reflect", "agentic_guard", "agentic_status", "grep", "read"],
+  debug: ["agentic_reflect", "agentic_guard", "agentic_status", "agentic_nav"],
   evolve: ["agentic_evolve", "agentic_skill", "agentic_status"],
 }
 
@@ -229,7 +229,7 @@ export class ToolRouter {
 
   /**
    * Select the top-K agentic tools for the current context.
-   * Always exposes built-in tools (read, edit, bash, grep, etc) without listing them.
+   * Always exposes built-in tools (edit, write, webfetch, question) without listing them.
    * Uses: keyword scoring + colocation + usage stats → ranked → top K
    */
   selectTools(context: RoutingContext, topK = this.allocatedToolCount): { selected: ToolMeta[]; reasons: string } {

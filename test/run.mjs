@@ -11049,8 +11049,10 @@ passed += hkPassed; failed += hkFailed
 
   // TR-11: buildAlwaysExposeHint
   const hint2 = router.buildAlwaysExposeHint()
-  trAssert(hint2.includes("read"), "TR-11a: always expose includes read")
-  trAssert(hint2.includes("edit"), "TR-11b: always expose includes edit")
+  trAssert(hint2.includes("edit"), "TR-11a: always expose includes edit")
+  trAssert(hint2.includes("write"), "TR-11b: always expose includes write")
+  trAssert(hint2.includes("webfetch"), "TR-11c: always expose includes webfetch")
+  trAssert(hint2.includes("question"), "TR-11d: always expose includes question")
 
   // TR-12: task type inference via colocation groups
   const result5 = router.selectTools({ taskInput: "create a new module", recentTools: [], domain: "code", isSubAgent: false })
