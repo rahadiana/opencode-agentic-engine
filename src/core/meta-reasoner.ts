@@ -132,6 +132,9 @@ export function createDefaultStrategy(label: string = "balanced"): StrategyConfi
 // ── MetaReasoner Class ──────────────────────────────────────────────────
 
 export class MetaReasoner {
+  // ponytail: cap versions to prevent unbounded growth
+  private static readonly MAX_VERSIONS = 100
+
   private versions: StrategyVersion[] = []
   private currentConfig: StrategyConfig
   private performanceHistory: PerformanceRecord[] = []
@@ -151,6 +154,7 @@ export class MetaReasoner {
       reason: "initial",
       createdAt: Date.now(),
     })
+    this._trimVersions()
   }
 
   // ── Performance Recording ────────────────────────────────────────────
@@ -292,6 +296,7 @@ export class MetaReasoner {
         reason: `auto-adapt #${this.adaptationCount}: ${changes.map(c => `${c.name}=${c.to}`).join(", ")}`,
         createdAt: Date.now(),
       })
+      this._trimVersions()
     }
 
     return {
@@ -405,6 +410,7 @@ export class MetaReasoner {
       reason: `auto-rollback (degradation: ${degradation.toFixed(2)})`,
       createdAt: Date.now(),
     })
+    this._trimVersions()
 
     return {
       config: this.currentConfig,
@@ -412,6 +418,13 @@ export class MetaReasoner {
       rolledBack: true,
       adapted: false,
       warnings: [`Performance degraded by ${Math.abs(degradation).toFixed(2)}. Rolled back to version ${prevVersion.version}`],
+    }
+  }
+
+  /** Trim versions array to prevent unbounded growth */
+  private _trimVersions(): void {
+    if (this.versions.length > MetaReasoner.MAX_VERSIONS) {
+      this.versions = this.versions.slice(-MetaReasoner.MAX_VERSIONS)
     }
   }
 
