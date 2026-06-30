@@ -4,6 +4,18 @@
 
 Plugin OpenCode yang mengimplementasikan agentic software engineering workflow berdasarkan paper "The End of Software Engineering" (arXiv:2606.05608).
 
+## Current Priority: Robust Even With Weak Models
+
+Goal berikutnya: buat plugin tetap hebat walau dipakai oleh model yang lemah/bodoh. Prinsip utama: **LLM boleh bodoh, harness harus pintar**. Jangan hanya menambah prompt; pindahkan kecerdasan ke deterministic runtime policy, schema validation, confidence gates, verification evidence, dan fallback yang aman.
+
+Lanjutkan dari `TODO.md`, terutama **P0 — Runtime WorkflowPolicy Gate**:
+
+1. Enforce workflow di runtime, bukan hanya prompt: research → plan → execute → verify → reflect/retry.
+2. Treat LLM output as untrusted; validate with schema before use.
+3. Never let garbage LLM output become success.
+4. Require real verification/evidence before final completion claims.
+5. Keep implementation OpenCode-native and minimal; avoid runtime-agnostic framework work unless explicitly requested.
+
 ## Commands
 
 ```bash
@@ -615,4 +627,3 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 - **Second Brain events**: `agent-loop.ts` now emits `plan.created`, `step.completed`, `step.failed`, `plan.completed` events — SecondBrain auto-tracks execution
 - **Gap #9 feedback events**: New `feedback.recorded` event emitted by `agentic_execute` on user feedback — enables observability + real-time adaptation
 - **1798+ unit tests** (was 1117) — net 0 regressions
-
