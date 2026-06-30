@@ -171,7 +171,7 @@ Each checklist uses STEP 1/2/3... format so weak models can follow sequentially.
 
 ## P4 — Test Coverage Gaps
 
-Status: **in progress**. Added tests for 4 previously untested modules exported by `index.ts`:
+Status: **complete**. Added tests for 4 previously untested modules exported by `index.ts`:
 
 | Module | Tests | Status |
 |--------|-------|--------|
