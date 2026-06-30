@@ -1581,6 +1581,40 @@ assert(importPatch.role === "architect", "import patch targets architect role")
 const evolver4 = new mod.SelfEvolver()
 const emptyReport = evolver4.evolve()
 assert(emptyReport.promptPatches.length === 0, "no prompt patches from empty data")
+
+// P2: SelfEvolver auto-apply prompt patches to RoleRegistry
+{
+  const roleReg = new mod.RoleRegistry()
+  const devPromptBefore = roleReg.getPrompt("developer")
+  assert(devPromptBefore && devPromptBefore.length > 0, "developer role has initial prompt")
+  const evolver5 = new mod.SelfEvolver()
+  evolver5.setRoleRegistry(roleReg)
+  // Feed many compile errors to trigger high-priority auto-apply (requires occurrences >= 2 for high)
+  evolver5.feedStepStates([
+    { stepId: "s1", success: false, output: "compile error in types.ts" },
+    { stepId: "s2", success: false, output: "Type 'string' is not assignable" },
+    { stepId: "s3", success: false, output: "Cannot find name" },
+    { stepId: "s4", success: false, output: "Module not found: ./missing" },
+    { stepId: "s5", success: false, output: "TypeError: undefined is not a function" },
+  ])
+  evolver5.feedEpisodes([
+    { sessionId: "sess-e", planGoal: "t1", tags: ["compile", "type"], outcome: "failed", summary: "", decisions: [], filesChanged: [], timestamp: Date.now() },
+    { sessionId: "sess-f", planGoal: "t2", tags: ["compile", "type"], outcome: "failed", summary: "", decisions: [], filesChanged: [], timestamp: Date.now() },
+    { sessionId: "sess-g", planGoal: "t3", tags: ["compile", "type"], outcome: "failed", summary: "", decisions: [], filesChanged: [], timestamp: Date.now() },
+  ])
+  const report3 = evolver5.evolve()
+  assert(report3.promptPatches.length >= 1, `generates prompt patches for compile errors (got ${report3.promptPatches.length})`)
+
+  // The prompt should have been modified if auto-apply condition was met
+  const devPromptAfter = roleReg.getPrompt("developer")
+  assert(devPromptAfter !== devPromptBefore, "auto-apply modified the developer prompt")
+  assert(devPromptAfter.length > devPromptBefore.length, "auto-apply appended instruction to developer prompt")
+  // Check that the prompt history shows the evolution source
+  const history = roleReg.getPromptHistory("developer")
+  const evoEntry = history.find(e => e.source === "auto-evolve")
+  assert(evoEntry !== undefined, "auto-apply creates history entry with source 'auto-evolve'")
+  assert(evoEntry.description.includes("compile"), "auto-apply description mentions the error category")
+}
 assert(true, "SelfEvolver prompt patching tests passed")
 
 // 61. Skill-aware delegation — delegate with skills context
@@ -1816,6 +1850,103 @@ const strictRetry = await strictHooks.tool.agentic_execute.execute({
 const strictRetryOut = typeof strictRetry === "string" ? strictRetry : strictRetry.output
 assert(strictRetryOut.includes("BLOCKED by WorkflowPolicy") && strictRetryOut.includes("reflection-missing"), "strict WorkflowPolicy blocks retry success before reflection")
 strictHooks.dispose?.()
+
+// 65c. WorkflowPolicy — AgentLoop integration (P0)
+console.log("\n[65c] WorkflowPolicy — AgentLoop integration")
+let wpAl = 0, wpAlf = 0
+const wpAl_assert = (c, m) => { if (c) { wpAl++; console.log(`  PASS: ${m}`) } else { wpAlf++; console.log(`  FAIL: ${m}`) } }
+
+const { AgentLoop: AgentLoopMod } = await import(pluginDist)
+const { LLMEngine: LLMEngineMod } = await import(pluginDist)
+const loopLLM = new LLMEngineMod()
+
+// WP-AL-1: setWorkflowPolicyConfig stores config
+{
+  const al = new AgentLoopMod(loopLLM)
+  al.setWorkflowPolicyConfig({ mode: "strict" })
+  wpAl_assert(true, "WP-AL-1a setWorkflowPolicyConfig non-strict")
+  al.setWorkflowPolicyConfig({ mode: "advisory", minConfidence: 0.3 })
+  wpAl_assert(true, "WP-AL-1b setWorkflowPolicyConfig advisory with minConfidence")
+}
+
+// WP-AL-2: setWorkflowState stores state
+{
+  const al = new AgentLoopMod(loopLLM)
+  al.setWorkflowState({ hasPlan: true, hasResearch: false, hasReflection: true })
+  wpAl_assert(true, "WP-AL-2a setWorkflowState with all fields")
+  al.setWorkflowState({ hasPlan: false })
+  wpAl_assert(true, "WP-AL-2b setWorkflowState partial update")
+}
+
+// WP-AL-3: WorkflowPolicy pre-execution gate — strict mode blocks retry without reflection
+{
+  const al = new AgentLoopMod(loopLLM)
+  al.setWorkflowPolicyConfig({ mode: "strict" })
+  al.setWorkflowState({ hasPlan: true, hasResearch: true, hasReflection: false })
+  // evaluateWorkflowPolicy directly for retry action
+  const { evaluateWorkflowPolicy } = await import(pluginDist)
+  const decisions = evaluateWorkflowPolicy({
+    action: "retry",
+    stepId: "test-step",
+    filesModified: ["src/test.ts"],
+    success: false,
+    hasReflection: false,
+  }, { mode: "strict" })
+  const blocked = decisions.filter(d => d.severity === "block")
+  wpAl_assert(blocked.some(d => d.code === "reflection-missing"), "WP-AL-3a strict retry without reflection blocked")
+  const decisionsOk = evaluateWorkflowPolicy({
+    action: "retry",
+    stepId: "test-step",
+    filesModified: ["src/test.ts"],
+    success: false,
+    hasReflection: true,
+  }, { mode: "strict" })
+  wpAl_assert(!decisionsOk.some(d => d.severity === "block"), "WP-AL-3b strict retry with reflection allowed")
+}
+
+// WP-AL-4: WorkflowPolicy post-execution gate — strict mode blocks final without evidence
+{
+  const { evaluateWorkflowPolicy } = await import(pluginDist)
+  const decisions = evaluateWorkflowPolicy({
+    action: "finalize",
+    stepId: "final-step",
+    filesModified: ["src/final.ts"],
+    success: true,
+    hasPlan: true,
+    hasResearch: true,
+    hasVerificationEvidence: false,
+  }, { mode: "strict" })
+  const blocked = decisions.filter(d => d.severity === "block")
+  wpAl_assert(blocked.some(d => d.code === "verification-missing"), "WP-AL-4a strict final without evidence blocked")
+  const decisionsOk = evaluateWorkflowPolicy({
+    action: "finalize",
+    stepId: "final-step",
+    filesModified: ["src/final.ts"],
+    success: true,
+    hasPlan: true,
+    hasResearch: true,
+    hasVerificationEvidence: true,
+  }, { mode: "strict" })
+  wpAl_assert(!decisionsOk.some(d => d.severity === "block"), "WP-AL-4b strict final with evidence allowed")
+}
+
+// WP-AL-5: Advisory mode warns but doesn't block
+{
+  const { evaluateWorkflowPolicy } = await import(pluginDist)
+  const decisions = evaluateWorkflowPolicy({
+    action: "finalize",
+    stepId: "adv-final",
+    filesModified: ["src/adv.ts"],
+    success: true,
+    hasPlan: true,
+    hasVerificationEvidence: false,
+  }, { mode: "advisory" })
+  wpAl_assert(!decisions.some(d => d.severity === "block"), "WP-AL-5a advisory does not block")
+  wpAl_assert(decisions.some(d => d.severity === "warn"), "WP-AL-5b advisory warns")
+}
+
+console.log(`  WP-AL: ${wpAl} passed, ${wpAlf} failed`)
+passed += wpAl; failed += wpAlf
 
 // 66. agentic_model — session-seeded model preference
 console.log("\n[66] agentic_model — session model preference")

@@ -31,7 +31,10 @@ import { SimulationEngine } from "./simulation-engine.js"
 import { WorldModel } from "./world-model.js"
 import { PatternDiscovery } from "../drift/pattern-discovery.js"
 import { ToolUsageTracker } from "./tool-usage-tracker.js"
+import type { ContinuousEvolution } from "../evolution/continuous-evolution.js"
 import { ToolGuardrailController, DEFAULT_GUARDRAIL_CONFIG, type ToolGuardrailConfig } from "./tool-guardrails.js"
+import { evaluateWorkflowPolicy, formatWorkflowPolicyDecisions } from "./workflow-policy.js"
+import type { WorkflowPolicyInput } from "./workflow-policy.js"
 import { createLogger } from "../observability/logger.js"
 
 const log = createLogger("AgentLoop")
@@ -55,6 +58,8 @@ export interface LoopResult {
   totalIterations: number
   success: boolean
   summary: string
+  /** Adapted MetaReasoner strategy config, if available (P1 feedback loop) */
+  adaptedStrategy?: { label: string; changes: Array<{ name: string; from: number; to: number; reason: string }> }
 }
 
 export interface LoopObserver {
@@ -96,6 +101,9 @@ export class AgentLoop {
   /** PatternDiscovery — recurring error pattern detection */
   private patternDiscovery?: PatternDiscovery
 
+  /** ContinuousEvolution — auto-evolution feedback loop */
+  private continuousEvolution?: ContinuousEvolution
+
   /** ToolUsageTracker — per-tool effectiveness */
   private toolUsageTracker?: ToolUsageTracker
 
@@ -104,6 +112,13 @@ export class AgentLoop {
 
   /** Cumulative output length in current loop */
   private cumulativeOutput = 0
+
+  /** WorkflowPolicy config — gates for autonomous enforcement (P0) */
+  private workflowPolicyConfig?: { mode: "advisory" | "strict"; minConfidence?: number }
+  /** Per-run workflow state tracked from session artifacts */
+  private workflowState: { hasPlan: boolean; hasResearch: boolean; hasReflection: boolean } = {
+    hasPlan: false, hasResearch: false, hasReflection: false,
+  }
 
   /** Graph Harness 3 layers */
   private planningLayer: PlanningLayer
@@ -148,6 +163,21 @@ export class AgentLoop {
     this.guardrails.updateConfig(config)
   }
 
+  /** Configure WorkflowPolicy for autonomous enforcement (P0) */
+  setWorkflowPolicyConfig(config: { mode?: "advisory" | "strict"; minConfidence?: number }): void {
+    this.workflowPolicyConfig = {
+      mode: config.mode ?? "advisory",
+      minConfidence: config.minConfidence,
+    }
+  }
+
+  /** Set workflow state from session artifacts before runLoop */
+  setWorkflowState(state: { hasPlan?: boolean; hasResearch?: boolean; hasReflection?: boolean }): void {
+    if (state.hasPlan !== undefined) this.workflowState.hasPlan = state.hasPlan
+    if (state.hasResearch !== undefined) this.workflowState.hasResearch = state.hasResearch
+    if (state.hasReflection !== undefined) this.workflowState.hasReflection = state.hasReflection
+  }
+
   /** Access guardrails for external inspection (tests, dashboard) */
   getGuardrails(): ToolGuardrailController {
     return this.guardrails
@@ -190,6 +220,11 @@ export class AgentLoop {
 
   setToolUsageTracker(tracker: ToolUsageTracker): void {
     this.toolUsageTracker = tracker
+  }
+
+  /** Set ContinuousEvolution for closed learning loop (P1) */
+  setContinuousEvolution(ce: ContinuousEvolution): void {
+    this.continuousEvolution = ce
   }
 
   /** Set workflow state provider for runtime policy enforcement */
@@ -335,6 +370,29 @@ export class AgentLoop {
         }
       }
 
+      // P0: WorkflowPolicy pre-execution gate
+      // Block retry without reflection in strict mode
+      if (this.workflowPolicyConfig && dagCtx.nodeStates.get(node.id)?.status === "failed") {
+        const isRetry = (dagCtx.nodeStates.get(node.id)?.retryCount ?? 0) > 0
+        const wpMode = this.workflowPolicyConfig.mode === "strict" ? "strict" : "advisory"
+        if (isRetry || wpMode === "strict") {
+          const wpInput: WorkflowPolicyInput = {
+            action: "retry",
+            stepId: node.id,
+            filesModified: [],
+            hasReflection: this.workflowState.hasReflection,
+            success: false,
+          }
+          const wpDecisions = evaluateWorkflowPolicy(wpInput, { mode: wpMode })
+          const blocked = wpDecisions.filter(d => d.severity === "block")
+          if (blocked.length > 0) {
+            const msg = `[WorkflowPolicy] ${formatWorkflowPolicyDecisions(blocked)}`
+            log.warn(`[AgentLoop] ${msg} for step ${node.id}`)
+            return { success: false, output: msg, filesModified: [], error: `WorkflowPolicy blocked: ${blocked[0].code}` }
+          }
+        }
+      }
+
       let result: { success: boolean; output: string; filesModified: string[]; error?: string }
       try {
         result = await stepExecutor(subtask)
@@ -450,6 +508,39 @@ export class AgentLoop {
         }
       }
 
+      // P0: WorkflowPolicy post-execution gate — enforce evidence for final step
+      if (this.workflowPolicyConfig && result.success) {
+        const isFinalStep = this.isAllCompleted(dagPlan, dagCtx)
+        if (isFinalStep) {
+          const wpInput: WorkflowPolicyInput = {
+            action: "finalize",
+            stepId: node.id,
+            filesModified: result.filesModified,
+            success: result.success,
+            hasPlan: true,
+            hasResearch: this.workflowState.hasResearch,
+            hasReflection: this.workflowState.hasReflection,
+            hasVerificationEvidence: true,
+          }
+          const mode = this.workflowPolicyConfig.mode === "strict" ? "strict" : "advisory"
+          const wpDecisions = evaluateWorkflowPolicy(wpInput, {
+            mode,
+            minConfidence: this.workflowPolicyConfig.minConfidence,
+          })
+          const blocked = wpDecisions.filter(d => d.severity === "block")
+          if (blocked.length > 0) {
+            const msg = `[WorkflowPolicy Final] ${formatWorkflowPolicyDecisions(blocked)}`
+            log.warn(`[AgentLoop] ${msg} for final step ${node.id}`)
+            result.success = false
+            result.output = msg
+          }
+          const warnings = wpDecisions.filter(d => d.severity === "warn")
+          if (warnings.length > 0) {
+            result.output = `${formatWorkflowPolicyDecisions(warnings)}\n\n${result.output}`
+          }
+        }
+      }
+
       // ── MetaReasoner: record step performance (Gap #8) ──
       if (this.metaReasoner) {
         try {
@@ -539,6 +630,19 @@ export class AgentLoop {
         error: result.error,
       })
 
+      // P1: Feed step result to ContinuousEvolution for closed learning loop
+      if (this.continuousEvolution) {
+        try {
+          this.continuousEvolution.feedStepResult({
+            stepId: node.id,
+            success: result.success,
+            output: (result.output ?? "").slice(0, 500),
+            sessionId,
+            timestamp: Date.now(),
+          })
+        } catch { /* non-fatal */ }
+      }
+
       return result
     }
 
@@ -594,6 +698,7 @@ export class AgentLoop {
 
     // ── MetaReasoner: adapt strategy post-execution (Gap #8) ──
     // ponytail: adapt every run, only log if changes were applied
+    let adaptedStrategy: LoopResult['adaptedStrategy'] = undefined
     if (this.metaReasoner) {
       try {
         const adaptation = this.metaReasoner.adapt()
@@ -602,12 +707,26 @@ export class AgentLoop {
           for (const c of adaptation.changes) {
             log.info(`  ${c.name}: ${c.from} → ${c.to} (${c.reason})`)
           }
+          adaptedStrategy = { label: adaptation.config.label, changes: adaptation.changes.map(c => ({ name: c.name, from: c.from, to: c.to, reason: c.reason })) }
         }
         if (adaptation.rolledBack && adaptation.warnings.length > 0) {
           log.warn(`[AgentLoop] Strategy rolled back: ${adaptation.warnings[0]}`)
         }
       } catch (e) {
         log.warn(`[AgentLoop] MetaReasoner adapt: ${e}`)
+      }
+    }
+
+    // ── ContinuousEvolution: check if evolution should trigger (P3) ──
+    // ponytail: one-shot check, no persistence of trigger state needed
+    if (this.continuousEvolution) {
+      try {
+        const trigger = this.continuousEvolution.shouldEvolve(sessionId)
+        if (trigger) {
+          log.warn(`[AgentLoop] Evolution trigger: ${trigger.reason} (type: ${trigger.type})`)
+        }
+      } catch (e) {
+        log.warn(`[AgentLoop] shouldEvolve check: ${e}`)
       }
     }
 
@@ -631,6 +750,7 @@ export class AgentLoop {
       totalIterations: iteration || 1,
       success: dagResult.success,
       summary: dagResult.summary,
+      adaptedStrategy,
     }
 
     // ponytail: no wall-clock tracking in DAG runner; consumers don't depend on precise time

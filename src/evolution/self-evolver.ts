@@ -1,6 +1,10 @@
 import type { SkillRecord } from "../memory/skill-store.js"
 import type { Episode } from "../memory/episodic-store.js"
 import type { AgentTask } from "../agents/coordinator.js"
+import type { RoleRegistry } from "../agents/role-registry.js"
+import { createLogger } from "../observability/logger.js"
+
+const log = createLogger("SelfEvolver")
 
 
 export interface EvolutionMetrics {
@@ -71,6 +75,11 @@ export class SelfEvolver {
 
   // Sliding window for success rate calculation
   private readonly successWindowSize = 20
+  private roleRegistry: RoleRegistry | null = null
+
+  /** Provide a RoleRegistry so auto-apply can patch role prompts (P2) */
+  setRoleRegistry(rr: RoleRegistry): void { this.roleRegistry = rr }
+
   feedSkills(skills: SkillRecord[]): void { this.skills = skills }
   feedEpisodes(episodes: Episode[]): void {
     this.episodes = (episodes ?? []).filter(e => {
@@ -107,7 +116,20 @@ export class SelfEvolver {
         (patch.priority === "medium" && patch.occurrences >= this.autoApplyMediumMin)
       
       if (shouldAutoApply) {
-        // Mark as applied (actual prompt injection happens in RoleRegistry)
+        // P2: Actually apply the patch via RoleRegistry
+        if (this.roleRegistry) {
+          const existing = this.roleRegistry.getPrompt(patch.role)
+          if (existing) {
+            // Append instruction to existing prompt
+            const updated = existing.endsWith("\n")
+              ? `${existing}${patch.instruction}`
+              : `${existing}\n${patch.instruction}`
+            const ok = this.roleRegistry.updatePrompt(patch.role, updated, "auto-evolve", `Auto-apply: ${patch.errorCategory} error pattern (${patch.occurrences}x)`)
+            if (ok) {
+              log.info(`Auto-applied prompt patch for "${patch.role}": ${patch.instruction.slice(0, 80)}...`)
+            }
+          }
+        }
         appliedPatches.push(patch)
       }
     }

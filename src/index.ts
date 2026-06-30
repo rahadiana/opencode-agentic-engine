@@ -380,6 +380,7 @@ const createEngine: Plugin = async (input, _options) => {
   const roleRegistry = new RoleRegistry()
   const schemaVersion = new MemorySchemaVersion()
   const selfEvolver = new SelfEvolver()
+  selfEvolver.setRoleRegistry(roleRegistry) // P2: auto-apply prompt patches to roles
   const continuousEvolution = new ContinuousEvolution()
   const patternDiscovery = new PatternDiscovery()
 const liveEvaluator = new LiveEvaluator()
@@ -516,10 +517,18 @@ const confidenceStore = new ConfidenceStore()
   agentLoop.setWorldModel(worldModel)
   agentLoop.setPatternDiscovery(patternDiscovery)
   agentLoop.setToolUsageTracker(toolUsageTracker)
+  // Wire ContinuousEvolution for closed learning loop (P1)
+  agentLoop.setContinuousEvolution(continuousEvolution)
   // Wire guardrails from config
   if (config.agent.toolGuardrails) {
     agentLoop.setGuardrailConfig(config.agent.toolGuardrails)
   }
+  // Wire WorkflowPolicy config (P0: enforce gates in autonomous execution)
+  const wfMode = config.agent.dumbModelMode ? "strict" : (config.agent.workflowPolicyMode ?? "advisory")
+  agentLoop.setWorkflowPolicyConfig({
+    mode: wfMode,
+    minConfidence: config.agent.dumbModelMode ? 0.2 : undefined,
+  })
   const stateStore = new StateStore({ worktree })
   // SQLite backend — lebih cepat dari file JSON, support structured queries
   // Graceful fallback: jika better-sqlite3 (Node) atau bun:sqlite (Bun) gak available
@@ -6274,6 +6283,15 @@ const confidenceStore = new ConfidenceStore()
               warnings: [],
             } as any)
 
+            // P0: Set workflow state from session artifacts before autonomous execution
+            {
+              const artifacts = sessionStore.getOrCreate(context.sessionID).artifacts
+              agentLoop.setWorkflowState({
+                hasPlan: artifacts.has("workflow:planned"),
+                hasResearch: artifacts.has("workflow:researched"),
+                hasReflection: artifacts.has("workflow:reflected"),
+              })
+            }
             const loopResult = await agentLoop.runLoop(
               context.sessionID,
               executor,
@@ -6293,6 +6311,11 @@ const confidenceStore = new ConfidenceStore()
             )
             verifyPassed = loopResult.success
             completedSteps.push(...loopResult.completedSteps)
+            // P1: Store adapted strategy for future planning feedback loop
+            if (loopResult.adaptedStrategy) {
+              const artifacts = sessionStore.getOrCreate(context.sessionID).artifacts
+              artifacts.set("meta:adaptedStrategy", JSON.stringify(loopResult.adaptedStrategy))
+            }
             verifyNote = loopResult.success
               ? `✅ AgentLoop: ${loopResult.completedSteps.length} steps`
               : `⚠️ AgentLoop: ${loopResult.completedSteps.length} ok, ${loopResult.failedSteps.length} failed`
@@ -7165,3 +7188,5 @@ export { ErrorRecovery } from "./core/error-recovery.js"
 export { AlignmentGate } from "./core/alignment-gate.js"
 export { EconomicModel } from "./core/economic-model.js"
 export { writeFiles, type FileWriteEntry } from "./core/execution-helpers.js"
+export { AgentLoop, type AgentLoopConfig, type LoopResult, type LoopObserver } from "./core/agent-loop.js"
+export { evaluateWorkflowPolicy, formatWorkflowPolicyDecisions, verificationEvidenceFailed, type WorkflowPolicyInput, type WorkflowPolicyDecision, type WorkflowPolicyOptions, type WorkflowAction, type WorkflowSeverity } from "./core/workflow-policy.js"
