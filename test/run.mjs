@@ -9465,6 +9465,7 @@ function ss_assert(cond, msg) { if (cond) { ss++ } else { console.error(`  ❌ $
 
   // SS-2: Set lalu Get (read-after-write)
   store.set("session", "test-key", { hello: "world", num: 42 })
+  store.flushSync() // flush write-behind queue so SS-8 can read from disk
   const val = store.get("session", "test-key")
   ss_assert(val?.hello === "world", "SS-2a get returns set data")
   ss_assert(val?.num === 42, "SS-2b numeric field preserved")
@@ -9511,6 +9512,7 @@ function ss_assert(cond, msg) { if (cond) { ss++ } else { console.error(`  ❌ $
 
   // SS-9: reload() re-reads from disk
   store.set("session", "pre-reload", { ok: true })
+  store.flushSync() // flush write-behind queue so file is on disk
   // Direct file write (simulate external change)
   const filePath2 = `${tmpDir}/.agentic/store/session/pre-reload.json`
   const raw2 = fsMod.readFileSync(filePath2, "utf8")
@@ -9573,6 +9575,7 @@ function ss_assert(cond, msg) { if (cond) { ss++ } else { console.error(`  ❌ $
   // SS-16: Scope isolation
   store.set("episodes", "ep-1", { project: "alpha" }, "project-alpha")
   store.set("episodes", "ep-1", { project: "beta" }, "project-beta")
+  store.flushSync() // flush so SS-17 can read from disk
   const alphaEp = store.get("episodes", "ep-1", "project-alpha")
   const betaEp = store.get("episodes", "ep-1", "project-beta")
   ss_assert(alphaEp?.project === "alpha", "SS-16a scope alpha isolated")
@@ -9602,6 +9605,7 @@ function ss_assert(cond, msg) { if (cond) { ss++ } else { console.error(`  ❌ $
 
   // SS-20: reload with scope
   store.set("episodes", "reload-scope", { v: 1 }, "scope-r")
+  store.flushSync() // flush write-behind queue so file is on disk
   // Direct file write (simulate external change)
   const scopeRDir = `${tmpDir}/.agentic/store/episodes/@scope-r`
   const scopeRFile = `${scopeRDir}/reload-scope.json`

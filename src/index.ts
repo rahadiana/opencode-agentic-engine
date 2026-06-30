@@ -7078,6 +7078,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
       try { stateStore.set("prompts", "state", roleRegistry.getAllPromptStates()) } catch { /* non-fatal */ }
       try { stateStore.set("evolution", "trend", continuousEvolution.toJSON(), projectId) } catch { /* non-fatal */ }
       try { stateStore.set("evaluation", "live", liveEvaluator.toJSON(), projectId) } catch { /* non-fatal */ }
+      try { stateStore.flushSync() } catch { /* non-fatal */ } // ponytail: flush write-behind queue before shutdown
       try { await traceLogger.dispose() } catch { /* non-fatal */ }
       try { eventBus.clear() } catch { /* non-fatal */ } // ponytail: prevent subscriber leak across plugin reloads
     },

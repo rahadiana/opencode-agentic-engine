@@ -80,6 +80,11 @@ export class StateStore {
   /** Track namespaces yang sudah di-load dari disk */
   private loaded = new Set<string>()
 
+  // ponytail: write-behind queue — batch writes, flush on timer + dispose
+  private writeQueue = new Map<string, { baseDir: string; namespace: string; key: string; content: string; scope?: string }>()
+  private flushTimer: ReturnType<typeof setTimeout> | null = null
+  private readonly FLUSH_INTERVAL = 2000
+
   constructor(config: StateStoreConfig) {
     this.localDir = resolve(config.worktree, ".agentic", "store")
     this.globalDir = config.globalDir ?? resolve(homedir(), ".config", "opencode", "agentic-store")
@@ -232,12 +237,43 @@ export class StateStore {
     const scopeCfg = NAMESPACE_SCOPE[namespace] ?? "local"
     const json = JSON.stringify(entry, null, 2)
 
+    // ponytail: enqueue async write instead of immediate sync I/O
     if (scopeCfg === "global" || scopeCfg === "both") {
-      this._writeFile(this.globalDir, namespace, key, json, scope)
+      this._enqueueWrite(this.globalDir, namespace, key, json, scope)
     }
     if (scopeCfg === "local" || scopeCfg === "both") {
-      this._writeFile(this.localDir, namespace, key, json, scope)
+      this._enqueueWrite(this.localDir, namespace, key, json, scope)
     }
+  }
+
+  // ponytail: write-behind queue — debounce writes, flush on timer + dispose
+  private _enqueueWrite(baseDir: string, namespace: string, key: string, content: string, scope?: string): void {
+    const qk = `${baseDir}:${namespace}:${key}${scope ? `:${scope}` : ""}`
+    this.writeQueue.set(qk, { baseDir, namespace, key, content, scope })
+    this._scheduleFlush()
+  }
+
+  private _scheduleFlush(): void {
+    if (this.flushTimer) return
+    this.flushTimer = setTimeout(() => this._flush(), this.FLUSH_INTERVAL)
+  }
+
+  /** Flush all queued writes to disk. Called automatically on timer and manually at dispose. */
+  flushSync(): void {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer)
+      this.flushTimer = null
+    }
+    this._flush()
+  }
+
+  private _flush(): void {
+    this.flushTimer = null
+    if (this.writeQueue.size === 0) return
+    for (const [, item] of this.writeQueue) {
+      this._writeFile(item.baseDir, item.namespace, item.key, item.content, item.scope)
+    }
+    this.writeQueue.clear()
   }
 
   /** Write file JSON. Buat direktori jika belum ada. */
