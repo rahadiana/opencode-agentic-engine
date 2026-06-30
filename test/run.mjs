@@ -734,6 +734,37 @@ const plexExec = await hooks.tool.agentic_parallel.execute({ action: "execute" }
 const plexOut = typeof plexExec === "string" ? plexExec : plexExec.output
 assert(plexOut.includes("Execution") || plexOut.includes("passed") || plexOut.includes("Failed"), "parallel execute produces result")
 
+// 42c. P1 schema-first LLM boundary — parallel LLM runner
+console.log("\n[42c] agentic_parallel — LLM output schema gate")
+const parallelSchemaDir = join(projectDir, "parallel-schema")
+rmSync(parallelSchemaDir, { recursive: true, force: true })
+mkdirSync(parallelSchemaDir, { recursive: true })
+const parallelGood = new mod.ParallelExecutor().llmStepRunner({
+  llmEngine: {
+    call: async () => ({ content: JSON.stringify({ files: [{ path: "src/generated.ts", content: "export const ok = true\n" }], summary: "generated" }) }),
+    getMemoryContext: () => "",
+  },
+  projectDir: parallelSchemaDir,
+  planGoal: "schema gate happy path",
+  sessionId: freshSid(),
+})
+const parallelGoodResult = await parallelGood({ id: "schema-good", description: "write valid file", dependsOn: [] })
+assert(parallelGoodResult.success === true, "P1-LLM-boundary valid JSON schema succeeds")
+assert(existsSync(join(parallelSchemaDir, "src/generated.ts")), "P1-LLM-boundary writes only after schema validation")
+const parallelBad = new mod.ParallelExecutor().llmStepRunner({
+  llmEngine: {
+    call: async () => ({ content: JSON.stringify({ files: [{ path: "../escape.ts", content: 123 }], summary: [] }) }),
+    getMemoryContext: () => "",
+  },
+  projectDir: parallelSchemaDir,
+  planGoal: "schema gate malformed shape",
+  sessionId: freshSid(),
+})
+const parallelBadResult = await parallelBad({ id: "schema-bad", description: "reject malformed file payload", dependsOn: [] })
+assert(parallelBadResult.success === false, "P1-LLM-boundary malformed JSON shape is safe failure")
+assert(String(parallelBadResult.error || "").includes("schema validation failed"), "P1-LLM-boundary reports schema validation failure")
+assert(!existsSync(join(projectDir, "escape.ts")), "P1-LLM-boundary rejected traversal path before write")
+
 // 43. agentic_status — full dashboard (merged from agentic_dashboard)
 console.log("\n[43] agentic_status — full dashboard")
 const dbResult = await hooks.tool.agentic_status.execute({ detail: "full" }, mockCtx(freshSid()))

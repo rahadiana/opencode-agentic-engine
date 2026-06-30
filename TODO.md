@@ -105,6 +105,8 @@ Tests:
 
 ## P1 — Schema-First LLM Boundary Audit
 
+Status: **started**. First minimal hardening slice covers `ParallelExecutor.llmStepRunner`: LLM JSON output is now parsed and validated with existing `SchemaValidator` before file writes. Malformed shapes, wrong field types, absolute paths, and `..` traversal paths return safe failure instead of writing files or reporting success. Regression tests cover valid payload and malformed payload behavior.
+
 Audit every `llmEngine.call(...)`.
 
 Goal: no internal LLM output should be trusted unless parsed and validated.

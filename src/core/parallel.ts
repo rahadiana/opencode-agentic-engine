@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process"
 import { writeFile, mkdir } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { join, dirname } from "node:path"
+import { SchemaValidator, type SchemaField } from "./skill-schema.js"
 
 export interface ParallelPlan {
   phases: Phase[]
@@ -46,6 +47,38 @@ export interface ConcurrentExecutionReport {
   failedSteps: number
   totalDurationMs: number
   summary: string
+}
+
+const llmStepImplementationSchema: Record<string, SchemaField> = {
+  files: {
+    type: "array",
+    required: true,
+    items: {
+      type: "object",
+      properties: {
+        path: { type: "string", required: true, minLength: 1, pattern: "^(?!/)(?!.*\\.\\.).+" },
+        content: { type: "string", required: true },
+      },
+    },
+  },
+  summary: { type: "string", required: false, default: "" },
+}
+
+function parseLLMStepImplementation(raw: string): { files: Array<{ path: string; content: string }>; summary: string } {
+  const parsed = JSON.parse(raw) as unknown
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("LLM output must be a JSON object")
+  }
+
+  const validator = new SchemaValidator()
+  const validated = validator.validate(llmStepImplementationSchema, parsed as Record<string, unknown>, { allowExtraFields: false })
+  if (!validated.valid) {
+    const messages = validated.errors.map(e => `${e.path}: ${e.message}`).join("; ")
+    throw new Error(`LLM output schema validation failed: ${messages}`)
+  }
+
+  const data = validated.data as { files: Array<{ path: string; content: string }>; summary?: string }
+  return { files: data.files, summary: data.summary ?? "" }
 }
 
 export class ParallelExecutor {
@@ -203,13 +236,13 @@ Only include files that need changing. Return ONLY valid JSON.` + opts.llmEngine
           temperature: 0.3,
         })
 
-        let impl: { files?: Array<{ path: string; content: string }>; summary?: string }
-        try { impl = JSON.parse(resp.content) } catch {
-          return { stepId: step.id, success: false, error: "LLM JSON parse error", output: resp.content, filesModified: [] }
+        let impl: { files: Array<{ path: string; content: string }>; summary: string }
+        try { impl = parseLLMStepImplementation(resp.content) } catch (e) {
+          return { stepId: step.id, success: false, error: (e as Error).message, output: resp.content, filesModified: [] }
         }
 
         const files: string[] = []
-        for (const file of impl.files ?? []) {
+        for (const file of impl.files) {
           const fullPath = join(opts.projectDir, file.path)
           await mkdir(dirname(fullPath), { recursive: true })
           await writeFile(fullPath, file.content, "utf-8")
@@ -219,7 +252,7 @@ Only include files that need changing. Return ONLY valid JSON.` + opts.llmEngine
         return {
           stepId: step.id,
           success: true,
-          output: impl.summary ?? step.description,
+          output: impl.summary || step.description,
           filesModified: files,
         }
       } catch (e) {
