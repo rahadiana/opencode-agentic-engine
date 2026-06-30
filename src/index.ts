@@ -1277,7 +1277,8 @@ const confidenceStore = new ConfidenceStore()
           
           const session = sessionStore.getOrCreate(context.sessionID)
           session.currentTaskType = taskType
-          const workflowPolicyMode = configLoader.get().agent.workflowPolicyMode ?? "advisory"
+          const agentCfg = configLoader.get().agent
+          const workflowPolicyMode = agentCfg.dumbModelMode ? "strict" : (agentCfg.workflowPolicyMode ?? "advisory")
           const priorState = executor.getStepState(context.sessionID, args.stepId)
           const isRetry = !!priorState?.result && !priorState.result.success && args.success
           const prePolicyDecisions = evaluateWorkflowPolicy({
@@ -1414,8 +1415,9 @@ const confidenceStore = new ConfidenceStore()
                   modelRegistry.recordHallucination(modelId)
                 }
 
-                const threshold = configLoader.get().agent.hallucinationThreshold
-                const blockEnabled = configLoader.get().agent.blockOnHallucination
+                const dumbMode = configLoader.get().agent.dumbModelMode ?? false
+                const threshold = dumbMode ? Math.min(configLoader.get().agent.hallucinationThreshold, 0.2) : configLoader.get().agent.hallucinationThreshold
+                const blockEnabled = dumbMode || configLoader.get().agent.blockOnHallucination
                 if (hallucinationRate >= threshold && blockEnabled) {
                   response += `\n🛑 **BLOCKED**: Hallucination rate ${(hallucinationRate * 100).toFixed(1)}% exceeds threshold ${(threshold * 100).toFixed(1)}%\n`
                   response += `This step will be marked as FAILED to prevent cascading errors from phantom files/functions.\n`

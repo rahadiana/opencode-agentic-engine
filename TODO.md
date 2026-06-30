@@ -105,7 +105,16 @@ Tests:
 
 ## P1 — Schema-First LLM Boundary Audit
 
-Status: **started**. First minimal hardening slice covers `ParallelExecutor.llmStepRunner`: LLM JSON output is now parsed and validated with existing `SchemaValidator` before file writes. Malformed shapes, wrong field types, absolute paths, and `..` traversal paths return safe failure instead of writing files or reporting success. Regression tests cover valid payload and malformed payload behavior. Second slice covers `Orchestrator.runSemanticValidation`: LLM cross-validation JSON now requires `{ passed:boolean, issues:[{ severity:"error|warning|info", description:string, source?:string }], summary?:string }`; invalid output is logged and ignored instead of being trusted. Third slice covers `RouterAgent.route`: LLM intent JSON now requires `{ category:string, confidence:number 0..1, reasoning:string }`; invalid output or unknown categories fall back to deterministic keyword routing. Fourth slice covers `PlannerCritic`: candidate plans, critic scores, and refinements are schema-validated before becoming subtasks/scores. Fifth slice covers `DataCleaner.validate`: LLM validation JSON now requires `{ valid:boolean, issues:string[] }`; malformed output or LLM errors fail closed instead of returning `valid:true`. Sixth slice: delegate step runner in `agentic_parallel` now reuses exported `parseLLMStepImplementation` for schema validation of LLM file-write payloads before `writeFileSync`; prevents garbage/malicious paths from weak models. Seventh slice: `SecondBrain.reflect` and `_reflectViaDelegate` now use `parseReflectionPayload` to validate LLM reflection JSON `{ summary:string, conflicts:string[], planUpdates:string[], newInfo:string[], actionItems:string[] }`; malformed output falls back to safe text summary instead of propagating garbage types. Eighth slice: `writeFiles` in `execution-helpers.ts` now uses `resolve`+`relative` to reject paths that escape `projectDir` via absolute paths or `..` traversal — the shared chokepoint for all LLM-driven file writes.
+Status: **complete** for all structured JSON boundaries. Eight slices hardened every `llmEngine.call()` site that parses structured JSON output. Remaining call sites are freeform text (debate executor/critic/cleaner, DataCleaner.clean) or already safe via try/catch with template fallback (PR description). Summary of all slices:
+
+1. `ParallelExecutor.llmStepRunner` — SchemaValidator on file-write JSON payloads
+2. `Orchestrator.runSemanticValidation` — cross-validation JSON schema gate
+3. `RouterAgent.route` — intent classifier JSON with keyword fallback
+4. `PlannerCritic` — candidate plans, critic scores, refinements validated
+5. `DataCleaner.validate` — fail-closed on malformed validation output
+6. Delegate step runner — reuses `parseLLMStepImplementation` from parallel.ts
+7. `SecondBrain.reflect` — `parseReflectionPayload` type validation
+8. `writeFiles` — path traversal guard (`resolve`+`relative`) at the shared chokepoint
 
 Audit every `llmEngine.call(...)`.
 
@@ -130,9 +139,14 @@ Tests:
 
 ## P2 — Dumb Model Mode
 
-Add config flag only after P0/P1 exist.
+Status: **complete**. Config flag `agent.dumbModelMode: boolean` added. When `true`:
 
-Possible config:
+- `workflowPolicyMode` forced to `"strict"` (blocks unsafe completion/retry without evidence/reflection)
+- `hallucinationThreshold` capped at `0.2` (lower = stricter)
+- `blockOnHallucination` forced `true` (hallucinatory steps become failures)
+- Existing P0/P1 schema validators and path traversal guards apply regardless of mode
+
+Config example:
 
 ```json
 {
@@ -142,15 +156,7 @@ Possible config:
 }
 ```
 
-Behavior:
-
-- Shorter prompts.
-- More JSON-only internal calls.
-- Stricter workflow gates.
-- More deterministic fallback.
-- Lower trust in model-generated claims.
-
-Do not implement this first. It is mostly a switch over stronger primitives from P0/P1.
+Default: `false` (no behavioral change for existing users).
 
 ## P3 — Procedural Skill Injection
 

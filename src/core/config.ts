@@ -128,6 +128,7 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
       softBlockReliability: { type: "number", min: 0, max: 1 },
       minSampleSize: { type: "number", min: 1 },
       workflowPolicyMode: { type: "string", values: ["advisory", "strict"] },
+      dumbModelMode: { type: "boolean" },
     })
     // Validate nested deepVerification
     const dv = (cfg.agent as Record<string, unknown>).deepVerification
@@ -242,6 +243,8 @@ export interface AgentConfig {
   toolGuardrails?: ToolGuardrailAgentConfig
   /** Runtime workflow enforcement: advisory warns, strict blocks unsafe completion */
   workflowPolicyMode?: "advisory" | "strict"
+  /** Dumb model mode: assumes LLM is unreliable. Forces strict workflow, lower hallucination threshold, blocks on hallucination. */
+  dumbModelMode?: boolean
 }
 
 /** Config for ToolGuardrailController — infinite loop detection */
