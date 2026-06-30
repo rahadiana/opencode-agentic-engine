@@ -38,8 +38,10 @@ export interface SemanticCacheEntry {
   response: LLMResponse
   /** When this entry was cached */
   timestamp: number
-  /** Tokenized query for fast similarity computation */
+  /** Tokenized query */
   tokens: string[]
+  /** Precomputed TF-IDF vector — computed once on set() to avoid O(n²) recompute on every get() */
+  vector: Map<string, number>
 }
 
 export interface SemanticCacheConfig {
@@ -119,32 +121,33 @@ export class SemanticCache {
       return null
     }
 
+    // ponytail: compute IDF once for all unique terms, not per entry (was O(n²))
     const corpus = [
       { tokens: queryTokens },
       ...activeEntries,
     ]
+    const allTerms = new Set<string>()
+    for (const doc of corpus) {
+      for (const t of doc.tokens) allTerms.add(t)
+    }
+    const idfCache = new Map<string, number>()
+    for (const term of allTerms) {
+      idfCache.set(term, computeIdf(term, corpus))
+    }
 
-    // Compute TF-IDF vector for the query
+    // Compute TF-IDF vector for the query once
     const queryTf = computeTf(queryTokens)
     const queryVec = new Map<string, number>()
     for (const [term, count] of queryTf) {
-      const idf = computeIdf(term, corpus)
-      queryVec.set(term, (count / queryTokens.length) * idf)
+      queryVec.set(term, (count / queryTokens.length) * (idfCache.get(term) ?? 1))
     }
 
-    // Find best match
+    // Find best match using precomputed entry vectors
     let bestSimilarity = 0
     let bestEntry: SemanticCacheEntry | null = null
 
     for (const entry of activeEntries) {
-      const entryTf = computeTf(entry.tokens)
-      const entryVec = new Map<string, number>()
-      for (const [term, count] of entryTf) {
-        const idf = computeIdf(term, corpus)
-        entryVec.set(term, (count / entry.tokens.length) * idf)
-      }
-
-      const similarity = cosineSimilarity(queryVec, entryVec)
+      const similarity = cosineSimilarity(queryVec, entry.vector)
       if (similarity > bestSimilarity) {
         bestSimilarity = similarity
         bestEntry = entry
@@ -172,11 +175,22 @@ export class SemanticCache {
       this.evictOldest()
     }
 
+    // ponytail: precompute TF-IDF vector once on set() so get() doesn't recompute per entry
+    const corpus = this.entries.map(e => ({ tokens: e.tokens }))
+    corpus.push({ tokens })
+    const tf = computeTf(tokens)
+    const vector = new Map<string, number>()
+    for (const [term, count] of tf) {
+      const idf = computeIdf(term, corpus)
+      vector.set(term, (count / tokens.length) * idf)
+    }
+
     this.entries.push({
       query,
       response,
       timestamp: Date.now(),
       tokens,
+      vector, // precomputed TF-IDF
     })
   }
 
