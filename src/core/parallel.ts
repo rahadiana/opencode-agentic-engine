@@ -64,7 +64,7 @@ const llmStepImplementationSchema: Record<string, SchemaField> = {
   summary: { type: "string", required: false, default: "" },
 }
 
-function parseLLMStepImplementation(raw: string): { files: Array<{ path: string; content: string }>; summary: string } {
+export function parseLLMStepImplementation(raw: string): { files: Array<{ path: string; content: string }>; summary: string } {
   const parsed = JSON.parse(raw) as unknown
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("LLM output must be a JSON object")

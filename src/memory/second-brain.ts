@@ -23,6 +23,42 @@ import type { MemoryOrchestrator } from "./memory-orchestrator.js"
 import type { LLMEngine } from "../core/llm.js"
 import type { AgentRuntime } from "../agents/agent-runtime.js"
 
+// ── Reflection payload schema ──────────────────────────────────────
+
+/** Shape expected from LLM reflection JSON output */
+export interface ReflectionPayload {
+  summary: string
+  conflicts: string[]
+  planUpdates: string[]
+  newInfo: string[]
+  actionItems: string[]
+}
+
+/**
+ * Parse and validate LLM reflection JSON. Returns null on invalid shape.
+ * Ensures every field is the correct type; garbage from weak models is rejected.
+ */
+export function parseReflectionPayload(raw: string): ReflectionPayload | null {
+  try {
+    const parsed = JSON.parse(raw)
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null
+    if (typeof parsed.summary !== "string") return null
+    if (!Array.isArray(parsed.conflicts) || !parsed.conflicts.every((c: unknown) => typeof c === "string")) return null
+    if (!Array.isArray(parsed.planUpdates) || !parsed.planUpdates.every((c: unknown) => typeof c === "string")) return null
+    if (!Array.isArray(parsed.newInfo) || !parsed.newInfo.every((c: unknown) => typeof c === "string")) return null
+    if (!Array.isArray(parsed.actionItems) || !parsed.actionItems.every((c: unknown) => typeof c === "string")) return null
+    return {
+      summary: parsed.summary,
+      conflicts: parsed.conflicts,
+      planUpdates: parsed.planUpdates,
+      newInfo: parsed.newInfo,
+      actionItems: parsed.actionItems,
+    }
+  } catch {
+    return null
+  }
+}
+
 // ── Types ──────────────────────────────────────────────────────────
 
 export interface Decision {
@@ -247,14 +283,14 @@ export class SecondBrain {
               actionItems = delegateResult.actionItems
             }
           } else {
-            try {
-              const parsed = JSON.parse(resp.content)
-              summary = parsed.summary ?? ""
-              conflicts = parsed.conflicts ?? []
-              planUpdates = parsed.planUpdates ?? []
-              newInfo = parsed.newInfo ?? []
-              actionItems = parsed.actionItems ?? []
-            } catch {
+            const validated = parseReflectionPayload(resp.content)
+            if (validated) {
+              summary = validated.summary
+              conflicts = validated.conflicts
+              planUpdates = validated.planUpdates
+              newInfo = validated.newInfo
+              actionItems = validated.actionItems
+            } else {
               summary = `Reflection: ${resp.content.slice(0, 300)}`
             }
           }
@@ -334,23 +370,14 @@ export class SecondBrain {
 
       if (!result.success || !result.output) return null
 
-      try {
-        const parsed = JSON.parse(result.output)
-        return {
-          summary: parsed.summary ?? "",
-          conflicts: parsed.conflicts ?? [],
-          planUpdates: parsed.planUpdates ?? [],
-          newInfo: parsed.newInfo ?? [],
-          actionItems: parsed.actionItems ?? [],
-        }
-      } catch {
-        return {
-          summary: `Delegated reflection: ${result.output.slice(0, 300)}`,
-          conflicts: [],
-          planUpdates: [],
-          newInfo: [],
-          actionItems: [],
-        }
+      const validated = parseReflectionPayload(result.output)
+      if (validated) return validated
+      return {
+        summary: `Delegated reflection: ${result.output.slice(0, 300)}`,
+        conflicts: [],
+        planUpdates: [],
+        newInfo: [],
+        actionItems: [],
       }
     } catch {
       return null

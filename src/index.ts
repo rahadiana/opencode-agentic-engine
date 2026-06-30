@@ -33,7 +33,7 @@ import { MemoryOrchestrator } from "./memory/memory-orchestrator.js"
 import { ConsolidationScheduler } from "./memory/consolidation-scheduler.js"
 import { initSecondBrain, getSecondBrain } from "./memory/second-brain.js"
 import { HallucinationGuard, type ClaimResult, type HallucinationCheck } from "./drift/hallucination-guard.js"
-import { ParallelExecutor } from "./core/parallel.js"
+import { ParallelExecutor, parseLLMStepImplementation } from "./core/parallel.js"
 import { Dashboard } from "./observability/dashboard.js"
 import { createLogger, setGlobalLogClient } from "./observability/logger.js"
 import { CheckpointSystem } from "./drift/checkpoints.js"
@@ -3819,13 +3819,14 @@ const confidenceStore = new ConfidenceStore()
                     userPrompt: `Goal: ${session.plan!.intent.goal}\nStep: ${step.description}${memCtx}`,
                     jsonMode: true, temperature: 0.3, maxTokens: 2048,
                   })
-                  let impl: { files?: Array<{ path: string; content: string }>; summary?: string }
-                  try { impl = JSON.parse(resp.content) } catch {
-                    await coordinator.updateTask(context.sessionID, taskId, "failed", resp.content)
-                    return { stepId: step.id, success: false, error: "LLM JSON parse error", output: resp.content, filesModified: [] }
+                  let impl: { files: Array<{ path: string; content: string }>; summary: string }
+                  try { impl = parseLLMStepImplementation(resp.content) } catch (parseErr) {
+                    const msg = parseErr instanceof Error ? parseErr.message : "LLM JSON parse/schema error"
+                    await coordinator.updateTask(context.sessionID, taskId, "failed", msg)
+                    return { stepId: step.id, success: false, error: msg, output: resp.content, filesModified: [] }
                   }
                   const files: string[] = []
-                  for (const f of impl.files ?? []) {
+                  for (const f of impl.files) {
                     const abs = join(cwd, f.path)
                     mkdirSync(dirname(abs), { recursive: true })
                     writeFileSync(abs, f.content, "utf-8")
@@ -6922,7 +6923,7 @@ export { ConstraintManifold, type ConstraintViolation, type ConstraintCheck, typ
 export { type SkillLifecycleStage, type MaturationCriteria } from "./memory/skill-store.js"
 export { LLMEngine } from "./core/llm.js"
 export { type LLMConfig, type LLMRequest, type LLMResponse, TOOL_COMPLEXITY, type CostAutoSwitchConfig, type CostSwitchEvent } from "./core/llm-types.js"
-export { ParallelExecutor, type ParallelExecutionResult, type ParallelPlan, type StepRunner } from "./core/parallel.js"
+export { ParallelExecutor, parseLLMStepImplementation, type ParallelExecutionResult, type ParallelPlan, type StepRunner } from "./core/parallel.js"
 export { parseSemanticValidationPayload, type SemanticValidationPayload } from "./agents/orchestrator.js"
 export { RouterAgent, parseRouterClassificationPayload, type RouterClassificationPayload } from "./core/router-agent.js"
 export { DataCleaner, parseDataValidationPayload, type DataValidationPayload } from "./core/data-cleaner.js"
@@ -6935,7 +6936,7 @@ export { WorkflowEngine, type WorkflowConfig, type ChainedResult } from "./core/
 export { StateStore, type StoreEntry, type StateNamespace } from "./core/state-store.js"
 export { MCPServer, type MCPServerConfig, type MCPServerStatus } from "./core/mcp-server.js"
 export { ConfidenceScorer, ConfidenceStore, type ConfidenceScore, type ConfidenceDimensions, type ScoringSignals, type StepConfidenceRecord } from "./core/confidence-scorer.js"
-export { SecondBrain, initSecondBrain, type Decision, type Todo, type Reflection, type GraphEdge, type KnowledgeSnapshot } from "./memory/second-brain.js"
+export { SecondBrain, initSecondBrain, parseReflectionPayload, type ReflectionPayload, type Decision, type Todo, type Reflection, type GraphEdge, type KnowledgeSnapshot } from "./memory/second-brain.js"
 export { ErrorRecovery } from "./core/error-recovery.js"
 export { AlignmentGate } from "./core/alignment-gate.js"
 export { EconomicModel } from "./core/economic-model.js"

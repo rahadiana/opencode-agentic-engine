@@ -846,6 +846,41 @@ const cleanerThrow = new mod.DataCleaner({
 const cleanerThrowResult = await cleanerThrow.validate("[]", "array")
 assert(cleanerThrowResult.valid === false, "P1-data cleaner fails closed on LLM validation error")
 
+console.log("\n[42h] delegate step runner — LLM output schema gate (reuses parseLLMStepImplementation)")
+// Valid payload accepted
+const delegateGood = mod.parseLLMStepImplementation(JSON.stringify({ files: [{ path: "src/foo.ts", content: "export const x = 1" }], summary: "added foo" }))
+assert(Array.isArray(delegateGood.files) && delegateGood.files.length === 1, "P1-delegate accepts valid file payload")
+assert(delegateGood.files[0].path === "src/foo.ts", "P1-delegate preserves file path")
+assert(typeof delegateGood.summary === "string", "P1-delegate preserves summary")
+// Malformed: not JSON
+try { mod.parseLLMStepImplementation("not json"); assert(false, "should throw") } catch (e) { assert(e.message.length > 0, "P1-delegate rejects non-JSON") }
+// Malformed: missing files
+try { mod.parseLLMStepImplementation(JSON.stringify({ summary: "no files" })); assert(false, "should throw") } catch (e) { assert(e.message.includes("schema"), "P1-delegate rejects missing files") }
+// Malformed: wrong content type
+try { mod.parseLLMStepImplementation(JSON.stringify({ files: [{ path: "x", content: 123 }] })); assert(false, "should throw") } catch (e) { assert(e.message.includes("schema"), "P1-delegate rejects wrong content type") }
+// Malformed: absolute path
+try { mod.parseLLMStepImplementation(JSON.stringify({ files: [{ path: "/etc/passwd", content: "x" }] })); assert(false, "should throw") } catch (e) { assert(e.message.includes("schema"), "P1-delegate rejects absolute path") }
+// Malformed: traversal path
+try { mod.parseLLMStepImplementation(JSON.stringify({ files: [{ path: "../escape/x", content: "x" }] })); assert(false, "should throw") } catch (e) { assert(e.message.includes("schema"), "P1-delegate rejects traversal path") }
+
+console.log("\n[42i] second-brain reflection — LLM output schema gate")
+// Valid payload accepted
+const reflGood = mod.parseReflectionPayload(JSON.stringify({ summary: "ok", conflicts: [], planUpdates: ["a"], newInfo: [], actionItems: ["b"] }))
+assert(reflGood !== null, "P1-reflection accepts valid payload")
+assert(reflGood.summary === "ok", "P1-reflection preserves summary")
+assert(reflGood.planUpdates.length === 1, "P1-reflection preserves planUpdates")
+assert(reflGood.actionItems[0] === "b", "P1-reflection preserves actionItems")
+// Malformed: not JSON
+assert(mod.parseReflectionPayload("not json") === null, "P1-reflection rejects non-JSON")
+// Malformed: summary is number
+assert(mod.parseReflectionPayload(JSON.stringify({ summary: 123, conflicts: [], planUpdates: [], newInfo: [], actionItems: [] })) === null, "P1-reflection rejects wrong summary type")
+// Malformed: conflicts is string not array
+assert(mod.parseReflectionPayload(JSON.stringify({ summary: "ok", conflicts: "bad", planUpdates: [], newInfo: [], actionItems: [] })) === null, "P1-reflection rejects wrong conflicts type")
+// Malformed: actionItems contains non-string
+assert(mod.parseReflectionPayload(JSON.stringify({ summary: "ok", conflicts: [], planUpdates: [], newInfo: [], actionItems: [1, 2] })) === null, "P1-reflection rejects non-string array items")
+// Malformed: missing field
+assert(mod.parseReflectionPayload(JSON.stringify({ summary: "ok", conflicts: [] })) === null, "P1-reflection rejects missing fields")
+
 // 43. agentic_status — full dashboard (merged from agentic_dashboard)
 console.log("\n[43] agentic_status — full dashboard")
 const dbResult = await hooks.tool.agentic_status.execute({ detail: "full" }, mockCtx(freshSid()))
