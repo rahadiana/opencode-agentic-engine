@@ -94,6 +94,29 @@ import { autoUpdatePlugin } from "./core/plugin-updater.js"
 // ── Build-time version injected by esbuild define ──
 declare const __VERSION__: string
 
+type VerificationEvidence = {
+  build?: "passed" | "failed" | "skipped"
+  lint?: "passed" | "failed" | "skipped"
+  techDebt?: "low" | "medium" | "high" | "critical"
+  tests?: Array<{ command?: string; passed?: number; failed?: number }>
+}
+
+function evidenceToSignals(evidence?: VerificationEvidence): Partial<import("./core/confidence-scorer.js").ScoringSignals> {
+  if (!evidence) return {}
+  const testTotals = evidence.tests?.reduce<{ passed: number; failed: number }>((acc, t) => {
+    acc.passed += t.passed ?? 0
+    acc.failed += t.failed ?? 0
+    return acc
+  }, { passed: 0, failed: 0 })
+  const totalTests = testTotals ? testTotals.passed + testTotals.failed : 0
+  return {
+    compileResult: evidence.build && evidence.build !== "skipped" ? { passed: evidence.build === "passed" } : undefined,
+    lintResult: evidence.lint && evidence.lint !== "skipped" ? { passed: evidence.lint === "passed" } : undefined,
+    testResult: testTotals && totalTests > 0 ? { passed: testTotals.failed === 0, total: totalTests, passedCount: testTotals.passed } : undefined,
+    techDebtScore: evidence.techDebt ? { overall: evidence.techDebt } : undefined,
+  }
+}
+
 const createEngine: Plugin = async (input, _options) => {
   // ── Normalize worktree: jangan sampai "/" (root) karena akan crash ──
   // Pakai input.directory dulu (paling akurat), fallback ke worktree, lalu HOME
@@ -1222,6 +1245,16 @@ const confidenceStore = new ConfidenceStore()
           error: tool.schema.string().optional().describe("Error message if the step failed"),
           autoVerify: tool.schema.boolean().optional().describe("Auto-run compile verification (default: true when success=true)"),
           feedback: tool.schema.enum(["positive", "negative"]).optional().describe("User feedback on the result. Positive boosts skill confidence; negative triggers adaptation (Gap #9: continuous learning from feedback)"),
+          verificationEvidence: tool.schema.object({
+            build: tool.schema.enum(["passed", "failed", "skipped"]).optional().describe("Manual build result to sync agentic_status/confidence"),
+            lint: tool.schema.enum(["passed", "failed", "skipped"]).optional().describe("Manual lint result to sync agentic_status/confidence"),
+            techDebt: tool.schema.enum(["low", "medium", "high", "critical"]).optional().describe("Manual tech-debt score to sync confidence"),
+            tests: tool.schema.array(tool.schema.object({
+              command: tool.schema.string().optional(),
+              passed: tool.schema.number().optional(),
+              failed: tool.schema.number().optional(),
+            })).optional().describe("Manual test summaries, e.g. [{ command, passed, failed }]"),
+          }).optional().describe("Optional verification evidence from manual shell commands so agentic_status stays in sync"),
         },
         async execute(args, context) {
           const startTime = Date.now()
@@ -1377,6 +1410,7 @@ const confidenceStore = new ConfidenceStore()
               testResult: undefined,
               lintResult: verifyResult?.checks.find(c => c.name === "lint") ? { passed: verifyResult.checks.find(c => c.name === "lint")!.passed } : undefined,
             }
+            Object.assign(signals, evidenceToSignals(args.verificationEvidence))
             if (modelId) {
               const modelScore = modelRegistry.getScore(modelId)
               if (modelScore) {

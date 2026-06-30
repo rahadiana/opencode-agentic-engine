@@ -1545,7 +1545,25 @@ assert(true, "Predictive Degradation Forecast tests passed")
 // 65. agentic_execute — feedback parameter exists
 console.log("\n[65] agentic_execute — feedback parameter")
 assert(typeof hooks.tool.agentic_execute.args.feedback === "object", "agentic_execute tool has feedback arg")
-assert(true, "agentic_execute feedback parameter tests passed")
+assert(typeof hooks.tool.agentic_execute.args.verificationEvidence === "object", "agentic_execute has verificationEvidence arg")
+const evidenceResult = await hooks.tool.agentic_execute.execute({
+  stepId: "evidence-sync",
+  success: true,
+  output: "verified with manual shell evidence",
+  filesModified: ["src/index.ts"],
+  autoVerify: false,
+  verificationEvidence: {
+    build: "passed",
+    lint: "passed",
+    techDebt: "low",
+    tests: [{ command: "node test/run.mjs", passed: 2043, failed: 0 }],
+  },
+}, mockCtx(freshSid()))
+const evidenceOut = typeof evidenceResult === "string" ? evidenceResult : evidenceResult.output
+assert(evidenceOut.includes("Confidence Score"), "verificationEvidence produces confidence score")
+assert(evidenceOut.includes("Test") && evidenceOut.includes("100%"), "verificationEvidence syncs test confidence")
+assert(evidenceOut.includes("Tech Debt") && evidenceOut.includes("100%"), "verificationEvidence syncs tech debt confidence")
+assert(true, "agentic_execute feedback/evidence parameter tests passed")
 
 // 66. agentic_model — session-seeded model preference
 console.log("\n[66] agentic_model — session model preference")
