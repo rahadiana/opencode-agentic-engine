@@ -11,6 +11,8 @@
  * - Nested object validation, array item validation
  * - Numeric constraints (min/max), string constraints (min/max length), enum values
  */
+import { ValidationError } from "./errors.js"
+
 export type SchemaFieldType = "string" | "number" | "boolean" | "array" | "object"
 
 /**
@@ -195,7 +197,7 @@ export class SchemaValidator {
     if (!result.valid) {
       const prefix = label ? `${label}: ` : ""
       const messages = result.errors.map(e => e.message).join("; ")
-      throw new Error(`${prefix}Schema validation failed: ${messages}`)
+      throw new ValidationError(`${prefix}Schema validation failed: ${messages}`)
     }
     return result.data
   }

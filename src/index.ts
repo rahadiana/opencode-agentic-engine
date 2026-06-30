@@ -3928,15 +3928,15 @@ const confidenceStore = new ConfidenceStore()
                     await coordinator.updateTask(context.sessionID, taskId, "failed", msg)
                     return { stepId: step.id, success: false, error: msg, output: resp.content, filesModified: [] }
                   }
-                  const files: string[] = []
-                  for (const f of impl.files) {
-                    const abs = join(cwd, f.path)
-                    mkdirSync(dirname(abs), { recursive: true })
-                    writeFileSync(abs, f.content, "utf-8")
-                    files.push(f.path)
+                  const written = writeFilesHelper(impl.files, cwd, context.sessionID, eventBus, { taskId })
+                  // path traversal guard built into writeFilesHelper — rejects writes escaping projectDir
+                  if (written.length !== impl.files.length) {
+                    const failed = impl.files.filter(f => !written.includes(f.path))
+                    await coordinator.updateTask(context.sessionID, taskId, "failed", `Path traversal blocked for: ${failed.map(f => f.path).join(", ")}`)
+                    return { stepId: step.id, success: false, error: `Path traversal blocked for some files`, output: "", filesModified: written }
                   }
                   await coordinator.updateTask(context.sessionID, taskId, "done", impl.summary)
-                  return { stepId: step.id, success: true, output: impl.summary ?? step.description, filesModified: files }
+                  return { stepId: step.id, success: true, output: impl.summary ?? step.description, filesModified: written }
                 } catch (e) {
                   await coordinator.updateTask(context.sessionID, taskId, "failed", (e as Error).message)
                   return { stepId: step.id, success: false, error: (e as Error).message, output: "", filesModified: [] }
@@ -7079,6 +7079,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
       try { stateStore.set("evolution", "trend", continuousEvolution.toJSON(), projectId) } catch { /* non-fatal */ }
       try { stateStore.set("evaluation", "live", liveEvaluator.toJSON(), projectId) } catch { /* non-fatal */ }
       try { await traceLogger.dispose() } catch { /* non-fatal */ }
+      try { eventBus.clear() } catch { /* non-fatal */ } // ponytail: prevent subscriber leak across plugin reloads
     },
   }
 }

@@ -1,6 +1,7 @@
 import { createLogger } from "../observability/logger.js"
 import type { LLMEngine } from "./llm.js"
 import { SchemaValidator, type SchemaField } from "./skill-schema.js"
+import { ValidationError } from "./errors.js"
 
 const log = createLogger("Router")
 
@@ -299,7 +300,7 @@ export class RouterAgent {
         if (parsed) {
           const matchedCat = this.categories.find(c => c.id === parsed.category)
           if (!matchedCat) {
-            throw new Error(`LLM returned unknown category "${parsed.category}", using keyword fallback`)
+            throw new ValidationError(`LLM returned unknown category "${parsed.category}", using keyword fallback`)
           }
           return {
             input,
@@ -312,7 +313,7 @@ export class RouterAgent {
             reasoning: parsed.reasoning,
           }
         }
-        throw new Error("LLM returned invalid router classification schema, using keyword fallback")
+        throw new ValidationError("LLM returned invalid router classification schema, using keyword fallback")
       } catch (e) {
         log.error(`LLM fallback failed`, { error: e })
       }

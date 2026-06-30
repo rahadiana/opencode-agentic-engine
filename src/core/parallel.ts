@@ -3,8 +3,9 @@ import type { LLMEngine } from "./llm.js"
 import { execFileSync } from "node:child_process"
 import { writeFile, mkdir } from "node:fs/promises"
 import { existsSync } from "node:fs"
-import { join, dirname } from "node:path"
+import { join, dirname, relative } from "node:path"
 import { SchemaValidator, type SchemaField } from "./skill-schema.js"
+import { ValidationError } from "./errors.js"
 
 export interface ParallelPlan {
   phases: Phase[]
@@ -67,14 +68,14 @@ const llmStepImplementationSchema: Record<string, SchemaField> = {
 export function parseLLMStepImplementation(raw: string): { files: Array<{ path: string; content: string }>; summary: string } {
   const parsed = JSON.parse(raw) as unknown
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("LLM output must be a JSON object")
+    throw new ValidationError("LLM output must be a JSON object")
   }
 
   const validator = new SchemaValidator()
   const validated = validator.validate(llmStepImplementationSchema, parsed as Record<string, unknown>, { allowExtraFields: false })
   if (!validated.valid) {
     const messages = validated.errors.map(e => `${e.path}: ${e.message}`).join("; ")
-    throw new Error(`LLM output schema validation failed: ${messages}`)
+    throw new ValidationError(`LLM output schema validation failed: ${messages}`)
   }
 
   const data = validated.data as { files: Array<{ path: string; content: string }>; summary?: string }
@@ -244,6 +245,11 @@ Only include files that need changing. Return ONLY valid JSON.` + opts.llmEngine
         const files: string[] = []
         for (const file of impl.files) {
           const fullPath = join(opts.projectDir, file.path)
+          // ponytail: path traversal guard — reject writes that escape projectDir
+          const rel = relative(opts.projectDir, fullPath)
+          if (rel.startsWith("..") || rel.startsWith("/")) {
+            return { stepId: step.id, success: false, error: `Path traversal blocked: ${file.path}`, output: "", filesModified: files }
+          }
           await mkdir(dirname(fullPath), { recursive: true })
           await writeFile(fullPath, file.content, "utf-8")
           files.push(file.path)
