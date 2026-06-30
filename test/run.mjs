@@ -811,6 +811,24 @@ const routerFallbackResult = await routerFallback.route("fix TypeScript build te
 assert(routerFallbackResult.usedLlm === false, "P1-router classifier falls back on unknown category")
 assert(routerFallbackResult.category === "tech", "P1-router classifier keyword fallback still routes safely")
 
+// 42f. P1 schema-first LLM boundary — planner critic parsers
+console.log("\n[42f] planner critic schema gate")
+const planCandidatesGood = mod.parsePlannerCandidatePlans(JSON.stringify([
+  { rationale: "direct", steps: [{ id: "a", description: "Inspect code" }, { id: "b", description: "Add tests", dependsOn: ["a"] }] },
+]))
+assert(planCandidatesGood.length === 1, "P1-planner critic accepts valid candidate list")
+assert(planCandidatesGood[0].steps[1].dependsOn.includes("a"), "P1-planner critic preserves valid dependencies")
+const planCandidatesBad = mod.parsePlannerCandidatePlans(JSON.stringify([
+  { rationale: "bad", steps: [{ id: "a", action: "missing required description" }] },
+]))
+assert(planCandidatesBad.length === 0, "P1-planner critic rejects malformed candidate steps")
+const criticGood = mod.parsePlannerCriticScore(JSON.stringify({ overall: 0.75, issues: ["needs tests"], suggestions: ["add verification"] }))
+assert(criticGood?.overall === 0.75, "P1-planner critic accepts valid critic score")
+const criticBad = mod.parsePlannerCriticScore(JSON.stringify({ overall: 2, issues: [], suggestions: [] }))
+assert(criticBad === null, "P1-planner critic rejects out-of-range critic score")
+const refinedBad = mod.parsePlannerRefinedCandidate(JSON.stringify({ rationale: "bad", steps: [{ description: "" }] }))
+assert(refinedBad === null, "P1-planner critic rejects invalid refinement")
+
 // 43. agentic_status — full dashboard (merged from agentic_dashboard)
 console.log("\n[43] agentic_status — full dashboard")
 const dbResult = await hooks.tool.agentic_status.execute({ detail: "full" }, mockCtx(freshSid()))

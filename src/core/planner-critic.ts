@@ -10,6 +10,7 @@
  */
 import type { LLMEngine } from "./llm.js"
 import type { TaskIntent, Subtask } from "./intent-parser.js"
+import { SchemaValidator, type SchemaField } from "./skill-schema.js"
 
 // ── Constants ─────────────────────────────────────────────────────
 
@@ -43,6 +44,115 @@ export interface CriticResult {
   bestScore: number
   iterations: number
   accepted: boolean
+}
+
+const stepSchema: SchemaField = {
+  type: "object",
+  required: true,
+  properties: {
+    id: { type: "string" },
+    description: { type: "string", required: true, minLength: 1 },
+    dependsOn: { type: "array", items: { type: "string", required: true } },
+    verificationCriteria: { type: "array", items: { type: "string", required: true } },
+  },
+}
+
+const candidateSchema: SchemaField = {
+  type: "object",
+  required: true,
+  properties: {
+    rationale: { type: "string", required: true },
+    steps: { type: "array", required: true, items: stepSchema },
+  },
+}
+
+const candidateListSchema: Record<string, SchemaField> = {
+  candidates: { type: "array", required: true, items: candidateSchema },
+}
+
+const criticScoreSchema: Record<string, SchemaField> = {
+  overall: { type: "number", required: true, minimum: 0, maximum: 1 },
+  issues: { type: "array", required: true, items: { type: "string", required: true } },
+  suggestions: { type: "array", required: true, items: { type: "string", required: true } },
+}
+
+const refinedCandidateSchema: Record<string, SchemaField> = {
+  rationale: { type: "string", required: true },
+  steps: { type: "array", required: true, items: stepSchema },
+}
+
+const plannerCriticSchemaValidator = new SchemaValidator()
+
+function extractJson(raw: string, kind: "array" | "object"): string {
+  const cleaned = raw.trim()
+  const block = kind === "array"
+    ? cleaned.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/)?.[1]
+    : cleaned.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)?.[1]
+  if (block) return block
+  return cleaned
+}
+
+function normalizeSteps(steps: unknown[], prefix: string): Subtask[] {
+  return steps.map((rawStep, index) => {
+    const step = rawStep as Record<string, unknown>
+    return {
+      id: typeof step.id === "string" && step.id.length > 0 ? step.id : `${prefix}-${index + 1}`,
+      description: step.description as string,
+      dependsOn: Array.isArray(step.dependsOn) ? step.dependsOn as string[] : (index > 0 ? [`${prefix}-${index}`] : []),
+      verificationCriteria: Array.isArray(step.verificationCriteria) ? step.verificationCriteria as string[] : [],
+    }
+  })
+}
+
+export function parsePlannerCandidatePlans(raw: string): CandidatePlan[] {
+  try {
+    const data = JSON.parse(extractJson(raw, "array"))
+    const payload = Array.isArray(data) ? data : [data]
+    const result = plannerCriticSchemaValidator.validate(candidateListSchema, { candidates: payload }, { allowExtraFields: false })
+    if (!result.valid) return []
+    return (result.data.candidates as unknown[])
+      .map((item, index) => {
+        const candidate = item as Record<string, unknown>
+        return {
+          id: `candidate-${index + 1}`,
+          rationale: candidate.rationale as string,
+          steps: normalizeSteps(candidate.steps as unknown[], `step-${index + 1}`),
+        }
+      })
+      .filter(c => c.steps.length > 0 && c.steps.length <= MAX_STEPS)
+  } catch {
+    return []
+  }
+}
+
+export function parsePlannerCriticScore(raw: string): CriticScore | null {
+  try {
+    const data = JSON.parse(extractJson(raw, "object"))
+    if (!data || typeof data !== "object" || Array.isArray(data)) return null
+    const result = plannerCriticSchemaValidator.validate(criticScoreSchema, data as Record<string, unknown>, { allowExtraFields: false })
+    if (!result.valid) return null
+    return {
+      overall: result.data.overall as number,
+      issues: result.data.issues as string[],
+      suggestions: result.data.suggestions as string[],
+    }
+  } catch {
+    return null
+  }
+}
+
+export function parsePlannerRefinedCandidate(raw: string): CandidatePlan | null {
+  try {
+    const data = JSON.parse(extractJson(raw, "object"))
+    if (!data || typeof data !== "object" || Array.isArray(data)) return null
+    const result = plannerCriticSchemaValidator.validate(refinedCandidateSchema, data as Record<string, unknown>, { allowExtraFields: false })
+    if (!result.valid) return null
+    const steps = normalizeSteps(result.data.steps as unknown[], "refined")
+    if (steps.length === 0 || steps.length > MAX_STEPS) return null
+    return { id: "refined", rationale: result.data.rationale as string, steps }
+  } catch {
+    return null
+  }
 }
 
 // ── Prompts ───────────────────────────────────────────────────────
@@ -259,92 +369,15 @@ export class PlannerCritic {
   // ── JSON Parsers ─────────────────────────────────────────────────
 
   private parsePlanResponse(raw: string): CandidatePlan[] {
-    try {
-      // Try direct parse first
-      const data = JSON.parse(raw)
-      if (Array.isArray(data)) {
-        return data
-          .map((item: any, i: number) => ({
-            id: `candidate-${i + 1}`,
-            rationale: item.rationale || item.description || "",
-            steps: (item.steps || []).map((s: any, j: number) => ({
-              id: s.id || `step-${i + 1}-${j + 1}`,
-              description: s.description || s.action || "",
-              dependsOn: s.dependsOn ?? (j > 0 ? [`step-${i + 1}-${j}`] : []),
-              verificationCriteria: s.verificationCriteria ?? [],
-            })),
-          }))
-          .filter(c => c.steps.length > 0 && c.steps.length <= MAX_STEPS)
-      }
-    } catch {
-      // Try extracting JSON from markdown code block
-      const jsonMatch = raw.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/)
-      if (jsonMatch) {
-        return this.parsePlanResponse(jsonMatch[1])
-      }
-      const objMatch = raw.match(/\{[\s\S]*"steps"[\s\S]*\}/)
-      if (objMatch) {
-        try {
-          const obj = JSON.parse(objMatch[0])
-          if (obj.steps) {
-            return [{
-              id: "candidate-1",
-              rationale: obj.rationale || "",
-              steps: obj.steps.map((s: any, j: number) => ({
-                id: s.id || `step-${j + 1}`,
-                description: s.description || "",
-                dependsOn: s.dependsOn ?? (j > 0 ? [`step-${j}`] : []),
-                verificationCriteria: s.verificationCriteria ?? [],
-              })),
-            }]
-          }
-        } catch { /* ignore */ }
-      }
-    }
-    return []
+    return parsePlannerCandidatePlans(raw)
   }
 
   private parseCriticResponse(raw: string): CriticScore | null {
-    try {
-      const data = JSON.parse(raw)
-      if (typeof data.overall === "number") {
-        return {
-          overall: Math.max(0, Math.min(1, data.overall)),
-          issues: Array.isArray(data.issues) ? data.issues : [],
-          suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
-        }
-      }
-    } catch {
-      const jsonMatch = raw.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
-      if (jsonMatch) {
-        return this.parseCriticResponse(jsonMatch[1])
-      }
-    }
-    return null
+    return parsePlannerCriticScore(raw)
   }
 
   private parseRefineResponse(raw: string): CandidatePlan | null {
-    try {
-      const data = JSON.parse(raw)
-      if (data.steps && Array.isArray(data.steps) && data.steps.length > 0) {
-        return {
-          id: "refined",
-          rationale: data.rationale || "",
-          steps: data.steps.map((s: any, i: number) => ({
-            id: s.id || `refined-${i + 1}`,
-            description: s.description || "",
-            dependsOn: s.dependsOn ?? (i > 0 ? [`refined-${i}`] : []),
-            verificationCriteria: s.verificationCriteria ?? [],
-          })),
-        }
-      }
-    } catch {
-      const jsonMatch = raw.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
-      if (jsonMatch) {
-        return this.parseRefineResponse(jsonMatch[1])
-      }
-    }
-    return null
+    return parsePlannerRefinedCandidate(raw)
   }
 
   /**

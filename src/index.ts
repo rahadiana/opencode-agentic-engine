@@ -6900,6 +6900,7 @@ export { SchemaValidator, type SchemaField, type SchemaFieldType, type SkillSche
 export { CodeSandbox, CodeModuleRegistry, checkBannedTokens, sandboxExecute, runSandboxTests, type BannedToken, type BannedTokenIssue, type CodeModule, type SandboxExecutionResult, type SandboxTestCase, type SandboxTestResult, type CodeGenerationResult, type SandboxSchemaField } from "./core/code-sandbox.js"
 export { TreeSearchPlanner, defaultExpansion, scoreState, diversityBonus, scoreWithDiversity, DEFAULT_BEAM_WIDTH, DEFAULT_MAX_DEPTH, EARLY_STOP_THRESHOLD, DIVERSITY_WEIGHT, type PlanState, type TreeSearchResult, type TreeSearchConfig, type ExpansionFn } from "./core/planner-tree-search.js"
 export { Planner, type MacroPhase, type MicroStep, type HierarchicalPlan, type PhaseContextMapping, type PhaseErrorContext } from "./core/planner.js"
+export { PlannerCritic, parsePlannerCandidatePlans, parsePlannerCriticScore, parsePlannerRefinedCandidate } from "./core/planner-critic.js"
 export { SkillImprover, type SkillTestCase, type EvaluationScore, type ImprovementResult } from "./core/skill-improver.js"
 export { AttentionScheduler, type AgentScheduleConfig, type AgentScheduleState, type SharedState, type CycleResult, type SchedulerMetrics } from "./core/attention-scheduler.js"
 export { WorldModel, type WorldSnapshot, type Belief, type Entity, type Relation, type WorldModelConfig, type BeliefEvidence, type BeliefUpdateResult } from "./core/world-model.js"
