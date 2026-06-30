@@ -1,6 +1,7 @@
 import type { LLMEngine } from "./llm.js"
 import type { DebateRound } from "./debate-loop.js"
 import { TimeoutError } from "./errors.js"
+import { SchemaValidator, type SchemaField } from "./skill-schema.js"
 
 export interface CleanConfig {
   /** Raw text to clean */
@@ -27,6 +28,38 @@ export interface CleanResult {
     originalLength: number
     cleanedLength: number
     removedLines: number
+  }
+}
+
+export interface DataValidationPayload {
+  valid: boolean
+  issues: string[]
+}
+
+const dataValidationSchema: Record<string, SchemaField> = {
+  valid: { type: "boolean", required: true },
+  issues: { type: "array", required: true, items: { type: "string", required: true } },
+}
+
+const dataValidationSchemaValidator = new SchemaValidator()
+
+export function parseDataValidationPayload(raw: string): DataValidationPayload | null {
+  const cleaned = raw.trim()
+  const jsonText = cleaned.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)?.[1]
+    ?? cleaned.match(/\{[\s\S]*\}/)?.[0]
+    ?? cleaned
+
+  try {
+    const data = JSON.parse(jsonText)
+    if (!data || typeof data !== "object" || Array.isArray(data)) return null
+    const result = dataValidationSchemaValidator.validate(dataValidationSchema, data as Record<string, unknown>, { allowExtraFields: false })
+    if (!result.valid) return null
+    return {
+      valid: result.data.valid as boolean,
+      issues: result.data.issues as string[],
+    }
+  } catch {
+    return null
   }
 }
 
@@ -172,18 +205,15 @@ export class DataCleaner {
         jsonMode: true,
       })
 
-      const parsed = this.tryParseJSON(resp.content) as { valid?: boolean; issues?: string[] } | null
+      const parsed = parseDataValidationPayload(resp.content)
       if (parsed) {
-        return {
-          valid: parsed.valid ?? true,
-          issues: parsed.issues ?? [],
-        }
+        return parsed
       }
     } catch {
       // Fallback
     }
 
-    return { valid: true, issues: [] }
+    return { valid: false, issues: ["LLM validation failed or returned invalid schema"] }
   }
 
   private static readonly MAX_INPUT_LENGTH = 100_000

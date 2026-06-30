@@ -829,6 +829,23 @@ assert(criticBad === null, "P1-planner critic rejects out-of-range critic score"
 const refinedBad = mod.parsePlannerRefinedCandidate(JSON.stringify({ rationale: "bad", steps: [{ description: "" }] }))
 assert(refinedBad === null, "P1-planner critic rejects invalid refinement")
 
+// 42g. P1 schema-first LLM boundary — data cleaner validation parser
+console.log("\n[42g] data cleaner validation schema gate")
+const dataValidationGood = mod.parseDataValidationPayload(JSON.stringify({ valid: true, issues: [] }))
+assert(dataValidationGood?.valid === true, "P1-data cleaner accepts valid validation payload")
+const dataValidationBad = mod.parseDataValidationPayload(JSON.stringify({ valid: "yes", issues: [] }))
+assert(dataValidationBad === null, "P1-data cleaner rejects malformed validation payload")
+const cleanerInvalidSchema = new mod.DataCleaner({
+  call: async () => ({ content: JSON.stringify({ valid: "yes", issues: [] }) }),
+})
+const cleanerInvalidResult = await cleanerInvalidSchema.validate("[]", "array")
+assert(cleanerInvalidResult.valid === false, "P1-data cleaner fails closed on malformed LLM validation")
+const cleanerThrow = new mod.DataCleaner({
+  call: async () => { throw new Error("boom") },
+})
+const cleanerThrowResult = await cleanerThrow.validate("[]", "array")
+assert(cleanerThrowResult.valid === false, "P1-data cleaner fails closed on LLM validation error")
+
 // 43. agentic_status — full dashboard (merged from agentic_dashboard)
 console.log("\n[43] agentic_status — full dashboard")
 const dbResult = await hooks.tool.agentic_status.execute({ detail: "full" }, mockCtx(freshSid()))
