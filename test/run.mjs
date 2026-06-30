@@ -765,6 +765,26 @@ assert(parallelBadResult.success === false, "P1-LLM-boundary malformed JSON shap
 assert(String(parallelBadResult.error || "").includes("schema validation failed"), "P1-LLM-boundary reports schema validation failure")
 assert(!existsSync(join(projectDir, "escape.ts")), "P1-LLM-boundary rejected traversal path before write")
 
+// 42d. P1 schema-first LLM boundary — orchestrator semantic validation parser
+console.log("\n[42d] orchestrator semantic validation schema gate")
+const semanticGood = mod.parseSemanticValidationPayload(JSON.stringify({
+  passed: false,
+  issues: [{ severity: "warning", description: "PM criteria not referenced", source: "llm-validator" }],
+  summary: "needs clarification",
+}))
+assert(semanticGood?.issues?.[0]?.severity === "warning", "P1-orchestrator semantic validation accepts valid schema")
+const semanticBadSeverity = mod.parseSemanticValidationPayload(JSON.stringify({
+  passed: true,
+  issues: [{ severity: "critical", description: "bad enum" }],
+  summary: "invalid",
+}))
+assert(semanticBadSeverity === null, "P1-orchestrator semantic validation rejects invalid issue severity")
+const semanticBadShape = mod.parseSemanticValidationPayload(JSON.stringify({
+  passed: "yes",
+  issues: "none",
+}))
+assert(semanticBadShape === null, "P1-orchestrator semantic validation rejects malformed shape")
+
 // 43. agentic_status — full dashboard (merged from agentic_dashboard)
 console.log("\n[43] agentic_status — full dashboard")
 const dbResult = await hooks.tool.agentic_status.execute({ detail: "full" }, mockCtx(freshSid()))

@@ -6922,6 +6922,7 @@ export { type SkillLifecycleStage, type MaturationCriteria } from "./memory/skil
 export { LLMEngine } from "./core/llm.js"
 export { type LLMConfig, type LLMRequest, type LLMResponse, TOOL_COMPLEXITY, type CostAutoSwitchConfig, type CostSwitchEvent } from "./core/llm-types.js"
 export { ParallelExecutor, type ParallelExecutionResult, type ParallelPlan, type StepRunner } from "./core/parallel.js"
+export { parseSemanticValidationPayload, type SemanticValidationPayload } from "./agents/orchestrator.js"
 export { MCPClient, type MCPConfig, type MCPConnection, type MCPCallResult } from "./core/mcp-client.js"
 export { ModelRegistry, type ModelStats, type ModelScore } from "./core/model-registry.js"
 export { ProtocolAdapter, type Protocol, type ToolDescriptor, type ProtocolCallResult, type ProtocolAdapterStats } from "./core/protocol-adapter.js"

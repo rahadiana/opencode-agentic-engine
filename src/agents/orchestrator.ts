@@ -4,6 +4,7 @@ import type { BudgetTracker } from "../core/budget-tracker.js"
 import type { EventBus } from "../core/event-bus.js"
 import type { Condition } from "../core/formal-model.js"
 import { parseFileEntries, writeFiles, recordCompletion } from "../core/execution-helpers.js"
+import { SchemaValidator, type SchemaField as ValidatorSchemaField } from "../core/skill-schema.js"
 import fs from "node:fs"
 import { createLogger } from "../observability/logger.js"
 
@@ -33,6 +34,55 @@ export interface CrossValidationResult {
   }>
   passed: boolean
   summary: string
+}
+
+export interface SemanticValidationPayload {
+  passed: boolean
+  issues: Array<{
+    severity: "error" | "warning" | "info"
+    description: string
+    source?: string
+  }>
+  summary?: string
+}
+
+const semanticValidationSchema: Record<string, ValidatorSchemaField> = {
+  passed: { type: "boolean", required: true },
+  issues: {
+    type: "array",
+    required: true,
+    items: {
+      type: "object",
+      required: true,
+      properties: {
+        severity: { type: "string", required: true, enum: ["error", "warning", "info"] },
+        description: { type: "string", required: true, minLength: 1 },
+        source: { type: "string" },
+      },
+    },
+  },
+  summary: { type: "string" },
+}
+
+const semanticValidationSchemaValidator = new SchemaValidator()
+
+export function parseSemanticValidationPayload(raw: string): SemanticValidationPayload | null {
+  const cleaned = raw.trim()
+  const jsonText = cleaned.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)?.[1] ?? cleaned
+
+  try {
+    const data = JSON.parse(jsonText)
+    if (!data || typeof data !== "object" || Array.isArray(data)) return null
+    const result = semanticValidationSchemaValidator.validate(semanticValidationSchema, data as Record<string, unknown>, { allowExtraFields: true })
+    if (!result.valid) return null
+    return {
+      passed: result.data.passed as boolean,
+      issues: result.data.issues as SemanticValidationPayload["issues"],
+      summary: result.data.summary as string | undefined,
+    }
+  } catch {
+    return null
+  }
 }
 
 // ── G4: Contract-based cross-validation ──
@@ -513,10 +563,12 @@ Check: 1) Contradictions? 2) Missing requirements? 3) Contract compliance?
 Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary":string}`
       try {
         const llmResp = await this.llmEngine.call({ systemPrompt: "You are a strict cross-validator.", userPrompt: validationPrompt, jsonMode: true, temperature: 0.1, maxTokens: 1024 })
-        const parsed = JSON.parse(llmResp.content)
-        if (parsed.issues && Array.isArray(parsed.issues)) {
+        const parsed = parseSemanticValidationPayload(llmResp.content)
+        if (!parsed) {
+          log.warn(`[Orchestrator] LLM cross-validation returned invalid schema for stage ${targetRole}`)
+        } else {
           for (const issue of parsed.issues) {
-            if (issue.severity && issue.description && !accumulatedIssues.some(i => i.description === issue.description)) {
+            if (!accumulatedIssues.some(i => i.description === issue.description)) {
               issues.push({ severity: issue.severity, description: issue.description, source: issue.source ?? "llm-validator" })
             }
           }
