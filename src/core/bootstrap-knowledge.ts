@@ -75,6 +75,31 @@ const BOOTSTRAP_NOWLEDGE: BootstrapEntry[] = [
     summary: "Tests live in test/run.mjs (1117+ unit tests spanning 50+ sections). Additional test files: dropin.mjs (plugin discovery), load-samedir.mjs (E2E workflow), e2e-scenario.mjs (EvoClaw benchmark), swebench-harness.mjs (SWE-bench), e2e-llm.mjs (LLM E2E). Tests use custom assert() functions, not Jest/Mocha. Each tool must have ≥2 test cases. Run with: node test/run.mjs for unit tests, LLM_OFF=true node test/swebench-harness.mjs for mock mode.",
     tags: ["testing", "test", "run.mjs", "e2e", "benchmark"],
     decisions: ["1117+ unit tests in run.mjs", "22+ test files total", "Custom assert() framework", "Each tool: 2+ test cases"]
+  },
+  // ── P3 Procedural Checklists ──
+  {
+    goal: "Checklist: How to add a new agentic_ tool",
+    summary: "STEP 1: Create source file in src/core/ or src/agents/ or src/memory/. STEP 2: Add import in src/index.ts at top. STEP 3: Add tool definition in the `tools` object inside AgenticEngine function — include name, description, schema, execute handler. STEP 4: Add new tool name to the expected list in test/run.mjs (EXPECTED_TOOLS array). STEP 5: Also add to test/dropin.mjs and test/load-samedir.mjs expected tool lists. STEP 6: Add ≥2 test cases in test/run.mjs — one happy path, one error path. STEP 7: Run `npm run build` — must pass with zero errors. STEP 8: Run `node test/run.mjs` — all tests must pass. STEP 9: Run `node test/realtest.mjs` — 166+ tests must pass. STEP 10: Commit with descriptive message.",
+    tags: ["checklist", "procedure", "new-tool", "howto", "step-by-step"],
+    decisions: ["Register in src/index.ts tools object", "Update 3 test files", "2+ test cases required", "Build + test before commit"]
+  },
+  {
+    goal: "Checklist: How to update OpenCode plugin tests",
+    summary: "STEP 1: Open test/run.mjs — all unit tests live here. STEP 2: Find the section for the tool/feature being tested (sections are numbered [1], [2], etc.). STEP 3: Add new assert() calls — use the pattern: assert(condition, 'descriptive message'). STEP 4: If testing a new export, add it to the destructured import at the top of run.mjs. STEP 5: Run `npm run build` first — tests import from dist/. STEP 6: Run `node test/run.mjs` — check that new tests appear in output. STEP 7: Run `node test/realtest.mjs` — must still pass (166+ tests). STEP 8: If the new feature adds a tool, also update expected tool count in test/dropin.mjs and test/load-samedir.mjs.",
+    tags: ["checklist", "procedure", "testing", "howto", "step-by-step"],
+    decisions: ["All tests in test/run.mjs", "Custom assert() not Jest", "Build before test", "Check realtest.mjs too"]
+  },
+  {
+    goal: "Checklist: How to verify prompt injection changes",
+    summary: "STEP 1: Read src/core/prompt-builder.ts and src/core/prompt-template.ts to understand current prompt structure. STEP 2: Check the system.transform hook in src/index.ts — this is where RAG results and knowledge context are injected. STEP 3: Make changes to prompt sections. STEP 4: Run `npm run build`. STEP 5: Run `node test/realtest.mjs` — it validates prompt content (tool count, section presence). STEP 6: Search test/realtest.mjs for 'system.transform' or 'prompt' tests to see what's checked. STEP 7: Manually inspect generated prompt by setting DEBUG_AGENTIC=1 and running a tool. STEP 8: Verify knowledge-context XML tags are present and properly escaped.",
+    tags: ["checklist", "procedure", "prompt", "injection", "howto", "step-by-step"],
+    decisions: ["Prompt built in prompt-builder.ts", "Injected via system.transform hook", "realtest.mjs validates prompt", "Check XML tag escaping"]
+  },
+  {
+    goal: "Checklist: How to recover TypeScript build failures",
+    summary: "STEP 1: Run `npm run build` and read the FULL error output. STEP 2: Identify error type — TS6133 (unused import/var), TS2345 (type mismatch), TS2304 (undeclared name), TS2322 (type assignment). STEP 3: For TS6133 — remove the unused import/variable. STEP 4: For TS2345/TS2322 — check the expected type and fix the argument or assignment. STEP 5: For TS2304 — add the missing import or declaration. STEP 6: After fix, run `npm run build` again — must be zero errors. STEP 7: Run `node test/run.mjs` to ensure no regressions. STEP 8: Common pitfall: ESM requires .js extension in imports even for .ts files (e.g., import from './foo.js' not './foo.ts').",
+    tags: ["checklist", "procedure", "build", "typescript", "error-recovery", "step-by-step"],
+    decisions: ["Read full error output", "Fix by error code", "ESM requires .js extensions", "Build + test after every fix"]
   }
 ]
 

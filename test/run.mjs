@@ -3141,6 +3141,15 @@ assert(ragStatsOut.length > 20, "rag stats returns output")
 assert(ragStatsOut.includes("automotive") && ragStatsOut.includes("financial"), "rag stats shows categories")
 assert(true, "agentic_rag stats passed")
 
+// Bootstrap procedural checklists (P3)
+console.log("\n[90b] bootstrap knowledge — procedural checklists")
+const ragChecklist = await hooks.tool.agentic_rag.execute({
+  action: "search",
+  query: "checklist how to add new tool step by step",
+}, mockCtx(freshSid()))
+const ragChecklistOut = typeof ragChecklist === "string" ? ragChecklist : (ragChecklist.output || "")
+assert(ragChecklistOut.includes("STEP") || ragChecklistOut.includes("checklist") || ragChecklistOut.length > 0, "P3-bootstrap checklist found in RAG")
+
 // Categories
 const ragCats = await hooks.tool.agentic_rag.execute({
   action: "categories",

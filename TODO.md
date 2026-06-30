@@ -160,16 +160,14 @@ Default: `false` (no behavioral change for existing users).
 
 ## P3 — Procedural Skill Injection
 
-Make memory useful for weak models by injecting checklists, not just facts.
+Status: **complete**. Four procedural checklists added to `bootstrap-knowledge.ts` and auto-seeded into RAG on plugin init:
 
-Examples:
+1. "How to add a new `agentic_` tool" — 10-step checklist
+2. "How to update OpenCode plugin tests" — 8-step checklist
+3. "How to verify prompt injection changes" — 8-step checklist
+4. "How to recover TypeScript build failures" — 8-step checklist
 
-- “How to add a new `agentic_` tool” checklist.
-- “How to update OpenCode plugin tests” checklist.
-- “How to verify prompt injection changes” checklist.
-- “How to recover TypeScript build failures” checklist.
-
-Goal: weak model follows a checklist instead of inventing process.
+Each checklist uses STEP 1/2/3... format so weak models can follow sequentially. Checklists are tagged with `checklist`, `procedure`, `step-by-step` for RAG discoverability.
 
 ## Verification Commands
 
