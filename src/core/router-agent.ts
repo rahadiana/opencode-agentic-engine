@@ -1,5 +1,6 @@
 import { createLogger } from "../observability/logger.js"
 import type { LLMEngine } from "./llm.js"
+import { SchemaValidator, type SchemaField } from "./skill-schema.js"
 
 const log = createLogger("Router")
 
@@ -33,6 +34,41 @@ export interface RouteMatch {
   suggestedRagIndex: string
   /** Brief reasoning for the route */
   reasoning: string
+}
+
+export interface RouterClassificationPayload {
+  category: string
+  confidence: number
+  reasoning: string
+}
+
+const routerClassificationSchema: Record<string, SchemaField> = {
+  category: { type: "string", required: true, minLength: 1 },
+  confidence: { type: "number", required: true, minimum: 0, maximum: 1 },
+  reasoning: { type: "string", required: true, minLength: 1 },
+}
+
+const routerClassificationSchemaValidator = new SchemaValidator()
+
+export function parseRouterClassificationPayload(raw: string): RouterClassificationPayload | null {
+  const cleaned = raw.trim()
+  const jsonText = cleaned.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)?.[1]
+    ?? cleaned.match(/\{[\s\S]*\}/)?.[0]
+    ?? cleaned
+
+  try {
+    const data = JSON.parse(jsonText)
+    if (!data || typeof data !== "object" || Array.isArray(data)) return null
+    const result = routerClassificationSchemaValidator.validate(routerClassificationSchema, data as Record<string, unknown>, { allowExtraFields: false })
+    if (!result.valid) return null
+    return {
+      category: result.data.category as string,
+      confidence: result.data.confidence as number,
+      reasoning: result.data.reasoning as string,
+    }
+  } catch {
+    return null
+  }
 }
 
 const DEFAULT_CATEGORIES: RouteCategory[] = [
@@ -259,31 +295,24 @@ export class RouterAgent {
           jsonMode: true,
         })
 
-        const cleaned = resp.content.trim()
-        const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0])
-          // Skip LLM result if it's a no_llm fallback response
-          if (parsed.status === "no_llm") {
-            throw new Error("LLM unavailable, using keyword fallback")
-          }
-          const catId = parsed.category || ""
-          const matchedCat = catId ? this.categories.find(c => c.id === catId) : null
+        const parsed = parseRouterClassificationPayload(resp.content)
+        if (parsed) {
+          const matchedCat = this.categories.find(c => c.id === parsed.category)
           if (!matchedCat) {
-            throw new Error(`LLM returned unknown category "${catId}", using keyword fallback`)
+            throw new Error(`LLM returned unknown category "${parsed.category}", using keyword fallback`)
           }
-          const confidence = Math.min(1, Math.max(0, parsed.confidence ?? 0.5))
           return {
             input,
             intent: `Terkait ${matchedCat.name}`,
-            category: catId,
-            confidence: parseFloat(confidence.toFixed(2)),
+            category: parsed.category,
+            confidence: parseFloat(parsed.confidence.toFixed(2)),
             usedLlm: true,
             suggestedTools: matchedCat?.suggestedTools ?? [],
             suggestedRagIndex: matchedCat?.suggestedRagIndex ?? "knowledge-general",
-            reasoning: parsed.reasoning ?? `LLM classified as ${catId}`,
+            reasoning: parsed.reasoning,
           }
         }
+        throw new Error("LLM returned invalid router classification schema, using keyword fallback")
       } catch (e) {
         log.error(`LLM fallback failed`, { error: e })
       }

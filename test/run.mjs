@@ -785,6 +785,32 @@ const semanticBadShape = mod.parseSemanticValidationPayload(JSON.stringify({
 }))
 assert(semanticBadShape === null, "P1-orchestrator semantic validation rejects malformed shape")
 
+// 42e. P1 schema-first LLM boundary — router classifier parser
+console.log("\n[42e] router classifier schema gate")
+const routerGood = mod.parseRouterClassificationPayload(JSON.stringify({
+  category: "tech",
+  confidence: 0.84,
+  reasoning: "mentions TypeScript and tests",
+}))
+assert(routerGood?.category === "tech", "P1-router classifier accepts valid schema")
+const routerBadConfidence = mod.parseRouterClassificationPayload(JSON.stringify({
+  category: "tech",
+  confidence: 2,
+  reasoning: "out of range",
+}))
+assert(routerBadConfidence === null, "P1-router classifier rejects out-of-range confidence")
+const routerBadShape = mod.parseRouterClassificationPayload(JSON.stringify({
+  category: "tech",
+  confidence: 0.7,
+}))
+assert(routerBadShape === null, "P1-router classifier rejects missing reasoning")
+const routerFallback = new mod.RouterAgent({
+  call: async () => ({ content: JSON.stringify({ category: "unknown", confidence: 0.9, reasoning: "bad category" }) }),
+})
+const routerFallbackResult = await routerFallback.route("fix TypeScript build test")
+assert(routerFallbackResult.usedLlm === false, "P1-router classifier falls back on unknown category")
+assert(routerFallbackResult.category === "tech", "P1-router classifier keyword fallback still routes safely")
+
 // 43. agentic_status — full dashboard (merged from agentic_dashboard)
 console.log("\n[43] agentic_status — full dashboard")
 const dbResult = await hooks.tool.agentic_status.execute({ detail: "full" }, mockCtx(freshSid()))

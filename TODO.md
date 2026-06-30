@@ -105,7 +105,7 @@ Tests:
 
 ## P1 — Schema-First LLM Boundary Audit
 
-Status: **started**. First minimal hardening slice covers `ParallelExecutor.llmStepRunner`: LLM JSON output is now parsed and validated with existing `SchemaValidator` before file writes. Malformed shapes, wrong field types, absolute paths, and `..` traversal paths return safe failure instead of writing files or reporting success. Regression tests cover valid payload and malformed payload behavior. Second slice covers `Orchestrator.runSemanticValidation`: LLM cross-validation JSON now requires `{ passed:boolean, issues:[{ severity:"error|warning|info", description:string, source?:string }], summary?:string }`; invalid output is logged and ignored instead of being trusted.
+Status: **started**. First minimal hardening slice covers `ParallelExecutor.llmStepRunner`: LLM JSON output is now parsed and validated with existing `SchemaValidator` before file writes. Malformed shapes, wrong field types, absolute paths, and `..` traversal paths return safe failure instead of writing files or reporting success. Regression tests cover valid payload and malformed payload behavior. Second slice covers `Orchestrator.runSemanticValidation`: LLM cross-validation JSON now requires `{ passed:boolean, issues:[{ severity:"error|warning|info", description:string, source?:string }], summary?:string }`; invalid output is logged and ignored instead of being trusted. Third slice covers `RouterAgent.route`: LLM intent JSON now requires `{ category:string, confidence:number 0..1, reasoning:string }`; invalid output or unknown categories fall back to deterministic keyword routing.
 
 Audit every `llmEngine.call(...)`.
 
