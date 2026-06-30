@@ -127,6 +127,7 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
       hardBlockReliability: { type: "number", min: 0, max: 1 },
       softBlockReliability: { type: "number", min: 0, max: 1 },
       minSampleSize: { type: "number", min: 1 },
+      workflowPolicyMode: { type: "string", values: ["advisory", "strict"] },
     })
     // Validate nested deepVerification
     const dv = (cfg.agent as Record<string, unknown>).deepVerification
@@ -239,6 +240,8 @@ export interface AgentConfig {
   deepVerification?: DeepVerificationAgentConfig
   /** Tool guardrails: loop detection for agent execution steps */
   toolGuardrails?: ToolGuardrailAgentConfig
+  /** Runtime workflow enforcement: advisory warns, strict blocks unsafe completion */
+  workflowPolicyMode?: "advisory" | "strict"
 }
 
 /** Config for ToolGuardrailController — infinite loop detection */
@@ -340,6 +343,7 @@ export const DEFAULT_CONFIG: AgenticConfigSchema = {
     hardBlockReliability: 0.2,
     softBlockReliability: 0.4,
     minSampleSize: 5,
+    workflowPolicyMode: "advisory",
     deepVerification: {
       security: true,
       performance: true,

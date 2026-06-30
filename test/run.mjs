@@ -985,6 +985,7 @@ assert(defaultCfg.memory.search.keywordWeight === 0.3, "default keyword weight 0
 assert(defaultCfg.memory.search.vectorWeight === 0.7, "default vector weight 0.7")
 assert(defaultCfg.agent.maxDelegationDepth === 3, "default max delegation depth 3")
 assert(defaultCfg.agent.autoSkillExtract === true, "default autoSkillExtract true")
+assert(defaultCfg.agent.workflowPolicyMode === "advisory", "default workflowPolicyMode advisory")
 assert(defaultCfg.storage.traceRetentionDays === 7, "default trace retention 7 days")
 await cfgHooksA.dispose()
 
@@ -997,7 +998,7 @@ writeFileSync(join(cfgWorktreeB, ".agentic", "config.json"), JSON.stringify({
   $schema: "v1",
   embedding: { model: "text-embedding-3-small", endpoint: "https://custom/v1/embeddings", apiKey: "sk-test" },
   memory: { enabled: true, mode: "full", maxEntries: 500, compressThreshold: 200, forgetAfterDays: 14, stopWordsLanguages: ["eng", "msa"], search: { keywordWeight: 0.4, vectorWeight: 0.6 } },
-  agent: { maxDelegationDepth: 7, autoSkillExtract: false, defaultRole: "qa" },
+  agent: { maxDelegationDepth: 7, autoSkillExtract: false, defaultRole: "qa", workflowPolicyMode: "strict" },
   storage: { traceRetentionDays: 30, skillMaxCount: 999 },
 }))
 const cfgInputB = { ...mockInput, worktree: cfgWorktreeB, directory: cfgWorktreeB, client: {} }
@@ -1011,6 +1012,7 @@ assert(customCfg.memory.stopWordsLanguages.includes("msa"), "custom stopWordsLan
 assert(customCfg.memory.search.keywordWeight === 0.4, "custom keyword weight loaded")
 assert(customCfg.agent.maxDelegationDepth === 7, "custom delegation depth loaded")
 assert(customCfg.agent.autoSkillExtract === false, "custom autoSkillExtract loaded")
+assert(customCfg.agent.workflowPolicyMode === "strict", "custom workflowPolicyMode loaded")
 assert(customCfg.storage.traceRetentionDays === 30, "custom trace retention loaded")
 assert(customCfg.storage.skillMaxCount === 999, "custom skill max count loaded")
 await cfgHooksB.dispose()
@@ -1597,6 +1599,44 @@ const finalEvidence = await hooks.tool.agentic_execute.execute({
 }, mockCtx(finalEvidenceSid))
 const finalEvidenceOut = typeof finalEvidence === "string" ? finalEvidence : finalEvidence.output
 assert(!finalEvidenceOut.includes("verification-missing"), "WorkflowPolicy accepts final completion with verificationEvidence")
+
+const lowConfidenceSid = freshSid()
+await hooks.tool.agentic_plan.execute({ goal: "One step low confidence policy", subtasks: [{ id: "final-low", description: "final", dependsOn: [] }] }, mockCtx(lowConfidenceSid))
+const lowConfidence = await hooks.tool.agentic_execute.execute({
+  stepId: "final-low", success: true, output: "Final with weak evidence", filesModified: ["src/final-low.ts"], autoVerify: false,
+  verificationEvidence: { techDebt: "critical" },
+}, mockCtx(lowConfidenceSid))
+const lowConfidenceOut = typeof lowConfidence === "string" ? lowConfidence : lowConfidence.output
+assert(lowConfidenceOut.includes("confidence-low"), "WorkflowPolicy warns on low-confidence completion")
+
+const strictDir = "/tmp/test-project-strict-policy"
+try { rmSync(strictDir, { recursive: true, force: true }) } catch {}
+mkdirSync(strictDir, { recursive: true })
+mkdirSync(join(strictDir, ".agentic"), { recursive: true })
+writeFileSync(join(strictDir, ".agentic", "config.json"), JSON.stringify({ $schema: "v1", agent: { workflowPolicyMode: "strict", autoHallucinationCheck: false } }))
+const strictHooks = await mod.AgenticEngine({ ...mockInput, project: { name: "strict-policy", path: strictDir }, directory: strictDir, worktree: strictDir })
+const strictCtx = mockCtx("strict-policy-session")
+strictCtx.directory = strictDir
+strictCtx.worktree = strictDir
+await strictHooks.tool.agentic_plan.execute({ goal: "Strict final gate", subtasks: [{ id: "strict-final", description: "final", dependsOn: [] }] }, strictCtx)
+const strictFinal = await strictHooks.tool.agentic_execute.execute({
+  stepId: "strict-final", success: true, output: "Final without evidence", filesModified: ["src/strict.ts"], autoVerify: false,
+}, strictCtx)
+const strictFinalOut = typeof strictFinal === "string" ? strictFinal : strictFinal.output
+assert(strictFinalOut.includes("BLOCKED by WorkflowPolicy") && strictFinalOut.includes("verification-missing"), "strict WorkflowPolicy blocks final completion without evidence")
+
+const strictRetryCtx = mockCtx("strict-policy-retry-session")
+strictRetryCtx.directory = strictDir
+strictRetryCtx.worktree = strictDir
+await strictHooks.tool.agentic_plan.execute({ goal: "Strict retry gate", subtasks: [{ id: "strict-retry", description: "retry", dependsOn: [] }] }, strictRetryCtx)
+await strictHooks.tool.agentic_execute.execute({ stepId: "strict-retry", success: false, output: "Failed once", error: "TypeError: boom", autoVerify: false }, strictRetryCtx)
+const strictRetry = await strictHooks.tool.agentic_execute.execute({
+  stepId: "strict-retry", success: true, output: "Retry without reflection", filesModified: ["src/retry.ts"], autoVerify: false,
+  verificationEvidence: { build: "passed", tests: [{ command: "npm test", passed: 1, failed: 0 }] },
+}, strictRetryCtx)
+const strictRetryOut = typeof strictRetry === "string" ? strictRetry : strictRetry.output
+assert(strictRetryOut.includes("BLOCKED by WorkflowPolicy") && strictRetryOut.includes("reflection-missing"), "strict WorkflowPolicy blocks retry success before reflection")
+strictHooks.dispose?.()
 
 // 66. agentic_model — session-seeded model preference
 console.log("\n[66] agentic_model — session model preference")

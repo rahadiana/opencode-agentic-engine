@@ -1277,6 +1277,7 @@ const confidenceStore = new ConfidenceStore()
           
           const session = sessionStore.getOrCreate(context.sessionID)
           session.currentTaskType = taskType
+          const workflowPolicyMode = configLoader.get().agent.workflowPolicyMode ?? "advisory"
           const priorState = executor.getStepState(context.sessionID, args.stepId)
           const isRetry = !!priorState?.result && !priorState.result.success && args.success
           const prePolicyDecisions = evaluateWorkflowPolicy({
@@ -1289,12 +1290,26 @@ const confidenceStore = new ConfidenceStore()
             hasReflection: session.artifacts.has(`workflow:reflected:${args.stepId}`),
             hasVerificationEvidence: !!args.verificationEvidence,
             verificationEvidenceFailed: verificationEvidenceFailed(args.verificationEvidence),
-          })
+          }, { mode: workflowPolicyMode })
+          const completedSteps = executor.getCompletedSteps(context.sessionID)
+          const willFinalize = !!(args.success && session.plan?.intent.subtasks.every(s => s.id === args.stepId || completedSteps.includes(s.id)))
+          const preFinalPolicyDecisions = willFinalize ? evaluateWorkflowPolicy({
+            action: "finalize",
+            stepId: args.stepId,
+            filesModified: [...executor.getAllFilesModified(context.sessionID), ...(args.filesModified ?? [])],
+            success: true,
+            hasPlan: !!session.plan,
+            hasResearch: session.artifacts.has("workflow:researched"),
+            hasVerificationEvidence: !!args.verificationEvidence || session.artifacts.has("workflow:verified"),
+            verificationEvidenceFailed: verificationEvidenceFailed(args.verificationEvidence),
+          }, { mode: workflowPolicyMode }) : []
+          const blockingPolicyDecisions = [...prePolicyDecisions, ...preFinalPolicyDecisions]
           const blocked = prePolicyDecisions.some(d => d.severity === "block")
+            || preFinalPolicyDecisions.some(d => d.severity === "block")
           if (blocked) {
             return {
-              output: `## Step ${args.stepId}: 🛑 BLOCKED by WorkflowPolicy\n\n${formatWorkflowPolicyDecisions(prePolicyDecisions)}\n\nFix the evidence/workflow issue, then call \`agentic_execute\` again.`,
-              metadata: { blocked: true, policy: prePolicyDecisions },
+              output: `## Step ${args.stepId}: 🛑 BLOCKED by WorkflowPolicy\n\n${formatWorkflowPolicyDecisions(blockingPolicyDecisions)}\n\nFix the evidence/workflow issue, then call \`agentic_execute\` again.`,
+              metadata: { blocked: true, policy: blockingPolicyDecisions },
             }
           }
 
@@ -1692,7 +1707,7 @@ const confidenceStore = new ConfidenceStore()
               hasVerificationEvidence: !!args.verificationEvidence || !!verifyResult?.passed || session.artifacts.has("workflow:verified"),
               verificationEvidenceFailed: verificationEvidenceFailed(args.verificationEvidence),
               confidence: confidenceScore_?.overall,
-            })
+            }, { mode: workflowPolicyMode })
             const finalPolicyText = formatWorkflowPolicyDecisions(finalPolicyDecisions)
             if (finalPolicyText) response += `\n### WorkflowPolicy Final Gate\n${finalPolicyText}\n`
           }
