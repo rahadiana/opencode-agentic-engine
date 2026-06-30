@@ -1500,7 +1500,16 @@
         "event": "step.completed",
         "timestamp": 1782819617124
       }
+    },
+    {
+      "source": "llm",
+      "target": "unknown",
+      "relation": "cost",
+      "metadata": {
+        "costUsd": 0,
+        "timestamp": 1782853313278
+      }
     }
   ],
-  "updatedAt": "2026-06-30T11:40:17.124Z"
+  "updatedAt": "2026-06-30T21:01:53.278Z"
 }

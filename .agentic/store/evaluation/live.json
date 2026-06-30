@@ -880,6 +880,11 @@
         "query": "P1 schema-first LLM boundary data-cleaner llmEngine.call JSON parsing clean format",
         "resultsCount": 8,
         "focused": true
+      },
+      {
+        "query": "Runtime WorkflowPolicy Gate, P0, LLM boundaries, schema validation",
+        "resultsCount": 15,
+        "focused": false
       }
     ],
     "delegations": [],
@@ -892,5 +897,5 @@
       }
     ]
   },
-  "updatedAt": "2026-06-30T12:14:28.698Z"
+  "updatedAt": "2026-06-30T21:33:59.286Z"
 }
