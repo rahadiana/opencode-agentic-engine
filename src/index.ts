@@ -255,6 +255,7 @@ const createEngine: Plugin = async (input, _options) => {
     { name: "agentic_tools", description: "Unified tool search and calling across MCP + A2A protocols. Search for tools by keyword, auto-route calls, list all connections, view combined stats. Key: `action` (search/call/list/stats)." },
     { name: "agentic_finetune", description: "End-to-end pipeline: prepare training data from skills → upload to OpenAI → create/monitor jobs. Use to fine-tune models from agent experience. Key: `action` (prepare/save/upload/create-job/status)." },
     { name: "agentic_db", description: "SQLite database backend untuk persistence — query, save, load, stats. Lebih cepat dari file JSON. Support structured queries dengan WHERE, JOIN, GROUP BY." },
+    { name: "agentic_memo", description: "Second Brain: record ADR decisions, manage TODOs, run reflection, and inspect knowledge graph. Key: `action` (decision/todo/todo-done/list/reflect/graph)." },
   ]
 
   // ── Sub-agent detection (dynamic via RoleRegistry + fallback signatures) ──
@@ -6553,7 +6554,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
           injection = buildSubAgentInjection(subAgent.role, subAgent.tools)
           transformOk = true
         } else {
-          // Full prompt for parent agent — all 29 tools shown, LLM picks which to use
+          // Full prompt for parent agent — all registered tools shown, LLM picks which to use
           const pack = currentInjectDomain ?? domainRegistry.getCurrentPack() ?? genericDomain
 
           // ── KNOWLEDGE-FIRST: Auto-inject RAG results ──

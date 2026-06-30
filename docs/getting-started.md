@@ -59,7 +59,7 @@ agentic_status
 Atau dashboard lengkap:
 
 ```
-agentic_dashboard
+agentic_status detail="full"
 ```
 
 ## Model Preferences

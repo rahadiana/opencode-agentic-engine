@@ -16,4 +16,4 @@ Plugin OpenCode yang mengimplementasikan agentic software engineering workflow.
 
 ## Entry Point
 
-`index.ts` — registers 33 tools + 6 hooks. Semua tool pakai prefix `agentic_`.
+`index.ts` — registers 31 `agentic_` tools + OpenCode hooks. Semua tool publik pakai prefix `agentic_`.

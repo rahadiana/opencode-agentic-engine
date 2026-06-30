@@ -28,7 +28,6 @@ Codebase navigation, context management, quality scoring, budget control.
 | [`agentic_pr`](tools.md#agentic_pr) | Generate & create PR description |
 | [`agentic_score`](tools.md#agentic_score) | Tech debt analysis |
 | [`agentic_model`](tools.md#agentic_model) | Per-role/tool/category model preferences |
-| [`agentic_model_reset`](tools.md#agentic_model_reset) | Reset model statistics |
 | [`agentic_budget`](tools.md#agentic_budget) | Circuit breaker: token/steps/time/cost |
 
 ## Stage III — Orchestration
@@ -43,7 +42,7 @@ Multi-agent coordination, memory, observability.
 | [`agentic_parallel`](tools.md#agentic_parallel) | Dependency-based concurrency |
 | [`agentic_skill`](tools.md#agentic_skill) | Skill extraction & search |
 | [`agentic_episodes`](tools.md#agentic_episodes) | Cross-session memory |
-| [`agentic_dashboard`](tools.md#agentic_dashboard) | Observability dashboard |
+| [`agentic_status`](tools.md#agentic_status) | Observability dashboard via `detail="full"` |
 | [`agentic_guard`](tools.md#agentic_guard) | Hallucination guard |
 | [`agentic_finetune`](tools.md#agentic_finetune) | Fine-tuning pipeline |
 
@@ -74,7 +73,6 @@ Tools eksperimental untuk debate, routing, RAG, dan protocol interop.
 | [`agentic_clean`](tools.md#agentic_clean) | Strip debate artifacts, reformat |
 | [`agentic_rag`](tools.md#agentic_rag) | Multi-index RAG search |
 | [`agentic_mcp`](tools.md#agentic_mcp) | MCP client (external tools/APIs) |
-| [`agentic_mcp_server`](tools.md#agentic_mcp_server) | MCP server (expose plugin tools) |
 | [`agentic_a2a`](tools.md#agentic_a2a) | A2A agent-to-agent protocol |
 | [`agentic_tools`](tools.md#agentic_tools) | Unified tool discovery (MCP + A2A) |
 | [`agentic_memo`](tools.md#agentic_memo) | Second Brain (decisions, TODOs, graph) |

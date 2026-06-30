@@ -18,15 +18,15 @@ export interface BootstrapEntry {
 const BOOTSTRAP_NOWLEDGE: BootstrapEntry[] = [
   {
     goal: "Understand opencode-agentic-engine architecture",
-    summary: "opencode-agentic-engine is an OpenCode plugin implementing agentic software engineering. It has 79 TypeScript source files across 6 layers: core/ (engine: planning, execution, verification, LLM, git, budget), agents/ (multi-agent coordination + A2A protocol), drift/ (error detection, hallucination guard), memory/ (episodic store, skill store, vector store, RAG), evaluation/ (live evaluator), observability/ (trace logger, dashboard). The entry point is src/index.ts which registers 31 tools and 6 hooks.",
+    summary: "opencode-agentic-engine is an OpenCode plugin implementing agentic software engineering. It has TypeScript source files across 6 layers: core/ (engine: planning, execution, verification, LLM, git, budget), agents/ (multi-agent coordination + A2A protocol), drift/ (error detection, hallucination guard), memory/ (episodic store, skill store, vector store, RAG), evaluation/ (live evaluator), observability/ (trace logger, dashboard). The entry point is src/index.ts which registers 31 agentic tools and OpenCode hooks.",
     tags: ["architecture", "structure", "overview", "plugin"],
     decisions: ["Entry: src/index.ts", "Core engine: src/core/", "Multi-agent: src/agents/", "Memory: src/memory/"]
   },
   {
     goal: "What are the 31 agentic tools?",
-    summary: "Stage I Foundation (5): agentic_plan, agentic_execute, agentic_reflect, agentic_verify, agentic_status. Stage II Intelligence (7): agentic_nav, agentic_context, agentic_snapshot, agentic_pr, agentic_score, agentic_model (includes reset), agentic_budget. Stage III Orchestration (8): agentic_delegate, agentic_pipeline, agentic_message, agentic_parallel, agentic_skill, agentic_episodes, agentic_guard, agentic_finetune. Stage IV Evolution (1): agentic_evolve. Stage V Autonomous (1): agentic_auto. Blueprint (6): agentic_debate, agentic_router, agentic_clean, agentic_rag, agentic_mcp, agentic_a2a. All tools use the agentic_ prefix.",
+    summary: "Stage I Foundation (5): agentic_plan, agentic_execute, agentic_reflect, agentic_verify, agentic_status. Stage II Intelligence (9): agentic_nav, agentic_context, agentic_snapshot, agentic_pr, agentic_score, agentic_model (includes reset), agentic_budget, agentic_db, agentic_memo. Stage III Orchestration (8): agentic_delegate, agentic_pipeline, agentic_message, agentic_parallel, agentic_skill, agentic_episodes, agentic_guard, agentic_finetune. Stage IV Evolution (1): agentic_evolve. Stage V Autonomous (1): agentic_auto. Blueprint (7): agentic_debate, agentic_router, agentic_clean, agentic_rag, agentic_mcp, agentic_a2a, agentic_tools. All tools use the agentic_ prefix.",
     tags: ["tools", "agentic", "reference", "list"],
-    decisions: ["31 tools total (28 listed by stage + 3 additional: agentic_tools, agentic_db, agentic_memo)", "Grouped by stage (I-V + Blueprint)", "All prefixed with agentic_"]
+    decisions: ["31 registered agentic tools total; agentic_dashboard and agentic_model_reset are merged into agentic_status detail=full and agentic_model reset actions", "Grouped by stage (I-V + Blueprint)", "All public tools prefixed with agentic_"]
   },
   {
     goal: "Recommended workflow: research → plan → implement → verify",

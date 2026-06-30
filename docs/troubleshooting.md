@@ -80,7 +80,7 @@ Dashboard: ❌ gpt-4o — reliability: 0%, calls: 5 (quarantined)
 **Fix:** Reset stats:
 
 ```
-agentic_model_reset reset model="gpt-4o"
+agentic_model action="reset" model="gpt-4o"
 ```
 
 ### Pipeline stage gagal

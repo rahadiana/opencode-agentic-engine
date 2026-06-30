@@ -218,23 +218,6 @@ Konfigurasi model LLM yang berbeda untuk setiap agent role dalam sesi yang sama.
 
 ---
 
-### agentic_model_reset
-
-Reset statistik model untuk recovery dari degraded performance.
-
-| Parameter | Tipe | Required | Deskripsi |
-|-----------|------|----------|-----------|
-| `action` | `"reset" \| "reset-stale" \| "reset-all"` | ✅ | `reset` → model tertentu; `reset-stale` → auto; `reset-all` → emergency |
-| `model` | `string` | ❌ | Nama model (required untuk `reset`) |
-| `staleDays` | `number` | ❌ | Threshold hari untuk stale detection (default: 7) |
-
-**Deskripsi**:  
-Recovery dari performance degradation dengan mereset statistik model. Berguna saat model mengalami timeout, retry storms, atau silent failures.
-
-**Stage**: II
-
----
-
 ### agentic_budget
 
 Budget enforcement tool (PDP layer). Set limits per scope (session/task) and configure behavior (hard-stop / warn / request-approval).
@@ -374,18 +357,15 @@ Search past tasks dan outcomes untuk belajar dari sesi sebelumnya. Gunakan sebel
 
 ---
 
-### agentic_dashboard
+### agentic_status detail="full"
 
-Observability dashboard dari execution traces.
+Observability dashboard dari execution traces. `agentic_dashboard` sudah digabung ke tool ini.
 
 | Parameter | Tipe | Required | Deskripsi |
 |-----------|------|----------|-----------|
-| — | — | — | Tidak ada parameter |
+| `detail` | `"basic" \| "full"` | ❌ | Gunakan `full` untuk timeline, statistics, anomalies, dan model reliability |
 
-**Deskripsi**:  
-Menampilkan timeline, statistics, tool usage, anomaly detection, dan model reliability (timeouts, retry storms, silent failures). Data dari JSONL trace logger.
-
-**Stage**: III
+**Stage**: I
 
 ---
 
@@ -621,19 +601,6 @@ SQLite database backend.
 
 ---
 
-### agentic_mcp_server
-
-Start/stop MCP server yang mengekspos plugin tools via standard MCP protocol.
-
-| Parameter | Tipe | Required | Deskripsi |
-|-----------|------|----------|-----------|
-| `action` | `"start" \| "stop" \| "status" \| "restart"` | ✅ | Operasi server |
-| `port` | `number` | ❌ | Port (untuk start) |
-
-**Deskripsi**: External MCP clients bisa discover dan call plugin tools. stdio transport.
-
----
-
 ### agentic_tools
 
 Unified tool discovery dan calling across MCP + A2A protocols.
@@ -655,15 +622,16 @@ Unified tool discovery dan calling across MCP + A2A protocols.
 
 ```
 Stage I    Foundation     [5 tools]   plan, execute, reflect, verify, status
-Stage II   Discovery      [7 tools]   nav, context, snapshot, pr, score, model, budget
-Stage III  Multi-Agent    [10 tools]  delegate, pipeline, message, parallel, skill,
-                                      episodes, dashboard, guard, model_reset, finetune
+Stage II   Discovery      [9 tools]   nav, context, snapshot, pr, score, model, budget,
+                                      db, memo
+Stage III  Multi-Agent    [8 tools]   delegate, pipeline, message, parallel, skill,
+                                      episodes, guard, finetune
 Stage IV   Evolution      [1 tool]    evolve
 Stage V    Autonomous     [1 tool]    auto
-Blueprint  Experimental   [9 tools]   debate, router, clean, rag, mcp, a2a,
-                                      db, mcp_server, tools
+Blueprint  Experimental   [7 tools]   debate, router, clean, rag, mcp, a2a,
+                                      tools
 ───────────────────────────────────────────────────
-Total                    [33 tools]
+Total                    [31 tools]
 ```
 
 ---

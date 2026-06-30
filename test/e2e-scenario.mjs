@@ -381,8 +381,8 @@ async function main() {
   const finalContext = await hooks.tool.agentic_context.execute({ action: "view" }, ctx("final"))
   metrics.finalContextSize = finalContext.output.length
 
-  // Dashboard
-  const dash = await hooks.tool.agentic_dashboard.execute({}, ctx("final"))
+  // Full dashboard (agentic_dashboard merged into agentic_status detail=full)
+  const dash = await hooks.tool.agentic_status.execute({ detail: "full" }, ctx("final"))
   assert(dash.output.length > 0, "dashboard output")
 
   // Evolve inspect

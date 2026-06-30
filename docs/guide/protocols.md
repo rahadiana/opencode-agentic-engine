@@ -25,23 +25,23 @@ agentic_mcp action="call" server="my-server" tool="get_weather" params='{"city":
 agentic_mcp action="disconnect" server="my-server"
 ```
 
-### MCP Server (`agentic_mcp_server`)
+### MCP Server (`agentic_mcp` server actions)
 
 Expose plugin tools sebagai MCP server — external clients bisa panggil:
 
 ```
 # Start server
-agentic_mcp_server action="start" port=4124
+agentic_mcp action="server-start" port=4124
   → Agentic MCP server running on port 4124
 
 # Status
-agentic_mcp_server action="status"
+agentic_mcp action="server-status"
 
 # Restart
-agentic_mcp_server action="restart"
+agentic_mcp action="server-restart"
 
 # Stop
-agentic_mcp_server action="stop"
+agentic_mcp action="server-stop"
 ```
 
 External client bisa discover dan call semua `agentic_*` tools via MCP protocol.

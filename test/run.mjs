@@ -73,13 +73,15 @@ catch (e) { assert(false, `AgenticEngine() threw: ${e.message}`) }
 assert(hooks && typeof hooks === "object", "hooks is an object")
 assert(typeof hooks.dispose === "function", "dispose hook registered")
 
-// 3. Tool registration (30 tools)
+// 3. Tool registration (31 tools)
 console.log("\n[3] Tool registration")
-for (const name of ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_model", "agentic_budget", "agentic_episodes", "agentic_parallel", "agentic_guard", "agentic_evolve", "agentic_auto", "agentic_debate", "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp", "agentic_a2a", "agentic_finetune"]) {
+const expectedAgenticTools = ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_model", "agentic_budget", "agentic_episodes", "agentic_parallel", "agentic_guard", "agentic_evolve", "agentic_auto", "agentic_debate", "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp", "agentic_a2a", "agentic_tools", "agentic_finetune", "agentic_db", "agentic_memo"]
+for (const name of expectedAgenticTools) {
   const tool = hooks.tool?.[name]
   assert(tool && typeof tool.execute === "function", `"${name}" has execute()`)
   assert(typeof tool.description === "string" && tool.description.length > 0, `"${name}" has description`)
 }
+assert(Object.keys(hooks.tool || {}).filter(t => t.startsWith("agentic_")).length === expectedAgenticTools.length, "registered agentic tool count matches expected list")
 
 // 4. agentic_plan — auto-decompose feature
 console.log("\n[4] agentic_plan — auto-decompose (create feature)")
@@ -1607,7 +1609,7 @@ assert(listAfterClearOut.includes("No model preferences"), "list shows empty aft
 
 assert(true, "agentic_model session model preference tests passed")
 
-// 66b. agentic_model — reset model statistics (merged from agentic_model_reset)
+// 66b. agentic_model — reset model statistics
 console.log("\n[66b] agentic_model — reset model stats (merged)")
 const mrSid = freshSid()
 const mrCtx = mockCtx(mrSid)

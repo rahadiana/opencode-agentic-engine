@@ -14,4 +14,4 @@
 | `multiAgent` | 15% | >90% delegation success |
 | `skillReuse` | 10% | >50% skill found |
 
-Skor ditampilkan di dashboard via `agentic_dashboard`.
+Skor ditampilkan di dashboard via `agentic_status detail="full"`.

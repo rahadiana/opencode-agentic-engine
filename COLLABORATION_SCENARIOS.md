@@ -573,13 +573,13 @@ agentic_evolve export-training-data  →  (use for local training)
 ### 5.1 Real-Time Dashboard
 
 ```
-agentic_dashboard  →  agentic_status
+agentic_status detail="full"  →  agentic_status
 ```
 
 **Use case**: Monitor execution health, detect anomalies.
 
 ```
-Step 1: agentic_dashboard    — Timeline + stats + anomaly detection
+Step 1: agentic_status full  — Timeline + stats + anomaly detection
 Step 2: agentic_status       — Execution dashboard + blocked steps
 ```
 
@@ -728,7 +728,7 @@ agentic_budget status  →  agentic_budget set  →  agentic_snapshot restore
 ### 6.3 Model Degradation Recovery
 
 ```
-agentic_model_reset  →  agentic_model list
+agentic_model reset actions  →  agentic_model list
 ```
 
 **Pattern**:
@@ -926,7 +926,7 @@ agentic_evolve export-skill
 1. agentic_status          — identify blocked steps
 2. agentic_budget status   — check remaining budget
 3. agentic_context compress — free up context space
-4. agentic_model_reset     — recover from degraded model
+4. agentic_model reset      — recover from degraded model
 5. agentic_snapshot restore — rollback to last good state
 6. agentic_reflect         — analyze what went wrong
 7. agentic_auto            — resume with learnings
@@ -972,7 +972,7 @@ agentic_auto (single call replaces all of the above)
 | `agentic_episodes` | any | - | plan, context |
 | `agentic_model` | any | - | llm engine |
 | `agentic_budget` | any | event: budget.limit.exceeded | execute (block) |
-| `agentic_dashboard` | any | - | observability |
+| `agentic_status` | any | - | status + observability (`detail="full"`) |
 | `agentic_guard` | execute | - | audit report |
 | `agentic_evolve` | any | - | system evolution |
 | `agentic_auto` | - | - | everything |
@@ -983,10 +983,8 @@ agentic_auto (single call replaces all of the above)
 | `agentic_mcp` | any | - | external tools |
 | `agentic_a2a` | any | - | remote agents |
 | `agentic_db` | any | - | structured data |
-| `agentic_mcp_server` | any | - | expose tools via MCP |
 | `agentic_tools` | any | - | cross-protocol tool discovery |
 | `agentic_finetune` | skill, episodes | - | fine-tuned model |
-| `agentic_model_reset` | any | - | model degradation recovery |
 
 ### Role → Tool Access Matrix
 

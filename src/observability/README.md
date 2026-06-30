@@ -8,7 +8,7 @@
 
 ## Dashboard Metrics
 
-Tersedia via `agentic_dashboard`:
+Tersedia via `agentic_status detail="full"`:
 - Statistics (calls, success rate, latency, peak concurrency)
 - Tools Used (sorted table)
 - Timeline (last 20 events)

@@ -100,7 +100,7 @@ Semua file konfigurasi, state, dan data runtime disimpan di folder `.agentic/`.
     "agentic_nav": "",         // Isi "provider/model" untuk override
     "agentic_plan": "",
     "agentic_verify": "",
-    // ... semua 29 tools
+    // ... semua 31 agentic tools
   },
   "categories": {
     "quick": "9router/FlashCombo",       // Complexity category
@@ -161,7 +161,7 @@ Semua file konfigurasi, state, dan data runtime disimpan di folder `.agentic/`.
 
 | Path | Isi | Diedit via |
 |------|-----|------------|
-| `store/models/registry.json` | Reliability/hallucination/latency per model | `agentic_model_reset` |
+| `store/models/registry.json` | Reliability/hallucination/latency per model | `agentic_model action="reset"` |
 | `store/episodes/@<project>/ses_*.json` | Cross-session memory | `agentic_episodes search` |
 | `store/evolution/@<project>/trend.json` | Self-evolution metrics | `agentic_evolve` |
 | `store/evaluation/@<project>/live.json` | 5-dimensi live scoring | Agent loop |

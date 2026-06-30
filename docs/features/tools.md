@@ -290,32 +290,17 @@ Convert skills → training data → upload OpenAI → monitor job.
 | `format` | enum | openai | openai/instructions |
 | `model` | string | — | Base model (e.g. gpt-4o-mini) |
 
-### `agentic_dashboard`
-Observability: timeline, stats, anomalies, model reliability, Gap #5/#10/#11.
-
-**Parameters:** none
-
 ### `agentic_model`
 Set per-role/per-tool/per-category LLM model preferences.
 
 **Parameters:**
 | Parameter | Type | Default | Deskripsi |
 |-----------|------|---------|-----------|
-| `action` | enum | — | set/get/list/clear |
+| `action` | enum | — | set/get/list/clear/reset/reset-stale/reset-all |
 | `role` | string | — | Agent role |
 | `tool` | string | — | Tool name |
 | `category` | enum | — | quick/unspecified-low/unspecified-high/deep |
 | `model` | string | — | Model name |
-
-### `agentic_model_reset`
-Reset model statistics untuk recovery dari degraded performance.
-
-**Parameters:**
-| Parameter | Type | Default | Deskripsi |
-|-----------|------|---------|-----------|
-| `action` | enum | — | reset/reset-stale/reset-all |
-| `model` | string | — | Model name |
-| `staleDays` | number | 7 | Stale threshold |
 
 ### `agentic_memo`
 Second Brain: ADR decisions, TODOs, reflection, knowledge graph.
@@ -367,19 +352,10 @@ MCP client: connect ke external servers, discover & call tools.
 **Parameters:**
 | Parameter | Type | Default | Deskripsi |
 |-----------|------|---------|-----------|
-| `action` | enum | — | connect/list/call/disconnect |
+| `action` | enum | — | connect/list/call/disconnect/server-start/server-stop/server-status/server-restart |
 | `transport` | enum | — | stdio/http |
 | `command` | string | — | Executable path |
 | `url` | string | — | Server URL |
-
-### `agentic_mcp_server`
-Start/stop MCP server yang expose plugin tools.
-
-**Parameters:**
-| Parameter | Type | Default | Deskripsi |
-|-----------|------|---------|-----------|
-| `action` | enum | — | start/stop/status/restart |
-| `port` | number | auto | Port |
 
 ### `agentic_a2a`
 A2A (Agent-to-Agent) protocol: discover remote agents, delegate tasks, serve Agent Card.

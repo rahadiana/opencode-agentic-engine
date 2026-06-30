@@ -76,7 +76,7 @@ Atau coba tool langsung:
 ```
 agentic_nav query="src/" showSummary=true
 agentic_plan goal="Buat fitur login"
-agentic_dashboard
+agentic_status detail="full"
 ```
 
 ## Dokumentasi Lengkap → [`docs/`](./docs/)

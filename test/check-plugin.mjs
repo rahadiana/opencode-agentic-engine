@@ -117,7 +117,7 @@ async function main() {
     const agenticTools = toolNames.filter(t => t.startsWith("agentic_"))
     ok(`Plugin initialized (${agenticTools.length} agentic tools registered)`)
 
-    // Check all 29 tools
+    // Check all registered agentic tools
     const expectedTools = [
       "agentic_plan", "agentic_execute", "agentic_reflect", "agentic_verify",
       "agentic_status", "agentic_nav", "agentic_context", "agentic_snapshot",
@@ -126,11 +126,11 @@ async function main() {
       "agentic_parallel", "agentic_skill", "agentic_episodes",
       "agentic_guard", "agentic_evolve", "agentic_auto", "agentic_debate",
       "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp",
-      "agentic_finetune",
+      "agentic_tools", "agentic_finetune", "agentic_db", "agentic_memo",
     ]
     const missing = expectedTools.filter(t => !toolNames.includes(t))
     if (missing.length === 0) {
-      ok("All 29 tools registered correctly")
+      ok(`All ${expectedTools.length} tools registered correctly`)
     } else {
       fail(`Missing tools: ${missing.join(", ")}`)
     }
@@ -149,8 +149,8 @@ async function main() {
     if (availableMatch) {
       const count = parseInt(availableMatch[1])
       ok(`Available Tools section present (${count} tools)`)
-      if (count >= 29) ok("  All 29+ tools listed")
-      else warn(`  Only ${count} tools listed (expected >= 29)`)
+      if (count >= expectedTools.length) ok(`  All ${expectedTools.length}+ tools listed`)
+      else warn(`  Only ${count} tools listed (expected >= ${expectedTools.length})`)
     } else {
       fail("Available Tools section MISSING from system prompt")
     }
@@ -172,7 +172,7 @@ async function main() {
     if (promptText.includes("Selected Tools for This Task")) {
       ok("Selected Tools (routed subset) section present")
     } else {
-      warn("No Selected Tools section — all 29 tools shown without routing")
+      warn(`No Selected Tools section — all ${expectedTools.length} tools shown without routing`)
     }
 
     // ── 7. Test tool execution ──
