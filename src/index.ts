@@ -78,17 +78,14 @@ import { codeIntentAnalyzer } from "./core/code-intent-analyzer.js"
 import { SchemaValidator } from "./core/skill-schema.js"
 import { parseFileEntries, writeFiles as writeFilesHelper } from "./core/execution-helpers.js"
 import { DslExecutor } from "./core/dsl-executor.js"
-import { SkillImprover } from "./core/skill-improver.js"
 import { ErrorRecovery } from "./core/error-recovery.js"
 import { AlignmentGate } from "./core/alignment-gate.js"
 import { EconomicModel } from "./core/economic-model.js"
-import { AttentionScheduler } from "./core/attention-scheduler.js"
-void AttentionScheduler // available via import for direct usage
+import { ConstraintManifold } from "./core/constraint-manifold.js"
 import { WorldModel } from "./core/world-model.js"
 import { SimulationEngine, type SimulatedStep } from "./core/simulation-engine.js"
 import { MetaReasoner } from "./core/meta-reasoner.js"
 import { BlueprintParser, BlueprintResolver, type ModelSpecMap } from "./core/agent-blueprint.js"
-import { ConstraintManifold } from "./core/constraint-manifold.js"
 import { autoUpdatePlugin } from "./core/plugin-updater.js"
 import { evaluateWorkflowPolicy, formatWorkflowPolicyDecisions, verificationEvidenceFailed } from "./core/workflow-policy.js"
 
@@ -637,16 +634,11 @@ const confidenceStore = new ConfidenceStore()
     return { instructions: skillRecord.definition.logic.instructions }
   })
 
-  // ── SkillImprover (Comparison 01: Self-Improvement Loop) ──
-  const skillImprover = new SkillImprover(skillStore, schemaValidator)
-  void skillImprover // available via import for direct usage
-
   // ── MetaReasoner (Comparison 22: Meta-Reasoning Strategy) ──
   const metaReasoner = new MetaReasoner()
 
-  // ── ConstraintManifold (Phase 4C: Safety by design) ──
+  // ── ConstraintManifold (Phase 4C: Safety by design) — used by dashboard ──
   const constraintManifold = new ConstraintManifold()
-  void constraintManifold // available via import for direct usage
 
   // Load cross-session knowledge artifact
   try {
@@ -1104,6 +1096,18 @@ const confidenceStore = new ConfidenceStore()
             metadata: { errors, complexity: plan.complexity, autoDecomposed: (!args.subtasks || args.subtasks.length === 0) && subtasks.length > 0, llmDecomposed: !!args.llmDecompose },
           })
 
+          // Emit plan.created event for Second Brain + observability
+          eventBus.emit({
+            type: "plan.created",
+            payload: {
+              sessionID: context.sessionID,
+              planId: plan.intent.subtasks[0]?.id ?? `plan-${Date.now()}`,
+              goal: plan.intent.goal,
+              subtaskCount: plan.intent.subtasks.length,
+              domain: domainRegistry.getCurrentDomain() ?? "generic",
+            },
+          })
+
           if (errors.length > 0) {
             return {
               output: `## Plan Created (with warnings)\n\n${errors.map(e => `⚠️  ${e}`).join("\n")}\n\n<details>\n<summary>Plan JSON</summary>\n\n\`\`\`json\n${JSON.stringify(plan, null, 2)}\n\`\`\`\n</details>`,
@@ -1548,6 +1552,21 @@ const confidenceStore = new ConfidenceStore()
 
             response += `\n**Suggested fix:** ${analysis.suggestedFix}\n`
 
+            // Emit step.retrying event when retries are available
+            if (retriesUsed > 0) {
+              eventBus.emit({
+                type: "step.retrying",
+                payload: {
+                  sessionID: context.sessionID,
+                  stepId: args.stepId,
+                  attempt: retriesUsed + 1,
+                  maxRetries: maxAllowed,
+                  previousError: args.error ?? analysis.likelyRootCause ?? "",
+                  suggestedFix: analysis.suggestedFix,
+                },
+              })
+            }
+
             if (canRetry) {
               response += `\n🔄 **Retries remaining:** ${retriesLeft}/${maxAllowed} (${analysis.category}) — fix the issue and call \`agentic_execute\` again.`
 
@@ -1836,6 +1855,14 @@ const confidenceStore = new ConfidenceStore()
           if (chainResult.recoverySteps.length > 0) {
             response += `\n### 🔄 Recovery Available\nRetry #${chainResult.recoverySteps.length} — call \`agentic_reflect\` to diagnose before retrying.\n`
           }
+          // Auto-chain fallback: suggest next tool even without a plan
+          if (chainResult.nextSteps.length === 0 && chainResult.recoverySteps.length === 0) {
+            if (args.success && !session.plan) {
+              response += `\n### 💡 Suggested Next\nVerify quality: \`agentic_verify\` or check status: \`agentic_status\`\n`
+            } else if (!args.success) {
+              response += `\n### 💡 Suggested Next\nDiagnose failure: \`agentic_reflect stepId="${args.stepId}"\`\n`
+            }
+          }
 
           // ── Curator: periodic lifecycle maintenance (every ~10 successful executions) ──
           if (args.success && curator.getConfig().enabled) {
@@ -1934,6 +1961,20 @@ const confidenceStore = new ConfidenceStore()
             output += `\n---\n🛑 **No retries remaining.** Consider adding a new plan step for this fix.`
           }
 
+          // Emit step.reflected event
+          eventBus.emit({
+            type: "step.reflected",
+            payload: {
+              sessionID: context.sessionID,
+              stepId: args.stepId,
+              category: analysis.category,
+              severity: analysis.severity,
+              suggestedFix: analysis.suggestedFix,
+              canRetry,
+              retriesUsed,
+            },
+          })
+
           sessionStore.getOrCreate(context.sessionID).artifacts.set(`workflow:reflected:${args.stepId}`, String(Date.now()))
           return { output }
         },
@@ -1965,6 +2006,19 @@ const confidenceStore = new ConfidenceStore()
           const checkOutput = result.checks.map(c =>
             `${c.passed ? "✅" : "❌"} **${c.name}**\n\`\`\`\n${c.output.slice(0, 600)}\n\`\`\``
           ).join("\n\n")
+
+          // Emit step.verified event
+          eventBus.emit({
+            type: "step.verified",
+            payload: {
+              sessionID: context.sessionID,
+              stepId,
+              tier,
+              passed: result.passed,
+              checkCount: result.checks.length,
+              errors: result.errors.slice(0, 5),
+            },
+          })
 
           if (result.passed) {
             sessionStore.getOrCreate(context.sessionID).artifacts.set("workflow:verified", String(Date.now()))
@@ -2019,6 +2073,27 @@ const confidenceStore = new ConfidenceStore()
             }
 
             let output = traceSection || "### 📊 Execution Overview\n\nNo trace data available yet. Execute some steps first.\n"
+
+            // EventBus observability stats
+            const eventHistory = eventBus.getHistory()
+            const eventTypes = new Map<string, number>()
+            for (const ev of eventHistory) {
+              eventTypes.set(ev.type, (eventTypes.get(ev.type) ?? 0) + 1)
+            }
+            if (eventTypes.size > 0) {
+              output += `\n### 🔌 Event Bus (${eventHistory.length} events, ${eventTypes.size} types)\n`
+              const sorted = [...eventTypes.entries()].sort((a, b) => b[1] - a[1])
+              for (const [type, count] of sorted.slice(0, 10)) {
+                output += `- \`${type}\`: ${count}x\n`
+              }
+              output += `**Subscribers:** ${eventBus.subscriberCount}\n`
+            }
+
+            // WorkflowEngine stats
+            const weStatus = workflowEngine.getStatus()
+            output += `\n### 🔗 Workflow Engine\n`
+            output += `**Retry entries:** ${weStatus.retryEntries}\n`
+
             output += `\n### 🤖 Model Reliability\n${modelReliability}\n`
 
             try {
@@ -3946,6 +4021,22 @@ const confidenceStore = new ConfidenceStore()
           const output = stepState.result.output
           const files = executor.getAllFilesModified(context.sessionID)
           const check = hallucinationGuard.check(output, files)
+
+          // Emit guard.check.completed event (auto-check in execution-helpers does this too)
+          const claims20 = check.claims.slice(0, 20) as unknown as Array<{ claim: string; type: "file" | "function" | "import"; verified: boolean; expected: string; actual: string | null }>
+          const unverifiedCount = claims20.filter(c => !c.verified).length
+          eventBus.emit({
+            type: "guard.check.completed",
+            payload: {
+              sessionID: context.sessionID,
+              stepId: args.stepId,
+              totalClaims: claims20.length,
+              unverifiedClaims: unverifiedCount,
+              hallucinationRate: claims20.length > 0 ? unverifiedCount / claims20.length : 0,
+              passed: check.passed,
+              claims: claims20,
+            },
+          })
 
           if (!check.passed) {
             const guardModelId = await llmEngine.getOpenCodeModel()
@@ -6670,7 +6761,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
         // GLOBAL FALLBACK: jika transform gagal total, inject tool list minimum
         log.error("[Agentic] system.transform ERROR — injecting fallback: " + (e instanceof Error ? e.message : String(e)))
         const fallbackTools = TOOL_REGISTRY.map(t => `- **${t.name}**: ${t.description.slice(0, 100)}`).join("\n")
-        const fallback = `\n\n## Agentic Tools\n\nYou have access to these tools. Use them with their \`agentic_\` prefix.\n\n### Tool List (${TOOL_REGISTRY.length})\n${fallbackTools}\n\nBuilt-in tools: \`read\`, \`edit\`, \`bash\`, \`grep\`, \`webfetch\`, \`write\`.`
+        const fallback = `\n\n## Agentic Tools\n\nYou have access to these tools. Use them with their \`agentic_\` prefix.\n\n### Tool List (${TOOL_REGISTRY.length})\n${fallbackTools}\n\nAvailable built-in tools: \`edit\`, \`write\`, \`webfetch\`, \`question\`. Do NOT use \`read\`, \`bash\`, \`grep\`, \`glob\`, \`todowrite\`, \`task\`.`
         if (output.system.length > 0) {
           output.system[output.system.length - 1] += "\n\n" + fallback
         } else {

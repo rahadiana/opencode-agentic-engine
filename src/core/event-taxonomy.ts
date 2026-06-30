@@ -265,6 +265,35 @@ export interface EpisodeRecordedEvent {
   }
 }
 
+// ── Namespace: step — reflection lifecycle ──
+
+export interface StepReflectedEvent {
+  type: "step.reflected"
+  payload: {
+    sessionID: string
+    stepId: string
+    category: string
+    severity: string
+    suggestedFix: string
+    canRetry: boolean
+    retriesUsed: number
+  }
+}
+
+// ── Namespace: step — verification lifecycle ──
+
+export interface StepVerifiedEvent {
+  type: "step.verified"
+  payload: {
+    sessionID: string
+    stepId: string
+    tier: string
+    passed: boolean
+    checkCount: number
+    errors: string[]
+  }
+}
+
 /** Feedback from user (Gap #9: continuous learning) */
 export interface FeedbackRecordedEvent {
   type: "feedback.recorded"
@@ -285,13 +314,15 @@ export type AgenticEvent =
   | StepCompletedEvent
   | StepFailedEvent
   | StepRetryingEvent
+  | StepReflectedEvent
+  | StepVerifiedEvent
+  | GuardCheckCompletedEvent
   | PlanCreatedEvent
   | PlanCompletedEvent
   | PipelineStageCompletedEvent
   | PipelineCompletedEvent
   | BudgetLimitExceededEvent
   | BudgetThresholdWarningEvent
-  | GuardCheckCompletedEvent
   | LLMResponseEvent
   | FileWrittenEvent
   | TaskDelegatedEvent
