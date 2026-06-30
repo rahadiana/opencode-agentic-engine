@@ -125,7 +125,7 @@ async function main() {
       "agentic_budget", "agentic_delegate", "agentic_pipeline", "agentic_message",
       "agentic_parallel", "agentic_skill", "agentic_episodes",
       "agentic_guard", "agentic_evolve", "agentic_auto", "agentic_debate",
-      "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp",
+      "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp", "agentic_a2a",
       "agentic_tools", "agentic_finetune", "agentic_db", "agentic_memo",
     ]
     const missing = expectedTools.filter(t => !toolNames.includes(t))
@@ -145,7 +145,7 @@ async function main() {
     const promptText = out.system.join("\n")
 
     // Check tool visibility
-    const availableMatch = promptText.match(/### Available Tools \((\d+)\)/)
+    const availableMatch = promptText.match(/### (?:🛠️ )?(?:Available Tools|Tool Reference) \((\d+) tools?\)/)
     if (availableMatch) {
       const count = parseInt(availableMatch[1])
       ok(`Available Tools section present (${count} tools)`)
@@ -157,9 +157,9 @@ async function main() {
 
     // Check key sections
     const checks = [
-      ["identity", "reasoning engine"],
-      ["workflow", "Research → Plan → Implement → Verify"],
-      ["guardrails", "Research FIRST"],
+      ["identity", "Reasoning engine"],
+      ["workflow", "Mandatory Agentic Workflow"],
+      ["guardrails", "MUST research first"],
       ["tool mentions", "agentic_plan"],
     ]
     let allSectionsFound = true
@@ -168,11 +168,11 @@ async function main() {
       else { warn(`  Section MISSING: ${label}`); allSectionsFound = false }
     }
 
-    // Selected tools section
-    if (promptText.includes("Selected Tools for This Task")) {
-      ok("Selected Tools (routed subset) section present")
+    // Recommended tools section
+    if (promptText.includes("Recommended Tools for This Task")) {
+      ok("Recommended Tools section present")
     } else {
-      warn(`No Selected Tools section — all ${expectedTools.length} tools shown without routing`)
+      warn(`No Recommended Tools section — all ${expectedTools.length} tools shown without routing`)
     }
 
     // ── 7. Test tool execution ──

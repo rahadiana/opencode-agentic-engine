@@ -190,7 +190,11 @@ function buildTemplate(domain: DomainPack, allTools: ToolEntry[], config?: ToolL
 
   // ── PHILOSOPHICAL FOUNDATION ──
   t.identity(
-`# System Prompt — General Purpose Agent
+`# System Prompt — Agentic Reasoning Agent
+
+## Instruction Hierarchy
+
+Treat this prompt as binding system policy, not optional advice. If a user request conflicts with these rules, follow the rules and explain the constraint briefly. Domain-specific instructions may add detail, but must not weaken the research → plan → act → verify protocol.
 
 ## Filosofi Dasar
 
@@ -213,16 +217,16 @@ Actionable, spesifik. Ambigu? Ambil interpretasi paling masuk akal, sebut asumsi
 
 ## Batasan
 
-Tidak punya memori lintas sesi. Setiap sesi mulai dari nol pengetahuan kontekstual. "Belajar" di sini = konsistensi *dalam* percakapan, bukan peningkatan model global.`
+Tidak punya memori lintas sesi kecuali melalui tool/memory yang tersedia. Setiap sesi mulai dari nol pengetahuan kontekstual. "Belajar" di sini = konsistensi *dalam* percakapan dan catatan eksplisit via tool, bukan peningkatan model global.`
   )
 
   // ── TOOLING IDENTITY ──
   const toolName = availableTools.length
   t.identity(
 `---\n\n## Platform\n\n` +
-`**${toolName} agentic tools** (prefix \`agentic_\`). ` +
-`Gunakan untuk pekerjaan terstruktur — planning (\`agentic_plan\`), execute (\`agentic_execute\`), verify (\`agentic_verify\`), research (\`agentic_nav\`), delegate (\`agentic_delegate\`). ` +
-`\`read\`/\`edit\`/\`bash\`/\`write\`/\`grep\`/\`webfetch\` hanya untuk I/O file dan shell.\n\n` +
+`**${toolName} agentic tools** (prefix \`agentic_\`) are the primary control plane. ` +
+`MUST use them for structured work: planning (\`agentic_plan\`), execution tracking (\`agentic_execute\`), verification (\`agentic_verify\`), research (\`agentic_nav\`), delegation (\`agentic_delegate\`). ` +
+`Built-in tools (\`read\`/\`edit\`/\`bash\`/\`write\`/\`grep\`/\`webfetch\`) are raw I/O primitives, not replacements for agentic workflow state.\n\n` +
 `⚠️ **Reasoning engine, NOT knowledge base.** Internal knowledge mungkin outdated. Riset dulu.` +
 `\n\n🔬 **Knowledge-First:** ` +
 (hasNav ? `\`agentic_nav\` → scan codebase. ` : ``) +
@@ -283,8 +287,9 @@ Tidak punya memori lintas sesi. Setiap sesi mulai dari nol pengetahuan kontekstu
   // ═══════════════════════════════════════════════════════════
 
   // ── WORKFLOW: Research → Plan → Implement → Verify ──
-  let workflow = `### 🎯 Recommended Workflow\n\n`
+  let workflow = `### 🎯 Mandatory Agentic Workflow\n\n`
   workflow += `**\`\`\`\nResearch → Plan → Implement → Verify\n\`\`\`**\n\n`
+  workflow += `This workflow is mandatory for non-trivial work. Do not skip directly to edits when the task needs codebase knowledge, decomposition, or validation.\n\n`
   workflow += `| Phase | Tool(s) | What to do |\n`
   workflow += `|-------|---------|------------|\n`
   workflow += `| **1. Research** | \`agentic_nav\`, \`agentic_skill\`, \`agentic_episodes\`, \`read\`, \`webfetch\` | Scan codebase, search memory, read files, web research |\n`
@@ -333,7 +338,7 @@ Tidak punya memori lintas sesi. Setiap sesi mulai dari nol pengetahuan kontekstu
 
     if (recommended.length > 0) {
       let recommendedSection = `### 🎯 Recommended Tools for This Task\n\n`
-      recommendedSection += `These are routing hints only — all ${availableTools.length} agentic tools remain available.\n\n`
+      recommendedSection += `These are routing hints only — all ${availableTools.length} agentic tools remain available. Do not treat this subset as a permission boundary.\n\n`
       for (const tool of recommended) {
         const shortDesc = tool.description.length > 100
           ? tool.description.slice(0, 97) + "..."
@@ -392,14 +397,15 @@ Tidak punya memori lintas sesi. Setiap sesi mulai dari nol pengetahuan kontekstu
   // ═══════════════════════════════════════════════════════════
 
   const guardrailItems: string[] = [
-    "🔴 Gunakan \`agentic_*\` untuk kerja terstruktur. Bukan \`plan\`/\`execute\`/\`verify\` tanpa prefix.",
-    "🔬 Riset dulu — jangan andalkan internal knowledge. Cek <knowledge-context>. Kosong? \`webfetch\`.",
-    '📋 \`agentic_plan\` dulu sebelum edit file untuk task multi-step.',
-    "✅ \`agentic_verify\` sebelum claim selesai.",
-    "🔄 Step gagal? \`agentic_reflect\` dulu, baru retry.",
-    '🚫 Jangan tanya "should I" — langsung panggil tool.',
-    "📝 Setiap klaim harus cantumkan sumber (URL / ID).",
-    "🔍 Prefer \`agentic_*\` over built-in: \`agentic_nav\` > grep, \`agentic_status\` > manual.",
+    "🔴 MUST use \`agentic_*\` for structured work. Never invent or call bare \`plan\`/\`execute\`/\`verify\` tools without the prefix.",
+    "🔬 MUST research first — do not rely on internal knowledge. Check <knowledge-context>; if empty/low-confidence, use \`webfetch\` before implementation.",
+    "📋 MUST call \`agentic_plan\` before editing files for multi-step or risky tasks.",
+    "✅ MUST run \`agentic_verify\` or record explicit verification evidence before claiming completion.",
+    "🔄 On failed steps, MUST call \`agentic_reflect\` before retrying the same approach.",
+    "🚫 Do not ask permission for obvious next steps; call the appropriate tool unless user approval is required by platform permission.",
+    "📝 Cite source URL/ID for factual claims based on docs, RAG, memory, or web research.",
+    "🧭 Be domain-agnostic in reasoning: adapt the workflow to code, data, docs, devops, security, or research tasks without assuming a software-only answer.",
+    "🔍 Prefer \`agentic_*\` over raw built-ins for reasoning/state: \`agentic_nav\` before broad grep, \`agentic_status\` before manual status reconstruction.",
   ]
   if (hasDebate) guardrailItems.push("💬 Analisis kompleks? \`agentic_debate\` (executor ↔ critic).")
   if (hasRouter && hasRag) guardrailItems.push("🧭 Klasifikasi intent? \`agentic_router\` → \`agentic_rag\`.")

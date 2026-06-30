@@ -518,9 +518,14 @@ async function suite12() {
 
   // Critical sections
   ok(text.toLowerCase().includes("reasoning engine") || text.includes("autonomous software engineering agent"), "identity present")
+  ok(text.includes("Instruction Hierarchy"), "instruction hierarchy present")
+  ok(text.includes("binding system policy"), "prompt rules are framed as binding")
+  ok(text.includes("Mandatory Agentic Workflow"), "mandatory workflow section present")
   ok(text.includes("Knowledge-First"), "knowledge-first protocol present")
   ok(text.includes("Research") || text.includes("Riset dulu"), "guardrail: research first")
   ok(text.includes("cite sources") || text.includes("sumber"), "guardrail: cite sources")
+  ok(text.includes("domain-agnostic"), "domain-agnostic rule present")
+  ok(text.includes("MUST use `agentic_*`"), "agentic tool usage is a MUST rule")
   ok(text.includes("MANDATORY RESEARCH") || text.includes("Mandatory"),
     "mandatory research flow present")
 
