@@ -15,6 +15,7 @@ import { type MCPClient, type MCPConfig, type MCPConnection, type MCPCallResult 
 import { type A2AClient, type DiscoveredAgent, type TaskSendResult } from "../agents/a2a-client.js"
 import type { AgentCard } from "../agents/a2a-types.js"
 import type { A2AServerConfig, A2AServerStatus } from "../agents/a2a-server.js"
+import { AgenticError, NotFoundError, ValidationError } from "./errors.js"
 
 // ── Types ────────────────────────────────────────────
 
@@ -144,19 +145,19 @@ export class ProtocolAdapter {
 
   /** Send a task to a remote A2A agent */
   async delegateA2A(serverUrl: string, taskDescription: string, messages?: Array<{ role: string; content: string }>): Promise<TaskSendResult> {
-    if (!this.a2aClient) throw new Error("A2A client not initialized — call agentic_a2a first")
+    if (!this.a2aClient) throw new AgenticError("A2A client not initialized — call agentic_a2a first", "A2A_NOT_INITIALIZED")
     const a2aMessages = messages?.map(m => ({
       role: m.role as "agent" | "user",
       parts: [{ type: "text" as const, text: m.content }],
     })) ?? [{ role: "user" as const, parts: [{ type: "text" as const, text: taskDescription }] }]
     const result = await this.a2aClient.taskSend(serverUrl, { id: "", sessionId: "" }, a2aMessages)
-    if (!result) throw new Error("A2A task send returned no result")
+    if (!result) throw new NotFoundError("result", "a2a")
     return result
   }
 
   /** Get task status from a remote A2A agent */
   async getA2ATask(serverUrl: string, taskIdStr: string): Promise<unknown> {
-    if (!this.a2aClient) throw new Error("A2A client not initialized")
+    if (!this.a2aClient) throw new AgenticError("A2A client not initialized", "A2A_NOT_INITIALIZED")
     return this.a2aClient.taskGet(serverUrl, { id: taskIdStr })
   }
 
@@ -347,7 +348,7 @@ export class ProtocolAdapter {
           parts: [{ type: "text" as const, text: m.content }],
         })) ?? [{ role: "user" as const, parts: [{ type: "text" as const, text: taskDesc }] }]
         const result = await this.a2aClient.taskSend(target.source, { id: "", sessionId: "" }, a2aMessages)
-        if (!result) throw new Error("A2A task send returned no result")
+        if (!result) throw new NotFoundError("result", "a2a")
         const task = result.task
         const isComplete = task.status === "completed" || task.status === "working"
         const isFailed = task.status === "failed"
@@ -373,7 +374,7 @@ export class ProtocolAdapter {
       }
     }
 
-    throw new Error(`Unknown protocol: ${target.protocol}`)
+    throw new ValidationError(`Unknown protocol: ${target.protocol}`)
   }
 
   /** List all available connections (MCP servers + A2A agents) */

@@ -1,5 +1,6 @@
 import { createLogger } from "../observability/logger.js"
 import type { AgentRole } from "./coordinator.js"
+import { ValidationError } from "../core/errors.js"
 
 const log = createLogger("RoleRegistry")
 
@@ -256,9 +257,9 @@ Focus on the "what" and "why".`,
   }
 
   registerCustom(def: CustomAgentDef): void {
-    if (!def.role || !def.role.trim()) throw new Error("Custom role must have a non-empty role name")
-    if (!def.name || !def.name.trim()) throw new Error("Custom role must have a non-empty name")
-    if (!def.prompt || !def.prompt.trim()) throw new Error("Custom role must have a non-empty prompt")
+    if (!def.role || !def.role.trim()) throw new ValidationError("Custom role must have a non-empty role name")
+    if (!def.name || !def.name.trim()) throw new ValidationError("Custom role must have a non-empty name")
+    if (!def.prompt || !def.prompt.trim()) throw new ValidationError("Custom role must have a non-empty prompt")
     this.custom.set(def.role, def)
     if (!this.promptHistory.has(def.role)) {
       this.addHistoryEntry(def.role, def.prompt, "manual", `Custom role: ${def.name}`)

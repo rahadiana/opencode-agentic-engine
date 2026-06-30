@@ -18,6 +18,7 @@
 
 import type { DAGPlan, DAGExecutionContext, DAGNode, NodeRunner, DAGResult, DAGObserver, NodeStatus, ExecutionPhase } from "./dag-engine.js"
 import { DAGEngine } from "./dag-engine.js"
+import { ValidationError } from "./errors.js"
 
 export interface ExecutionLayerConfig {
   /** Max parallel nodes (default: 4) */
@@ -121,7 +122,7 @@ export class ExecutionLayer {
       return this.dagEngine.computePhases(context)
     } catch (err) {
       if (err instanceof Error && err.message.includes("cycle")) {
-        throw new Error(
+        throw new ValidationError(
           `[ExecutionLayer] ${err.message}. ` +
           `Fix dependency declarations before execution.`,
         )

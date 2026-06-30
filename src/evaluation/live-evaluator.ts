@@ -1,3 +1,5 @@
+import { ValidationError } from "../core/errors.js"
+
 // src/evaluation/live-evaluator.ts — Real-time evaluation score
 // Mengukur performa agent secara live dari aktivitas sesi nyata,
 // mirip metrik SWE-bench (task success) dan EvoClaw (continuous evolution).
@@ -282,7 +284,7 @@ export class LiveEvaluator {
 
   /** Restore from persisted state — validates data shape */
   fromJSON(data: unknown): void {
-    if (!data || typeof data !== "object") throw new Error("LiveEvaluator.fromJSON: invalid data")
+    if (!data || typeof data !== "object") throw new ValidationError("LiveEvaluator.fromJSON: invalid data")
     const d = data as Record<string, unknown>
     if (Array.isArray(d.stepResults)) {
       this.stepResults = d.stepResults as Array<{ stepId: string; success: boolean; sessionId?: string; timestamp?: number }>

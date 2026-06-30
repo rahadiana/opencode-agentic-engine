@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises"
+import { ValidationError, LLMError } from "./errors.js"
 
 // ──────────────────────────────────────────────
 // Types
@@ -62,7 +63,7 @@ export class FineTuningClient {
    * filePath: path to .jsonl file
    */
   async uploadFile(filePath: string): Promise<FineTuningFile> {
-    if (!this.apiKey) throw new Error("OpenAI API key not configured for fine-tuning")
+    if (!this.apiKey) throw new ValidationError("OpenAI API key not configured for fine-tuning")
 
     const content = await readFile(filePath, "utf-8")
 
@@ -95,7 +96,7 @@ export class FineTuningClient {
     trainingFileId: string,
     options?: Partial<FineTuningConfig>,
   ): Promise<FineTuningJob> {
-    if (!this.apiKey) throw new Error("OpenAI API key not configured for fine-tuning")
+    if (!this.apiKey) throw new ValidationError("OpenAI API key not configured for fine-tuning")
 
     const hyperparams: Record<string, unknown> = {}
     if (options?.trainingEpochs) hyperparams.n_epochs = options.trainingEpochs
@@ -120,7 +121,7 @@ export class FineTuningClient {
 
     if (!resp.ok) {
       const errText = await resp.text().catch(() => "unknown error")
-      throw new Error(`Create job failed (${resp.status}): ${errText}`)
+      throw new LLMError(`Create job failed (${resp.status}): ${errText}`)
     }
 
     const data = await resp.json() as Record<string, unknown>
@@ -131,7 +132,7 @@ export class FineTuningClient {
    * Get fine-tuning job status.
    */
   async getJobStatus(jobId: string): Promise<FineTuningJob> {
-    if (!this.apiKey) throw new Error("OpenAI API key not configured for fine-tuning")
+    if (!this.apiKey) throw new ValidationError("OpenAI API key not configured for fine-tuning")
 
     const resp = await this.fetchWithRetry(`${this.baseURL}/v1/fine_tuning/jobs/${jobId}`, {
       headers: { Authorization: `Bearer ${this.apiKey}` },
@@ -142,7 +143,7 @@ export class FineTuningClient {
   }
 
   async listJobs(limit = 20): Promise<FineTuningJob[]> {
-    if (!this.apiKey) throw new Error("OpenAI API key not configured for fine-tuning")
+    if (!this.apiKey) throw new ValidationError("OpenAI API key not configured for fine-tuning")
 
     const resp = await this.fetchWithRetry(`${this.baseURL}/v1/fine_tuning/jobs?limit=${limit}`, {
       headers: { Authorization: `Bearer ${this.apiKey}` },
@@ -153,7 +154,7 @@ export class FineTuningClient {
   }
 
   async cancelJob(jobId: string): Promise<FineTuningJob> {
-    if (!this.apiKey) throw new Error("OpenAI API key not configured for fine-tuning")
+    if (!this.apiKey) throw new ValidationError("OpenAI API key not configured for fine-tuning")
 
     const resp = await this.fetchWithRetry(`${this.baseURL}/v1/fine_tuning/jobs/${jobId}/cancel`, {
       method: "POST",
@@ -176,7 +177,7 @@ export class FineTuningClient {
     let attempt = 0
     while (true) {
       if (Date.now() - startTime > timeoutMs) {
-        throw new Error(`Timed out waiting for job ${jobId} after ${timeoutMs}ms`)
+        throw new LLMError(`Timed out waiting for job ${jobId} after ${timeoutMs}ms`)
       }
 
       const statusPromise = this.getJobStatus(jobId)
@@ -212,7 +213,7 @@ export class FineTuningClient {
             await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)))
             continue
           }
-          throw new Error(`Request failed (${resp.status}): ${errText}`)
+          throw new LLMError(`Request failed (${resp.status}): ${errText}`)
         }
         return resp
       } catch (e) {
@@ -220,7 +221,7 @@ export class FineTuningClient {
         await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)))
       }
     }
-    throw new Error("Request failed after retries")
+    throw new LLMError("Request failed after retries")
   }
 
   /**

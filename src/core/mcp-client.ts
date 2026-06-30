@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process"
 import { request } from "node:http"
 import { request as httpsRequest } from "node:https"
+import { AgenticError, NotFoundError, ValidationError } from "./errors.js"
 
 export type MCPTransport = "stdio" | "http" | "https"
 
@@ -228,7 +229,7 @@ export class MCPClient {
         tools = await this.connectHTTP(name, config)
         break
       default:
-        throw new Error(`Unsupported MCP transport: ${config.transport}`)
+        throw new AgenticError(`Unsupported MCP transport: ${config.transport}`, "MCP_ERROR")
     }
 
     const now = new Date().toISOString()
@@ -316,13 +317,13 @@ export class MCPClient {
   async callTool(serverName: string, toolName: string, args: Record<string, unknown> = {}): Promise<MCPCallResult> {
     const conn = this.connections.get(serverName)
     if (!conn || !conn.connected) {
-      throw new Error(`Not connected to MCP server "${serverName}"`)
+      throw new AgenticError(`Not connected to MCP server "${serverName}"`, "MCP_NOT_CONNECTED")
     }
 
     // Validate tool exists and args match schema
     const tool = conn.tools.find(t => t.name === toolName)
     if (!tool) {
-      throw new Error(`Tool "${toolName}" not found on server "${serverName}". Available tools: ${conn.tools.map(t => t.name).join(", ")}`)
+      throw new NotFoundError("tool", `${toolName} on server "${serverName}"`)
     }
 
     // Validate args against tool schema if available
@@ -332,7 +333,7 @@ export class MCPClient {
       if (schema.required) {
         for (const req of schema.required) {
           if (args[req] === undefined) {
-            throw new Error(`Missing required argument "${req}" for tool "${toolName}"`)
+            throw new ValidationError(`Missing required argument "${req}" for tool "${toolName}"`)
           }
         }
       }
@@ -352,7 +353,7 @@ export class MCPClient {
           content = await this.callHTTP(conn, toolName, args)
           break
         default:
-          throw new Error(`Unsupported transport: ${conn.config.transport}`)
+          throw new AgenticError(`Unsupported transport: ${conn.config.transport}`, "MCP_ERROR")
       }
 
       return {
@@ -375,7 +376,7 @@ export class MCPClient {
 
   private async connectStdio(name: string, config: MCPConfig): Promise<MCPTool[]> {
     if (!config.command) {
-      throw new Error("stdio transport requires a 'command'")
+      throw new ValidationError("stdio transport requires a 'command'")
     }
 
     return new Promise((resolve, reject) => {
@@ -527,7 +528,7 @@ export class MCPClient {
 
   private async callStdio(conn: { config: MCPConfig; proc?: ChildProcess; buffer: string }, toolName: string, args: Record<string, unknown>): Promise<unknown> {
     if (!conn.proc || !conn.proc.stdin) {
-      throw new Error("stdio connection not established")
+      throw new AgenticError("stdio connection not established", "MCP_NOT_CONNECTED")
     }
 
     return new Promise((resolve, reject) => {
@@ -600,7 +601,7 @@ export class MCPClient {
 
   private async connectHTTP(_name: string, config: MCPConfig): Promise<MCPTool[]> {
     if (!config.url) {
-      throw new Error("HTTP transport requires a 'url'")
+      throw new ValidationError("HTTP transport requires a 'url'")
     }
 
     // Step 1: Send initialize request
@@ -610,7 +611,7 @@ export class MCPClient {
     const initParsed = JSON.parse(initResponse)
 
     if (initParsed.error) {
-      throw new Error(`MCP initialize failed: ${getRpcErrorMessage(initParsed.error)}`)
+      throw new AgenticError(`MCP initialize failed: ${getRpcErrorMessage(initParsed.error)}`, "MCP_ERROR")
     }
 
     // Step 2: Send initialized notification (no response expected)
@@ -626,7 +627,7 @@ export class MCPClient {
     const listParsed = JSON.parse(listResponse)
 
     if (listParsed.error) {
-      throw new Error(`MCP tools/list failed: ${getRpcErrorMessage(listParsed.error)}`)
+      throw new AgenticError(`MCP tools/list failed: ${getRpcErrorMessage(listParsed.error)}`, "MCP_ERROR")
     }
 
     const tools: MCPTool[] = parseToolsFromResult(listParsed.result?.tools || [])
@@ -636,7 +637,7 @@ export class MCPClient {
 
   private async callHTTP(conn: { config: MCPConfig }, toolName: string, args: Record<string, unknown>): Promise<unknown> {
     if (!conn.config.url) {
-      throw new Error("HTTP connection has no URL")
+      throw new ValidationError("HTTP connection has no URL")
     }
 
     const body = buildRpcMessage("tools/call", Date.now(), { name: toolName, arguments: args })
@@ -645,7 +646,7 @@ export class MCPClient {
     const parsed = JSON.parse(response)
 
     if (parsed.error) {
-      throw new Error(parsed.error.message || String(parsed.error))
+      throw new AgenticError(parsed.error.message || String(parsed.error), "MCP_ERROR")
     }
 
     return parsed.result?.content || parsed.result || null

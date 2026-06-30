@@ -13,6 +13,7 @@
  */
 
 import { createLogger } from "../observability/logger.js"
+import { LLMError, ValidationError } from "../core/errors.js"
 
 const log = createLogger("Embedder")
 
@@ -119,7 +120,7 @@ export class LocalEmbedder {
     clearTimeout(timeout)
     if (!resp.ok) {
       const errText = await resp.text().catch(() => "")
-      throw new Error(`Embedding API error ${resp.status}: ${errText.slice(0, 200)}`)
+      throw new LLMError(`Embedding API error ${resp.status}: ${errText.slice(0, 200)}`)
     }
     return resp.json()
   }
@@ -224,7 +225,7 @@ export class LocalEmbedder {
     const endpoint = this.config.endpoint ?? "https://api.openai.com/v1/embeddings"
     const apiKey = this.config.apiKey ?? process.env.OPENAI_API_KEY ?? ""
 
-    if (!apiKey) throw new Error("No API key for remote embedding")
+    if (!apiKey) throw new ValidationError("No API key for remote embedding")
 
     const data = await this.httpCall(endpoint, apiKey, {
       model: this.config.model,
@@ -232,7 +233,7 @@ export class LocalEmbedder {
     }) as { data?: Array<{ embedding: number[] }> }
 
     if (!data.data?.[0]?.embedding) {
-      throw new Error("Invalid embedding response")
+      throw new ValidationError("Invalid embedding response")
     }
 
     const result: EmbeddingResult = {

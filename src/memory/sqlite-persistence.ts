@@ -26,6 +26,7 @@ import type { PersistentState } from "./persistence.js"
 import { resolve } from "node:path"
 import { homedir } from "node:os"
 import { existsSync, mkdirSync, statSync } from "node:fs"
+import { AgenticError } from "../core/errors.js"
 
 export interface SQLiteConfig {
   /** Path ke file database (default: ~/.config/opencode/agentic-store/agentic.db) */
@@ -110,9 +111,10 @@ export class SQLitePersistence {
       // bun:sqlite not available either
     }
 
-    throw new Error(
+    throw new AgenticError(
       "No SQLite driver available. Install better-sqlite3 (Node) " +
-      "or run in Bun (bun:sqlite built-in)."
+      "or run in Bun (bun:sqlite built-in).",
+      "SQLITE_DRIVER_UNAVAILABLE"
     )
   }
 

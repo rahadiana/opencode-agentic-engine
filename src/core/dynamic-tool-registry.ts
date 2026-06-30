@@ -11,6 +11,7 @@
  */
 
 import { type MCPTool } from "./mcp-client.js"
+import { ValidationError } from "./errors.js"
 
 export interface DynamicToolRegistration {
   name: string
@@ -91,10 +92,10 @@ export class DynamicToolRegistry {
    */
   register(registration: DynamicToolRegistration): void {
     if (!registration.name || typeof registration.name !== "string") {
-      throw new Error("Tool name is required and must be a string")
+      throw new ValidationError("Tool name is required and must be a string")
     }
     if (typeof registration.execute !== "function") {
-      throw new Error("Tool execute function is required")
+      throw new ValidationError("Tool execute function is required")
     }
 
     const name = registration.name

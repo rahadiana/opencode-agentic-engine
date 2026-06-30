@@ -11,7 +11,7 @@
  */
 
 import type { Subtask } from "./intent-parser.js"
-import { TimeoutError, BudgetExceededError } from "./errors.js"
+import { TimeoutError, BudgetExceededError, ValidationError } from "./errors.js"
 import { computeBackoff, buildSummary, inferNodeType, detectLoop, LOOP_DETECTION_MAX_IDENTICAL, combinedAbort } from "./dag-helpers.js"
 import { createLogger } from "../observability/logger.js"
 
@@ -287,7 +287,7 @@ export class DAGEngine {
       const unprocessed = nodes
         .filter(n => !phases.flatMap(p => p.nodeIds).includes(n.id))
         .map(n => n.id)
-      throw new Error(
+      throw new ValidationError(
         `DAG cycle detected! ${unprocessed.length} nodes cannot be resolved: ${unprocessed.join(", ")}`,
       )
     }

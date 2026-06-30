@@ -12,6 +12,7 @@
  */
 
 import type { ModelRegistry } from "./model-registry.js"
+import { ValidationError } from "./errors.js"
 
 // ── Model Spec dari ~/.cache/opencode/models.json ──
 
@@ -109,25 +110,25 @@ export class BlueprintParser {
     // spec_version
     if (!data.spec_version) data.spec_version = "v1"
     if (data.spec_version !== "v1") {
-      throw new Error(`Unsupported spec_version: ${data.spec_version}. Only "v1" is supported.`)
+      throw new ValidationError(`Unsupported spec_version: ${data.spec_version}. Only "v1" is supported.`)
     }
 
     // metadata
     const meta = data.metadata as Record<string, unknown> | undefined
     if (!meta || typeof meta.name !== "string" || !meta.name) {
-      throw new Error("Blueprint requires metadata.name (string)")
+      throw new ValidationError("Blueprint requires metadata.name (string)")
     }
 
     // agent
     const agent = data.agent as Record<string, unknown> | undefined
     if (!agent || typeof agent.identity !== "string" || !agent.identity) {
-      throw new Error("Blueprint requires agent.identity (string)")
+      throw new ValidationError("Blueprint requires agent.identity (string)")
     }
 
     // model_tiers
     const tiers = agent.model_tiers as Record<string, string> | undefined
     if (!tiers || Object.keys(tiers).length === 0) {
-      throw new Error("Blueprint requires agent.model_tiers with at least one tier (e.g. { default: \"capable\" })")
+      throw new ValidationError("Blueprint requires agent.model_tiers with at least one tier (e.g. { default: \"capable\" })")
     }
 
     return {

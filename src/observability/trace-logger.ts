@@ -7,6 +7,7 @@ import { createGzip } from "node:zlib"
 import { pipeline } from "node:stream/promises"
 import { statSync } from "node:fs"
 import { createLogger } from "./logger.js"
+import { AgenticError } from "../core/errors.js"
 
 const log = createLogger("TraceLogger")
 
@@ -137,7 +138,7 @@ export class TraceLogger {
     try {
       await mkdir(dir, { recursive: true })
     } catch (err) {
-      throw new Error(`TraceLogger.init: failed to create directory ${dir}: ${err}`)
+      throw new AgenticError(`TraceLogger.init: failed to create directory ${dir}: ${err}`, "TRACE_INIT_ERROR")
     }
   }
 

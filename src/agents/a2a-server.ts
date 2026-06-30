@@ -36,6 +36,7 @@ import {
   createJsonRpcResult,
   createTextMessage,
 } from "./a2a-types.js"
+import { ValidationError } from "../core/errors.js"
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -223,7 +224,7 @@ export class A2AServer {
       let rpcReq: JsonRpcRequest
       try {
         rpcReq = JSON.parse(body)
-        if (rpcReq.jsonrpc !== "2.0" || !rpcReq.method) throw new Error("Invalid JSON-RPC")
+        if (rpcReq.jsonrpc !== "2.0" || !rpcReq.method) throw new ValidationError("Invalid JSON-RPC")
       } catch {
         res.writeHead(400, { "Content-Type": A2A_CONTENT_TYPE })
         res.end(JSON.stringify(createJsonRpcError(-32700, "Parse error", { body })))

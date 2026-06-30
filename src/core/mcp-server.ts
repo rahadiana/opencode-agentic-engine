@@ -16,6 +16,7 @@
 
 import http, { type IncomingMessage, type ServerResponse } from "node:http"
 import { type DynamicToolRegistry } from "./dynamic-tool-registry.js"
+import { ValidationError } from "./errors.js"
 
 export interface MCPServerConfig {
   port?: number
@@ -185,7 +186,7 @@ export class MCPServer {
       let rpcReq: { jsonrpc: string; id: string | number; method: string; params?: Record<string, unknown> }
       try {
         rpcReq = JSON.parse(body)
-        if (rpcReq.jsonrpc !== "2.0" || !rpcReq.method) throw new Error("Invalid JSON-RPC")
+        if (rpcReq.jsonrpc !== "2.0" || !rpcReq.method) throw new ValidationError("Invalid JSON-RPC")
       } catch {
         res.writeHead(400, { "Content-Type": "application/json" })
         res.end(JSON.stringify({

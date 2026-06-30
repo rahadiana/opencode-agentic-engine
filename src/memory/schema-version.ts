@@ -1,3 +1,5 @@
+import { ValidationError } from "../core/errors.js"
+
 export const MEMORY_SCHEMA_VERSION = 1
 
 export interface SchemaMigration {
@@ -34,7 +36,7 @@ export class MemorySchemaVersion {
   registerMigration(migration: SchemaMigration): void {
     const existingFromSame = this.migrations.filter(m => m.from === migration.from)
     if (existingFromSame.length > 0 && existingFromSame.some(m => m.to !== migration.to)) {
-      throw new Error(`SchemaMigrator: branching migration detected from v${migration.from} — existing: v${migration.from}->v${existingFromSame[0].to}, attempted: v${migration.from}->v${migration.to}`)
+      throw new ValidationError(`SchemaMigrator: branching migration detected from v${migration.from} — existing: v${migration.from}->v${existingFromSame[0].to}, attempted: v${migration.from}->v${migration.to}`)
     }
     const exists = this.migrations.some(m => m.from === migration.from && m.to === migration.to)
     if (!exists) {
@@ -48,7 +50,7 @@ export class MemorySchemaVersion {
     const visited = new Set<number>()
     while (true) {
       if (visited.has(currentVersion)) {
-        throw new Error(`SchemaMigrator: circular migration detected at v${currentVersion}`)
+        throw new ValidationError(`SchemaMigrator: circular migration detected at v${currentVersion}`)
       }
       visited.add(currentVersion)
       const m = this.migrations.find(m => m.from === currentVersion)
