@@ -7231,3 +7231,4 @@ export { AgentLoop, type AgentLoopConfig, type LoopResult, type LoopObserver } f
 export { evaluateWorkflowPolicy, formatWorkflowPolicyDecisions, verificationEvidenceFailed, type WorkflowPolicyInput, type WorkflowPolicyDecision, type WorkflowPolicyOptions, type WorkflowAction, type WorkflowSeverity } from "./core/workflow-policy.js"
 export { MultiIndexRAG, enrichWithVectors, type IndexData, type IndexSearchResult, type IndexEntry, type RAGConfig, type RAGStats, type SearchWithConfidenceResult } from "./memory/multi-index-rag.js"
 export { LocalEmbedder, type EmbedderConfig, type EmbeddingResult } from "./memory/local-embedder.js"
+export { SkillExtractor, normalize } from "./memory/skill-extractor.js"
