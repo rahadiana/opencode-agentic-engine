@@ -50,7 +50,7 @@ const log = createLogger("Stopwords")
 // ── Load stopwords-iso, fall back to minimal set ───────────────────────
 function loadStopWords(): Set<string> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const stopwordsIso: Record<string, string[]> = require("stopwords-iso")
 
     if (!stopwordsIso || typeof stopwordsIso !== "object") {
