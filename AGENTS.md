@@ -647,7 +647,7 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 - **Docs sync**: `package.json` → 0.5.7-dev, `PLAN.md` metrik aktual, `README.md` test count 2381, `AGENTS.md` test count/coverage terbaru
 - **Branch coverage target**: Persistence.ts 62.5%, second-brain.ts 76.76%, multi-index-rag.ts 77.19% — modul prioritas untuk coverage berikutnya
 
-### v0.5.9-dev — Coverage + Lint + Full RULES.md Cycle (2026-07-01)
+### v0.5.9-dev — Zero Lint Warnings + Router/Embedder/Verifier Coverage (2026-07-01)
 
 - **Full RULES.md cycle**: Phase 0→6 executed: load context, drift detection, baseline verification, gap targeting, implementation, session completion
 - **Drift fixes**: `package.json` 0.5.6-dev→0.5.7-dev, `README.md` test count 2197→2381, `PLAN.md` metrik diupdate (coverage, EvoClaw 100%, test count, branch coverage detail)
@@ -660,3 +660,11 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 - **14 MIR tests**: `importAll` else branch, `enrichWithVectors`, `searchByCategoryAsync`, `searchAllAsync` — all multi-index-rag uncovered paths
 - **SWE-bench real LLM eval**: ✅ Baseline 2/7 (29%) with OpenCode Free `mimo-v2.5-free`. Bug-fix 2/2 ✅, config/import 0/4 ❌. Realistic baseline data for future comparison.
 - **`as any` cleanup**: sqlite-persistence.ts `any` return type eliminated. Down from 49→minimal remaining in `src/index.ts` (33, LogClient type mismatch) and `orchestrator.ts` (1, complex nested conditional).
+- **Zero lint warnings**: All 33 `no-explicit-any` in `src/index.ts` eliminated (catch→unknown, event handler payloads via `as`, registryTool `def` types, variable types, lambda callbacks). Updated `package.json` `@typescript-eslint/no-explicit-any` rule.
+- **orchestrator.ts lint**: Extracted `PipelineParams` interface, replaced 3 `params: any` with typed interface.
+- **ToolRouter tests**: Added 9 new tests (TR-14..TR-18) — clamping edge cases, empty buildToolList, usageBonus via recordCall, weird input, anti-keyword + colocation fallback.
+- **2497 unit tests** (was 2488), **0 lint warnings** (was 34).
+- **Coverage**: Stmts 87.66%, Branch 68.14%, Funcs 76.28%.
+- **RouterAgent branch**: 50→64.7% (+14.7%) via 9 new test groups.
+- **Verifier branch**: 70.9→76.0% (+5.1%) via 11 new test groups.
+- **LocalEmbedder branch**: 33.3→91.7% (+58.4%) via 3 new test groups.

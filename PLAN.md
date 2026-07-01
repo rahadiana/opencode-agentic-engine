@@ -9,10 +9,14 @@
 | Metrik | Nilai |
 |--------|-------|
 | **Versi** | v0.5.9-dev |
-| **Unit tests** | 2488 (all mock, no LLM needed) |
+| **Unit tests** | 2497 (all mock, no LLM needed) |
 | **Agentic tools** | 31 (`agentic_*` prefix) |
 | **Source files** | 80+ di `src/` (7 subdirektori) |
-| **Coverage gate** | ✅ Stmts 87.55%, Branch 67.87%, Func 75.89%, Lines 87.55% |
+| **Coverage gate** | ✅ Stmts 87.66%, Branch 68.14%, Func 76.28%, Lines 87.66% |
+| **router-agent.ts branch** | ✅ 64.7% |
+| **tool-router.ts branch** | ✅ 88.23% (4 template literal artifacts) |
+| **verifier.ts branch** | ✅ 76.0% |
+| **local-embedder.ts branch** | ✅ 91.67% |
 | **dag-engine.ts branch** | ✅ 89.87% |
 | **execution-helpers.ts branch** | ✅ 100% |
 | **budget-tracker.ts branch** | ✅ 100% |
@@ -70,7 +74,7 @@ src/
 | NPM publish | 🔮 Future | `npm publish` untuk `opencode plugin opencode-agentic-engine` |
 | Streaming | 🔮 Future | Didelegasikan ke OpenCode SDK (47/48 capabilities) |
 | SWE-bench real LLM eval | ✅ Baseline 2/7 (29%) | OpenCode Free mimo-v2.5-free. Bug-fix 2/2 ✅, config/import 0/4 ❌. Butuh model capable untuk skor >70%. |
-| Branch coverage >75% | 🔮 Future | Saat ini 67.87%; execution-helpers.ts 100%, budget-tracker.ts 100%, skill-schema.ts 100%, recovery-layer.ts 100%, dag-engine.ts 89.87%, tech-debt-scorer.ts 96.42%, persistence.ts 79.31%, multi-index-rag.ts 79.19%, debate-loop.ts 76.59%, verifier.ts 70.58% |
+| Branch coverage >75% | 🔮 Future | Saat ini 68.14%; files <75%: episodic-store 11.11%, sqlite-persistence 30%, git 37.5%, planner-critic 41.17%, execution-layer 42.85%, agent-blueprint 45.45%, second-brain 55%, config 60%, dashboard 60.86%, agent-loop 60.93%, model-registry 64.7% |
 | Lint warnings 0 | ✅ **0 warnings** | All `no-explicit-any` eliminated across `src/` |
 
 ---
