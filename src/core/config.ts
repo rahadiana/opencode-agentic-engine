@@ -543,6 +543,7 @@ export class ConfigLoader {
   }
 
   /** Deep merge helper (handles objects and arrays) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private mergeDeep<T extends Record<string, any>>(target: T, source: Partial<T>): T {
     const result = { ...target }
     for (const key of Object.keys(source) as Array<keyof T>) {
@@ -552,6 +553,7 @@ export class ConfigLoader {
         const existing = result[key]
         result[key] = (Array.isArray(existing) ? [...existing, ...val] : [...val]) as T[keyof T]
       } else if (val !== null && typeof val === "object") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         result[key] = this.mergeDeep(result[key] as Record<string, any>, val as Record<string, any>) as T[keyof T]
       } else {
         result[key] = val as T[keyof T]

@@ -17,7 +17,7 @@ export interface DynamicToolRegistration {
   name: string
   description: string
   parameters?: Record<string, unknown>
-  execute: (args: Record<string, unknown>, context?: any) => Promise<unknown>
+  execute: (args: Record<string, unknown>, context?: unknown) => Promise<unknown>
   metadata?: {
     category?: string
     keywords?: string[]
@@ -129,7 +129,7 @@ export class DynamicToolRegistry {
     name: string,
     description: string,
     parameters: Record<string, unknown>,
-    execute: (args: Record<string, unknown>, context?: any) => Promise<unknown>,
+    execute: (args: Record<string, unknown>, context?: unknown) => Promise<unknown>,
     metadata?: { category?: string; keywords?: string[]; version?: string },
   ): void {
     this.register({

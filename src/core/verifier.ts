@@ -10,6 +10,8 @@ const log = createLogger("Verifier")
 
 export type SupportedLanguage = "typescript" | "python" | "go" | "rust" | "javascript" | "unknown"
 
+interface VulnEntry { severity: string }
+
 /** Gap #4 — verification depth tiers */
 export type VerificationTier = "fast" | "standard" | "deep"
 
@@ -352,9 +354,10 @@ export class Verifier {
       })
       const parsed = JSON.parse(output)
       const vulns = parsed.vulnerabilities ?? {}
-      const criticalCount = Object.values(vulns).filter((v: any) => v.severity === "critical").length
-      const highCount = Object.values(vulns).filter((v: any) => v.severity === "high").length
-      const moderateCount = Object.values(vulns).filter((v: any) => v.severity === "moderate").length
+      const allVulns = Object.values(vulns) as VulnEntry[]
+      const criticalCount = allVulns.filter((v: VulnEntry) => v.severity === "critical").length
+      const highCount = allVulns.filter((v: VulnEntry) => v.severity === "high").length
+      const moderateCount = allVulns.filter((v: VulnEntry) => v.severity === "moderate").length
 
       if (criticalCount > 0 || highCount > 0) {
         return {
@@ -374,8 +377,9 @@ export class Verifier {
       try {
         const parsed = JSON.parse(stdout)
         const vulns = parsed.vulnerabilities ?? {}
-        const criticalCount = Object.values(vulns).filter((v: any) => v.severity === "critical").length
-        const highCount = Object.values(vulns).filter((v: any) => v.severity === "high").length
+        const allVulns2 = Object.values(vulns) as VulnEntry[]
+        const criticalCount = allVulns2.filter((v: VulnEntry) => v.severity === "critical").length
+        const highCount = allVulns2.filter((v: VulnEntry) => v.severity === "high").length
         if (criticalCount > 0 || highCount > 0) {
           return {
             name: "deps:npm",

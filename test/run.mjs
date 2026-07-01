@@ -3970,6 +3970,28 @@ const ragCats = await hooks.tool.agentic_rag.execute({
 }, mockCtx(freshSid()))
 assert(true, "agentic_rag categories passed")
 
+// List all entries
+const ragList = await hooks.tool.agentic_rag.execute({
+  action: "list",
+}, mockCtx(freshSid()))
+const ragListOut = typeof ragList === "string" ? ragList : (ragList.output || "")
+assert(ragListOut.length > 0, "rag list returns entries")
+assert(true, "agentic_rag list passed")
+
+// Clear category + verify it's gone
+await hooks.tool.agentic_rag.execute({
+  action: "clear",
+  category: "automotive",
+}, mockCtx(freshSid()))
+const ragAfterClear = await hooks.tool.agentic_rag.execute({
+  action: "search",
+  query: "oli",
+  category: "automotive",
+}, mockCtx(freshSid()))
+const ragAfterClearOut = typeof ragAfterClear === "string" ? ragAfterClear : (ragAfterClear.output || "")
+assert(ragAfterClearOut.includes("Matches: 0") || ragAfterClearOut.includes("no results"), "rag clear removes category data")
+assert(true, "agentic_rag clear passed")
+
 // ── Layer 1: MCP Client ──
 console.log("\n[91] agentic_mcp — MCP client")
 const mcpSid = freshSid()
@@ -4198,12 +4220,51 @@ assert(p4Out.includes("Goal") || p4Out.includes("Auto"), "output mentions goal o
   assert(projectEps.length === 1, "getByProject returns scoped episodes")
   assert(projectEps[0].projectId === projA, "getByProject filters correctly")
 
-  // Cleanup
+  // Test 6: PersistenceLayer.loadAll — returns entries from namespace
+  const scopeGlobal2 = join(projectDir, "scope-global-2")
+  try { mkdirSync(scopeGlobal2, { recursive: true }) } catch {}
+  try { mkdirSync(scopeWorktree, { recursive: true }) } catch {}
+  process.env.AGENTIC_STORE_DIR = scopeGlobal2
+  const pl2 = new PersistenceLayer(scopeWorktree)
+  pl2.save("episodes", "test-ep-1", { data: "first" }, projA)
+  pl2.save("episodes", "test-ep-2", { data: "second" }, projA)
+  const allEps = pl2.loadAll("episodes", projA)
+  assert(allEps.length >= 2, "loadAll returns saved entries")
+  assert(allEps.every(e => e.key && e.data), "loadAll returns valid PersistentState entries")
+
+  // Test 7: PersistenceLayer.listKeys
+  const keysA = pl2.listKeys("episodes", projA)
+  assert(keysA.includes("test-ep-1"), "listKeys finds scoped key")
+  assert(keysA.includes("test-ep-2"), "listKeys finds second scoped key")
+
+  // Test 8: PersistenceLayer.delete
+  pl2.save("episodes", "to-delete", { temp: true }, projA)
+  const loadedBefore = pl2.load("episodes", "to-delete", projA)
+  assert(loadedBefore !== null, "delete precondition: key exists")
+  const deleted = pl2.delete("episodes", "to-delete", projA)
+  assert(deleted === true, "delete returns true on success")
+  const loadedAfter = pl2.load("episodes", "to-delete", projA)
+  assert(loadedAfter === null, "delete removes key from persistence")
+
+  // Test 9: PersistenceLayer.delete — non-existent key
+  const notFound = pl2.delete("episodes", "nonexistent-key", projA)
+  assert(notFound === false, "delete returns false for missing key")
+
+  // Test 10: PersistenceLayer.listScopes — no scopes in empty namespace
+  const emptyScopes = pl2.listScopes("nonexistent-ns")
+  assert(emptyScopes.length === 0, "listScopes returns empty for missing namespace")
+
+  // Test 11: PersistenceLayer.listKeys — empty namespace
+  const emptyKeys = pl2.listKeys("nonexistent-ns")
+  assert(emptyKeys.length === 0, "listKeys returns empty for missing namespace")
+
+  // Cleanup Test 6-11 dirs
   try { rmSync(scopeWorktree, { recursive: true, force: true }) } catch {}
   try { rmSync(scopeGlobal, { recursive: true, force: true }) } catch {}
+  try { rmSync(scopeGlobal2, { recursive: true, force: true }) } catch {}
   delete process.env.AGENTIC_STORE_DIR
 
-  assert(true, "Project-Scoped Memory Isolation tests passed")
+  assert(true, "PersistenceLayer branch coverage tests passed")
 
   // ── BudgetTracker unit tests (inside runAll) ──
   console.log("\n[B1] BudgetTracker — class unit tests")
@@ -10866,6 +10927,53 @@ function sb_assert(cond, msg) { if (cond) { sb++ } else { console.error(`  ❌ $
     sessionID: "sb-session",
   })
   sb_assert(true, "SB-13 empty step.completed handled without crash")
+
+  // SB-14: budget.threshold.warning creates medium-priority TODO
+  sbBrain.handleEvent("budget.threshold.warning", {
+    metric: "time",
+    usagePercent: 85,
+    sessionID: "sb-session",
+  })
+  const thresholdTodos = sbBrain.getPendingTodos(10).filter(t => t.text.includes("85%"))
+  sb_assert(thresholdTodos.length >= 1, "SB-14 budget.threshold.warning creates TODO with usage")
+  sb_assert(thresholdTodos[0].priority === "medium", "SB-14b threshold TODO medium priority")
+
+  // SB-15: memory.episode.recorded tracks graph edge
+  sbBrain.handleEvent("memory.episode.recorded", {
+    episodeId: "ep-test-1",
+    outcome: "success",
+    sessionID: "sb-session",
+  })
+  const epEdges = sbBrain.getEdges().filter(e => e.target === "ep-test-1" && e.relation === "recorded")
+  sb_assert(epEdges.length >= 1, "SB-15 memory.episode.recorded tracks graph edge")
+
+  // SB-16: feedback.recorded — negative creates high-priority TODO
+  sbBrain.handleEvent("feedback.recorded", {
+    stepId: "step-fb-neg",
+    feedback: "negative",
+    model: "gpt-4o",
+    taskType: "code",
+    errorCategory: "type",
+    sessionID: "sb-session",
+  })
+  const negTodos = sbBrain.getPendingTodos(10).filter(t => t.text.includes("step-fb-neg"))
+  sb_assert(negTodos.length >= 1, "SB-16a negative feedback creates high-priority TODO")
+  sb_assert(negTodos[0].priority === "high", "SB-16b negative feedback TODO is high priority")
+  const negEdges = sbBrain.getEdges().filter(e => e.source === "feedback" && e.relation === "user_negative")
+  sb_assert(negEdges.length >= 1, "SB-16c negative feedback tracks user_negative edge")
+
+  // SB-17: feedback.recorded — positive tracks edge without TODO
+  sbBrain.handleEvent("feedback.recorded", {
+    stepId: "step-fb-pos",
+    feedback: "positive",
+    model: "gpt-4o",
+    taskType: "code",
+    sessionID: "sb-session",
+  })
+  const posEdges = sbBrain.getEdges().filter(e => e.source === "feedback" && e.relation === "user_positive")
+  sb_assert(posEdges.length >= 1, "SB-17a positive feedback tracks user_positive edge")
+  const posTodos = sbBrain.getPendingTodos(10).filter(t => t.text.includes("step-fb-pos"))
+  sb_assert(posTodos.length === 0, "SB-17b positive feedback does NOT create TODO")
 
   // Cleanup
   try { fsMod.rmSync(tmpDir, { recursive: true }) } catch {}

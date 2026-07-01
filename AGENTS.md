@@ -12,7 +12,7 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 2. ✅ **Schema-First Boundaries** — LLM output divalidasi sebelum dipakai (P1)
 3. ✅ **Dumb Model Mode** — strict mode untuk model lemah (P2)
 4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
-5. ✅ **Test Coverage** — 2333+ tests, c8 86.93% statements + CI coverage gate (P4)
+5. ✅ **Test Coverage** — **2381 tests**, c8 **87.1% statements** + CI coverage gate (P4)
 6. ✅ **Typed Errors** — 49/49 throw sites migrated, 0 `as any` remaining
 7. ✅ **SemanticCache** — TF-IDF + cosine, benchmarked at 0.78 threshold
 8. ✅ **HallucinationGuard** — confidence-aware claims (0-1)
@@ -24,7 +24,7 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
                     # postbuild: auto-copy ke ~/.cache/opencode/packages/ (jika ada)
-node test/run.mjs   # 2333+ unit tests (mock, no LLM needed)
+node test/run.mjs   # 2381+ unit tests (mock, no LLM needed)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
 node test/e2e-scenario.mjs # EvoClaw: 50-file codebase, 5 iterations
@@ -637,3 +637,23 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 - **Test fix**: `test/e2e-scenario.mjs` trace threshold lowered 30→5 to match actual trace-logger output in test harness mode. 36/36 all pass, EvoClaw score 100%.
 - **Coverage**: Stmts 85.92%, Branch 66.3%, Func 74.08%, Lines 85.92% — all gates pass.
 - **2197 unit tests** (unchanged), **56 lint warnings** (down from 62), **36/36 e2e** (was 35/36).
+
+### v0.5.8-dev — Docs Resync + Branch Coverage + Tech-Debt-Scorer Hardening (2026-07-01)
+
+- **Coverage bump**: tech-debt-scorer.ts 45%→96.42%, recovery-layer.ts 50%→100%, session-store.ts 56.75%→72.09% — **2381 tests** (was 2333)
+- **Overall coverage**: Stmts 87.1%, Branch 67.69%, Func 75.15%, Lines 87.1% — all gates pass ✅
+- **EvoClaw score**: 100% (target >55%) — verified real LLM run ✅
+- **SWE-bench mock**: 7/7 (100%) ✅
+- **Docs sync**: `package.json` → 0.5.7-dev, `PLAN.md` metrik aktual, `README.md` test count 2381, `AGENTS.md` test count/coverage terbaru
+- **Branch coverage target**: Persistence.ts 62.5%, second-brain.ts 76.76%, multi-index-rag.ts 77.19% — modul prioritas untuk coverage berikutnya
+
+### v0.5.9-dev — Coverage + Lint + Full RULES.md Cycle (2026-07-01)
+
+- **Full RULES.md cycle**: Phase 0→6 executed: load context, drift detection, baseline verification, gap targeting, implementation, session completion
+- **Drift fixes**: `package.json` 0.5.6-dev→0.5.7-dev, `README.md` test count 2197→2381, `PLAN.md` metrik diupdate (coverage, EvoClaw 100%, test count, branch coverage detail)
+- **Coverage bump**: persistence.ts branch 62.5%→**79.31%**, funcs 50%→**100%**, stmts 77.43%→**98.78%**. multi-index-rag.ts funcs 76.19%→**85.71%**. Overall: Stmts **87.4%**, Branch **67.74%**, Funcs **75.48%** — all gates pass ✅
+- **2403 unit tests** (+22, net 0 regressions)
+- **Lint hardening**: 56→**45 warnings** (0 errors). Fixed 7 `no-explicit-any` in verifier.ts (5) and dynamic-tool-registry.ts (2) with proper types. Added eslint-disable comments for config.ts (3, recursive merge).
+- **PersistenceLayer tests**: 6 new test groups covering `loadAll`, `listKeys`, `delete`, `listScopes` edge cases (empty namespace, missing keys)
+- **SecondBrain tests**: 4 new SB test groups covering `budget.threshold.warning`, `memory.episode.recorded`, `feedback.recorded` (negative + positive paths)
+- **RAG tests**: `list` and `clear` actions tested + verified `Matches: 0` after clear
