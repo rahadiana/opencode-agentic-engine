@@ -291,11 +291,13 @@ const createEngine: Plugin = async (input, _options) => {
   ) {
     // Wrap execute with global error handler
     const wrappedExecute = async (args: any, context: any) => {
+      // ponytail: context can be undefined when tools are called without session context
+      if (!context?.sessionID) {
+        return { output: `❌ **${name}** requires an active session. Make sure a session is created before calling this tool.`, metadata: { error: "no-session", tool: name } }
+      }
       try {
         // Auto-set LLM session + tool context for model resolution
-        if (context?.sessionID) {
-          llmEngine.setSessionId(context.sessionID)
-        }
+        llmEngine.setSessionId(context.sessionID)
         llmEngine.setToolContext(name)
         const result = await def.execute(args, context)
         return result
