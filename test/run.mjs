@@ -4172,6 +4172,32 @@ assert(p4Out.includes("Goal") || p4Out.includes("Auto"), "output mentions goal o
   const bt6 = new BT()
   bt6.recordTokens("custom-model/xyz", 1000, 500)
   assert(bt6.totalCostUsd === 0, "B1p unknown model → $0 silent, no warning")
+
+  // EventBus emission (covers _exceedLimit eventBus branch lines 441-452)
+  const bt7 = new BT()
+  let emittedEvent = null
+  bt7.setEventBus({ emit: (ev) => { emittedEvent = ev } })
+  bt7.setSessionId("evt-session")
+  bt7.setLimits("session", { maxSteps: 1 })
+  bt7.recordStep()
+  bt7.recordStep()
+  const exceeded = bt7.check("session")
+  assert(exceeded !== null, "B1q eventBus: limit exceeded")
+  assert(emittedEvent !== null, "B1r eventBus: event emitted")
+  assert(emittedEvent.type === "budget.limit.exceeded", "B1s eventBus: correct type")
+  assert(emittedEvent.payload.metric === "steps", "B1t eventBus: metric = steps")
+  assert(emittedEvent.payload.sessionID === "evt-session", "B1u eventBus: sessionID set")
+
+  // bt8: eventBus emission with no sessionId (covers line 445: this.sessionId ?? "")
+  let emittedEventRef = null
+  const bt8 = new BT()
+  bt8.setEventBus({ emit: (ev) => { emittedEventRef = ev } })
+  bt8.setLimits("session", { maxTokens: 10 })
+  bt8.recordTokens(0, 100) // exceed token limit
+  const exceeded2 = bt8.check("session")
+  assert(exceeded2 !== null, "B1v eventBus no session: limit exceeded")
+  assert(emittedEventRef !== null, "B1w eventBus no session: event emitted")
+  assert(emittedEventRef.payload.sessionID === "", "B1x eventBus no session: sessionID falls back to empty string")
   assert(true, "B1z BudgetTracker all unit tests passed")
 
   // ── agentic_budget tool tests (inside runAll) ──
@@ -4703,12 +4729,32 @@ assert(p4Out.includes("Goal") || p4Out.includes("Auto"), "output mentions goal o
   assert(Array.isArray(sv12_js.required) && sv12_js.required.includes("name"), "SCHEMA-12b required fields included")
   assert(sv12_js.properties?.name?.type === "string", "SCHEMA-12c property type preserved")
 
+  // SCHEMA-12b: Object/array types via toJSONSchema (covers fieldToJSONSchema branches)
+  const sv12b_schema = {
+    tags: { type: "array", items: { type: "string" }, description: "Item labels" },
+    metadata: { type: "object", properties: { key: { type: "string", required: true }, value: { type: "string" } } },
+    status: { type: "string", enum: ["active", "inactive"], default: "active", minLength: 1, maxLength: 20, pattern: "^[a-z]+$", maximum: 0 },
+    count: { type: "number", minimum: 0, maximum: 100 },
+  }
+  const sv12b_js = sv1.toJSONSchema(sv12b_schema)
+  assert(typeof sv12b_js.properties?.tags?.items === "object", "SCHEMA-12d array items object")
+  assert(sv12b_js.properties?.tags?.items?.type === "string", "SCHEMA-12e array items type")
+  assert(typeof sv12b_js.properties?.metadata?.properties === "object", "SCHEMA-12f object properties exists")
+  assert(sv12b_js.properties?.metadata?.properties?.key?.type === "string", "SCHEMA-12g nested property type")
+  assert(Array.isArray(sv12b_js.properties?.metadata?.required) && sv12b_js.properties?.metadata?.required?.includes("key"), "SCHEMA-12h nested required propagated")
+
   // SCHEMA-13: inferField
   assert(sv1.inferField("hello").type === "string", "SCHEMA-13a infer string")
   assert(sv1.inferField(42).type === "number", "SCHEMA-13b infer number")
   assert(sv1.inferField(true).type === "boolean", "SCHEMA-13c infer boolean")
   const sv13_inferred = sv1.inferField({ a: 1, b: "x" })
   assert(sv13_inferred.type === "object" && sv13_inferred.properties?.a?.type === "number", "SCHEMA-13d infer object")
+  assert(sv1.inferField(BigInt(42)).type === "string", "SCHEMA-13e infer bigint falls to default string")
+  assert(sv1.inferField(Symbol("x")).type === "string", "SCHEMA-13f infer symbol falls to default string")
+  assert(sv1.inferField(null).type === "string", "SCHEMA-13g infer null returns string")
+  assert(sv1.inferField(undefined).type === "string", "SCHEMA-13h infer undefined returns string")
+  assert(sv1.inferField([]).type === "array", "SCHEMA-13i infer empty array returns array")
+  assert(sv1.inferField([1, 2]).type === "array", "SCHEMA-13j infer non-empty array returns array")
 
   // SCHEMA-14: inferSchema
   const sv14_inferred = sv1.inferSchema({ name: "test", count: 5, active: true })

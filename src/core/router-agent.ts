@@ -308,8 +308,8 @@ export class RouterAgent {
             category: parsed.category,
             confidence: parseFloat(parsed.confidence.toFixed(2)),
             usedLlm: true,
-            suggestedTools: matchedCat?.suggestedTools ?? [],
-            suggestedRagIndex: matchedCat?.suggestedRagIndex ?? "knowledge-general",
+            suggestedTools: matchedCat.suggestedTools ?? [],
+            suggestedRagIndex: matchedCat.suggestedRagIndex ?? "knowledge-general",
             reasoning: parsed.reasoning,
           }
         }
