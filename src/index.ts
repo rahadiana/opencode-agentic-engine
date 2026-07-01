@@ -356,6 +356,7 @@ const createEngine: Plugin = async (input, _options) => {
   const git = new GitIntegration(worktree)
   const debtScorer = new TechDebtScorer()
   const skillStore = new SkillStore()
+  ;(globalThis as any).__opencode_skillStore = skillStore
   const curator = new SkillCurator(
     config.curator ?? {},
     () => skillStore.getAll(),
@@ -366,6 +367,7 @@ const createEngine: Plugin = async (input, _options) => {
     orchestrator.definePipeline(pipeline)
   }
   const episodicStore = new EpisodicStore()
+  ;(globalThis as any).__opencode_episodicStore = episodicStore
   const checkpoints = new CheckpointSystem()
   const hallucinationGuard = new HallucinationGuard(worktree)
   const parallelExec = new ParallelExecutor()
@@ -6507,7 +6509,8 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                 const guardResult = guard.check(checkOutput, allModified)
                 if (guardResult?.claims) {
                   const failedClaims = guardResult.claims.filter((c: any) => !c.verified)
-                  verifyNote += failedClaims.length > 0 ? ` ⚠️ Guard:${failedClaims.length} issues` : " ✅ Guard"
+                  const conf = guardResult.overallConfidence !== undefined ? ` (conf: ${guardResult.overallConfidence.toFixed(2)})` : ''
+                  verifyNote += (failedClaims.length > 0 ? ` ⚠️ Guard:${failedClaims.length} issues` : " ✅ Guard") + conf
                 }
               } catch { /* non-fatal */ }
 
