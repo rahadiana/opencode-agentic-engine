@@ -9,12 +9,12 @@
 | Metrik | Nilai |
 |--------|-------|
 | **Versi** | v0.5.7-dev |
-| **Unit tests** | 2220 (all mock, no LLM needed) |
+| **Unit tests** | 2263 (all mock, no LLM needed) |
 | **Agentic tools** | 31 (`agentic_*` prefix) |
 | **Source files** | 80+ di `src/` (7 subdirektori) |
-| **Coverage gate** | ✅ Stmts 86.1%, Branch 66.51%, Func 74%, Lines 86.1% |
+| **Coverage gate** | ✅ Stmts 86.63%, Branch 66.73%, Func 74.58%, Lines 86.63% |
 | **dag-engine.ts branch** | ✅ 89.87% (up from 70.4%) |
-| **Lint** | ✅ 0 errors, 62 warnings |
+| **Lint** | ✅ 0 errors, 56 warnings |
 | **SWE-bench (mock)** | ✅ 7/7 (100%) |
 | **EvoClaw score** | ✅ 99% (target: >55%) |
 | **CI** | Build + lint + coverage gate + unit test |
@@ -62,7 +62,7 @@ src/
 | NPM publish | 🔮 Future | `npm publish` untuk `opencode plugin opencode-agentic-engine` |
 | Streaming | 🔮 Future | Didelegasikan ke OpenCode SDK (47/48 capabilities) |
 | SWE-bench real LLM eval | 🔮 Future | Butuh model capable (harness sudah siap) |
-| Branch coverage >75% | 🔮 Future | Saat ini 66.3%; modul kompleks: dag-engine, agent-loop |
+| Branch coverage >75% | 🔮 Future | Saat ini 66.73%; verifier.ts 70.58%, debate-loop.ts 76.59%, dag-engine.ts 89.87% |
 | Lint warnings 0 | 🔮 Future | 62 `no-explicit-any` warnings tersisa |
 
 ---

@@ -12,7 +12,7 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 2. ✅ **Schema-First Boundaries** — LLM output divalidasi sebelum dipakai (P1)
 3. ✅ **Dumb Model Mode** — strict mode untuk model lemah (P2)
 4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
-5. ✅ **Test Coverage** — 2197+ tests, c8 85.88% statements + CI coverage gate (P4)
+5. ✅ **Test Coverage** — 2263+ tests, c8 86.63% statements + CI coverage gate (P4)
 6. ✅ **Typed Errors** — 49/49 throw sites migrated, 0 `as any` remaining
 7. ✅ **SemanticCache** — TF-IDF + cosine, benchmarked at 0.78 threshold
 8. ✅ **HallucinationGuard** — confidence-aware claims (0-1)
@@ -24,7 +24,7 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
                     # postbuild: auto-copy ke ~/.cache/opencode/packages/ (jika ada)
-node test/run.mjs   # 2197+ unit tests (mock, no LLM needed)
+node test/run.mjs   # 2263+ unit tests (mock, no LLM needed)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
 node test/e2e-scenario.mjs # EvoClaw: 50-file codebase, 5 iterations
@@ -609,7 +609,7 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 - **Gap #9 (ContinuousEvolution degradation callback)**: Default `onDegradation` callback emits `feedback.recorded` event for observability pipeline.
 - **Performance**: SemanticCache O(n²)→O(n) via precomputed TF-IDF vectors. StateStore write-behind queue (2s flush).
 - **Memory pruning**: MetaReasoner `MAX_VERSIONS=100` cap on versions array.
-- **Code coverage tooling**: `npm run test:coverage` via c8 (85.88% stmts, 66.11% branches, 74.01% funcs).
+- **Code coverage tooling**: `npm run test:coverage` via c8 (86.63% stmts, 66.73% branches, 74.58% funcs).
 - **Fine-tuning real-data bridge**: `skillStore`/`episodicStore` exposed on `globalThis` so `agentic_finetune` accesses real collected data.
 - **`as any` cleanup**: Reduced from 37 → 1 remaining (OpenCode SDK client type mismatch — ponytail).
 - **`agentic_auto` thorough**: Post-processing audit now reports `overallConfidence` from HallucinationGuard.
