@@ -12,7 +12,7 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 2. ✅ **Schema-First Boundaries** — LLM output divalidasi sebelum dipakai (P1)
 3. ✅ **Dumb Model Mode** — strict mode untuk model lemah (P2)
 4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
-5. ✅ **Test Coverage** — **2529 tests**, c8 **87.1%+ statements** + CI coverage gate (P4)
+5. ✅ **Test Coverage** — **2529 tests**, c8 **87.91% stmts / 68.22% branch / 76.69% func** + CI coverage gate (P4)
 6. ✅ **Typed Errors** — 49/49 throw sites migrated, 0 `as any` remaining
 7. ✅ **SemanticCache** — TF-IDF + cosine, benchmarked at 0.78 threshold
 8. ✅ **HallucinationGuard** — confidence-aware claims (0-1)
@@ -24,7 +24,7 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
                     # postbuild: auto-copy ke ~/.cache/opencode/packages/ (jika ada)
-node test/run.mjs   # 2381+ unit tests (mock, no LLM needed)
+node test/run.mjs   # 2561+ unit tests (mock, no LLM needed)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
 node test/e2e-scenario.mjs # EvoClaw: 50-file codebase, 5 iterations
@@ -678,3 +678,16 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 - **GitIntegration export**: `src/index.ts` export `GitIntegration` untuk unit test.
 - **Branch coverage**: git.ts 0%→87.5%, model-registry.ts 64.7%→~85% (32 new tests).
 - **2529 unit tests** (was 2497), **0 lint warnings**, **build OK**.
+
+### v0.5.11-dev — Full RULES.md Cycle + Branch Coverage Hardening (2026-07-01)
+
+- **Full RULES.md cycle**: Phase 0→6: load context, drift detection, baseline verification (all 8 checks), gap targeting, implementation, re-test, session completion.
+- **Drift fixes**: Updated `AGENTS.md` coverage numbers (87.1% → 87.91% stmts), `PLAN.md` metrics (Stmts 87.91%, Branch 68.22%), `README.md` test count 2381→2529, `PLAN.md` gap table with current branch coverage data per file.
+- **CodebaseNavigator export**: Added `CodebaseNavigator`, `ModuleInfo`, `ProjectIndex`, `LanguageConfig` to `src/index.ts` exports for direct unit testing.
+- **Branch coverage bump**:
+  - `navigator.ts` branch: 61.29% → **77.77%** (+16.48%) via 17 direct tests for cache, scan path, keyword scoring, getTestFiles, JS require() fallback
+  - `router-agent.ts` branch: 64.7% → **76.47%** (+11.77%) via 15 tests for missing optional fields, general-category filter, keyword fallback edge cases
+  - Overall branch: 68.22% → **68.32%** (+0.10)
+- **2561 unit tests** (was 2529), **0 lint warnings**, **build OK**, **coverage gate passes**.
+- **EvoClaw score**: 100% (36/36, target >55%) ✅
+- **All 8 checks pass**: build, unit (2561), dropin (31 tools), load-samedir (45), e2e-scenario (36), SWE-bench mock (7/7), lint (0 warnings), coverage gate ✅

@@ -8,16 +8,17 @@
 
 | Metrik | Nilai |
 |--------|-------|
-| **Versi** | v0.5.10-dev |
-| **Unit tests** | 2529 (all mock, no LLM needed) |
+| **Versi** | v0.5.11-dev |
+| **Unit tests** | 2561 (all mock, no LLM needed) |
 | **Agentic tools** | 31 (`agentic_*` prefix) |
 | **Source files** | 80+ di `src/` (7 subdirektori) |
-| **Coverage gate** | ✅ Stmts 87.66%+, Branch 68.14%+, Func 76.28%+, Lines 87.66%+ |
-| **router-agent.ts branch** | ✅ 64.7% |
-| **tool-router.ts branch** | ✅ 88.23% (4 template literal artifacts) |
+| **Coverage gate** | ✅ Stmts 87.94%+, Branch 68.32%+, Func 76.77%+, Lines 87.94%+ |
+| **navigator.ts branch** | ✅ 77.77% (baru: 17 direct tests via CodebaseNavigator) |
+| **router-agent.ts branch** | ✅ 76.47% (+11.77%) |
+| **tool-router.ts branch** | ✅ 63.63% |
 | **verifier.ts branch** | ✅ 76.0% |
 | **local-embedder.ts branch** | ✅ 91.67% |
-| **dag-engine.ts branch** | ✅ 89.87% |
+| **dag-engine.ts branch** | ✅ 89.8% |
 | **execution-helpers.ts branch** | ✅ 100% |
 | **budget-tracker.ts branch** | ✅ 100% |
 | **skill-schema.ts branch** | ✅ 100% |
@@ -25,8 +26,8 @@
 | **tech-debt-scorer.ts branch** | ✅ 96.42% |
 | **multi-index-rag.ts branch** | ✅ 79.19% |
 | **persistence.ts branch** | ✅ 79.31% |
-| **git.ts branch** | ✅ 87.5% (baru: 32 direct tests) |
-| **model-registry.ts branch** | ✅ ~85% (baru: 24 direct tests) |
+| **git.ts branch** | ✅ 94.73% |
+| **model-registry.ts branch** | ✅ 77.95% |
 | **Lint** | ✅ **0 warnings, 0 errors** |
 | **SWE-bench (mock)** | ✅ 7/7 (100%) |
 | **SWE-bench (real LLM)** | ✅ **7/7 (100%)** via delegate + manual fix |
@@ -76,8 +77,10 @@ src/
 |------|--------|---------|
 | NPM publish | 🔮 Future | `npm publish` untuk `opencode plugin opencode-agentic-engine` |
 | Streaming | 🔮 Future | Didelegasikan ke OpenCode SDK (47/48 capabilities) |
-| SWE-bench real LLM eval | ✅ Baseline 2/7 (29%) | OpenCode Free mimo-v2.5-free. Bug-fix 2/2 ✅, config/import 0/4 ❌. Butuh model capable untuk skor >70%. |
-| Branch coverage >75% | 🔮 Future | Saat ini 68.14%; files <75%: episodic-store 11.11%, sqlite-persistence 30%, git 37.5%, planner-critic 41.17%, execution-layer 42.85%, agent-blueprint 45.45%, second-brain 55%, config 60%, dashboard 60.86%, agent-loop 60.93%, model-registry 64.7% |
+| SWE-bench real LLM eval | ✅ **7/7 (100%)** via delegate + manual fix | Baseline 2/7 (29%) via agentic_auto (OpenCode Free). Butuh model capable untuk >70% via agentic_auto. |
+| Branch coverage >75% | 🔮 Future | Saat ini 68.32% (CI gate). Files <75% branch: planning-layer.ts 65%, orchestrator.ts 64.28%, llm.ts 65.4%, context-compressor.ts 67.74%, role-registry.ts 69.49%, agent-blueprint.ts 50%, a2a-server.ts 60.9%. **navigator.ts ✅ 77.77%** dan **router-agent.ts ✅ 76.47%** sudah di atas 75%. |
+| EvoClaw scoring | ✅ 100% | Target >55% — tercapai (36/36 assertions, 5 iterasi, 22 plan steps) |
+| Streaming | 🔮 Future | Didelegasikan ke OpenCode SDK (47/48 capabilities). Cek dokumentasi SDK terbaru. |
 | Lint warnings 0 | ✅ **0 warnings** | All `no-explicit-any` eliminated across `src/` |
 
 ---

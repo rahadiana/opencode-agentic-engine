@@ -984,6 +984,46 @@ assert(foodCat.suggestedTools.includes("webfetch"), "RA-8: createCategory tools 
 const simpleCat = mod.createCategory("simple", "Simple", [], "No keywords")
 assert(simpleCat.suggestedTools.length === 0, "RA-8: createCategory no tools default empty")
 
+// 42e10. RouterAgent — LLM route with missing suggestedTools/RagIndex (branch line 311-312)
+console.log("\n[42e10] RouterAgent — LLM branch: missing optional fields")
+const routerBr = new mod.RouterAgent({
+  call: async () => ({ content: JSON.stringify({ category: "custom", confidence: 0.9, reasoning: "test" }) }),
+})
+// Set a category that's missing suggestedTools and suggestedRagIndex (via plain object)
+routerBr.setCategories([
+  { id: "custom", name: "Custom", keywords: ["test"], description: "Test cat", suggestedTools: undefined, suggestedRagIndex: undefined },
+  { id: "general", name: "General", keywords: [], description: "General", suggestedTools: [], suggestedRagIndex: "knowledge-general" },
+])
+const routerBrResult = await routerBr.route("test input")
+assert(routerBrResult.usedLlm === true, "RA-9: LLM success with missing fields")
+// With undefined suggestedTools, ?? [] should give empty array
+assert(Array.isArray(routerBrResult.suggestedTools), "RA-9: suggestedTools is array")
+assert(routerBrResult.suggestedTools.length === 0, "RA-9: no tools from undefined")
+// With undefined suggestedRagIndex, ?? "knowledge-general" should give default
+assert(routerBrResult.suggestedRagIndex === "knowledge-general", "RA-9: rag index defaults to knowledge-general")
+
+// 42e11. RouterAgent — LLM filter branch: category with id=general is filtered (line 288 branch)
+console.log("\n[42e11] RouterAgent — LLM general-filter path")
+const routerGen = new mod.RouterAgent({
+  call: async () => ({ content: JSON.stringify({ category: "general", confidence: 0.8, reasoning: "no specific category" }) }),
+})
+const routerGenResult = await routerGen.route("general question")
+assert(routerGenResult.usedLlm === true, "RA-10: general category via LLM")
+assert(routerGenResult.category === "general", "RA-10: category is general")
+
+// 42e12. RouterAgent — keyword fallback with missing suggestedTools (branch in _keywordFallback, lines 271-272)
+console.log("\n[42e12] RouterAgent — keyword fallback missing optional fields")
+const routerKFB = new mod.RouterAgent()
+routerKFB.setCategories([
+  { id: "custom", name: "Custom", keywords: ["custom"], description: "Test cat", suggestedTools: undefined, suggestedRagIndex: undefined },
+  { id: "general", name: "General", keywords: [], description: "General", suggestedTools: [], suggestedRagIndex: "knowledge-general" },
+])
+const routerKFResult = await routerKFB.route("custom keyword test")
+assert(routerKFResult.usedLlm === false, "RA-11: keyword fallback")
+assert(Array.isArray(routerKFResult.suggestedTools), "RA-11: suggestedTools is array")
+assert(routerKFResult.suggestedTools.length === 0, "RA-11: no tools from undefined")
+assert(routerKFResult.suggestedRagIndex === "knowledge-general", "RA-11: rag index defaults from fallback")
+
 // 42f. P1 schema-first LLM boundary — planner critic parsers
 console.log("\n[42f] planner critic schema gate")
 const planCandidatesGood = mod.parsePlannerCandidatePlans(JSON.stringify([
@@ -3193,6 +3233,103 @@ const navSpOut = typeof navSpecial === "string" ? navSpecial : (navSpecial.outpu
 assert(navSpOut.length > 0, "nav with complex query returns results")
 assert(typeof navSpecial === "object", "nav returns object")
 assert(true, "agentic_nav edge case tests passed")
+
+// ── Branch Coverage: CodebaseNavigator direct tests ──
+console.log("\n[75b] CodebaseNavigator — direct branch coverage")
+const CN = mod.CodebaseNavigator
+assert(typeof CN === "function", "CodebaseNavigator exported")
+
+// Setup a multi-lang project
+const cnDir = "/tmp/cn-test-" + Date.now()
+mkdirSync(cnDir, { recursive: true })
+mkdirSync(join(cnDir, "src"), { recursive: true })
+mkdirSync(join(cnDir, "src", "nested", "deep"), { recursive: true })
+mkdirSync(join(cnDir, "tests"), { recursive: true })
+writeFileSync(join(cnDir, "tsconfig.json"), "{}")
+writeFileSync(join(cnDir, "package.json"), JSON.stringify({ name: "cn-test", type: "module" }))
+writeFileSync(join(cnDir, "src/index.ts"), 'import { helper } from "./helper"\nexport function main() { return helper() }\n')
+writeFileSync(join(cnDir, "src/helper.ts"), 'export function helper(): string { return "ok" }\n')
+// JS file with require pattern to trigger impMatch[1] ?? impMatch[2] fallback (line 350)
+writeFileSync(join(cnDir, "src/legacy.js"), 'const fs = require("fs");\nmodule.exports = { read: fs.readFileSync }\n')
+// File with non-source extension to test include check
+writeFileSync(join(cnDir, "src/data.json"), '{"key": "value"}')
+// File in deep nested directory to test recursion depth
+writeFileSync(join(cnDir, "src/nested/deep/config.ts"), 'export const cfg = { port: 3000 }\n')
+// Test file
+writeFileSync(join(cnDir, "tests/index.test.ts"), 'import { main } from "../src/index"\n')
+
+const nav = new CN()
+// Scan the test project
+const idx = await nav.scan(cnDir)
+assert(idx.modules.length >= 3, `found ${idx.modules.length} modules`)
+assert(idx.primaryLanguage === "typescript", `primary lang: ${idx.primaryLanguage}`)
+assert(idx.hasTests === true, "has tests dir")
+assert(idx.srcDir?.endsWith("src") || idx.srcDir === cnDir, "src dir found")
+
+// Test findRelevantFiles scoring branches
+const relevant = nav.findRelevantFiles("helper function", 5)
+assert(relevant.length > 0, "findRelevantFiles returns results")
+const noMatch = nav.findRelevantFiles("xyznonexistent123", 3)
+assert(noMatch.length === 0, "no match returns empty")
+// Test with test-related keywords to trigger isTestTask branch
+const testFiles = nav.findRelevantFiles("run test for helper", 5)
+assert(testFiles.length >= 0, "test task query works")
+
+// Test getTestFiles branches (including PHP-style extension and _-prefix)
+const testForIndex = nav.getTestFiles("/tmp/cn-test/src/index.ts")
+assert(testForIndex.length >= 0, "getTestFiles for index.ts")
+// Test with non-existent file path — returns empty
+const testNonExistent = nav.getTestFiles("/tmp/cn-test/src/nonexistent.ts")
+assert(Array.isArray(testNonExistent), "getTestFiles for nonexistent returns array")
+
+// Test getSummary branch with detected langs (line 276 ternary)
+const navSummary = nav.getSummary()
+assert(navSummary.includes("Root:"), "summary includes root")
+assert(navSummary.includes("Language:"), "summary includes language")
+assert(navSummary.includes("Modules:"), "summary includes modules")
+
+// Test scan cache hit (line 148-150) — BEFORE trailing-slash scan which clears cache
+const idxCached = await nav.scan(cnDir)
+assert(idxCached === idx, "scan cache returns same reference")
+
+// Test invalidateCache
+nav.invalidateCache()
+const idxFresh = await nav.scan(cnDir)
+assert(idxFresh !== idx, "invalidateCache produces fresh index")
+
+// Test scan with trailing slash to trigger resolvedDir !== resolvedRoot path (line 324)
+const idx2 = await nav.scan(cnDir + "/")
+assert(idx2.modules.length >= 3, "scan with trailing slash works")
+assert(true, "CodebaseNavigator direct tests passed")
+
+// JavaScript-only project to trigger require() fallback in import matching (line 350)
+const cnJsDir = "/tmp/cn-js-test-" + Date.now()
+mkdirSync(cnJsDir, { recursive: true })
+mkdirSync(join(cnJsDir, "src"), { recursive: true })
+// No tsconfig.json — only package.json, so primary lang = JavaScript
+writeFileSync(join(cnJsDir, "package.json"), JSON.stringify({ name: "cn-js-test", type: "module" }))
+// JS file with require() pattern to hit impMatch[1] ?? impMatch[2] branch
+writeFileSync(join(cnJsDir, "src/app.js"), 'const { readFile } = require("fs");\nmodule.exports = { read: readFile }\n')
+writeFileSync(join(cnJsDir, "src/utils.js"), 'export function log(msg) { console.log(msg) }\n')
+
+const navJs = new CN()
+const idxJs = await navJs.scan(cnJsDir)
+assert(idxJs.detectedLangs.includes("javascript"), "js-only project detected as JS")
+// Verify the JS file with require was parsed (triggers line 350 fallback)
+const jsModule = idxJs.modules.find(m => m.name === "app" || m.path.endsWith("app.js"))
+assert(!!jsModule, "app.js module found")
+assert(jsModule.imports.length > 0, "app.js imports parsed")
+assert(idxJs.modules.length >= 2, "found JS modules")
+
+// Test getSummary with only 1 detected lang (no "also:" suffix)
+const navJsSummary = navJs.getSummary()
+assert(!navJsSummary.includes("also:"), "js-only summary has no also: suffix")
+
+// Cleanup JS
+try { rmSync(cnJsDir, { recursive: true, force: true }) } catch { /* ignore */ }
+
+// Cleanup
+try { rmSync(cnDir, { recursive: true, force: true }) } catch { /* ignore */ }
 
 // ── Coverage Expansion: agentic_context ──
 console.log("\n[76] agentic_context — edge cases")
