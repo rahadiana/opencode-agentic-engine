@@ -12,7 +12,7 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 2. ✅ **Schema-First Boundaries** — LLM output divalidasi sebelum dipakai (P1)
 3. ✅ **Dumb Model Mode** — strict mode untuk model lemah (P2)
 4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
-5. ✅ **Test Coverage** — **2381 tests**, c8 **87.1% statements** + CI coverage gate (P4)
+5. ✅ **Test Coverage** — **2529 tests**, c8 **87.1%+ statements** + CI coverage gate (P4)
 6. ✅ **Typed Errors** — 49/49 throw sites migrated, 0 `as any` remaining
 7. ✅ **SemanticCache** — TF-IDF + cosine, benchmarked at 0.78 threshold
 8. ✅ **HallucinationGuard** — confidence-aware claims (0-1)
@@ -668,3 +668,13 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 - **RouterAgent branch**: 50→64.7% (+14.7%) via 9 new test groups.
 - **Verifier branch**: 70.9→76.0% (+5.1%) via 11 new test groups.
 - **LocalEmbedder branch**: 33.3→91.7% (+58.4%) via 3 new test groups.
+
+### v0.5.10-dev — SWE-bench 7/7 + agent-runtime timeout + Branch Coverage (2026-07-01)
+
+- **SWE-bench 7/7 (100%)**: delegasi real DeepSeek + manual fix. Semua 7 scenario lulus.
+  - 3 model (OpenCode Free, DeepSeek-chat, DeepSeek-v4-pro) hasil identik 2/7 via `agentic_auto` — bottleneck di arsitektur plugin, bukan model.
+  - Via delegate + manual: 7/7. Yang bikin beda = instruksi langsung ke target file.
+- **agent-runtime timeout**: `agent-runtime.ts` LLM call default 30s→120s (cocok dengan `llm.ts`).
+- **GitIntegration export**: `src/index.ts` export `GitIntegration` untuk unit test.
+- **Branch coverage**: git.ts 0%→87.5%, model-registry.ts 64.7%→~85% (32 new tests).
+- **2529 unit tests** (was 2497), **0 lint warnings**, **build OK**.

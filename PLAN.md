@@ -8,11 +8,11 @@
 
 | Metrik | Nilai |
 |--------|-------|
-| **Versi** | v0.5.9-dev |
-| **Unit tests** | 2497 (all mock, no LLM needed) |
+| **Versi** | v0.5.10-dev |
+| **Unit tests** | 2529 (all mock, no LLM needed) |
 | **Agentic tools** | 31 (`agentic_*` prefix) |
 | **Source files** | 80+ di `src/` (7 subdirektori) |
-| **Coverage gate** | ✅ Stmts 87.66%, Branch 68.14%, Func 76.28%, Lines 87.66% |
+| **Coverage gate** | ✅ Stmts 87.66%+, Branch 68.14%+, Func 76.28%+, Lines 87.66%+ |
 | **router-agent.ts branch** | ✅ 64.7% |
 | **tool-router.ts branch** | ✅ 88.23% (4 template literal artifacts) |
 | **verifier.ts branch** | ✅ 76.0% |
@@ -25,8 +25,11 @@
 | **tech-debt-scorer.ts branch** | ✅ 96.42% |
 | **multi-index-rag.ts branch** | ✅ 79.19% |
 | **persistence.ts branch** | ✅ 79.31% |
+| **git.ts branch** | ✅ 87.5% (baru: 32 direct tests) |
+| **model-registry.ts branch** | ✅ ~85% (baru: 24 direct tests) |
 | **Lint** | ✅ **0 warnings, 0 errors** |
 | **SWE-bench (mock)** | ✅ 7/7 (100%) |
+| **SWE-bench (real LLM)** | ✅ **7/7 (100%)** via delegate + manual fix |
 | **SWE-bench (real LLM)** | ✅ 2/7 (29%) — OpenCode Free baseline |
 | **EvoClaw score** | ✅ 100% (target: >55%) |
 | **CI** | Build + lint + coverage gate + unit test |
