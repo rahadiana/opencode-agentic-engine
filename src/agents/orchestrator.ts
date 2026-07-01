@@ -394,7 +394,7 @@ export class Orchestrator {
   validateSchema(output: string, schema: SchemaField[]): SchemaValidationResult[] {
     const results: SchemaValidationResult[] = []
     const lower = output.toLowerCase()
-    let parsed: any = null
+    let parsed: Record<string, unknown> | null = null
     try {
       parsed = JSON.parse(output)
     } catch { /* not JSON */ }
@@ -776,7 +776,9 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
   }
 
   private async handleStageOutput(
-    role: string, raw: string, allFiles: string[], stageTaskId: string, runId: string, params: any,
+    role: string, raw: string, allFiles: string[], stageTaskId: string, runId: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    params: any,
   ): Promise<{ pipelineReview?: string; verifyNote?: string }> {
     const { projectDir, sessionID, coordinator } = params
     let pipelineReview: string | undefined
@@ -810,6 +812,7 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
     opts: {
       sessionID: string; taskId: string; pipelineRunId: string; output: string
       filesModified: string[]; durationMs: number; role: string
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     }, params: any,
   ): Promise<void> {
     await recordCompletion({

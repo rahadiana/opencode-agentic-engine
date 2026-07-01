@@ -133,7 +133,6 @@ export class SimulationEngine {
     const stepResults: SimulatedStepResult[] = []
     const warnings: string[] = []
     let totalTokens = 0
-    let totalScore = 0
     let completedSteps = 0
 
     // Build dependency map for cycle detection
@@ -154,7 +153,6 @@ export class SimulationEngine {
 
       if (!result.blocked) {
         completedSteps++
-        totalScore += result.score
       }
     }
 

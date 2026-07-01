@@ -84,7 +84,7 @@ agentic_status detail="full"
 | Section | Link |
 |---------|------|
 | Getting Started | [docs/getting-started.md](./docs/getting-started.md) |
-| 34 Tools Reference | [docs/features/tools.md](./docs/features/tools.md) |
+| 31 Tools Reference | [docs/features/tools.md](./docs/features/tools.md) |
 | Workflow Guide | [docs/guide/workflow.md](./docs/guide/workflow.md) |
 | Multi-Agent | [docs/guide/multi-agent.md](./docs/guide/multi-agent.md) |
 | Memory & Skills | [docs/guide/memory.md](./docs/guide/memory.md) |
@@ -97,7 +97,7 @@ agentic_status detail="full"
 ## Testing
 
 ```bash
-node test/run.mjs        # 1854 unit tests (mock, no LLM)
+node test/run.mjs        # 2197 unit tests (mock, no LLM)
 node test/e2e-llm.mjs    # LLM E2E: 19 tests
 ./test-container.sh      # Full Docker pipeline (7 layers)
 ```

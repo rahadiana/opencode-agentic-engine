@@ -310,7 +310,7 @@ export class StateStore {
   private _tryDelete(filePath: string): void {
     try {
       if (existsSync(filePath)) unlinkSync(filePath)
-    } catch (err) {
+    } catch {
       // silent in test mode
     }
   }

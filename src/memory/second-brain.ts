@@ -846,7 +846,7 @@ export class SecondBrain {
           // Unknown events are silently ignored
           break
       }
-    } catch (e) {
+    } catch {
       // Non-fatal: don't let Second Brain errors break the event loop
       // Ponytail: single catch-all instead of per-branch try/catch
     }
