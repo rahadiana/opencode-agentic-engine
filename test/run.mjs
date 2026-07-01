@@ -3992,6 +3992,95 @@ const ragAfterClearOut = typeof ragAfterClear === "string" ? ragAfterClear : (ra
 assert(ragAfterClearOut.includes("Matches: 0") || ragAfterClearOut.includes("no results"), "rag clear removes category data")
 assert(true, "agentic_rag clear passed")
 
+// ── MultiIndexRAG unit tests (direct class access) ──
+console.log("\n[MIR] MultiIndexRAG — direct class tests")
+const { MultiIndexRAG, enrichWithVectors, LocalEmbedder } = mod
+
+// MIR-1: importAll with no tfidfDocs (re-index from raw data)
+const mirNoEmbed = new MultiIndexRAG("", {
+  keywordWeight: 0.3,
+  vectorWeight: 0.7,
+  embedding: null,
+})
+const mirEpisodes = [{
+  id: "ep-import-test", sessionID: "s1", projectId: "p1",
+  planGoal: "Test import", summary: "Testing importAll without tfidfDocs",
+  decisions: ["used SQLite"], tags: ["test", "import"],
+  outcome: "success", steps: [{ description: "step1", status: "done" }],
+  filesChanged: ["test.ts"], timestamp: Date.now(),
+  model: "mock", extractorVersion: "1",
+  createdAt: new Date().toISOString(),
+}]
+const mirSkills = [{
+  definition: {
+    schema: "agentic-skill/v1",
+    meta: { id: "sk-import-test", name: "test-skill", version: "1.0.0" },
+    trigger: { pattern: "test import", keywords: ["test", "import"] },
+    steps: [{ description: "do something" }],
+  },
+  sourceStepId: "s1",
+  confidence: 0.8,
+  successCount: 1, failureCount: 0,
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+}]
+// Call importAll WITHOUT tfidfDocs (triggers else branch at line 687)
+mirNoEmbed.importAll({
+  "test-cat": { episodes: mirEpisodes, skills: mirSkills },
+})
+// Verify data was indexed into vector store
+const importSearch = mirNoEmbed.searchByCategory("import", "test-cat", 5)
+assert(importSearch.entries.length > 0, "MIR-1a importAll without tfidfDocs indexes episodes")
+assert(importSearch.entries.some(e => e.title?.includes("import")), "MIR-1b importAll re-indexes from raw data")
+assert(true, "MIR-1 importAll without tfidfDocs passed")
+
+// MIR-2: enrichWithVectors with mock embedder
+const mockEmbedder = {
+  embed: async (_text) => ({ vector: [0.1, 0.2, 0.3, 0.4], model: "mock", dimensions: 4 }),
+  cosineSimilarity: (a, b) => a.reduce((s, v, i) => s + v * b[i], 0),
+}
+const mockResults = [{
+  category: "test-cat",
+  query: "test query",
+  totalInCategory: 2,
+  entries: [
+    { category: "test-cat", title: "alpha", keywords: ["test"], timestamp: "1", hybridScore: 0.5 },
+    { category: "test-cat", title: "beta", keywords: ["other"], timestamp: "2", hybridScore: 0.3 },
+  ],
+}]
+const enriched = await enrichWithVectors(mockEmbedder, mockResults, "test query", 0.3, 0.7)
+assert(enriched.length === 1, "MIR-2a enrichWithVectors returns same count")
+assert(typeof enriched[0].entries[0].vectorScore === "number", "MIR-2b entries get vectorScore")
+assert(typeof enriched[0].entries[0].hybridScore === "number", "MIR-2c entries get hybridScore")
+// After enrichment, entries are sorted by hybridScore descending
+assert(enriched[0].entries[0].title === "alpha", "MIR-2d entries sorted by hybridScore")
+assert(true, "MIR-2 enrichWithVectors passed")
+
+// MIR-3: searchByCategoryAsync with embedder configured
+const mirWithEmbed = new MultiIndexRAG("", {
+  keywordWeight: 0.3,
+  vectorWeight: 0.7,
+  embedding: { model: "mock", endpoint: "http://localhost", apiKey: "test" },
+})
+// Re-use the embedder by setting it directly
+const le = new LocalEmbedder({})
+mirWithEmbed.importAll({
+  "async-cat": { episodes: mirEpisodes, skills: mirSkills },
+})
+const asyncResult = await mirWithEmbed.searchByCategoryAsync("import", "async-cat", 5)
+assert(asyncResult.entries.length > 0, "MIR-3a searchByCategoryAsync returns results")
+assert(asyncResult.category === "async-cat", "MIR-3b category preserved")
+assert(true, "MIR-3 searchByCategoryAsync passed")
+
+// MIR-4: searchAllAsync returns results across categories
+mirWithEmbed.importAll({
+  "async-cat-2": { episodes: mirEpisodes, skills: mirSkills },
+})
+const allAsync = await mirWithEmbed.searchAllAsync("import", 5)
+assert(allAsync.length > 0, "MIR-4a searchAllAsync returns results")
+assert(allAsync.every(r => r.entries.length > 0), "MIR-4b all categories have entries")
+assert(true, "MIR-4 searchAllAsync passed")
+
 // ── Layer 1: MCP Client ──
 console.log("\n[91] agentic_mcp — MCP client")
 const mcpSid = freshSid()

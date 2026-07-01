@@ -45,13 +45,29 @@ const DEFAULT_CONFIG: SQLiteConfig = {
   autoMigrate: true,
 }
 
-/** Unified interface for both sqlite drivers */
-type Db = any
+/** Statement interface for both sqlite drivers */
+interface DbStatement {
+  run(...params: unknown[]): { changes: number }
+  all(...params: unknown[]): Record<string, unknown>[]
+  get(...params: unknown[]): unknown
+  source?: string // bun:sqlite specific (for db.run(stmt.source, ...))
+}
+
+/** Connection interface for both sqlite drivers */
+interface DbConnection {
+  prepare(sql: string): DbStatement
+  query(sql: string): DbStatement
+  exec(sql: string): void
+  run(sql: string, ...params: unknown[]): { changes: number }
+  pragma(sql: string): unknown // better-sqlite3 specific
+  close(): void
+}
+
 type DriverType = "better-sqlite3" | "bun:sqlite"
 
 export class SQLitePersistence {
   private _driver: DriverType | null = null
-  private db: Db = null
+  private db: DbConnection | null = null
   private dbPath: string
 
   constructor(config?: SQLiteConfig) {
@@ -80,10 +96,10 @@ export class SQLitePersistence {
       this._driver = "better-sqlite3"
 
       if (cfg.wal) {
-        this.db.pragma("journal_mode = WAL")
+        this.db!.pragma("journal_mode = WAL")
       }
-      this.db.pragma(`cache_size = -${cfg.cacheSize}`)
-      this.db.pragma("wal_autocheckpoint = 1000")
+      this.db!.pragma(`cache_size = -${cfg.cacheSize}`)
+      this.db!.pragma("wal_autocheckpoint = 1000")
 
       if (cfg.autoMigrate) this._migrate()
       return
@@ -100,10 +116,10 @@ export class SQLitePersistence {
       this._driver = "bun:sqlite"
 
       if (cfg.wal) {
-        this.db.run("PRAGMA journal_mode = WAL")
+        this.db!.run("PRAGMA journal_mode = WAL")
       }
-      this.db.run(`PRAGMA cache_size = -${cfg.cacheSize}`)
-      this.db.run("PRAGMA wal_autocheckpoint = 1000")
+      this.db!.run(`PRAGMA cache_size = -${cfg.cacheSize}`)
+      this.db!.run("PRAGMA wal_autocheckpoint = 1000")
 
       if (cfg.autoMigrate) this._migrate()
       return
@@ -122,27 +138,27 @@ export class SQLitePersistence {
 
   private _exec(sql: string): void {
     if (this._driver === "bun:sqlite") {
-      this.db.exec(sql)
+      this.db!.exec(sql)
     } else {
-      this.db.exec(sql)
+      this.db!.exec(sql)
     }
   }
 
-  private _prepare(sql: string): any {
+  private _prepare(sql: string): DbStatement {
     if (this._driver === "bun:sqlite") {
-      return this.db.query(sql)
+      return this.db!.query(sql)
     }
-    return this.db.prepare(sql)
+    return this.db!.prepare(sql)
   }
 
-  private _run(stmt: any, ...params: any[]): { changes: number } {
+  private _run(stmt: DbStatement, ...params: unknown[]): { changes: number } {
     if (this._driver === "bun:sqlite") {
-      return this.db.run(stmt.source, ...params) as { changes: number }
+      return this.db!.run(stmt.source!, ...params) as { changes: number }
     }
     return stmt.run(...params) as { changes: number }
   }
 
-  private _all(stmt: any, ...params: any[]): Record<string, unknown>[] {
+  private _all(stmt: DbStatement, ...params: unknown[]): Record<string, unknown>[] {
     if (params.length > 0) {
       if (this._driver === "bun:sqlite") {
         return stmt.all(...params) as Record<string, unknown>[]
@@ -152,7 +168,7 @@ export class SQLitePersistence {
     return stmt.all() as Record<string, unknown>[]
   }
 
-  private _get(stmt: any, ...params: any[]): any {
+  private _get(stmt: DbStatement, ...params: unknown[]): unknown {
     if (params.length > 0) {
       if (this._driver === "bun:sqlite") {
         return stmt.get(...params)
@@ -235,7 +251,7 @@ export class SQLitePersistence {
       const rows = this._all(stmt, namespace, scope) as Array<{ key: string; data: string; updated_at: string }>
       return rows.map(row => ({
         key: row.key,
-        data: this._safeParse(row.data),
+        data: this._safeParse(row.data) as T,
         updatedAt: row.updated_at,
       }))
     } else {
@@ -245,7 +261,7 @@ export class SQLitePersistence {
       const rows = this._all(stmt, namespace) as Array<{ key: string; data: string; updated_at: string }>
       return rows.map(row => ({
         key: row.key,
-        data: this._safeParse(row.data),
+        data: this._safeParse(row.data) as T,
         updatedAt: row.updated_at,
       }))
     }
@@ -307,7 +323,7 @@ export class SQLitePersistence {
   /**
    * Raw query — untuk structured queries.
    */
-  query<T = any>(sql: string, params?: any[]): T[] {
+  query<T = unknown>(sql: string, params?: unknown[]): T[] {
     const stmt = this._prepare(sql)
     if (params && params.length > 0) {
       return this._all(stmt, ...params) as T[]
@@ -349,7 +365,7 @@ export class SQLitePersistence {
     return this._driver
   }
 
-  private _safeParse(data: string): any {
+  private _safeParse(data: string): unknown {
     try {
       return JSON.parse(data)
     } catch {

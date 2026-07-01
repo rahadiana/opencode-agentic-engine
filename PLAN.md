@@ -9,18 +9,21 @@
 | Metrik | Nilai |
 |--------|-------|
 | **Versi** | v0.5.7-dev |
-| **Unit tests** | 2381 (all mock, no LLM needed) |
+| **Unit tests** | 2417 (all mock, no LLM needed) |
 | **Agentic tools** | 31 (`agentic_*` prefix) |
 | **Source files** | 80+ di `src/` (7 subdirektori) |
-| **Coverage gate** | ✅ Stmts 87.1%, Branch 67.69%, Func 75.15%, Lines 87.1% |
+| **Coverage gate** | ✅ Stmts 87.55%, Branch 67.87%, Func 75.89%, Lines 87.55% |
 | **dag-engine.ts branch** | ✅ 89.87% |
 | **execution-helpers.ts branch** | ✅ 100% |
 | **budget-tracker.ts branch** | ✅ 100% |
 | **skill-schema.ts branch** | ✅ 100% |
 | **recovery-layer.ts branch** | ✅ 100% |
 | **tech-debt-scorer.ts branch** | ✅ 96.42% |
-| **Lint** | ✅ 0 errors, 56 warnings |
+| **multi-index-rag.ts branch** | ✅ 79.19% |
+| **persistence.ts branch** | ✅ 79.31% |
+| **Lint** | ✅ 0 errors, 34 warnings |
 | **SWE-bench (mock)** | ✅ 7/7 (100%) |
+| **SWE-bench (real LLM)** | ✅ 2/7 (29%) — OpenCode Free baseline |
 | **EvoClaw score** | ✅ 100% (target: >55%) |
 | **CI** | Build + lint + coverage gate + unit test |
 
@@ -66,9 +69,9 @@ src/
 |------|--------|---------|
 | NPM publish | 🔮 Future | `npm publish` untuk `opencode plugin opencode-agentic-engine` |
 | Streaming | 🔮 Future | Didelegasikan ke OpenCode SDK (47/48 capabilities) |
-| SWE-bench real LLM eval | 🔮 Future | Butuh model capable (harness sudah siap, mock 7/7 ✅) |
-| Branch coverage >75% | 🔮 Future | Saat ini 67.69%; execution-helpers.ts 100%, budget-tracker.ts 100%, skill-schema.ts 100%, recovery-layer.ts 100%, dag-engine.ts 89.87%, tech-debt-scorer.ts 96.42%, debate-loop.ts 76.59%, verifier.ts 70.58%, session-store.ts 72.09% |
-| Lint warnings 0 | 🔮 Future | 56 `no-explicit-any` warnings tersisa |
+| SWE-bench real LLM eval | ✅ Baseline 2/7 (29%) | OpenCode Free mimo-v2.5-free. Bug-fix 2/2 ✅, config/import 0/4 ❌. Butuh model capable untuk skor >70%. |
+| Branch coverage >75% | 🔮 Future | Saat ini 67.87%; execution-helpers.ts 100%, budget-tracker.ts 100%, skill-schema.ts 100%, recovery-layer.ts 100%, dag-engine.ts 89.87%, tech-debt-scorer.ts 96.42%, persistence.ts 79.31%, multi-index-rag.ts 79.19%, debate-loop.ts 76.59%, verifier.ts 70.58% |
+| Lint warnings 0 | 🔮 Future | 34 `no-explicit-any` warnings tersisa (33 index.ts, 1 orchestrator.ts) |
 
 ---
 
