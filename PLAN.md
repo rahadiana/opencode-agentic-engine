@@ -8,11 +8,12 @@
 
 | Metrik | Nilai |
 |--------|-------|
-| **Versi** | v0.5.6-dev |
-| **Unit tests** | 2197 (all mock, no LLM needed) |
+| **Versi** | v0.5.7-dev |
+| **Unit tests** | 2220 (all mock, no LLM needed) |
 | **Agentic tools** | 31 (`agentic_*` prefix) |
 | **Source files** | 80+ di `src/` (7 subdirektori) |
-| **Coverage gate** | ✅ Stmts 85.91%, Branch 66.3%, Func 74.08%, Lines 85.91% |
+| **Coverage gate** | ✅ Stmts 86.1%, Branch 66.51%, Func 74%, Lines 86.1% |
+| **dag-engine.ts branch** | ✅ 89.87% (up from 70.4%) |
 | **Lint** | ✅ 0 errors, 62 warnings |
 | **SWE-bench (mock)** | ✅ 7/7 (100%) |
 | **EvoClaw score** | ✅ 99% (target: >55%) |
