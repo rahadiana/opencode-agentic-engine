@@ -1509,7 +1509,88 @@
         "costUsd": 0,
         "timestamp": 1782853313278
       }
+    },
+    {
+      "source": "src/agents/a2a-server.ts",
+      "target": "cleanup-as-any",
+      "relation": "modified_by",
+      "metadata": {
+        "event": "step.completed",
+        "timestamp": 1782878204821
+      }
+    },
+    {
+      "source": "src/core/agent-loop.ts",
+      "target": "cleanup-as-any",
+      "relation": "modified_by",
+      "metadata": {
+        "event": "step.completed",
+        "timestamp": 1782878204822
+      }
+    },
+    {
+      "source": "src/core/protocol-adapter.ts",
+      "target": "cleanup-as-any",
+      "relation": "modified_by",
+      "metadata": {
+        "event": "step.completed",
+        "timestamp": 1782878204822
+      }
+    },
+    {
+      "source": "src/core/state-store.ts",
+      "target": "cleanup-as-any",
+      "relation": "modified_by",
+      "metadata": {
+        "event": "step.completed",
+        "timestamp": 1782878204823
+      }
+    },
+    {
+      "source": "src/core/workflow-engine.ts",
+      "target": "cleanup-as-any",
+      "relation": "modified_by",
+      "metadata": {
+        "event": "step.completed",
+        "timestamp": 1782878204823
+      }
+    },
+    {
+      "source": "src/index.ts",
+      "target": "cleanup-as-any",
+      "relation": "modified_by",
+      "metadata": {
+        "event": "step.completed",
+        "timestamp": 1782878204823
+      }
+    },
+    {
+      "source": "src/memory/second-brain.ts",
+      "target": "cleanup-as-any",
+      "relation": "modified_by",
+      "metadata": {
+        "event": "step.completed",
+        "timestamp": 1782878204823
+      }
+    },
+    {
+      "source": "src/memory/sqlite-persistence.ts",
+      "target": "cleanup-as-any",
+      "relation": "modified_by",
+      "metadata": {
+        "event": "step.completed",
+        "timestamp": 1782878204824
+      }
+    },
+    {
+      "source": "src/observability/dashboard.ts",
+      "target": "cleanup-as-any",
+      "relation": "modified_by",
+      "metadata": {
+        "event": "step.completed",
+        "timestamp": 1782878204824
+      }
     }
   ],
-  "updatedAt": "2026-06-30T21:01:53.278Z"
+  "updatedAt": "2026-07-01T03:56:44.824Z"
 }

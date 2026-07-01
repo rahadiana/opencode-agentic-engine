@@ -442,12 +442,26 @@
         "output": "Build passed, tests passed (2097+166), TODO.md updated with sixth and seventh slice status. Committe",
         "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
         "timestamp": 1782819617123
+      },
+      {
+        "stepId": "cleanup-as-any",
+        "success": true,
+        "output": "Eliminated as any → typed across 8 files: a2a-server (5 param casts → typed interfaces), agent-loop (onEscalation interface method), protocol-adapter (delete → undefined), state-store (Second Brain namespaces in union type), workflow-engine (event payload casts → proper shapes), index.ts (6 casts → typed), second-brain (14 namespace casts → typed), sqlite-persistence (return types), dashboard (breakdown cast). 1 as any remains: index.ts:397 OpenCode SDK client type mismatch. 2197 tests pass, tsc --noEmit clean.",
+        "sessionId": "ses_0e43d5deaffegJFK7fPiHspG8x",
+        "timestamp": 1782878199139
+      },
+      {
+        "stepId": "cleanup-as-any",
+        "success": true,
+        "output": "Eliminated as any → typed across 8 files: a2a-server (5 param casts → typed interfaces), agent-loop ",
+        "sessionId": "ses_0e43d5deaffegJFK7fPiHspG8x",
+        "timestamp": 1782878204819
       }
     ],
     "evolveCount": 0,
     "windowSize": 30,
     "lastEvolveSession": null,
-    "cumulativeResults": 96
+    "cumulativeResults": 98
   },
-  "updatedAt": "2026-06-30T23:27:10.145Z"
+  "updatedAt": "2026-07-01T04:47:07.969Z"
 }
