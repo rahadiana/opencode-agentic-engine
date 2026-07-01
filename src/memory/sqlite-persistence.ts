@@ -142,14 +142,14 @@ export class SQLitePersistence {
     return stmt.run(...params) as { changes: number }
   }
 
-  private _all(stmt: any, ...params: any[]): any[] {
+  private _all(stmt: any, ...params: any[]): Record<string, unknown>[] {
     if (params.length > 0) {
       if (this._driver === "bun:sqlite") {
-        return stmt.all(...params) as any[]
+        return stmt.all(...params) as Record<string, unknown>[]
       }
-      return stmt.all(...params) as any[]
+      return stmt.all(...params) as Record<string, unknown>[]
     }
-    return stmt.all() as any[]
+    return stmt.all() as Record<string, unknown>[]
   }
 
   private _get(stmt: any, ...params: any[]): any {
@@ -228,25 +228,27 @@ export class SQLitePersistence {
    * Scope = undefined → ambil global (scope='')
    */
   loadAll<T>(namespace: string, scope?: string): PersistentState<T>[] {
-    let rows: Array<{ key: string; data: string; updated_at: string }>
-
     if (scope !== undefined) {
       const stmt = this._prepare(
         "SELECT key, data, updated_at FROM store WHERE namespace = ? AND scope = ? ORDER BY key"
       )
-      rows = this._all(stmt, namespace, scope)
+      const rows = this._all(stmt, namespace, scope) as Array<{ key: string; data: string; updated_at: string }>
+      return rows.map(row => ({
+        key: row.key,
+        data: this._safeParse(row.data),
+        updatedAt: row.updated_at,
+      }))
     } else {
       const stmt = this._prepare(
         "SELECT key, data, updated_at FROM store WHERE namespace = ? AND scope = '' ORDER BY key"
       )
-      rows = this._all(stmt, namespace)
+      const rows = this._all(stmt, namespace) as Array<{ key: string; data: string; updated_at: string }>
+      return rows.map(row => ({
+        key: row.key,
+        data: this._safeParse(row.data),
+        updatedAt: row.updated_at,
+      }))
     }
-
-    return rows.map(row => ({
-      key: row.key,
-      data: this._safeParse(row.data),
-      updatedAt: row.updated_at,
-    }))
   }
 
   /**

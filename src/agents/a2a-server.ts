@@ -26,6 +26,10 @@ import type {
   JsonRpcResponse,
   A2AMessage,
   Artifact,
+  GetCardParams,
+  TaskSendParams,
+  TaskGetParams,
+  TaskCancelParams,
 } from "./a2a-types.js"
 import {
   A2A_METHODS,
@@ -271,7 +275,7 @@ export class A2AServer {
         Connection: "keep-alive",
       })
 
-      const params = rpcReq.params as any
+      const params = rpcReq.params as unknown as TaskSendParams
       if (!params?.id || !params?.input) {
         res.write(`data: ${JSON.stringify(createJsonRpcError(-32602, "Invalid params", { id: rpcReq.id }))}\n\n`)
         res.end()
@@ -334,7 +338,7 @@ export class A2AServer {
 
     switch (req.method) {
       case A2A_METHODS.GET_CARD: {
-        const params = req.params as any
+        const params = req.params as unknown as GetCardParams
         let capabilities = this.card.capabilities
         if (params?.capabilityFilter?.length) {
           const filter = new Set(params.capabilityFilter as string[])
@@ -347,7 +351,7 @@ export class A2AServer {
       }
 
       case A2A_METHODS.TASK_SEND: {
-        const params = req.params as any
+        const params = req.params as unknown as TaskSendParams
         if (!params?.id || !params?.input) {
           return createJsonRpcError(-32602, "Invalid params: id and input required")
         }
@@ -393,7 +397,7 @@ export class A2AServer {
       }
 
       case A2A_METHODS.TASK_GET: {
-        const params = req.params as any
+        const params = req.params as unknown as TaskGetParams
         if (!params?.id?.id) {
           return createJsonRpcError(-32602, "Invalid params: id required")
         }
@@ -405,7 +409,7 @@ export class A2AServer {
       }
 
       case A2A_METHODS.TASK_CANCEL: {
-        const params = req.params as any
+        const params = req.params as unknown as TaskCancelParams
         if (!params?.id?.id) {
           return createJsonRpcError(-32602, "Invalid params: id required")
         }

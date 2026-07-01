@@ -157,36 +157,41 @@ export class WorkflowEngine {
 
   /** Step berhasil → cek plan → suggest next ready step */
   private _onStepCompleted(ev: AgenticEvent): void {
-    const p = (ev as any).payload
+    const p = (ev as { payload: Record<string, unknown> }).payload
     if (!p?.sessionID || !p?.stepId) return
 
-    const plan = this.sessionStore.getOrCreate(p.sessionID).plan
-    if (!plan || !(plan as any).steps || (plan as any).steps.length === 0) return
-
-    const steps = (plan as any).steps as Array<{ id: string; status?: string; dependsOn?: string[] }>
+    const plan = this.sessionStore.getOrCreate(p.sessionID as string).plan
+    if (!plan) return
+    // ponytail: steps array rebuilt each call — status tracking is ephemeral;
+    // persists only within one event handler invocation.
+    const steps = plan.intent.subtasks.map(s => ({
+      id: s.id,
+      status: undefined as string | undefined,
+      dependsOn: s.dependsOn,
+    }))
 
     // Tandai step selesai
-    const current = steps.find((s: any) => s.id === p.stepId)
+    const current = steps.find(s => s.id === p.stepId)
     if (current) current.status = "completed"
 
     // Cari step berikutnya yang dependensinya terpenuhi
-    const ready = steps.filter((s: any) => {
+    const ready = steps.filter(s => {
       if (s.status === "completed" || s.status === "running") return false
       if (!s.dependsOn || s.dependsOn.length === 0) return true
       return s.dependsOn.every((depId: string) => {
-        const dep = steps.find((ds: any) => ds.id === depId)
+        const dep = steps.find(ds => ds.id === depId)
         return dep?.status === "completed"
       })
     })
 
     if (ready.length > 0 && this._currentResult) {
-      this._currentResult.nextSteps.push(...ready.map((s: any) => s.id))
+      this._currentResult.nextSteps.push(...ready.map(s => s.id))
     }
   }
 
   /** Step gagal → track retry → suggest recovery */
   private _onStepFailed(ev: AgenticEvent): void {
-    const p = (ev as any).payload
+    const p = (ev as { payload: Record<string, unknown> }).payload
     if (!p?.sessionID || !p?.stepId) return
 
     const retryKey = `${p.sessionID}::${p.stepId}`
@@ -202,10 +207,10 @@ export class WorkflowEngine {
 
   /** Task selesai → auto-advance pipeline */
   private _onTaskCompleted(ev: AgenticEvent): void {
-    const p = (ev as any).payload
+    const p = (ev as { payload: Record<string, unknown> }).payload
     if (!p?.sessionID || !p?.pipelineRunId || !this.orchestrator) return
     if (this._currentResult) {
-      this._currentResult.advancedStages.push(p.pipelineRunId)
+      this._currentResult.advancedStages.push(p.pipelineRunId as string)
     }
   }
 

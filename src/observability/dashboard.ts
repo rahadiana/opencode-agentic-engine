@@ -245,7 +245,7 @@ export class Dashboard {
       if (v.severity === "error") blockedActions++
       const cat = v.category as keyof ViolationCategoryBreakdown
       if (cat in breakdown) {
-        (breakdown as any)[cat]++
+        breakdown[cat]++
       } else {
         breakdown.other++
       }

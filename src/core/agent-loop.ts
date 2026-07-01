@@ -66,6 +66,7 @@ export interface LoopObserver {
   onStepStart(stepId: string, iteration: number): void
   onStepComplete(stepId: string, success: boolean, output: string): void
   onLoopComplete(result: LoopResult): void
+  onEscalation?(nodes: Array<{ nodeId: string; reason: string }>): void
 }
 
 interface ExecutorWithState {
@@ -680,8 +681,8 @@ export class AgentLoop {
 
       // Notify observers
       this.observers.forEach(o => {
-        if ((o as any).onEscalation) {
-          (o as any).onEscalation(escalatedNodes)
+        if (o.onEscalation) {
+          o.onEscalation(escalatedNodes)
         }
       })
     }

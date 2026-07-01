@@ -35,6 +35,11 @@ export type StateNamespace =
   | "models"
   | "prompts"
   | "session"
+  // Second Brain namespaces (used by second-brain.ts)
+  | "decisions"
+  | "todos"
+  | "reflections"
+  | "graph"
 
 export interface StateStoreConfig {
   /** Project worktree path (for local store) */
@@ -54,6 +59,10 @@ const NAMESPACE_SCOPE: Record<StateNamespace, "local" | "global" | "both"> = {
   models:     "global",
   prompts:    "both",
   session:    "local",
+  decisions:  "local",
+  todos:      "local",
+  reflections:"local",
+  graph:      "local",
 }
 
 // ── Helpers ──

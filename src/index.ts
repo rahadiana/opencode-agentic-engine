@@ -326,7 +326,7 @@ const createEngine: Plugin = async (input, _options) => {
       const errMsg = e instanceof Error ? e.message : String(e)
       log.error(`[Agentic] ❌ Tool registration FAILED for "${name}": ${errMsg}`)
     }
-    return tool({ description: def.description, args: def.args, execute: wrappedExecute as any })
+    return tool({ description: def.description, args: def.args, execute: wrappedExecute })
   }
 
   const navigator = new CodebaseNavigator()
@@ -356,7 +356,7 @@ const createEngine: Plugin = async (input, _options) => {
   const git = new GitIntegration(worktree)
   const debtScorer = new TechDebtScorer()
   const skillStore = new SkillStore()
-  ;(globalThis as any).__opencode_skillStore = skillStore
+  ;(globalThis as unknown as { __opencode_skillStore: import("./memory/skill-store.js").SkillStore }).__opencode_skillStore = skillStore
   const curator = new SkillCurator(
     config.curator ?? {},
     () => skillStore.getAll(),
@@ -367,7 +367,7 @@ const createEngine: Plugin = async (input, _options) => {
     orchestrator.definePipeline(pipeline)
   }
   const episodicStore = new EpisodicStore()
-  ;(globalThis as any).__opencode_episodicStore = episodicStore
+  ;(globalThis as unknown as { __opencode_episodicStore: import("./memory/episodic-store.js").EpisodicStore }).__opencode_episodicStore = episodicStore
   const checkpoints = new CheckpointSystem()
   const hallucinationGuard = new HallucinationGuard(worktree)
   const parallelExec = new ParallelExecutor()
@@ -393,6 +393,7 @@ const confidenceScorer = new ConfidenceScorer()
 const confidenceStore = new ConfidenceStore()
   const llmEngine = new LLMEngine()
   llmEngine.setOpencodeClient(input.client)
+  // ponytail: OpenCode SDK client type differs from LogClient; cast needed
   setGlobalLogClient(input.client as any)
     llmEngine.setModelRegistry(modelRegistry)
     llmEngine.setSessionStore(sessionStore)
@@ -3516,9 +3517,9 @@ const confidenceStore = new ConfidenceStore()
                 const us = taskType ? modelRegistry.getUserSatisfaction(m.id, taskType) : 0.5
                 return {
                   model: m.id,
-                  reliability: (s as any).reliability ?? 0.5,
+                  reliability: s.reliability ?? 0.5,
                   userSat: us,
-                  score: us * 0.6 + ((s as any).reliability ?? 0.5) * 0.4,
+                  score: us * 0.6 + (s.reliability ?? 0.5) * 0.4,
                   isFast: /flash|mini|small|light|nano|fast/.test(m.id),
                   isCapable: /ultra|pro|reason|sonnet|opus|max|strong/.test(m.id),
                 }
@@ -3799,7 +3800,7 @@ const confidenceStore = new ConfidenceStore()
                 ["working", "episodic", "semantic", "procedural"].includes(l))
               const result = memoryOrchestrator.query({
                 query: args.query,
-                levels: validLevels.length > 0 ? validLevels as any : undefined,
+                levels: validLevels.length > 0 ? validLevels as import("./memory/memory-orchestrator.js").MemoryLevel[] : undefined,
                 minImportance: args.minImportance ?? 0,
                 maxResults: 15,
               })
@@ -6298,7 +6299,7 @@ const confidenceStore = new ConfidenceStore()
               estimatedSteps: planSubtaskList.length,
               complexity: planSubtaskList.length <= 3 ? "low" : planSubtaskList.length <= 8 ? "medium" : "high",
               warnings: [],
-            } as any)
+            })
 
             // P0: Set workflow state from session artifacts before autonomous execution
             {
@@ -6636,7 +6637,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
               if (!args.text) return { output: "`text` is required for TODOs." }
               const todo = sb.addTodo({
                 text: args.text as string,
-                priority: (args.priority as any) ?? "medium",
+                priority: (args.priority as "low" | "medium" | "high" | "critical") ?? "medium",
                 category: args.category as string | undefined,
                 sessionId: context.sessionID as string,
               })

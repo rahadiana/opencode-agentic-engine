@@ -18,7 +18,7 @@
  */
 
 import type { StateStore } from "../core/state-store.js"
-import type { SessionStore } from "./session-store.js"
+import type { SessionStore, SessionState } from "./session-store.js"
 import type { MemoryOrchestrator } from "./memory-orchestrator.js"
 import type { LLMEngine } from "../core/llm.js"
 import type { AgentRuntime } from "../agents/agent-runtime.js"
@@ -154,7 +154,7 @@ export class SecondBrain {
     all.push(entry)
     // Keep only latest N
     const trimmed = all.slice(-MAX_DECISIONS)
-    this.stateStore.set(NS_DECISIONS as any, "global", trimmed)
+    this.stateStore.set(NS_DECISIONS, "global", trimmed)
 
     // Also store in memoryOrchestrator for cross-level search
     if (this.memoryOrchestrator) {
@@ -173,7 +173,7 @@ export class SecondBrain {
 
   /** Get all decisions */
   getDecisions(): Decision[] {
-    const stored = this.stateStore.get<Decision[]>(NS_DECISIONS as any, "global")
+    const stored = this.stateStore.get<Decision[]>(NS_DECISIONS, "global")
     return stored ?? []
   }
 
@@ -198,7 +198,7 @@ export class SecondBrain {
     const all = this.getTodos()
     all.push(entry)
     const trimmed = all.slice(-MAX_TODOS)
-    this.stateStore.set(NS_TODOS as any, "global", trimmed)
+    this.stateStore.set(NS_TODOS, "global", trimmed)
     return entry
   }
 
@@ -209,13 +209,13 @@ export class SecondBrain {
     if (idx === -1) return false
     all[idx].status = status
     all[idx].updatedAt = Date.now()
-    this.stateStore.set(NS_TODOS as any, "global", all)
+    this.stateStore.set(NS_TODOS, "global", all)
     return true
   }
 
   /** Get all TODOs */
   getTodos(): Todo[] {
-    const stored = this.stateStore.get<Todo[]>(NS_TODOS as any, "global")
+    const stored = this.stateStore.get<Todo[]>(NS_TODOS, "global")
     return stored ?? []
   }
 
@@ -317,7 +317,7 @@ export class SecondBrain {
     const all = this.getReflections()
     all.push(reflection)
     const trimmed = all.slice(-MAX_REFLECTIONS)
-    this.stateStore.set(NS_REFLECTIONS as any, "global", trimmed)
+    this.stateStore.set(NS_REFLECTIONS, "global", trimmed)
 
     // Auto-create TODOs for action items
     for (const item of actionItems) {
@@ -386,7 +386,7 @@ export class SecondBrain {
 
   /** Get all reflections */
   getReflections(): Reflection[] {
-    const stored = this.stateStore.get<Reflection[]>(NS_REFLECTIONS as any, "global")
+    const stored = this.stateStore.get<Reflection[]>(NS_REFLECTIONS, "global")
     return stored ?? []
   }
 
@@ -407,13 +407,13 @@ export class SecondBrain {
     )
     if (!exists) {
       all.push(edge)
-      this.stateStore.set(NS_GRAPH as any, "global", all)
+      this.stateStore.set(NS_GRAPH, "global", all)
     }
   }
 
   /** Get all edges */
   getEdges(): GraphEdge[] {
-    const stored = this.stateStore.get<GraphEdge[]>(NS_GRAPH as any, "global")
+    const stored = this.stateStore.get<GraphEdge[]>(NS_GRAPH, "global")
     return stored ?? []
   }
 
@@ -495,7 +495,7 @@ export class SecondBrain {
     if (!this.sessionStore) return { loaded: true }
 
     const session = this.sessionStore.getOrCreate(sessionId)
-    const lastLoad = (session as any)._lastMemoryLoad ?? 0
+    const lastLoad = (session as SessionState & { _lastMemoryLoad?: number })._lastMemoryLoad ?? 0
     const now = Date.now()
 
     if (now - lastLoad > staleMs) {
@@ -512,7 +512,7 @@ export class SecondBrain {
       }
 
       // Mark as loaded
-      ;(session as any)._lastMemoryLoad = now
+      ;(session as SessionState & { _lastMemoryLoad?: number })._lastMemoryLoad = now
 
       return {
         loaded: false,

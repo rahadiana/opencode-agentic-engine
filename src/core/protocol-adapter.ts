@@ -192,7 +192,7 @@ export class ProtocolAdapter {
     const g = globalThis as { __opencode_a2aServer?: import("../agents/a2a-server.js").A2AServer }
     if (g.__opencode_a2aServer) {
       await g.__opencode_a2aServer.stop()
-      delete (g as any).__opencode_a2aServer
+      g.__opencode_a2aServer = undefined
     }
   }
 
