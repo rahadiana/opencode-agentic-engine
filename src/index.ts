@@ -7206,6 +7206,7 @@ export { ConsolidationScheduler, type ConsolidationSchedule, type ConsolidationT
 export { ConstraintManifold, type ConstraintViolation, type ConstraintCheck, type SafetyPolicy, type ActionProposal, type ConstraintCategory, type ConstraintSeverity, type ConstraintConfig } from "./core/constraint-manifold.js"
 export { type SkillLifecycleStage, type MaturationCriteria } from "./memory/skill-store.js"
 export { LLMEngine } from "./core/llm.js"
+export { GitIntegration } from "./core/git.js"
 export { type LLMConfig, type LLMRequest, type LLMResponse, TOOL_COMPLEXITY, type CostAutoSwitchConfig, type CostSwitchEvent } from "./core/llm-types.js"
 export { ParallelExecutor, parseLLMStepImplementation, type ParallelExecutionResult, type ParallelPlan, type StepRunner } from "./core/parallel.js"
 export { parseSemanticValidationPayload, type SemanticValidationPayload } from "./agents/orchestrator.js"

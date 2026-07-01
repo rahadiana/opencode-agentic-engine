@@ -151,7 +151,7 @@ export class AgentRuntime {
       const fullPrompt = promptParts.join("\n")
       // Dynamic timeout: estimate ~4 chars per token, min 30s, max 600s (10 menit)
       const approxTokens = Math.ceil(fullPrompt.length / 4)
-      const minTimeout = ctx.timeoutMs ?? 30_000
+      const minTimeout = ctx.timeoutMs ?? 120_000
       const dynamicTimeout = Math.min(Math.max(approxTokens * 0.3, minTimeout), 600_000)
       const timeoutMs = Math.round(dynamicTimeout)
 

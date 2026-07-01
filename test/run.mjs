@@ -13133,6 +13133,187 @@ passed += hkPassed; failed += hkFailed
   passed += trPassed; failed += trFailed
 }
 
+// ── GitIntegration Tests (GI) ──
+console.log("\n[GI] GitIntegration — branch coverage gap")
+let gi = 0, gif = 0
+const gi_assert = (c, m) => { if (c) { gi++; console.log(`  PASS: ${m}`) } else { gif++; console.log(`  FAIL: ${m}`) } }
+
+{
+  const { GitIntegration } = await import(pluginDist)
+  const git = new GitIntegration("/tmp/test-git-project")
+
+  // GI-1: generatePRDescription — all success
+  const prAll = git.generatePRDescription("Add feature", [
+    { id: "s1", description: "Add types", success: true },
+    { id: "s2", description: "Implement logic", success: true },
+  ], ["src/types.ts"])
+  gi_assert(prAll.summary.includes("Implements"), "GI-1a all success summary")
+  gi_assert(prAll.breakingChanges === false, "GI-1b all success no breaking changes")
+  gi_assert(prAll.changes.length === 2, "GI-1c both steps in changes")
+
+  // GI-2: generatePRDescription — partial success (uncovered branch)
+  const prPartial = git.generatePRDescription("Fix partial feature", [
+    { id: "s1", description: "Add types", success: true },
+    { id: "s2", description: "Implement logic", success: false },
+  ], ["src/types.ts", "src/logic.ts"])
+  gi_assert(prPartial.summary.includes("Partially implements"), "GI-2a partial success summary")
+  gi_assert(prPartial.summary.includes("1 steps need follow-up"), "GI-2b failed steps counted")
+  gi_assert(prPartial.breakingChanges === true, "GI-2c breakingChanges=true when steps fail")
+  gi_assert(prPartial.changes.length === 1, "GI-2d only successful steps in changes")
+  gi_assert(prPartial.title === "Fix partial feature", "GI-2e title preserved")
+}
+
+console.log(`  GitIntegration: ${gi} passed, ${gif} failed`)
+passed += gi; failed += gif
+
+// ── ModelRegistry Direct Tests (MRD) ──
+console.log("\n[MRD] ModelRegistry — direct method coverage")
+let mrd = 0, mrdf = 0
+const mrd_assert = (c, m) => { if (c) { mrd++; console.log(`  PASS: ${m}`) } else { mrdf++; console.log(`  FAIL: ${m}`) } }
+
+{
+  const { ModelRegistry } = await import(pluginDist)
+
+  // MRD-1: resolveAlias — empty/null
+  {
+    const reg = new ModelRegistry()
+    mrd_assert(reg.resolveAlias("").length === 0, "MRD-1a empty alias returns []")
+    mrd_assert(reg.resolveAlias(null).length === 0, "MRD-1b null alias returns []")
+  }
+
+  // MRD-2: suggestWithFallback — no candidates
+  {
+    const reg = new ModelRegistry()
+    const result = reg.suggestWithFallback("dev", [])
+    mrd_assert(result[0] === "default", "MRD-2 no candidates returns ['default']")
+  }
+
+  // MRD-3: getSummary — empty registry
+  {
+    const reg = new ModelRegistry()
+    mrd_assert(reg.getSummary() === "No model data recorded yet.", "MRD-3 empty registry summary")
+  }
+
+  // MRD-4: deleteModel
+  {
+    const reg = new ModelRegistry()
+    reg.addModel("to-delete")
+    mrd_assert(reg.deleteModel("to-delete") === true, "MRD-4a deleteModel returns true")
+    mrd_assert(reg.deleteModel("nonexistent") === false, "MRD-4b deleteModel returns false for missing")
+  }
+
+  // MRD-5: registerAlias + resolveAlias
+  {
+    const reg = new ModelRegistry()
+    reg.registerAlias("fast", ["gpt-4o", "claude-3"])
+    const models = reg.resolveAlias("fast")
+    mrd_assert(models.includes("gpt-4o"), "MRD-5a alias resolves gpt-4o")
+    mrd_assert(models.includes("claude-3"), "MRD-5b alias resolves claude-3")
+    const unknown = reg.resolveAlias("nonexistent")
+    mrd_assert(unknown.length === 1 && unknown[0] === "nonexistent", "MRD-5c unknown alias returns [alias]")
+  }
+
+  // MRD-6: recordUserFeedback + getUserSatisfaction
+  {
+    const reg = new ModelRegistry()
+    reg.addModel("user-model")
+    reg.recordCall("user-model", true, 100, "code", 0.01)
+    reg.recordUserFeedback("user-model", "code", true)
+    reg.recordUserFeedback("user-model", "code", true)
+    reg.recordUserFeedback("user-model", "code", false)
+    const sat = reg.getUserSatisfaction("user-model", "code")
+    mrd_assert(Math.abs(sat - 2/3) < 0.001, `MRD-6a user satisfaction = 0.666 (got ${sat})`)
+    const noData = reg.getUserSatisfaction("user-model", "unknown-type")
+    mrd_assert(noData === 0.5, "MRD-6b unknown type defaults to 0.5")
+  }
+
+  // MRD-7: recordHallucination
+  {
+    const reg = new ModelRegistry()
+    reg.addModel("hallucinating-model")
+    reg.recordCall("hallucinating-model", true, 100)
+    reg.recordHallucination("hallucinating-model")
+    const score = reg.getScore("hallucinating-model")
+    mrd_assert(score.hallucinationRate > 0, "MRD-7 hallucination recorded")
+  }
+
+  // MRD-8: fromJSON with prefixed key merge
+  {
+    const reg = new ModelRegistry()
+    reg.fromJSON({
+      "my-model": { totalCalls: 5, successCalls: 5, failedCalls: 0, hallucinationCount: 0, avgLatencyMs: 100, lastUsed: 1000, consecutiveFailures: 0, consecutiveSuccesses: 5, quarantineUntil: 0, byTaskType: {}, totalCost: 0, avgCostPerCall: 0 },
+      "opencode/my-model": { totalCalls: 3, successCalls: 2, failedCalls: 1, hallucinationCount: 0, avgLatencyMs: 200, lastUsed: 2000, consecutiveFailures: 1, consecutiveSuccesses: 2, quarantineUntil: 0, byTaskType: {}, totalCost: 0, avgCostPerCall: 0 },
+    })
+    const score = reg.getScore("opencode/my-model")
+    mrd_assert(score !== null, "MRD-8a fromJSON merged entry has score")
+    mrd_assert(score.totalCalls >= 5, `MRD-8b merged calls >= 5 (got ${score.totalCalls})`)
+  }
+
+  // MRD-9: enterQuarantine + isBlocked
+  {
+    const reg = new ModelRegistry()
+    reg.addModel("quarantined-model")
+    reg.recordCall("quarantined-model", true, 100)
+    reg.enterQuarantine("quarantined-model", 60)
+    const block = reg.isBlocked("quarantined-model", { hardBlockReliability: 0.2, softBlockReliability: 0.4, minSampleSize: 3 })
+    mrd_assert(block.blocked === true, "MRD-9a quarantined model blocked")
+    mrd_assert(block.severity === "hard", "MRD-9b quarantine is hard block")
+  }
+
+  // MRD-10: selectBestModel — with blocked model
+  {
+    const reg = new ModelRegistry()
+    reg.addModel("good-model")
+    for (let i = 0; i < 5; i++) reg.recordCall("good-model", true, 100, "code", 0.01)
+    reg.addModel("bad-model")
+    for (let i = 0; i < 10; i++) reg.recordCall("bad-model", false, 100, "code", 0.01)
+    const result = reg.selectBestModel("code", ["good-model", "bad-model"], { hardBlockReliability: 0.2, softBlockReliability: 0.5, minSampleSize: 3 })
+    mrd_assert(result === "good-model", "MRD-10 selects non-blocked model")
+  }
+
+  // MRD-11: selectBestModel — empty list
+  {
+    const reg = new ModelRegistry()
+    mrd_assert(reg.selectBestModel("code", []) === "default", "MRD-11 empty list returns default")
+  }
+
+  // MRD-12: selectWithFallback — healthy path
+  {
+    const reg = new ModelRegistry()
+    reg.addModel("healthy-model")
+    for (let i = 0; i < 5; i++) reg.recordCall("healthy-model", true, 100)
+    const config = { hardBlockReliability: 0.1, softBlockReliability: 0.3, minSampleSize: 3 }
+    const result = reg.selectWithFallback("code", ["healthy-model"], config)
+    mrd_assert(result.model === "healthy-model", "MRD-12a healthy selection")
+    mrd_assert(result.tier === "healthy", "MRD-12b healthy tier")
+  }
+
+  // MRD-13: selectWithFallback — empty list
+  {
+    const reg = new ModelRegistry()
+    const result = reg.selectWithFallback("code", [], { hardBlockReliability: 0.1, softBlockReliability: 0.3, minSampleSize: 3 })
+    mrd_assert(result.model === "default", "MRD-13 empty list returns default")
+  }
+
+  // MRD-14: toJSON round-trip
+  {
+    const reg = new ModelRegistry()
+    reg.addModel("json-model")
+    reg.recordCall("json-model", true, 100, "code", 0.01)
+    const json = reg.toJSON()
+    mrd_assert(typeof json === "object" && json !== null, "MRD-14a toJSON returns object")
+
+    const reg2 = new ModelRegistry()
+    reg2.fromJSON(json)
+    const score2 = reg2.getScore("json-model")
+    mrd_assert(score2 !== null, "MRD-14b fromJSON restores model")
+    mrd_assert(score2.totalCalls >= 1, "MRD-14c fromJSON restores stats")
+  }
+}
+
+console.log(`  ModelRegistry: ${mrd} passed, ${mrdf} failed`)
+passed += mrd; failed += mrdf
+
 console.log(`Results: ${passed} passed, ${failed} failed`)
 if (failed === 0) console.log("ALL TESTS PASSED")
 process.exit(failed > 0 ? 1 : 0)
