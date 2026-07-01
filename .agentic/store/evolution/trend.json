@@ -3,83 +3,6 @@
   "data": {
     "results": [
       {
-        "stepId": "test-verify",
-        "success": true,
-        "output": "Verification completed before commit: npm run build passed, node test/run.mjs passed with 2043 passe",
-        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
-        "timestamp": 1782811122154
-      },
-      {
-        "stepId": "safe-status-sync",
-        "success": true,
-        "output": "Added optional verificationEvidence to agentic_execute so manual shell verification can feed ConfidenceScorer dimensions for build, lint, tests, and tech debt. Added regression coverage in test/run.mjs proving the new argument exists and raises Test/Tech Debt confidence to 100% when provided.",
-        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
-        "timestamp": 1782811772045
-      },
-      {
-        "stepId": "safe-status-sync",
-        "success": true,
-        "output": "Added optional verificationEvidence to agentic_execute so manual shell verification can feed Confide",
-        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
-        "timestamp": 1782811774946
-      },
-      {
-        "stepId": "create-execute",
-        "success": true,
-        "output": "Audited the generated system prompt and made minimal rule-strengthening changes: added Instruction Hierarchy, reframed workflow as Mandatory Agentic Workflow, made agentic tools the primary control plane, changed key guardrails to MUST/NEVER wording, added domain-agnostic reasoning rule, and updated prompt diagnostics/tests for the current 31-tool registry and stronger prompt assertions. References used: OpenCode Agents docs https://opencode.ai/docs/agents/ and OpenCode config/customization skill/schema guidance https://opencode.ai/config.json.",
-        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
-        "timestamp": 1782813713690
-      },
-      {
-        "stepId": "create-execute",
-        "success": true,
-        "output": "Audited the generated system prompt and made minimal rule-strengthening changes: added Instruction H",
-        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
-        "timestamp": 1782813713700
-      },
-      {
-        "stepId": "create-plan",
-        "success": true,
-        "output": "Audited current prompt implementation and OpenCode docs before editing. Findings: generated prompt already exposed all 31 agentic tools and Knowledge-First flow, but several sections were recommendation-style rather than binding system-policy rules. Chosen plan: minimal prompt wording hardening only, preserving OpenCode experimental.chat.system.transform injection and permission-based agent registration from OpenCode docs.",
-        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
-        "timestamp": 1782813722805
-      },
-      {
-        "stepId": "create-plan",
-        "success": true,
-        "output": "Audited current prompt implementation and OpenCode docs before editing. Findings: generated prompt a",
-        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
-        "timestamp": 1782813722814
-      },
-      {
-        "stepId": "create-review",
-        "success": true,
-        "output": "Reviewed and verified prompt hardening. Real checks passed: npm run build; node test/run.mjs (2047 passed, 0 failed); node test/realtest.mjs (166 passed, 0 failed); node test/check-plugin.mjs (0 failed, setup warnings only); agentic_verify tier=standard passed dockerfile-lint and yaml-validate; agentic_score reported LOW tech debt. Note: agentic_score showed a stale 'No test files changed' suggestion despite test/realtest.mjs and test/check-plugin.mjs being modified; git diff confirms tests changed.",
-        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
-        "timestamp": 1782813748187
-      },
-      {
-        "stepId": "create-review",
-        "success": true,
-        "output": "Reviewed and verified prompt hardening. Real checks passed: npm run build; node test/run.mjs (2047 p",
-        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
-        "timestamp": 1782813748197
-      },
-      {
-        "stepId": "research-gather",
-        "success": true,
-        "output": "Inspected TODO.md, OpenCode docs, arXiv reference, agentic_execute/plan/nav/reflect/verify handlers, SessionStore, Executor, and tests. Confirmed minimal OpenCode-native integration point is agentic_execute plus workflow state flags recorded in session artifacts.",
-        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
-        "timestamp": 1782814891035
-      },
-      {
-        "stepId": "research-gather",
-        "success": true,
-        "output": "Inspected TODO.md, OpenCode docs, arXiv reference, agentic_execute/plan/nav/reflect/verify handlers,",
-        "sessionId": "ses_0e8b07f51ffeL9ADGH4696Qwkq",
-        "timestamp": 1782814891051
-      },
-      {
         "stepId": "research-synthesize",
         "success": true,
         "output": "Implemented a minimal pure WorkflowPolicy module with advisory/strict decisions, integrated advisory warnings and hard failing-evidence block into agentic_execute, and recorded plan/nav/reflect/verify workflow state in session artifacts. Added regression tests for no-plan warning, failed-evidence block, final verification warning, and final evidence acceptance.",
@@ -456,12 +379,54 @@
         "output": "Eliminated as any → typed across 8 files: a2a-server (5 param casts → typed interfaces), agent-loop ",
         "sessionId": "ses_0e43d5deaffegJFK7fPiHspG8x",
         "timestamp": 1782878204819
+      },
+      {
+        "stepId": "swebench-real-llm-eval",
+        "success": true,
+        "output": "SWE-bench real LLM eval with OpenCode Free mimo-v2.5-free: 2/7 (29%). Bug-fix 2/2 ✅, config/import 0/4 ❌. Baseline data recorded in PLAN.md and AGENTS.md.",
+        "sessionId": "ses_0e200e6f8ffe7h1VA1ISvA7129",
+        "timestamp": 1782918297612
+      },
+      {
+        "stepId": "swebench-real-llm-eval",
+        "success": true,
+        "output": "SWE-bench real LLM eval with OpenCode Free mimo-v2.5-free: 2/7 (29%). Bug-fix 2/2 ✅, config/import 0",
+        "sessionId": "ses_0e200e6f8ffe7h1VA1ISvA7129",
+        "timestamp": 1782918302336
+      },
+      {
+        "stepId": "lint-zero-warnings",
+        "success": true,
+        "output": "Zero lint warnings. All 33 no-explicit-any fixed in src/index.ts + 1 in orchestrator.ts. +71 tests (2488 total), coverage all gates pass. Branch: router 50→64.7%, embedder 33.3→91.7%, verifier 70.9→76%.",
+        "sessionId": "ses_0e200e6f8ffe7h1VA1ISvA7129",
+        "timestamp": 1782921800859
+      },
+      {
+        "stepId": "lint-zero-warnings",
+        "success": true,
+        "output": "Zero lint warnings. All 33 no-explicit-any fixed in src/index.ts + 1 in orchestrator.ts. +71 tests (",
+        "sessionId": "ses_0e200e6f8ffe7h1VA1ISvA7129",
+        "timestamp": 1782921803771
+      },
+      {
+        "stepId": "developer-fix-test-script",
+        "success": true,
+        "output": "Verified `/tmp/swebench-inline-s1/package.json` already has `\"test\": \"vitest run\"` (was previously `echo tests ok`). `npm test` now correctly runs vitest — 33 tests pass across 9 test files. 11 failing test files are empty stubs (no test suites), not a script issue.",
+        "sessionId": "ses_0e173bd9fffeeZ8O6NZANZ8thI",
+        "timestamp": 1782924055769
+      },
+      {
+        "stepId": "developer-fix-test-script",
+        "success": true,
+        "output": "Verified `/tmp/swebench-inline-s1/package.json` already has `\"test\": \"vitest run\"` (was previously `",
+        "sessionId": "ses_0e173bd9fffeeZ8O6NZANZ8thI",
+        "timestamp": 1782924057555
       }
     ],
-    "evolveCount": 0,
+    "evolveCount": 1,
     "windowSize": 30,
-    "lastEvolveSession": null,
-    "cumulativeResults": 98
+    "lastEvolveSession": "ses_0e200e6f8ffe7h1VA1ISvA7129",
+    "cumulativeResults": 104
   },
-  "updatedAt": "2026-07-01T04:47:07.969Z"
+  "updatedAt": "2026-07-01T17:48:35.170Z"
 }
