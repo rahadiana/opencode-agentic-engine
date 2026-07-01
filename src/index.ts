@@ -519,6 +519,21 @@ const confidenceStore = new ConfidenceStore()
   agentLoop.setToolUsageTracker(toolUsageTracker)
   // Wire ContinuousEvolution for closed learning loop (P1)
   agentLoop.setContinuousEvolution(continuousEvolution)
+  // Register default degradation callback: emit event + log
+  continuousEvolution.onDegradation((_trend, trigger) => {
+    const msg = `Evolution triggered: ${trigger.reason} (type: ${trigger.type}, rate: ${(trigger.metrics.recentRate * 100).toFixed(0)}%)`
+    console.warn(`[ContinuousEvo] ${msg}`)
+    eventBus.emit({
+      type: "feedback.recorded",
+      payload: {
+        sessionID: "",
+        stepId: "continuous-evolution",
+        feedback: "negative",
+        model: "",
+        taskType: "evolution",
+      },
+    })
+  })
   // Wire guardrails from config
   if (config.agent.toolGuardrails) {
     agentLoop.setGuardrailConfig(config.agent.toolGuardrails)

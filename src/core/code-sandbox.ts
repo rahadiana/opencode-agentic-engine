@@ -277,7 +277,7 @@ export function sandboxExecute(
     const wrappedCode = `
       ${code}
       if (typeof handler !== 'function') {
-        throw new Error('Code must define a function named "handler"');
+        throw new Error('Code must define a function named "handler"'); // ponytail: inside VM sandbox string, not TS scope — typed errors inapplicable
       }
       handler(INPUT_PLACEHOLDER);
     `
