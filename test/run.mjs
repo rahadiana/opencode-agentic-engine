@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from "fs"
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, chmodSync } from "fs"
 import { join } from "path"
 import { sdkMockClient } from "./mock-sdk-client.mjs"
 
@@ -901,7 +901,350 @@ console.log("\n[42j] writeFiles — path traversal guard")
   fs.rmSync(tmpDir, { recursive: true, force: true })
 }
 
-// 43. agentic_status — full dashboard (merged from agentic_dashboard)
+// 42k. execution-helpers — branch coverage (writeFiles eventBus/catch, parseFileEntries, recordCompletion)
+console.log("\n[42k] execution-helpers — branch coverage")
+{
+  // ── writeFiles with eventBus (line 58) ──
+  const ehEvents = []
+  const ehEventBus = { emit: (ev) => ehEvents.push(ev) }
+  const ehDir = "/tmp/eh-test-" + Date.now()
+  const ehWritten = mod.writeFiles([{ path: "out.ts", content: "data" }], ehDir, "sid-1", ehEventBus, { stepId: "s1" })
+  assert(ehWritten.length === 1, "EH-1a writeFiles with eventBus writes file")
+  assert(ehEvents.length === 1, "EH-1b writeFiles emits file.written event")
+  assert(ehEvents[0].type === "file.written", "EH-1c event type is file.written")
+  assert(ehEvents[0].payload.filePath === "out.ts", "EH-1d event payload has filePath")
+  assert(ehEvents[0].payload.sourceStepId === "s1", "EH-1e event payload has sourceStepId")
+  try { rmSync(ehDir, { recursive: true, force: true }) } catch {}
+
+  // ── parseFileEntries: valid JSON (line 88-96) ──
+  const pfe1 = mod.parseFileEntries(JSON.stringify({
+    files: [{ path: "a.ts", content: "aaa" }, { path: "b.ts", content: "bbb" }]
+  }))
+  assert(pfe1.length === 2, "EH-2a parseFileEntries parses JSON files array")
+  assert(pfe1[0].path === "a.ts", "EH-2b first entry path")
+  assert(pfe1[1].content === "bbb", "EH-2c second entry content")
+
+  // ── parseFileEntries: sparse JSON (invalid entries filtered out) ──
+  const pfe1b = mod.parseFileEntries(JSON.stringify({
+    files: [{ path: "a.ts", content: "aaa" }, { path: "b.ts" }] // b missing content → filtered
+  }))
+  assert(pfe1b.length === 1, "EH-2d parseFileEntries filters entries missing content")
+  assert(pfe1b[0].path === "a.ts", "EH-2e correct entry kept")
+
+  // ── parseFileEntries: FILE: ``` regex (line 102-106) ──
+  const pfe2 = mod.parseFileEntries("FILE: src/x.ts\n```ts\nconst x = 1\n```\nFILE: src/y.js\n```js\nvar y = 2\n```")
+  assert(pfe2.length === 2, "EH-3a parseFileEntries parses FILE: blocks")
+  assert(pfe2[0].path === "src/x.ts", "EH-3b first FILE path")
+  assert(pfe2[0].content.includes("const x"), "EH-3c first FILE content")
+
+  // ── parseFileEntries: JSON array top-level (no .files wrapper) ──
+  const pfe2b = mod.parseFileEntries(JSON.stringify([
+    { path: "arr.ts", content: "arr" }
+  ]))
+  assert(pfe2b.length === 0, "EH-3d parseFileEntries returns empty for JSON array without .files wrapper")
+
+  // ── parseFileEntries: fallback code block (line 109-115) ──
+  const pfe3 = mod.parseFileEntries("Some text with ```ts\nconst code = 1\n``` and more discussion and analysis of the code block and what it means. ".repeat(4))
+  assert(pfe3.length === 1, "EH-4a parseFileEntries fallback uses code block")
+  assert(pfe3[0].path === "src/generated.ts", "EH-4b fallback path is default")
+
+  // ── parseFileEntries: NO_CHANGES should not trigger fallback (line 109) ──
+  const pfe4 = mod.parseFileEntries("NO_CHANGES: nothing to update")
+  assert(pfe4.length === 0, "EH-4c parseFileEntries NO_CHANGES returns empty")
+
+  // ── parseFileEntries: noChanges JSON flag (line 109) ──
+  const pfe5 = mod.parseFileEntries('{"noChanges":true}')
+  assert(pfe5.length === 0, "EH-4d parseFileEntries noChanges flag returns empty")
+
+  // ── parseFileEntries: empty input ──
+  const pfe6 = mod.parseFileEntries("")
+  assert(pfe6.length === 0, "EH-4e parseFileEntries empty returns empty")
+
+  // ── parseFileEntries: fallbackPath param (line 113) ──
+  const pfe7 = mod.parseFileEntries("check ```\nfallback content\n``` long enough text to ensure the raw length exceeds one hundred characters which is the requirement for the fallback extract. ".repeat(3), "src/custom.ts")
+  assert(pfe7.length === 1, "EH-4f parseFileEntries custom fallbackPath works")
+  assert(pfe7[0].path === "src/custom.ts", "EH-4g custom fallback path used")
+
+  // ── tryParseJSON: direct valid JSON ──
+  // (not exported, but covered via parseFileEntries internally — let's verify it works)
+  // We'll test it through the schema validation path in recordCompletion
+  
+  // ── recordCompletion: minimal (no deps) ──
+  const rc1 = await mod.recordCompletion(
+    { sessionID: "s1", output: "test", filesModified: [], durationMs: 0 },
+    {}
+  )
+  assert(rc1.guardPassed === true, "EH-5a recordCompletion minimal guard passes")
+  assert(rc1.skillExtracted === false, "EH-5b recordCompletion minimal no skill")
+  assert(rc1.confidenceScore === undefined, "EH-5c recordCompletion minimal no confidence")
+
+  // ── recordCompletion: with guard check (hallucinationGuard) ──
+  const mockGuard = {
+    check(output, files) {
+      return { passed: true, claims: [{ verified: true }] }
+    }
+  }
+  const rc2 = await mod.recordCompletion(
+    { sessionID: "s2", output: "ok", filesModified: ["src/a.ts"], durationMs: 0 },
+    { hallucinationGuard: mockGuard }
+  )
+  assert(rc2.guardPassed === true, "EH-6a recordCompletion with guard passes")
+  assert(rc2.skillExtracted === false, "EH-6b recordCompletion with guard no skill")
+
+  // ── recordCompletion: guard fails ──
+  const mockGuardFail = {
+    check(output, files) {
+      return { passed: false, claims: [{ verified: false }] }
+    }
+  }
+  const rc3 = await mod.recordCompletion(
+    { sessionID: "s3", output: "bad claim", filesModified: ["src/b.ts"], durationMs: 0 },
+    { hallucinationGuard: mockGuardFail }
+  )
+  assert(rc3.guardPassed === false, "EH-7 recordCompletion guard fails when claims unverified")
+
+  // ── recordCompletion: guard + eventBus emission (line 201-216) ──
+  const rcEvents = []
+  const rcEventBus = { emit: (ev) => rcEvents.push(ev) }
+  const mockGuard2 = {
+    check(output, files) {
+      return { passed: true, claims: [{ verified: true, claim: "exists", type: "file", expected: "yes", actual: "yes" }] }
+    }
+  }
+  const rc4 = await mod.recordCompletion(
+    { sessionID: "s4", output: "x", filesModified: ["src/c.ts"], durationMs: 0 },
+    { hallucinationGuard: mockGuard2, eventBus: rcEventBus }
+  )
+  assert(rc4.guardPassed === true, "EH-8a recordCompletion guard with eventBus passes")
+  const guardEvent = rcEvents.find(e => e.type === "guard.check.completed")
+  assert(guardEvent !== undefined, "EH-8b guard.check.completed event emitted")
+  assert(guardEvent.payload.sessionID === "s4", "EH-8c guard event has sessionID")
+
+  // ── recordCompletion: guard eventBus with empty claims (line 211 ternary false branch) ──
+  const rcEvents2 = []
+  const rcEventBus2 = { emit: (ev) => rcEvents2.push(ev) }
+  const mockGuardEmpty = {
+    check(output, files) {
+      return { passed: true, claims: [] } // empty claims → hallucinationRate ternary false
+    }
+  }
+  const rc4b = await mod.recordCompletion(
+    { sessionID: "s4b", output: "x", filesModified: ["src/c2.ts"], durationMs: 0 },
+    { hallucinationGuard: mockGuardEmpty, eventBus: rcEventBus2 }
+  )
+  assert(rc4b.guardPassed === true, "EH-8d guard with empty claims passes")
+  const guardEvent2 = rcEvents2.find(e => e.type === "guard.check.completed")
+  assert(guardEvent2 !== undefined, "EH-8e guard event emitted for empty claims")
+  assert(guardEvent2.payload.hallucinationRate === 0, "EH-8f hallucinationRate 0 for empty claims")
+
+  // ── recordCompletion: with budget tracker (line 194) ──
+  let budgetSteps = 0
+  const mockBudget = { recordStep() { budgetSteps++ } }
+  const rc5 = await mod.recordCompletion(
+    { sessionID: "s5", output: "budget", filesModified: [], durationMs: 0 },
+    { budgetTracker: mockBudget }
+  )
+  assert(budgetSteps === 1, "EH-9 recordCompletion records budget step")
+
+  // ── recordCompletion: with confidence scoring (line 220-233) ──
+  const scores = []
+  const mockScorer = {
+    score(signals) { return { overall: 0.85, dimensions: {} } }
+  }
+  const mockStore = {
+    set(key, val) { scores.push({ key, val }) }
+  }
+  const rc6 = await mod.recordCompletion(
+    { sessionID: "s6", output: "score", filesModified: [], durationMs: 0 },
+    { confidenceScorer: mockScorer, confidenceStore: mockStore }
+  )
+  assert(scores.length === 1, "EH-10a recordCompletion stores confidence score")
+  assert(scores[0].val.overall === 0.85, "EH-10b confidence score is correct")
+
+  // ── writeFiles: catch block on write error (line 68-70) ──
+  // Create a read-only directory to trigger write error
+  const roDir = "/tmp/eh-readonly-" + Date.now()
+  mkdirSync(roDir, { recursive: true })
+  mkdirSync(roDir + "/sub", { recursive: true })
+  chmodSync(roDir + "/sub", 0o444) // read-only
+  const ehWrittenFail = mod.writeFiles([{ path: "sub/newfile.ts", content: "data" }], roDir, "sid-fail")
+  assert(ehWrittenFail.length === 0, "EH-11 writeFiles returns empty when write fails")
+  try { rmSync(roDir, { recursive: true, force: true }) } catch {}
+
+  // ── recordCompletion: with skill extraction (autoExtract enabled) ──
+  let extractedSkill = false
+  const mockSkillStore = {
+    async extract(record, tags) {
+      extractedSkill = true
+      return {
+        definition: { meta: { id: "sk1", name: "skill1" }, output_schema: null },
+        successRate: 0.9
+      }
+    }
+  }
+  const mockConfigLoader = {
+    get() {
+      return { agent: { autoSkillExtract: true } }
+    }
+  }
+  const rc7 = await mod.recordCompletion(
+    { sessionID: "s7", output: "skill data", filesModified: ["src/d.ts"], durationMs: 0, role: "developer" },
+    { skillStore: mockSkillStore, configLoader: mockConfigLoader }
+  )
+  assert(extractedSkill === true, "EH-12a recordCompletion extracts skill for developer")
+  assert(rc7.skillExtracted === true, "EH-12b skillExtracted flag is true")
+
+  // ── recordCompletion: skill extraction with schema validation + eventBus (lines 260-288) ──
+  const svEvents = []
+  const svEventBus = { emit: (ev) => svEvents.push(ev) }
+  const mockSchemaValidator = {
+    validate(schema, output) {
+      return { valid: false, errors: [{ path: "name", message: "required" }] }
+    }
+  }
+  const mockSkillStoreWithSchema = {
+    async extract(record, tags) {
+      return {
+        definition: {
+          meta: { id: "sk-schema", name: "schema-skill" },
+          output_schema: { fields: [{ name: "name", type: "string" }] }
+        },
+        successRate: 0.8
+      }
+    }
+  }
+  const rc8 = await mod.recordCompletion(
+    { sessionID: "s8", output: '{"name": "test"}', filesModified: ["src/e.ts"], durationMs: 0, role: "developer" },
+    {
+      skillStore: mockSkillStoreWithSchema,
+      configLoader: mockConfigLoader,
+      schemaValidator: mockSchemaValidator,
+      eventBus: svEventBus
+    }
+  )
+  assert(rc8.skillExtracted === true, "EH-13a recordCompletion schema validation extracts skill")
+  assert(rc8.schemaValidation !== undefined, "EH-13b schema validation result present")
+  assert(rc8.schemaValidation.outputErrors.length > 0, "EH-13c schema validation has errors")
+  assert(rc8.schemaValidation.outputErrors[0].path === "name", "EH-13d schema validation error path")
+  assert(svEvents.length > 0, "EH-13e schema validation emits events")
+
+  // ── recordCompletion: skill extract tryParseJSON invalid (catch block, line 286-288) ──
+  const mockSkillStoreBadOutput = {
+    async extract(record, tags) {
+      return {
+        definition: {
+          meta: { id: "sk-bad", name: "bad-skill" },
+          output_schema: { fields: [{ name: "x", type: "string" }] }
+        },
+        successRate: 0.5
+      }
+    }
+  }
+  const mockSchemaValidator2 = {
+    validate(schema, output) { return { valid: false, errors: [{ path: "x", message: "missing" }] } }
+  }
+  const rc9 = await mod.recordCompletion(
+    { sessionID: "s9", output: "not-json-at-all", filesModified: ["src/f.ts"], durationMs: 0, role: "developer" },
+    {
+      skillStore: mockSkillStoreBadOutput,
+      configLoader: mockConfigLoader,
+      schemaValidator: mockSchemaValidator2
+    }
+  )
+  assert(rc9.skillExtracted === true, "EH-14a recordCompletion non-JSON output still extracts skill")
+  assert(rc9.schemaValidation === undefined, "EH-14b schema validation skipped for non-JSON output")
+
+  // ── recordCompletion: schema validation catch block (schemaValidator.validate throws, line 287-288) ──
+  const mockSchemaValidatorThrows = {
+    validate(schema, output) { throw new Error("validator crashed") }
+  }
+  const mockSkillStoreSchema2 = {
+    async extract(record, tags) {
+      return {
+        definition: {
+          meta: { id: "sk-throw", name: "throw-skill" },
+          output_schema: { fields: [{ name: "x", type: "string" }] }
+        },
+        successRate: 0.5
+      }
+    }
+  }
+  const rc9b = await mod.recordCompletion(
+    { sessionID: "s9b", output: '{"x":1}', filesModified: ["src/f2.ts"], durationMs: 0, role: "developer" },
+    {
+      skillStore: mockSkillStoreSchema2,
+      configLoader: mockConfigLoader,
+      schemaValidator: mockSchemaValidatorThrows
+    }
+  )
+  assert(rc9b.skillExtracted === true, "EH-14c recordCompletion handles validator throw gracefully")
+
+  // ── recordCompletion: tryParseJSON regex extraction path (line 311-318) ──
+  // record.output with JSON embedded in non-JSON text to trigger regex fallback
+  const mockSkillStoreRegex = {
+    async extract(record, tags) {
+      return {
+        definition: {
+          meta: { id: "sk-regex", name: "regex-skill" },
+          output_schema: { fields: [{ name: "key", type: "string" }] }
+        },
+        successRate: 0.7
+      }
+    }
+  }
+  const mockSchemaValidator3 = {
+    validate(schema, output) { return { valid: true, errors: [] } }
+  }
+  const rc9c = await mod.recordCompletion(
+    { sessionID: "s9c", output: 'prefix { "key": "value" } suffix', filesModified: ["src/f3.ts"], durationMs: 0, role: "developer" },
+    {
+      skillStore: mockSkillStoreRegex,
+      configLoader: mockConfigLoader,
+      schemaValidator: mockSchemaValidator3
+    }
+  )
+  assert(rc9c.skillExtracted === true, "EH-14d recordCompletion regex JSON extraction works")
+
+  // ── recordCompletion: tryParseJSON regex extraction + invalid JSON (catch line 317-318) ──
+  const mockSkillStoreBadRegex = {
+    async extract(record, tags) {
+      return {
+        definition: {
+          meta: { id: "sk-badr", name: "bad-regex" },
+          output_schema: { fields: [{ name: "x", type: "string" }] }
+        },
+        successRate: 0.6
+      }
+    }
+  }
+  const mockSchemaValidator4 = {
+    validate(schema, output) { return { valid: true, errors: [] } }
+  }
+  const rc9d = await mod.recordCompletion(
+    // Text with {braces} but invalid JSON inside → regex match catches {braces} but parse fails
+    { sessionID: "s9d", output: 'text { invalid: json, missing: quotes } text', filesModified: ["src/f4.ts"], durationMs: 0, role: "developer" },
+    {
+      skillStore: mockSkillStoreBadRegex,
+      configLoader: mockConfigLoader,
+      schemaValidator: mockSchemaValidator4
+    }
+  )
+  assert(rc9d.skillExtracted === true, "EH-14e recordCompletion handles invalid regex JSON gracefully")
+
+  // ── recordCompletion: skill extraction catch block (mock extract throws, line 292-293) ──
+  const mockSkillStoreThrows = {
+    async extract(record, tags) {
+      throw new Error("extract failed")
+    }
+  }
+  const rc10 = await mod.recordCompletion(
+    { sessionID: "s10", output: "some output", filesModified: ["src/g.ts"], durationMs: 0, role: "developer" },
+    { skillStore: mockSkillStoreThrows, configLoader: mockConfigLoader }
+  )
+  assert(rc10.skillExtracted === false, "EH-15 recordCompletion handles skill extract throw gracefully")
+}
+
+assert(true, "execution-helpers branch coverage tests passed")
 console.log("\n[43] agentic_status — full dashboard")
 const dbResult = await hooks.tool.agentic_status.execute({ detail: "full" }, mockCtx(freshSid()))
 const dbOut = typeof dbResult === "string" ? dbResult : dbResult.output

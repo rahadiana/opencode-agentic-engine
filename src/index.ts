@@ -7212,6 +7212,6 @@ export { SecondBrain, initSecondBrain, parseReflectionPayload, type ReflectionPa
 export { ErrorRecovery } from "./core/error-recovery.js"
 export { AlignmentGate } from "./core/alignment-gate.js"
 export { EconomicModel } from "./core/economic-model.js"
-export { writeFiles, type FileWriteEntry } from "./core/execution-helpers.js"
+export { writeFiles, parseFileEntries, recordCompletion, type FileWriteEntry, type CompletionRecord, type CompletionDeps, type CompletionResult } from "./core/execution-helpers.js"
 export { AgentLoop, type AgentLoopConfig, type LoopResult, type LoopObserver } from "./core/agent-loop.js"
 export { evaluateWorkflowPolicy, formatWorkflowPolicyDecisions, verificationEvidenceFailed, type WorkflowPolicyInput, type WorkflowPolicyDecision, type WorkflowPolicyOptions, type WorkflowAction, type WorkflowSeverity } from "./core/workflow-policy.js"
