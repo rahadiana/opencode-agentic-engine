@@ -45,6 +45,8 @@ export interface RecoveryLayerConfig {
   autoReplan: boolean
   /** Whether to auto-escalate when replan exhausted */
   autoEscalate: boolean
+  /** Max recovery history entries before LRU eviction (default: 500) */
+  maxHistorySize?: number
 }
 
 export interface ReplanResult {
@@ -79,10 +81,11 @@ const DEFAULT_CONFIG: RecoveryLayerConfig = {
 export class RecoveryLayer {
   private config: RecoveryLayerConfig
   private recoveryHistory: RecoveryRecord[] = []
-  private readonly maxHistorySize = 500
+  private maxHistorySize: number
 
   constructor(config?: Partial<RecoveryLayerConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config }
+    this.maxHistorySize = config?.maxHistorySize ?? 500
   }
 
   /**

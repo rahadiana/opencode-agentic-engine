@@ -445,6 +445,93 @@ const scOut = typeof scResult === "string" ? scResult : scResult.output
 assert(scOut.includes("Tech Debt") || scOut.includes("Score"), "score output produced")
 assert(scOut.includes("coupling") || scOut.includes("size") || scOut.includes("scope"), "includes categories")
 
+// ── TechDebtScorer direct unit tests (branch coverage) ──
+{
+  console.log("\n[23b] TechDebtScorer — branch coverage")
+  const tdScorer = new mod.TechDebtScorer()
+  function gen(opts = {}) {
+    const lines = []
+    if (opts.todos) for (let i = 0; i < opts.todos; i++) lines.push(`// TODO: item ${i}`)
+    if (opts.any) lines.push("const x: any = 1")
+    if (opts.unknownAs) lines.push("const y = z as unknown as string")
+    if (opts.imports) for (let i = 0; i < opts.imports; i++) lines.push(`import { m${i} } from "p${i}"`)
+    if (opts.lines) while (lines.length < opts.lines) lines.push(`const v${lines.length} = ${lines.length}`)
+    return lines.join("\n")
+  }
+  function makeFiles(configs) {
+    const m = new Map()
+    configs.forEach((c, i) => m.set(c.name || `f${i}.ts`, gen(c)))
+    return m
+  }
+
+  // Test: TODO > 2 (line 134-136)
+  // isComment(line) skips lines starting with // before counting TODOs,
+  // so TODOs must be inline (not standalone comment lines)
+  const todoContent = `let a = 1 // TODO: refactor this
+let b = 2 // TODO: simplify that
+let c = 3 // TODO: clean later
+`
+  const r1 = tdScorer.score("fix code", ["demo.ts"], new Map([["demo.ts", todoContent]]))
+  const p1 = r1.breakdown.find(b => b.category === "patterns")
+  assert(p1 && p1.issues.some(i => i.includes("TODOs")), "TD: >2 TODOs detected")
+
+  // Test: as unknown as (line 138-140)
+  const r2 = tdScorer.score("fix types", ["demo.ts"], new Map([["demo.ts", "let x = y as unknown as string\nlet z = 1\n"]]))
+  const p2 = r2.breakdown.find(b => b.category === "patterns")
+  assert(p2 && p2.issues.some(i => i.includes("as unknown as")), "TD: as unknown as cast detected")
+
+  // Test: generateSuggestion — low (line 148)
+  const r3 = tdScorer.score("readme", [], new Map())
+  assert(r3.overall === "low", `TD: overall low (got ${r3.overall})`)
+  assert(r3.suggestion === "Minimal debt. Proceed confidently.", "TD: suggestion for low")
+
+  // Test: generateSuggestion — medium (line 149)
+  // 6 files (>5 → coupling+3), 1 with 11 imports (+1 coupling),
+  // 1 file 200 lines (+1 size), 6 dirs+no tests (+4 scope),
+  // any+unknownAs (+3 patterns) → total 12, avg 3
+  const medFiles = makeFiles([
+    { name: "a/f1.ts", imports: 11, any: true, unknownAs: true, lines: 200 },
+    { name: "b/f2.ts", lines: 5 },
+    { name: "c/f3.ts", lines: 5 },
+    { name: "d/f4.ts", lines: 5 },
+    { name: "e/f5.ts", lines: 5 },
+    { name: "f/f6.ts", lines: 5 },
+  ])
+  const r4 = tdScorer.score("implement feature", ["a/f1.ts","b/f2.ts","c/f3.ts","d/f4.ts","e/f5.ts","f/f6.ts"], medFiles)
+  assert(r4.overall === "medium", `TD: overall medium (got ${r4.overall})`)
+  assert(r4.suggestion.includes("Address before next"), "TD: suggestion for medium")
+
+  // Test: generateSuggestion — high (line 150)
+  // 6 files, 4 with 11 imports (coupling+7), 3 with 200-400 lines (size+4),
+  // 6 dirs+no tests (scope+4), 5 files with any (patterns+10 capped)
+  // → total 25, avg 6.25
+  const highFiles = makeFiles([
+    { name: "a/f1.ts", imports: 11, any: true, lines: 400 },
+    { name: "b/f2.ts", imports: 11, any: true, lines: 200 },
+    { name: "c/f3.ts", imports: 11, any: true, lines: 200 },
+    { name: "d/f4.ts", imports: 11, any: true, lines: 5 },
+    { name: "e/f5.ts", any: true, lines: 5 },
+    { name: "f/f6.ts", lines: 5 },
+  ])
+  const r5 = tdScorer.score("implement feature", ["a/f1.ts","b/f2.ts","c/f3.ts","d/f4.ts","e/f5.ts","f/f6.ts"], highFiles)
+  assert(r5.overall === "high", `TD: overall high (got ${r5.overall})`)
+  assert(r5.suggestion.includes("Fix before merging"), "TD: suggestion for high")
+
+  // Test: generateSuggestion — critical (line 151)
+  // 6 files all maxed → total 33, avg 8.25
+  const critFiles = makeFiles([
+    { name: "a/f1.ts", imports: 11, any: true, unknownAs: true, lines: 400 },
+    { name: "b/f2.ts", imports: 11, any: true, unknownAs: true, lines: 400 },
+    { name: "c/f3.ts", imports: 11, any: true, unknownAs: true, lines: 400 },
+    { name: "d/f4.ts", imports: 11, any: true, unknownAs: true, lines: 400 },
+    { name: "e/f5.ts", imports: 11, any: true, unknownAs: true, lines: 400 },
+    { name: "f/f6.ts", imports: 11, any: true, unknownAs: true, lines: 400 },
+  ])
+  const r6 = tdScorer.score("implement feature", ["a/f1.ts","b/f2.ts","c/f3.ts","d/f4.ts","e/f5.ts","f/f6.ts"], critFiles)
+  assert(r6.overall === "critical", `TD: overall critical (got ${r6.overall})`)
+  assert(r6.suggestion.includes("Critical debt"), "TD: suggestion for critical")
+}
+
 // 24. agentic_delegate — role assignment
 console.log("\n[24] agentic_delegate — assign task")
 const dlCtx = mockCtx(freshSid())
@@ -7827,6 +7914,61 @@ csOk("CS-4b SessionStore getActiveSessions", () => {
 console.log(`  ConsolidationScheduler: ${csm} passed, ${csf} failed`)
 passed += mem + csm; failed += memf + csf
 
+// ── SessionStore Branch Coverage ──────────────────────────────────
+console.log("\n[SS-BR] SessionStore — Branch Coverage")
+let ssbr = 0, ssbrf = 0
+const ssbr_assert = (cond, msg) => { if (cond) { ssbr++ } else { console.error(`  ❌ ${msg}`); ssbrf++ } }
+
+{
+  const SS = mod.SessionStore
+  const sess = new SS()
+
+  // SS-BR-1: clearToolPreference with tool arg (line 204)
+  const sid1 = "ss-br-1"
+  sess.setToolPreference(sid1, "agentic_plan", "gpt-4o")
+  ssbr_assert(sess.getToolPreference(sid1, "agentic_plan") === "gpt-4o", "SS-BR-1a tool pref set")
+  sess.clearToolPreference(sid1, "agentic_plan")
+  ssbr_assert(sess.getToolPreference(sid1, "agentic_plan") === undefined, "SS-BR-1b specific tool cleared")
+
+  // SS-BR-2: clearToolPreference without tool arg → delete all (line 206)
+  const sid2 = "ss-br-2"
+  sess.setToolPreference(sid2, "agentic_verify", "claude")
+  sess.setToolPreference(sid2, "agentic_plan", "gpt-4o")
+  sess.clearToolPreference(sid2)
+  ssbr_assert(sess.getToolPreference(sid2, "agentic_verify") === undefined, "SS-BR-2a all tool prefs cleared")
+  ssbr_assert(sess.getToolPreference(sid2, "agentic_plan") === undefined, "SS-BR-2b all tool prefs cleared")
+
+  // SS-BR-3: setCategoryPreference first-time for session (lines 214-216)
+  const sid3 = "ss-br-3"
+  sess.setCategoryPreference(sid3, "quick", "flash-combo")
+  ssbr_assert(sess.getCategoryPreference(sid3, "quick") === "flash-combo", "SS-BR-3a first-time category set works")
+
+  // SS-BR-4: getAllCategoryPreferences for unknown session (line 227)
+  const sid4 = "ss-br-4"
+  const all = sess.getAllCategoryPreferences(sid4)
+  ssbr_assert(Array.isArray(all) && all.length === 0, "SS-BR-4a empty prefs returns []")
+
+  // SS-BR-5: clearCategoryPreference with category arg (line 235)
+  const sid5 = "ss-br-5"
+  sess.setCategoryPreference(sid5, "deep", "strong-reason")
+  sess.setCategoryPreference(sid5, "quick", "flash-combo")
+  sess.clearCategoryPreference(sid5, "deep")
+  ssbr_assert(sess.getCategoryPreference(sid5, "deep") === undefined, "SS-BR-5a specific category cleared")
+  ssbr_assert(sess.getCategoryPreference(sid5, "quick") === "flash-combo", "SS-BR-5b other category kept")
+
+  // SS-BR-6: clearCategoryPreference without category arg (line 237)
+  const sid6 = "ss-br-6"
+  sess.setCategoryPreference(sid6, "deep", "strong-reason")
+  sess.setCategoryPreference(sid6, "quick", "flash-combo")
+  sess.clearCategoryPreference(sid6)
+  ssbr_assert(sess.getCategoryPreference(sid6, "deep") === undefined, "SS-BR-6a all categories cleared")
+  ssbr_assert(sess.getCategoryPreference(sid6, "quick") === undefined, "SS-BR-6b all categories cleared")
+}
+
+ssbr_assert(true, "SS-BR-DONE SessionStore branch coverage tests complete")
+console.log(`  SessionStore branches: ${ssbr} passed, ${ssbrf} failed`)
+passed += ssbr; failed += ssbrf
+
 // ── Phase 3A: SkillStore.record() + Pattern→Skill ─────────────────
 console.log("\n[P3A] Phase 3A — Pattern-to-Skill conversion")
 const { SkillStore: SK2, createSkillDefinition: csd } = await import(pluginDist)
@@ -9645,6 +9787,161 @@ const rl_assert = (c, m) => { if (c) { rl++; console.log(`  PASS: ${m}`) } else 
   const rl = new RecoveryLayer()
   const recoveries = rl.getRecoveries("nonexistent")
   rl_assert(recoveries.length === 0, "RL-8 unknown node returns empty")
+}
+
+// RL-9: getAllRecoveries returns copy of history (covers line 205 spread)
+{
+  const rl = new RecoveryLayer()
+  const dagEngine = new DAGEngine()
+  const pll = new PlanningLayer(dagEngine)
+  const { plan, context } = pll.createPlan("test", [
+    { id: "a", description: "a", dependsOn: [], verificationCriteria: [] },
+  ])
+  const nodeA = plan.nodes[0]
+  context.nodeStates.set("a", { nodeId: "a", status: "failed", retryCount: 0 })
+  rl.decide(nodeA, context, "error for spread")
+  const all = rl.getAllRecoveries()
+  rl_assert(all.length === 1, "RL-9a getAllRecoveries returns records")
+  rl_assert(all[0].nodeId === "a", "RL-9b record contents match")
+  all.length = 0
+  rl_assert(rl.getAllRecoveries().length === 1, "RL-9c returns copy (internal unmodified)")
+}
+
+// RL-10: getStats with multiple different statuses (covers line 216 ?? branch)
+{
+  const rl = new RecoveryLayer({ maxRetries: 2, maxReplans: 0 })
+  const dagEngine = new DAGEngine()
+  const pll = new PlanningLayer(dagEngine)
+  const { plan, context } = pll.createPlan("test", [
+    { id: "a", description: "a", dependsOn: [], verificationCriteria: [] },
+  ])
+  const nodeA = plan.nodes[0]
+  // 2 retries → same "retrying" status, then escalate → different status
+  context.nodeStates.set("a", { nodeId: "a", status: "failed", retryCount: 0 })
+  rl.decide(nodeA, context, "first retry")
+  context.nodeStates.set("a", { nodeId: "a", status: "failed", retryCount: 1 })
+  rl.decide(nodeA, context, "second retry")
+  context.nodeStates.set("a", { nodeId: "a", status: "failed", retryCount: 2 })
+  rl.decide(nodeA, context, "escalate")
+  const stats = rl.getStats()
+  rl_assert(stats.totalRecoveries === 3, "RL-10a totalRecoveries=3")
+  rl_assert(stats.byLevel.retry === 2, "RL-10b byLevel.retry=2")
+  rl_assert(stats.byLevel.escalate === 1, "RL-10c byLevel.escalate=1")
+  rl_assert(stats.byStatus.retrying === 2, "RL-10d byStatus.retrying=2")
+  rl_assert(stats.byStatus.escalated === 1, "RL-10e byStatus.escalated=1")
+}
+
+// RL-11: LRU eviction with small maxHistorySize (covers line 248)
+{
+  const rl = new RecoveryLayer({ maxRetries: 10, maxHistorySize: 2 })
+  const dagEngine = new DAGEngine()
+  const pll = new PlanningLayer(dagEngine)
+  const { plan, context } = pll.createPlan("test", [
+    { id: "a", description: "a", dependsOn: [], verificationCriteria: [] },
+  ])
+  const nodeA = plan.nodes[0]
+  context.nodeStates.set("a", { nodeId: "a", status: "failed", retryCount: 0 })
+  rl.decide(nodeA, context, "first")
+  rl.decide(nodeA, context, "second")
+  rl_assert(rl.getAllRecoveries().length === 2, "RL-11a 2 before eviction")
+  rl.decide(nodeA, context, "third")
+  const all = rl.getAllRecoveries()
+  rl_assert(all.length === 2, "RL-11b 2 after eviction")
+  rl_assert(all[0].error.includes("second"), "RL-11c oldest (first) evicted")
+  rl_assert(all[1].error.includes("third"), "RL-11d newest (third) kept")
+}
+
+// RL-12: computeDelay "none" strategy returns 0 (covers line 255)
+{
+  const rl = new RecoveryLayer({ maxRetries: 1, retryStrategy: "none" })
+  const dagEngine = new DAGEngine()
+  const pll = new PlanningLayer(dagEngine)
+  const { plan, context } = pll.createPlan("test", [
+    { id: "a", description: "a", dependsOn: [], verificationCriteria: [] },
+  ])
+  const nodeA = plan.nodes[0]
+  context.nodeStates.set("a", { nodeId: "a", status: "failed", retryCount: 0 })
+  const d = rl.decide(nodeA, context, "err")
+  rl_assert(d.delayMs === 0, "RL-12a delay=0 for none strategy")
+}
+
+// RL-13: computeDelay "linear" strategy (covers line 257)
+{
+  const rl = new RecoveryLayer({ maxRetries: 1, retryStrategy: "linear" })
+  const dagEngine = new DAGEngine()
+  const pll = new PlanningLayer(dagEngine)
+  const { plan, context } = pll.createPlan("test", [
+    { id: "a", description: "a", dependsOn: [], verificationCriteria: [] },
+  ])
+  const nodeA = plan.nodes[0]
+  context.nodeStates.set("a", { nodeId: "a", status: "failed", retryCount: 0 })
+  const d = rl.decide(nodeA, context, "err")
+  // computeDelay(1) = Math.min(1 * 1000, 30000) = 1000
+  rl_assert(d.delayMs === 1000, `RL-13a delay=1000 for linear (got ${d.delayMs})`)
+}
+
+// RL-14: computeDelay unknown strategy hits default branch (covers line 261)
+{
+  const rl = new RecoveryLayer({ maxRetries: 1, retryStrategy: "unknown" })
+  const dagEngine = new DAGEngine()
+  const pll = new PlanningLayer(dagEngine)
+  const { plan, context } = pll.createPlan("test", [
+    { id: "a", description: "a", dependsOn: [], verificationCriteria: [] },
+  ])
+  const nodeA = plan.nodes[0]
+  context.nodeStates.set("a", { nodeId: "a", status: "failed", retryCount: 0 })
+  const d = rl.decide(nodeA, context, "err")
+  // default: Math.min(1 * 1000, 30000) = 1000
+  rl_assert(d.delayMs === 1000, `RL-14a delay=1000 for default (got ${d.delayMs})`)
+}
+
+// RL-15: Skip fallback when autoEscalate=false (covers line 138-142)
+{
+  const rl = new RecoveryLayer({ maxRetries: 1, maxReplans: 0, autoReplan: false, autoEscalate: false })
+  const dagEngine = new DAGEngine()
+  const pll = new PlanningLayer(dagEngine)
+  const { plan, context } = pll.createPlan("test", [
+    { id: "a", description: "a", dependsOn: [], verificationCriteria: [] },
+  ])
+  const nodeA = plan.nodes[0]
+  // retryCount >= maxRetries → no retry; no replans + autoReplan=false → no replan; autoEscalate=false → skip
+  context.nodeStates.set("a", { nodeId: "a", status: "failed", retryCount: 5 })
+  const decision = rl.decide(nodeA, context, "fatal error")
+  rl_assert(decision.level === "none", `RL-15a level=none (got ${decision.level})`)
+  rl_assert(decision.action === "skip", "RL-15b action=skip")
+  rl_assert(decision.delayMs === 0, "RL-15c delayMs=0")
+  const all = rl.getAllRecoveries()
+  rl_assert(all.length === 1, "RL-15d exactly 1 recovery record")
+  rl_assert(all[0].status === "skipped", "RL-15e status=skipped")
+}
+
+// RL-16: generateReplan with planner returning empty subtasks (covers line 158 false branch)
+{
+  const rl = new RecoveryLayer()
+  const result = rl.generateReplan(
+    { id: "test", description: "test task", dependsOn: [], verificationCriteria: [] },
+    "some error",
+    () => [],
+  )
+  rl_assert(result.newSubtasks.length === 3, `RL-16a falls back to default 3 subtasks (got ${result.newSubtasks.length})`)
+  rl_assert(result.newSubtasks[0].id === "test-diagnose", "RL-16b first is diagnose")
+  rl_assert(result.newSubtasks[1].id === "test-fix", "RL-16c second is fix")
+  rl_assert(result.newSubtasks[2].id === "test-verify", "RL-16d third is verify")
+}
+
+// RL-17: generateReplan with planner returning valid subtasks (covers line 161 true branch)
+{
+  const rl = new RecoveryLayer()
+  const result = rl.generateReplan(
+    { id: "build", description: "Build project", dependsOn: [], verificationCriteria: [] },
+    "compilation error",
+    () => [
+      { id: "fix-build", description: "Fix build", dependsOn: [], verificationCriteria: [] },
+    ],
+  )
+  rl_assert(result.newSubtasks.length === 1, `RL-17a planner result used (got ${result.newSubtasks.length})`)
+  rl_assert(result.newSubtasks[0].id === "fix-build", "RL-17b custom subtask returned")
+  rl_assert(result.summary.includes("build"), "RL-17c summary mentions original id")
 }
 
 console.log(`  RL: ${rl} passed, ${rlf} failed`)

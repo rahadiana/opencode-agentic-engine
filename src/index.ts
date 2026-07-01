@@ -7146,6 +7146,7 @@ export { HallucinationGuard, type HallucinationCheck, type ClaimResult } from ".
 export { ErrorAnalyzer } from "./core/error-analyzer.js"
 export { RoleRegistry } from "./agents/role-registry.js"
 export { VectorStore } from "./memory/vector-store.js"
+export { TechDebtScorer } from "./core/tech-debt-scorer.js"
 export { Verifier } from "./core/verifier.js"
 export { DebateLoop, formatDebateResult, type DebateConfig, type DebateResult, type DebateRound } from "./core/debate-loop.js"
 export { ContinuousEvolution } from "./evolution/continuous-evolution.js"
