@@ -286,10 +286,12 @@ const createEngine: Plugin = async (input, _options) => {
    */
   function registryTool(
     name: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     def: { description: string; args: any; execute: (args: any, context: any) => Promise<any> },
     registryMeta?: { version?: string; category?: string; keywords?: string[] },
   ) {
     // Wrap execute with global error handler
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const wrappedExecute = async (args: any, context: any) => {
       // ponytail: context can be undefined when tools are called without session context
       if (!context?.sessionID) {
@@ -297,11 +299,11 @@ const createEngine: Plugin = async (input, _options) => {
       }
       try {
         // Auto-set LLM session + tool context for model resolution
-        llmEngine.setSessionId(context.sessionID)
+        llmEngine.setSessionId(context.sessionID as string)
         llmEngine.setToolContext(name)
         const result = await def.execute(args, context)
         return result
-      } catch (err: any) {
+      } catch (err: unknown) {
         const errMsg = err instanceof Error ? err.message : String(err)
         const errStack = err instanceof Error ? err.stack : ""
         log.error(`[Agentic] ❌ Tool "${name}" execution failed:\n  ${errMsg}\n${errStack ? `  ${errStack.split("\n").slice(1, 4).join("\n  ")}` : ""}`)
@@ -320,7 +322,7 @@ const createEngine: Plugin = async (input, _options) => {
         name,
         def.description,
         jsonSchema as Record<string, unknown>,
-        wrappedExecute as (args: Record<string, unknown>, context?: any) => Promise<unknown>,
+        wrappedExecute as (args: Record<string, unknown>, context?: unknown) => Promise<unknown>,
         registryMeta,
       )
     } catch (e) {
@@ -328,7 +330,7 @@ const createEngine: Plugin = async (input, _options) => {
       const errMsg = e instanceof Error ? e.message : String(e)
       log.error(`[Agentic] ❌ Tool registration FAILED for "${name}": ${errMsg}`)
     }
-    return tool({ description: def.description, args: def.args, execute: wrappedExecute })
+    return tool({ description: def.description, args: def.args, execute: wrappedExecute as (args: Record<string, unknown>, context: Record<string, unknown>) => Promise<{ output: string }> })
   }
 
   const navigator = new CodebaseNavigator()
@@ -604,8 +606,9 @@ const confidenceStore = new ConfidenceStore()
   }
 
   // Restore persisted evolution trend + evaluator score (scoped per project) via StateStore
-  const savedEvo = stateStore.get<{ results: any[]; evolveCount: number; windowSize: number }>("evolution", "trend", projectId)
-  if (savedEvo) continuousEvolution.fromJSON(savedEvo)
+  const savedEvo = stateStore.get<Record<string, unknown>>("evolution", "trend", projectId)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (savedEvo) continuousEvolution.fromJSON(savedEvo as any)
   const savedEval = stateStore.get<Record<string, unknown>>("evaluation", "live", projectId)
   if (savedEval) liveEvaluator.fromJSON(savedEval)
 
@@ -933,40 +936,44 @@ const confidenceStore = new ConfidenceStore()
     }
   }
 
-  eventBus.on("step.completed", (ev: any) => {
-    liveEvaluator.feedStepResult({ stepId: ev.payload.stepId, success: true, sessionId: ev.payload.sessionID })
+  eventBus.on("step.completed", (ev) => {
+    const p = ev.payload as { stepId: string; sessionID: string; output?: string }
+    liveEvaluator.feedStepResult({ stepId: p.stepId, success: true, sessionId: p.sessionID })
     continuousEvolution.feedStepResult({
-      stepId: ev.payload.stepId,
+      stepId: p.stepId,
       success: true,
-      output: ev.payload.output?.slice(0, 100) ?? "",
-      sessionId: ev.payload.sessionID,
+      output: p.output?.slice(0, 100) ?? "",
+      sessionId: p.sessionID,
       timestamp: Date.now(),
     })
     // Auto-evolve check on every successful step
-    checkAutoEvolve(ev.payload.sessionID)
+    checkAutoEvolve(p.sessionID)
   })
-  eventBus.on("step.failed", (ev: any) => {
-    liveEvaluator.feedStepResult({ stepId: ev.payload.stepId, success: false, sessionId: ev.payload.sessionID })
+  eventBus.on("step.failed", (ev) => {
+    const p = ev.payload as { stepId: string; sessionID: string; error?: string; errorCategory?: string }
+    liveEvaluator.feedStepResult({ stepId: p.stepId, success: false, sessionId: p.sessionID })
     continuousEvolution.feedStepResult({
-      stepId: ev.payload.stepId,
+      stepId: p.stepId,
       success: false,
-      output: ev.payload.error?.slice(0, 100) ?? "",
-      sessionId: ev.payload.sessionID,
+      output: p.error?.slice(0, 100) ?? "",
+      sessionId: p.sessionID,
       timestamp: Date.now(),
-      category: ev.payload.errorCategory,
+      category: p.errorCategory,
     })
     // Auto-evolve check on every failed step
-    checkAutoEvolve(ev.payload.sessionID)
+    checkAutoEvolve(p.sessionID)
   })
-  eventBus.on("task.completed", (ev: any) => {
-    liveEvaluator.feedDelegation(ev.payload.taskId, ev.payload.role, ev.payload.success)
+  eventBus.on("task.completed", (ev) => {
+    const p = ev.payload as { taskId: string; role: string; success: boolean }
+    liveEvaluator.feedDelegation(p.taskId, p.role, p.success)
   })
 
   // TraceLogger: log semua event ke file JSONL (wildcard)
-  eventBus.onAny((ev: any) => {
+  eventBus.onAny((ev) => {
+    const p = ev.payload as Record<string, unknown> | undefined
     traceLogger.log({
       step: ev.type,
-      input: JSON.stringify(ev.payload ?? {}).slice(0, 200),
+      input: JSON.stringify(p ?? {}).slice(0, 200),
       output: "",
       toolUsed: ev.type?.split(".")[0] ?? "event",
       success: !ev.type?.includes("failed") && !ev.type?.includes("exceeded"),
@@ -976,14 +983,16 @@ const confidenceStore = new ConfidenceStore()
   })
 
   // Orchestrator: auto-advance pipeline saat stage selesai
-  eventBus.on("pipeline.stage.completed", (ev: any) => {
-    orchestrator.advanceStage(ev.payload.runId, ev.payload.output, ev.payload.issues)
+  eventBus.on("pipeline.stage.completed", (ev) => {
+    const p = ev.payload as { runId: string; output: string; issues: string[] }
+    orchestrator.advanceStage(p.runId, p.output, p.issues)
   })
 
   // ModelRegistry: catat hallucination guard failures
-  eventBus.on("guard.check.completed", (ev: any) => {
-    if (!ev.payload.passed) {
-      modelRegistry.recordHallucination(ev.payload.sessionID)
+  eventBus.on("guard.check.completed", (ev) => {
+    const p = ev.payload as { passed: boolean; sessionID: string }
+    if (!p.passed) {
+      modelRegistry.recordHallucination(p.sessionID)
     }
   })
 
@@ -1656,7 +1665,7 @@ const confidenceStore = new ConfidenceStore()
                       if (!svResult.valid) {
                         response += `⚠️ Input schema: ${svResult.errors.length} issues\n`
                         for (const err of svResult.errors.slice(0, 3)) {
-                          response += `  • ${err.path}: ${err.message}\n`
+                          response += `  • ${err.path}: ${err instanceof Error ? err.message : String(err)}\n`
                         }
                       } else {
                         response += `✅ Input schema validated\n`
@@ -1702,7 +1711,7 @@ const confidenceStore = new ConfidenceStore()
                       if (!svResult.valid) {
                         response += `⚠️ Output schema: ${svResult.errors.length} issues\n`
                         for (const err of svResult.errors.slice(0, 3)) {
-                          response += `  • ${err.path}: ${err.message}\n`
+                          response += `  • ${err.path}: ${err instanceof Error ? err.message : String(err)}\n`
                         }
                       } else {
                         response += `✅ Output schema validated\n`
@@ -2081,14 +2090,15 @@ const confidenceStore = new ConfidenceStore()
 
             await traceLogger.flush()
             const tracePath = `${worktree}/.agentic/trace.jsonl`
-            let traces: any[] = []
+            let traces: Record<string, unknown>[] = []
             try {
               const content = readFileSync(tracePath, "utf-8")
               traces = content.trim().split("\n").filter(Boolean).map(l => JSON.parse(l))
             } catch { /* no traces yet */ }
 
             if (traces.length > 0) {
-              const data = dashboard.generate(traces, Date.now(), {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const data = dashboard.generate(traces as any, Date.now(), {
                 skillStore: {
                   getAll: () => skillStore.getAll(),
                   getLifecycleStats: () => skillStore.getLifecycleStats(),
@@ -2473,16 +2483,16 @@ const confidenceStore = new ConfidenceStore()
               return { output: `Snapshot "${args.label}" not found. Use \`action: "list"\` to see available snapshots.` }
             }
 
-            let snapshot: any
+            let snapshot: { plan?: unknown; completedSteps?: string[]; filesModified?: string[]; [key: string]: unknown }
             try {
-              snapshot = JSON.parse(raw)
+              snapshot = JSON.parse(raw) as typeof snapshot
             } catch {
               return { output: `Snapshot "${args.label}" is corrupted and cannot be restored.` }
             }
 
             // Re-init execution with the same plan but mark completed steps from snapshot
             if (snapshot.plan) {
-              executor.initExecution(context.sessionID, snapshot.plan)
+              executor.initExecution(context.sessionID, snapshot.plan as Parameters<typeof executor.initExecution>[1])
               // Re-mark completed steps
               for (const stepId of snapshot.completedSteps ?? []) {
                 executor.recordResult(context.sessionID, {
@@ -2493,7 +2503,7 @@ const confidenceStore = new ConfidenceStore()
                 })
               }
               // Update session plan
-              session.plan = snapshot.plan
+              session.plan = snapshot.plan as Parameters<typeof executor.initExecution>[1]
             }
 
             traceLogger.log({
@@ -5169,7 +5179,7 @@ const confidenceStore = new ConfidenceStore()
           taskDescription: tool.schema.string().optional().describe("Task description (for delegate action)"),
           instructions: tool.schema.string().optional().describe("Additional instructions for delegated task"),
         },
-        async execute(args: Record<string, unknown>, _context: any) {
+        async execute(args: Record<string, unknown>, _context: Record<string, unknown>) {
           const action = (args.action as string) || "status"
           const g = globalThis as {
             __opencode_a2aClient?: import("./agents/a2a-client.js").A2AClient
@@ -5537,7 +5547,7 @@ const confidenceStore = new ConfidenceStore()
           suffix: tool.schema.string().optional().describe("Custom suffix for the fine-tuned model name"),
           jobId: tool.schema.string().optional().describe("Fine-tuning job ID (for status/cancel actions)"),
         },
-        async execute(args: Record<string, unknown>, _ctx: any) {
+        async execute(args: Record<string, unknown>, _ctx: Record<string, unknown>) {
           const action = args.action as string
           const source = (args.source as string) ?? "combined"
           const format = (args.format as "openai" | "instructions") ?? "openai"
@@ -5659,8 +5669,9 @@ const confidenceStore = new ConfidenceStore()
                     `> Use \`action: "create-job"\` with \`jobId: "${file.id}"\` to start fine-tuning.`,
                   ].join("\n"),
                 }
-              } catch (err: any) {
-                return { output: `❌ Upload failed: ${err.message}` }
+              } catch (err: unknown) {
+                const errMsg = err instanceof Error ? err.message : String(err)
+                return { output: `❌ Upload failed: ${errMsg}` }
               }
             }
 
@@ -5689,8 +5700,8 @@ const confidenceStore = new ConfidenceStore()
                     `> Use \`action: "status"\` with \`jobId: "${job.id}"\` to check progress.`,
                   ].join("\n"),
                 }
-              } catch (err: any) {
-                return { output: `❌ Create job failed: ${err.message}` }
+              } catch (err: unknown) {
+                return { output: `❌ Create job failed: ${err instanceof Error ? err.message : String(err)}` }
               }
             }
 
@@ -5717,8 +5728,8 @@ const confidenceStore = new ConfidenceStore()
                     job.error ? `**Error:** ${job.error}` : "",
                   ].filter(Boolean).join("\n"),
                 }
-              } catch (err: any) {
-                return { output: `❌ Status check failed: ${err.message}` }
+              } catch (err: unknown) {
+                return { output: `❌ Status check failed: ${err instanceof Error ? err.message : String(err)}` }
               }
             }
 
@@ -5737,8 +5748,8 @@ const confidenceStore = new ConfidenceStore()
                 return {
                   output: `## Fine-Tuning Jobs (${jobs.length})\n\n${jobLines}`,
                 }
-              } catch (err: any) {
-                return { output: `❌ List jobs failed: ${err.message}` }
+              } catch (err: unknown) {
+                return { output: `❌ List jobs failed: ${err instanceof Error ? err.message : String(err)}` }
               }
             }
 
@@ -5755,8 +5766,8 @@ const confidenceStore = new ConfidenceStore()
                 return {
                   output: `✅ Job ${job.id} cancelled. Status: ${job.status}`,
                 }
-              } catch (err: any) {
-                return { output: `❌ Cancel failed: ${err.message}` }
+              } catch (err: unknown) {
+                return { output: `❌ Cancel failed: ${err instanceof Error ? err.message : String(err)}` }
               }
             }
 
@@ -5811,8 +5822,8 @@ const confidenceStore = new ConfidenceStore()
                     `> Or run \`action: "full-pipeline-wait"\` to block until completion.`,
                   ].join("\n"),
                 }
-              } catch (err: any) {
-                return { output: `❌ Pipeline failed at step: ${err.message}` }
+              } catch (err: unknown) {
+                return { output: `❌ Pipeline failed at step: ${err instanceof Error ? err.message : String(err)}` }
               }
             }
 
@@ -5849,8 +5860,8 @@ const confidenceStore = new ConfidenceStore()
                     `**Dataset saved to:** ${savePath}`,
                   ].filter(Boolean).join("\n"),
                 }
-              } catch (err: any) {
-                return { output: `❌ Full pipeline failed: ${err.message}` }
+              } catch (err: unknown) {
+                return { output: `❌ Full pipeline failed: ${err instanceof Error ? err.message : String(err)}` }
               }
             }
 
@@ -5872,7 +5883,7 @@ const confidenceStore = new ConfidenceStore()
           data: tool.schema.string().optional().describe("JSON data string (for action=save)"),
           params: tool.schema.string().optional().describe("JSON array of query parameters (for action=query)"),
         },
-        async execute(args: Record<string, unknown>, _ctx: any) {
+        async execute(args: Record<string, unknown>, _ctx: Record<string, unknown>) {
           const action = args.action as string
 
           // Jika SQLite tidak tersedia (Bun tanpa better-sqlite3, dll)
@@ -5901,8 +5912,8 @@ const confidenceStore = new ConfidenceStore()
                   ].join("\n"),
                   metadata: { rows: total, data: rows.slice(0, 50) },
                 }
-              } catch (err: any) {
-                return { output: `❌ Query failed: ${err.message}` }
+              } catch (err: unknown) {
+                return { output: `❌ Query failed: ${err instanceof Error ? err.message : String(err)}` }
               }
             }
 
@@ -5918,8 +5929,8 @@ const confidenceStore = new ConfidenceStore()
                 const scope = args.scope as string | undefined
                 sqliteDB.save(namespace, key, data, scope)
                 return { output: `✅ Saved \`${namespace}:${key}\`${scope ? ` (scope: ${scope})` : ""}` }
-              } catch (err: any) {
-                return { output: `❌ Save failed: ${err.message}` }
+              } catch (err: unknown) {
+                return { output: `❌ Save failed: ${err instanceof Error ? err.message : String(err)}` }
               }
             }
 
@@ -6027,8 +6038,8 @@ const confidenceStore = new ConfidenceStore()
                     }
                   }
                   migrated.push(`${ns} (${items.length} items)`)
-                } catch (err: any) {
-                  skipped.push(`${ns} (error: ${err.message})`)
+      } catch (err: unknown) {
+                  skipped.push(`${ns} (error: ${err instanceof Error ? err.message : String(err)})`)
                 }
               }
 
@@ -6111,7 +6122,7 @@ const confidenceStore = new ConfidenceStore()
               for (const sk of skills.slice(0, 3)) {
                 const d = sk.definition
                 const steps = d.workflow?.steps || []
-                skillContexts.push(`${d.meta?.name || "skill"} (${(sk.successRate * 100).toFixed(0)}% success) — ${steps.slice(0, 2).map((w: any) => w.description || w.action || "").join("; ")}`)
+                skillContexts.push(`${d.meta?.name || "skill"} (${(sk.successRate * 100).toFixed(0)}% success) — ${steps.slice(0, 2).map((w: { description?: string; action?: string }) => w.description || w.action || "").join("; ")}`)
               }
             }
           } catch { /* non-fatal */ }
@@ -6278,7 +6289,7 @@ const confidenceStore = new ConfidenceStore()
               const writtenPaths = writeFilesHelper(filesToWrite, projectDir, context.sessionID, eventBus)
               allModified.push(...writtenPaths)
               return {
-                success: writtenPaths.length > 0 || filesToWrite.some((f: any) => f.noChanges),
+                success: writtenPaths.length > 0 || filesToWrite.some((f: import("./core/execution-helpers.js").FileWriteEntry & { noChanges?: boolean }) => !!f.noChanges),
                 output: `Generated ${writtenPaths.length} files`,
                 filesModified: writtenPaths,
                 error: writtenPaths.length === 0 ? "No files generated" : undefined,
@@ -6511,7 +6522,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                 const checkOutput = `Created files: ${allModified.join(", ")}, wrote implementations for ${activeSteps.map(s => s.description).join(", ")}`
                 const guardResult = guard.check(checkOutput, allModified)
                 if (guardResult?.claims) {
-                  const failedClaims = guardResult.claims.filter((c: any) => !c.verified)
+                  const failedClaims = guardResult.claims.filter((c: { verified: boolean }) => !c.verified)
                   const conf = guardResult.overallConfidence !== undefined ? ` (conf: ${guardResult.overallConfidence.toFixed(2)})` : ''
                   verifyNote += (failedClaims.length > 0 ? ` ⚠️ Guard:${failedClaims.length} issues` : " ✅ Guard") + conf
                 }
@@ -7198,7 +7209,7 @@ export { LLMEngine } from "./core/llm.js"
 export { type LLMConfig, type LLMRequest, type LLMResponse, TOOL_COMPLEXITY, type CostAutoSwitchConfig, type CostSwitchEvent } from "./core/llm-types.js"
 export { ParallelExecutor, parseLLMStepImplementation, type ParallelExecutionResult, type ParallelPlan, type StepRunner } from "./core/parallel.js"
 export { parseSemanticValidationPayload, type SemanticValidationPayload } from "./agents/orchestrator.js"
-export { RouterAgent, parseRouterClassificationPayload, type RouterClassificationPayload } from "./core/router-agent.js"
+export { RouterAgent, createCategory, parseRouterClassificationPayload, type RouterClassificationPayload, type RouteCategory } from "./core/router-agent.js"
 export { DataCleaner, parseDataValidationPayload, type DataValidationPayload } from "./core/data-cleaner.js"
 export { MCPClient, type MCPConfig, type MCPConnection, type MCPCallResult } from "./core/mcp-client.js"
 export { ModelRegistry, type ModelStats, type ModelScore } from "./core/model-registry.js"

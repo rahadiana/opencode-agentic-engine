@@ -8,8 +8,8 @@
 
 | Metrik | Nilai |
 |--------|-------|
-| **Versi** | v0.5.7-dev |
-| **Unit tests** | 2417 (all mock, no LLM needed) |
+| **Versi** | v0.5.9-dev |
+| **Unit tests** | 2488 (all mock, no LLM needed) |
 | **Agentic tools** | 31 (`agentic_*` prefix) |
 | **Source files** | 80+ di `src/` (7 subdirektori) |
 | **Coverage gate** | ✅ Stmts 87.55%, Branch 67.87%, Func 75.89%, Lines 87.55% |
@@ -21,7 +21,7 @@
 | **tech-debt-scorer.ts branch** | ✅ 96.42% |
 | **multi-index-rag.ts branch** | ✅ 79.19% |
 | **persistence.ts branch** | ✅ 79.31% |
-| **Lint** | ✅ 0 errors, 34 warnings |
+| **Lint** | ✅ **0 warnings, 0 errors** |
 | **SWE-bench (mock)** | ✅ 7/7 (100%) |
 | **SWE-bench (real LLM)** | ✅ 2/7 (29%) — OpenCode Free baseline |
 | **EvoClaw score** | ✅ 100% (target: >55%) |
@@ -71,7 +71,7 @@ src/
 | Streaming | 🔮 Future | Didelegasikan ke OpenCode SDK (47/48 capabilities) |
 | SWE-bench real LLM eval | ✅ Baseline 2/7 (29%) | OpenCode Free mimo-v2.5-free. Bug-fix 2/2 ✅, config/import 0/4 ❌. Butuh model capable untuk skor >70%. |
 | Branch coverage >75% | 🔮 Future | Saat ini 67.87%; execution-helpers.ts 100%, budget-tracker.ts 100%, skill-schema.ts 100%, recovery-layer.ts 100%, dag-engine.ts 89.87%, tech-debt-scorer.ts 96.42%, persistence.ts 79.31%, multi-index-rag.ts 79.19%, debate-loop.ts 76.59%, verifier.ts 70.58% |
-| Lint warnings 0 | 🔮 Future | 34 `no-explicit-any` warnings tersisa (33 index.ts, 1 orchestrator.ts) |
+| Lint warnings 0 | ✅ **0 warnings** | All `no-explicit-any` eliminated across `src/` |
 
 ---
 

@@ -285,6 +285,27 @@ const BUILT_IN_CONTRACTS: Record<string, PipelineContract> = {
   "refactor-review": REFACTOR_REVIEW_CONTRACT,
 }
 
+/** Shared params bag passed through pipeline execution stages */
+export interface PipelineParams {
+  pipeline: WorkflowPipeline
+  runId: string
+  goal: string
+  constraints?: string[]
+  projectDir: string
+  codebaseSummary: string
+  filesBlock: string
+  memoryContexts: string[]
+  skillContexts: string[]
+  coordinator: AgentCoordinator
+  sessionID: string
+  budgetTracker?: BudgetTracker
+  eventBus?: EventBus
+  hallucinationGuard?: import("../drift/hallucination-guard.js").HallucinationGuard
+  skillStore?: import("../memory/skill-store.js").SkillStore
+  configLoader?: import("../core/config.js").ConfigLoader
+  schemaValidator?: import("../core/skill-schema.js").SchemaValidator
+}
+
 export class Orchestrator {
   private pipelines = new Map<string, WorkflowPipeline>()
   private readonly maxActiveRuns = 50
@@ -619,25 +640,7 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
    * Reused by both `agentic_pipeline run` and `agentic_auto` (Stage V).
    * Returns { results: Map<role, output>, allFiles: string[], pipelineReview: string, hasNoLLM: bool }
    */
-  async executePipeline(params: {
-    pipeline: WorkflowPipeline
-    runId: string
-    goal: string
-    constraints?: string[]
-    projectDir: string
-    codebaseSummary: string
-    filesBlock: string
-    memoryContexts: string[]
-    skillContexts: string[]
-    coordinator: AgentCoordinator
-    sessionID: string
-    budgetTracker?: BudgetTracker
-    eventBus?: EventBus
-    hallucinationGuard?: import("../drift/hallucination-guard.js").HallucinationGuard
-    skillStore?: import("../memory/skill-store.js").SkillStore
-    configLoader?: import("../core/config.js").ConfigLoader
-    schemaValidator?: import("../core/skill-schema.js").SchemaValidator
-  }): Promise<{
+  async executePipeline(params: PipelineParams): Promise<{
     results: Map<string, { output: string; issues: string[]; validatedBy: string[] }>
     allFiles: string[]
     pipelineReview: string
@@ -723,7 +726,7 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
   }
 
   private async executeStage(
-    stage: PipelineStage, params: any, stageTaskId: string, runId: string,
+    stage: PipelineStage, params: PipelineParams, stageTaskId: string, runId: string,
   ): Promise<{ stop: boolean; verifyNote?: string; hasNoLLM?: boolean; budgetExceeded?: boolean; raw?: string }> {
     const { goal, constraints, filesBlock, codebaseSummary, memoryContexts, skillContexts, coordinator, sessionID } = params
     const sysPrompts = this.sysPrompts
@@ -777,8 +780,7 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
 
   private async handleStageOutput(
     role: string, raw: string, allFiles: string[], stageTaskId: string, runId: string,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    params: any,
+    params: PipelineParams,
   ): Promise<{ pipelineReview?: string; verifyNote?: string }> {
     const { projectDir, sessionID, coordinator } = params
     let pipelineReview: string | undefined
@@ -812,8 +814,7 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
     opts: {
       sessionID: string; taskId: string; pipelineRunId: string; output: string
       filesModified: string[]; durationMs: number; role: string
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    }, params: any,
+    }, params: PipelineParams,
   ): Promise<void> {
     await recordCompletion({
       sessionID: opts.sessionID,
