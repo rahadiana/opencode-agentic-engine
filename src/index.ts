@@ -35,7 +35,7 @@ import { initSecondBrain, getSecondBrain } from "./memory/second-brain.js"
 import { HallucinationGuard, type ClaimResult, type HallucinationCheck } from "./drift/hallucination-guard.js"
 import { ParallelExecutor, parseLLMStepImplementation } from "./core/parallel.js"
 import { Dashboard } from "./observability/dashboard.js"
-import { createLogger, setGlobalLogClient } from "./observability/logger.js"
+import { createLogger, setGlobalLogClient, type LogClient } from "./observability/logger.js"
 import { CheckpointSystem } from "./drift/checkpoints.js"
 import { SessionStore } from "./memory/session-store.js"
 import { TOOL_COMPLEXITY } from "./core/llm-types.js"
@@ -393,8 +393,8 @@ const confidenceScorer = new ConfidenceScorer()
 const confidenceStore = new ConfidenceStore()
   const llmEngine = new LLMEngine()
   llmEngine.setOpencodeClient(input.client)
-  // ponytail: OpenCode SDK client type differs from LogClient; cast needed
-  setGlobalLogClient(input.client as any)
+  // ponytail: OpenCode SDK client type differs from LogClient; unknown cast needed
+  setGlobalLogClient(input.client as unknown as LogClient)
     llmEngine.setModelRegistry(modelRegistry)
     llmEngine.setSessionStore(sessionStore)
     llmEngine.setBudgetTracker(budgetTracker)

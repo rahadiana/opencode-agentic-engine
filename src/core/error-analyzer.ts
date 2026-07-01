@@ -280,7 +280,7 @@ export class ErrorAnalyzer {
    */
   private extractLocation(errorMessage: string, modifiedFiles: string[]): string {
     // TypeScript format: src/foo.ts(14,5)
-    const tsMatch = errorMessage.match(/([^\s()]+\.\w+)\s*[\(:]\s*(\d+)/)
+    const tsMatch = errorMessage.match(/([^\s()]+\.\w+)\s*[(:]\s*(\d+)/)
     if (tsMatch) {
       return `${tsMatch[1]}:${tsMatch[2]}`
     }

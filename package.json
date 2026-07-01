@@ -48,6 +48,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node test/run.mjs",
     "test:coverage": "c8 --reporter=text --reporter=lcov --src=src --exclude=\"src/**/domains/**\" node test/run.mjs",
+    "test:coverage:ci": "c8 --reporter=text --reporter=lcov --check-coverage --statements=80 --branches=60 --functions=70 --lines=80 --src=src --exclude=\"src/**/domains/**\" node test/run.mjs",
     "test:e2e": "node test/e2e-scenario.mjs",
     "test:e2e-llm": "node test/e2e-llm.mjs",
     "lint": "eslint src/",

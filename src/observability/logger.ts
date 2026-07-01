@@ -37,7 +37,7 @@ export interface Logger {
 
 // ── Global client for SDK logging ──────────────────────────
 
-type LogClient = { app?: { log?: (opts: { body: { service: string; level: string; message: string; extra?: Record<string, unknown> } }) => Promise<boolean> } }
+export type LogClient = { app?: { log?: (opts: { body: { service: string; level: string; message: string; extra?: Record<string, unknown> } }) => Promise<boolean> } }
 let _globalClient: LogClient | null = null
 
 /**

@@ -12,8 +12,8 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 2. ✅ **Schema-First Boundaries** — LLM output divalidasi sebelum dipakai (P1)
 3. ✅ **Dumb Model Mode** — strict mode untuk model lemah (P2)
 4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
-5. ✅ **Test Coverage** — 2197+ tests, c8 85.88% statements (P4)
-6. ✅ **Typed Errors** — 48/49 throw sites migrated, 1 `as any` remaining
+5. ✅ **Test Coverage** — 2197+ tests, c8 85.88% statements + CI coverage gate (P4)
+6. ✅ **Typed Errors** — 49/49 throw sites migrated, 0 `as any` remaining
 7. ✅ **SemanticCache** — TF-IDF + cosine, benchmarked at 0.78 threshold
 8. ✅ **HallucinationGuard** — confidence-aware claims (0-1)
 9. ✅ **MetaReasoner** — strategy adaptation with agent-loop feedback
@@ -646,3 +646,12 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 - **`agentic_auto` thorough**: Post-processing audit now reports `overallConfidence` from HallucinationGuard.
 - **SWE-bench mock**: 7/7 (100%) — no regressions.
 - **2197+ unit tests** (was 1798) — 399 new tests across all gap implementations.
+
+### v0.5.6-dev — CI Hardening + Zero `as any` (2026-07-01)
+
+- **Zero `as any`**: Removed last `as any` in `src/index.ts:397` — replaced with `as unknown as LogClient`. Exported `LogClient` type from `logger.ts`. Zero `as any` across all `src/` files.
+- **Coverage gate in CI**: New `npm run test:coverage:ci` script enforces `--statements=80 --branches=60 --functions=70 --lines=80` via c8 `--check-coverage`. Fails CI if thresholds not met.
+- **ESLint in CI**: Added `npm run lint` to the `lint` CI job. Fixed 37 `no-useless-escape` lint errors (`prompt-builder.ts`, `error-analyzer.ts`). 62 warnings remain (no-explicit-any, no-unused-vars).
+- **Blocking integration tests**: Removed `continue-on-error: true` from all 3 integration test steps. E2E scenario runs in `LLM_OFF=true` mock mode so it's reliable without network dependency.
+- **Phase 4 Smart Agentic Analysis**: Evaluated 48 capabilities — plugin scores **47/48** (streaming delegated to OpenCode SDK).
+- All 2197 tests pass, build passes, lint passes, coverage gate passes.

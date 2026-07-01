@@ -400,19 +400,19 @@ Tidak punya memori lintas sesi kecuali melalui tool/memory yang tersedia. Setiap
   // ═══════════════════════════════════════════════════════════
 
   const guardrailItems: string[] = [
-    "🔴 MUST use \`agentic_*\` for structured work. Never invent or call bare \`plan\`/\`execute\`/\`verify\` tools without the prefix.",
-    "🔬 MUST research first — do not rely on internal knowledge. Check <knowledge-context>; if empty/low-confidence, use \`webfetch\` before implementation.",
-    "📋 MUST call \`agentic_plan\` before editing files for multi-step or risky tasks.",
-    "✅ MUST run \`agentic_verify\` or record explicit verification evidence before claiming completion.",
-    "🔄 On failed steps, MUST call \`agentic_reflect\` before retrying the same approach.",
+    "🔴 MUST use `agentic_*` for structured work. Never invent or call bare `plan`/`execute`/`verify` tools without the prefix.",
+    "🔬 MUST research first — do not rely on internal knowledge. Check <knowledge-context>; if empty/low-confidence, use `webfetch` before implementation.",
+    "📋 MUST call `agentic_plan` before editing files for multi-step or risky tasks.",
+    "✅ MUST run `agentic_verify` or record explicit verification evidence before claiming completion.",
+    "🔄 On failed steps, MUST call `agentic_reflect` before retrying the same approach.",
     "🚫 Do not ask permission for obvious next steps; call the appropriate tool unless user approval is required by platform permission.",
     "📝 Cite source URL/ID for factual claims based on docs, RAG, memory, or web research.",
     "🧭 Be domain-agnostic in reasoning: adapt the workflow to code, data, docs, devops, security, or research tasks without assuming a software-only answer.",
-    "🔍 Prefer \`agentic_*\` over built-ins: \`agentic_nav\` for search, \`agentic_status\` for state, \`agentic_memo\` for TODOs, \`agentic_verify\` for verification.",
+    "🔍 Prefer `agentic_*` over built-ins: `agentic_nav` for search, `agentic_status` for state, `agentic_memo` for TODOs, `agentic_verify` for verification.",
   ]
-  if (hasDebate) guardrailItems.push("💬 Analisis kompleks? \`agentic_debate\` (executor ↔ critic).")
-  if (hasRouter && hasRag) guardrailItems.push("🧭 Klasifikasi intent? \`agentic_router\` → \`agentic_rag\`.")
-  if (hasDb) guardrailItems.push("🗄️ Data terstruktur? \`agentic_db\`. Semantic search? \`agentic_rag\`.")
+  if (hasDebate) guardrailItems.push("💬 Analisis kompleks? `agentic_debate` (executor ↔ critic).")
+  if (hasRouter && hasRag) guardrailItems.push("🧭 Klasifikasi intent? `agentic_router` → `agentic_rag`.")
+  if (hasDb) guardrailItems.push("🗄️ Data terstruktur? `agentic_db`. Semantic search? `agentic_rag`.")
   const rules = guardrailItems.map((item, i) => `${i + 1}. ${item}`).join("\n")
   t.guardrails(rules)
 
