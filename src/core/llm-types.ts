@@ -118,6 +118,12 @@ export interface LLMRequest {
    *  If the signal fires before the LLM responds, the call aborts
    *  and returns a fallback response. */
   signal?: AbortSignal
+  /**
+   * Timeout in milliseconds for this LLM call.
+   * Overrides the default timeout (300s) for long prompts.
+   * Agent-runtime sets this dynamically based on prompt size.
+   */
+  timeoutMs?: number
 }
 
 export interface LLMResponse {

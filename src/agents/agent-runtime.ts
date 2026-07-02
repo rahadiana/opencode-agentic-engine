@@ -166,6 +166,7 @@ export class AgentRuntime {
           maxTokens: 4096,
           model: modelOverride, // ← dikirim ke SDK langsung, bukan via config
           signal: controller.signal, // ← forward AbortSignal ke bawah
+          timeoutMs, // ← pass dynamic timeout so llm.ts inner timeout scales with prompt size too
           ...(ctx.reasoningEffort ? { reasoningEffort: ctx.reasoningEffort } : {}),
         }),
         new Promise<LLMResponse>((_, reject) => {

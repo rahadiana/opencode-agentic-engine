@@ -1081,7 +1081,7 @@ export class LLMEngine {
 
     try {
       const body = this._buildPromptBody(req)
-      const text = await this._promptWithTimeout(client, this.pluginSessionId, body, 120_000, req.signal)
+      const text = await this._promptWithTimeout(client, this.pluginSessionId, body, req.timeoutMs ?? 300_000, req.signal)
 
       if (text.trim()) {
         return { content: text.trim(), finishReason: 'stop' }
