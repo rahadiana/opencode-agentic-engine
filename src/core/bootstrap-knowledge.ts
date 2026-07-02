@@ -131,6 +131,7 @@ export function bootstrapKnowledge(rag: MultiIndexRAG, projectId: string): void 
       projectId,
       score: 0.95,
       usageCount: 1,
+      significance: "routine",
     })
     count++
   }

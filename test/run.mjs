@@ -1094,6 +1094,21 @@ assert(mod.parseReflectionPayload(JSON.stringify({ summary: "ok", conflicts: "ba
 assert(mod.parseReflectionPayload(JSON.stringify({ summary: "ok", conflicts: [], planUpdates: [], newInfo: [], actionItems: [1, 2] })) === null, "P1-reflection rejects non-string array items")
 // Malformed: missing field
 assert(mod.parseReflectionPayload(JSON.stringify({ summary: "ok", conflicts: [] })) === null, "P1-reflection rejects missing fields")
+// Backward-compat: old format without triggers should still be accepted
+const noTriggers = mod.parseReflectionPayload(JSON.stringify({ summary: "legacy ok", conflicts: [], planUpdates: [], newInfo: [], actionItems: ["legacy"] }))
+assert(noTriggers !== null, "P1-reflection accepts legacy format without triggers")
+assert(noTriggers.summary === "legacy ok", "P1-reflection preserves legacy summary")
+assert(noTriggers.triggers === undefined, "P1-reflection legacy has no triggers")
+// New format with valid triggers accepted
+const withTriggers = mod.parseReflectionPayload(JSON.stringify({ summary: "triggered", conflicts: [], planUpdates: [], newInfo: [], actionItems: [], triggers: ["gap", "growth"] }))
+assert(withTriggers !== null, "P1-reflection accepts valid triggers")
+assert(withTriggers.triggers !== undefined, "P1-reflection triggers present")
+assert(withTriggers.triggers.length === 2, "P1-reflection preserves 2 valid triggers")
+assert(withTriggers.triggers[0] === "gap", "P1-reflection first trigger is gap")
+// Invalid trigger values filtered out
+const badTriggers = mod.parseReflectionPayload(JSON.stringify({ summary: "bad trig", conflicts: [], planUpdates: [], newInfo: [], actionItems: [], triggers: ["gap", "invalid_trigger", "drift"] }))
+assert(badTriggers !== null, "P1-reflection accepts partially invalid triggers")
+assert(badTriggers.triggers.length === 2, "P1-reflection filters invalid triggers, keeps valid ones")
 
 console.log("\n[42j] writeFiles — path traversal guard")
 {
@@ -8540,6 +8555,59 @@ csOk("CS-4a EpisodicStore getAll and remove", () => {
   if (!es.remove(es.getAll()[0].id)) throw new Error("remove should return true")
   if (es.getAll().length !== 0) throw new Error("Should be empty")
 })
+
+// ── ES-SIG: EpisodicStore Significance ──
+console.log("\n[ES-SIG] EpisodicStore — significance tier")
+let essig = 0, essigf = 0
+const essig_assert = (cond, msg) => { if (cond) { essig++ } else { console.error(`  ❌ ${msg}`); essigf++ } }
+
+;{
+  // Default significance is routine
+  const es = new ES()
+  es.record("s1", "Default goal", "success", ["d1"])
+  essig_assert(es.getAll()[0].significance === "routine", "ES-SIG-1a default significance is routine")
+}
+;{
+  // Explicit significance is stored
+  const es = new ES()
+  es.record("s2", "Pivotal goal", "success", ["d2"], undefined, undefined, undefined, undefined, "pivotal")
+  essig_assert(es.getAll()[0].significance === "pivotal", "ES-SIG-2a explicit pivotal stored")
+}
+;{
+  // Notable significance
+  const es = new ES()
+  es.record("s3", "Notable goal", "success", ["d3"], undefined, undefined, undefined, undefined, "notable")
+  essig_assert(es.getAll()[0].significance === "notable", "ES-SIG-3a explicit notable stored")
+}
+;{
+  // searchForReuse weights pivotal higher than routine
+  // Note: searchForReuse only returns episodes WITH a plan
+  const es = new ES()
+  const plan = ["Investigate login issue", "Fix auth logic", "Test fix"]
+  const r1 = es.record("s4", "Fix login bug", "success", ["fixed auth"], undefined, undefined, undefined, plan, "routine")
+  const r2 = es.record("s5", "Fix login bug", "success", ["fixed auth"], undefined, undefined, undefined, plan, "pivotal")
+  const results = es.searchForReuse("Fix login bug", 0.5, 5)
+  essig_assert(results.length === 2, "ES-SIG-4a both routine and pivotal found")
+  essig_assert(results[0].significance === "pivotal", "ES-SIG-4b pivotal ranked first")
+}
+;{
+  // Prune never removes pivotal episodes
+  const es = new ES()
+  es.record("s6", "Low score pivotal", "success", ["d6"], undefined, undefined, undefined, undefined, "pivotal")
+  es.record("s7", "Low score routine", "success", ["d7"], undefined, undefined, undefined, undefined, "routine")
+  // Manually set scores low
+  const all = es.getAll()
+  all[0].score = 0.01; all[0].usageCount = 0
+  all[1].score = 0.01; all[1].usageCount = 0
+  const pruned = es.prune()
+  essig_assert(pruned >= 1, "ES-SIG-5a at least routine pruned")
+  const remaining = es.getAll()
+  essig_assert(remaining.some(e => e.significance === "pivotal"), "ES-SIG-5b pivotal survives prune")
+  essig_assert(!remaining.some(e => e.significance === "routine" && e.score < 0.3), "ES-SIG-5c low-score routine pruned")
+}
+
+console.log(`  ES-SIG: ${essig} passed, ${essigf} failed`)
+passed += essig; failed += essigf
 
 csOk("CS-4b SessionStore getActiveSessions", () => {
   const ss = new SS()

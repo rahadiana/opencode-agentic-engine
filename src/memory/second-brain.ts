@@ -25,6 +25,9 @@ import type { AgentRuntime } from "../agents/agent-runtime.js"
 
 // ── Reflection payload schema ──────────────────────────────────────
 
+/** EvoClaw-inspired reflection trigger types */
+export type ReflectionTrigger = "gap" | "drift" | "contradiction" | "growth" | "refinement"
+
 /** Shape expected from LLM reflection JSON output */
 export interface ReflectionPayload {
   summary: string
@@ -32,12 +35,17 @@ export interface ReflectionPayload {
   planUpdates: string[]
   newInfo: string[]
   actionItems: string[]
+  /** EvoClaw-inspired trigger checklist: gap/drift/contradiction/growth/refinement (optional, backward-compat) */
+  triggers?: ReflectionTrigger[]
 }
 
 /**
  * Parse and validate LLM reflection JSON. Returns null on invalid shape.
  * Ensures every field is the correct type; garbage from weak models is rejected.
  */
+/** Valid trigger values for reflection trigger checklist */
+const VALID_TRIGGERS: readonly string[] = ["gap", "drift", "contradiction", "growth", "refinement"]
+
 export function parseReflectionPayload(raw: string): ReflectionPayload | null {
   try {
     const parsed = JSON.parse(raw)
@@ -47,13 +55,19 @@ export function parseReflectionPayload(raw: string): ReflectionPayload | null {
     if (!Array.isArray(parsed.planUpdates) || !parsed.planUpdates.every((c: unknown) => typeof c === "string")) return null
     if (!Array.isArray(parsed.newInfo) || !parsed.newInfo.every((c: unknown) => typeof c === "string")) return null
     if (!Array.isArray(parsed.actionItems) || !parsed.actionItems.every((c: unknown) => typeof c === "string")) return null
-    return {
+    const result: ReflectionPayload = {
       summary: parsed.summary,
       conflicts: parsed.conflicts,
       planUpdates: parsed.planUpdates,
       newInfo: parsed.newInfo,
       actionItems: parsed.actionItems,
     }
+    // Optional triggers (backward-compat): validate each trigger is a known value
+    if (Array.isArray(parsed.triggers)) {
+      const filtered = parsed.triggers.filter((t: unknown) => VALID_TRIGGERS.includes(t as string))
+      if (filtered.length > 0) result.triggers = filtered
+    }
+    return result
   } catch {
     return null
   }
@@ -90,6 +104,8 @@ export interface Reflection {
   planUpdates: string[]     // Suggested plan changes
   newInfo: string[]         // New information discovered
   actionItems: string[]     // Follow-up tasks
+  /** EvoClaw-inspired trigger checklist */
+  triggers: ReflectionTrigger[]
   sessionId?: string
 }
 
@@ -244,6 +260,7 @@ export class SecondBrain {
     let planUpdates: string[] = []
     let newInfo: string[] = []
     let actionItems: string[] = []
+    let triggers: ReflectionTrigger[] = []
     let summary = ""
 
     if (this.llmEngine) {
@@ -264,8 +281,9 @@ export class SecondBrain {
               "1. Any conflicting decisions?\n" +
               "2. Any decisions that affect plans?\n" +
               "3. Any new information that changes priorities?\n" +
-              "4. Action items based on this reflection.\n\n" +
-              "Return VALID JSON only: {\"summary\":\"...\",\"conflicts\":[],\"planUpdates\":[],\"newInfo\":[],\"actionItems\":[]}",
+              "4. Action items based on this reflection.\n" +
+              "5. Which triggers apply (EvoClaw-style): gap (missing workflow/knowledge), drift (degradation), contradiction (conflicting decisions), growth (success pattern), refinement (workflow optimization).\n\n" +
+              "Return VALID JSON only: {\"summary\":\"...\",\"conflicts\":[],\"planUpdates\":[],\"newInfo\":[],\"actionItems\":[],\"triggers\":[]}",
             userPrompt: contextParts.join("\n\n"),
             jsonMode: false,
             temperature: 0.2,
@@ -281,6 +299,7 @@ export class SecondBrain {
               planUpdates = delegateResult.planUpdates
               newInfo = delegateResult.newInfo
               actionItems = delegateResult.actionItems
+              triggers = delegateResult.triggers
             }
           } else {
             const validated = parseReflectionPayload(resp.content)
@@ -290,6 +309,7 @@ export class SecondBrain {
               planUpdates = validated.planUpdates
               newInfo = validated.newInfo
               actionItems = validated.actionItems
+              triggers = validated.triggers ?? []
             } else {
               summary = `Reflection: ${resp.content.slice(0, 300)}`
             }
@@ -310,6 +330,7 @@ export class SecondBrain {
       planUpdates,
       newInfo,
       actionItems,
+      triggers,
       sessionId,
     }
 
@@ -340,7 +361,7 @@ export class SecondBrain {
     decisions: Decision[],
     pendingTodos: Todo[],
     sessionId?: string,
-  ): Promise<{ summary: string; conflicts: string[]; planUpdates: string[]; newInfo: string[]; actionItems: string[] } | null> {
+  ): Promise<{ summary: string; conflicts: string[]; planUpdates: string[]; newInfo: string[]; actionItems: string[]; triggers: ReflectionTrigger[] } | null> {
     if (!this.agentRuntime) return null
 
     const contextParts: string[] = []
@@ -357,8 +378,9 @@ export class SecondBrain {
       "1. Any conflicting decisions?\n" +
       "2. Any decisions that affect plans?\n" +
       "3. Any new information that changes priorities?\n" +
-      "4. Action items based on this reflection.\n\n" +
-      "Return VALID JSON only: {\"summary\":\"...\",\"conflicts\":[],\"planUpdates\":[],\"newInfo\":[],\"actionItems\":[]}"
+      "4. Action items based on this reflection.\n" +
+      "5. Which triggers apply (EvoClaw-style): gap (missing workflow/knowledge), drift (degradation), contradiction (conflicting decisions), growth (success pattern), refinement (workflow optimization).\n\n" +
+      "Return VALID JSON only: {\"summary\":\"...\",\"conflicts\":[],\"planUpdates\":[],\"newInfo\":[],\"actionItems\":[],\"triggers\":[]}"
 
     try {
       const result = await this.agentRuntime.execute({
@@ -371,13 +393,14 @@ export class SecondBrain {
       if (!result.success || !result.output) return null
 
       const validated = parseReflectionPayload(result.output)
-      if (validated) return validated
+      if (validated) return { ...validated, triggers: validated.triggers ?? [] }
       return {
         summary: `Delegated reflection: ${result.output.slice(0, 300)}`,
         conflicts: [],
         planUpdates: [],
         newInfo: [],
         actionItems: [],
+        triggers: [],
       }
     } catch {
       return null
@@ -467,6 +490,9 @@ export class SecondBrain {
     if (snap.reflections.length > 0) {
       const latest = snap.reflections[snap.reflections.length - 1]
       parts.push(`=== Last Reflection ===\n${latest.summary.slice(0, 300)}`)
+      if (latest.triggers.length > 0) {
+        parts.push(`Triggers: ${latest.triggers.join(", ")}`)
+      }
       if (latest.actionItems.length > 0) {
         parts.push(`Action items: ${latest.actionItems.join(", ")}`)
       }

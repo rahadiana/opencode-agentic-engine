@@ -28,7 +28,7 @@ import type { AgentRole, AgentTask } from "./agents/coordinator.js"
 import { Orchestrator, type WorkflowPipeline } from "./agents/orchestrator.js"
 import { SkillStore } from "./memory/skill-store.js"
 import { SkillCurator } from "./curation/skill-curator.js"
-import { EpisodicStore } from "./memory/episodic-store.js"
+import { EpisodicStore, type Episode } from "./memory/episodic-store.js"
 import { MemoryOrchestrator } from "./memory/memory-orchestrator.js"
 import { ConsolidationScheduler } from "./memory/consolidation-scheduler.js"
 import { initSecondBrain, getSecondBrain } from "./memory/second-brain.js"
@@ -644,6 +644,7 @@ const confidenceStore = new ConfidenceStore()
       projectId: epData.projectId,
       score: 0.5,
       usageCount: 0,
+      significance: "routine",
     })
   }
   for (const sk of savedSkills) {
@@ -3856,6 +3857,7 @@ const confidenceStore = new ConfidenceStore()
                       score: 0,
                       usageCount: 0,
                       summary: ep.data.planGoal,
+                  significance: "routine" as const,
                     })
                   }
                 }
@@ -4965,8 +4967,9 @@ const confidenceStore = new ConfidenceStore()
                   tags: content.toLowerCase().match(/\b[a-z]{4,}\b/g)?.slice(0, 8) ?? [],
                   score: 1.0,
                   usageCount: 0,
+                  significance: "routine",
                 }
-                multiIndexRAG.indexEpisode(cat, episode)
+                multiIndexRAG.indexEpisode(cat, episode as Episode)
 
                 return {
                   output: `## ✅ Stored as Episode\n\n**Category:** ${cat}\n**Title:** ${title}\n**Tags:** ${episode.tags.join(", ")}`,
@@ -7172,7 +7175,7 @@ export { FineTuningClient } from "./core/fine-tuning.js"
 export { episodeToTrainingExample, episodesToTrainingData, prepareFineTuningDataset, saveTrainingDataToFile } from "./memory/skill-training.js"
 export { ConfigLoader, validateConfig } from "./core/config.js"
 export { PersistenceLayer } from "./memory/persistence.js"
-export { EpisodicStore } from "./memory/episodic-store.js"
+export { EpisodicStore, Significance } from "./memory/episodic-store.js"
 export { SkillStore, createSkillDefinition, inspectSkill, serializeSkill, deserializeSkill } from "./memory/skill-store.js"
 export { type SkillRecord } from "./memory/skill-store.js"
 export { STOP_WORDS, isStopWord, filterStopWords, getStopWordStats } from "./memory/stopwords.js"

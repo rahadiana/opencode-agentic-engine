@@ -12,7 +12,7 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 2. ✅ **Schema-First Boundaries** — LLM output divalidasi sebelum dipakai (P1)
 3. ✅ **Dumb Model Mode** — strict mode untuk model lemah (P2)
 4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
-5. ✅ **Test Coverage** — **2529 tests**, c8 **87.91% stmts / 68.22% branch / 76.69% func** + CI coverage gate (P4)
+5. ✅ **Test Coverage** — **2611 tests**, c8 **88% stmts / 68.35% branch / 77.1% func** + CI coverage gate (P4)
 6. ✅ **Typed Errors** — 49/49 throw sites migrated, 0 `as any` remaining
 7. ✅ **SemanticCache** — TF-IDF + cosine, benchmarked at 0.78 threshold
 8. ✅ **HallucinationGuard** — confidence-aware claims (0-1)
@@ -24,7 +24,7 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
                     # postbuild: auto-copy ke ~/.cache/opencode/packages/ (jika ada)
-node test/run.mjs   # 2561+ unit tests (mock, no LLM needed)
+node test/run.mjs   # 2611+ unit tests (mock, no LLM needed)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
 node test/e2e-scenario.mjs # EvoClaw: 50-file codebase, 5 iterations
@@ -691,3 +691,11 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 - **2561 unit tests** (was 2529), **0 lint warnings**, **build OK**, **coverage gate passes**.
 - **EvoClaw score**: 100% (36/36, target >55%) ✅
 - **All 8 checks pass**: build, unit (2561), dropin (31 tools), load-samedir (45), e2e-scenario (36), SWE-bench mock (7/7), lint (0 warnings), coverage gate ✅
+
+### v0.5.12-dev — EvoClaw Tiered Memory + Reflection Triggers (2026-07-02)
+
+- **Item 2 — EpisodicStore significance**: New `significance: 'routine' | 'notable' | 'pivotal'` field on `Episode` interface (EvoClaw-inspired tiered memory). `record()` accepts optional 9th significance param (defaults to `routine`). `searchForReuse()` weights similarity by significance multiplier (pivotal 2×, notable 1.3×, routine 1×). `prune()` never removes pivotal episodes, protects notable from aggressive pruning.
+- **Item 3 — Reflection trigger checklist**: New `triggers?: ReflectionTrigger[]` field on `ReflectionPayload` (backward-compat, optional). Valid triggers: `gap`, `drift`, `contradiction`, `growth`, `refinement` (EvoClaw-style). `Reflection` interface updated with `triggers` array. `reflect()` LLM prompt includes trigger analysis instruction. `_reflectViaDelegate()` likewise. `formatKnowledgeSnapshot()` displays triggers in output. `parseReflectionPayload()` filters invalid trigger values.
+- **Tests**: 8 new ES-SIG tests (default significance, explicit tiers, searchForReuse ranking, prune protection), 9 new P1-reflection tests (backward-compat legacy format, valid triggers, invalid trigger filtering).
+- **2611 unit tests** (was 2561), **0 lint warnings**, **build OK**, **coverage gate passes** (88% stmts, 68.35% branch, 77.1% funcs).
+- **All E2E pass**: SWE-bench mock 7/7, EvoClaw 100% (36/36) ✅

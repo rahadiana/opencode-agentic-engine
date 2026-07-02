@@ -1,6 +1,8 @@
 import { createMemoryEnvelope, parseMemoryEnvelope, MEMORY_SCHEMA_VERSION, MemorySchemaVersion } from "./schema-version.js"
 import { isStopWord } from "./stopwords.js"
 
+export type Significance = "routine" | "notable" | "pivotal"
+
 export interface Episode {
   id: string
   sessionId: string
@@ -19,6 +21,8 @@ export interface Episode {
   score: number
   /** Usage count for pruning decisions */
   usageCount: number
+  /** EvoClaw-inspired tiered significance: pivotal > notable > routine (default) */
+  significance: Significance
 }
 
 export interface EpisodeEnvelope {
@@ -42,7 +46,7 @@ export class EpisodicStore {
     this.onRecord = cb
   }
 
-  record(sessionId: string, planGoal: string, outcome: Episode["outcome"], decisions: string[], filesChanged?: string[], domain?: string, projectId?: string, plan?: string[]): Episode {
+  record(sessionId: string, planGoal: string, outcome: Episode["outcome"], decisions: string[], filesChanged?: string[], domain?: string, projectId?: string, plan?: string[], significance?: Significance): Episode {
     const episode: Episode = {
       id: `ep-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       sessionId,
@@ -58,6 +62,7 @@ export class EpisodicStore {
       tags: this.extractTags(planGoal, decisions),
       score: 1.0,
       usageCount: 0,
+      significance: significance ?? "routine",
     }
 
     this.episodes.push(episode)
@@ -196,10 +201,12 @@ export class EpisodicStore {
         for (const qt of qTokens) {
           if (goalTokens.has(qt)) overlap++
         }
-        // Jaccard-like similarity weighted by episode score
+        // Significance multiplier: pivotal 2x, notable 1.3x, routine 1x
+        const sigMult = { routine: 1, notable: 1.3, pivotal: 2 }[e.significance] ?? 1
+        // Jaccard-like similarity weighted by episode score + significance
         const union = new Set([...qTokens, ...goalTokens]).size
         const jaccard = union > 0 ? overlap / union : 0
-        const similarity = jaccard * e.score
+        const similarity = jaccard * e.score * sigMult
         return { episode: e, similarity }
       })
       .filter(s => s.similarity >= threshold)
@@ -228,13 +235,19 @@ export class EpisodicStore {
   /**
    * Prune episodes that have low score and low usage.
    * Removes episodes with score < 0.3 AND usageCount < 2.
+   * Never prunes pivotal episodes; notable episodes get higher threshold (score < 0.1).
    * Returns number of removed episodes.
    */
   prune(): number {
     const before = this.episodes.length
-    this.episodes = this.episodes.filter(e =>
-      !(e.score < 0.3 && e.usageCount < 2)
-    )
+    this.episodes = this.episodes.filter(e => {
+      // Never prune pivotal
+      if (e.significance === "pivotal") return true
+      // Notable: only prune if extremely decayed
+      if (e.significance === "notable") return !(e.score < 0.1 && e.usageCount < 1)
+      // Routine: standard pruning
+      return !(e.score < 0.3 && e.usageCount < 2)
+    })
     return before - this.episodes.length
   }
 
