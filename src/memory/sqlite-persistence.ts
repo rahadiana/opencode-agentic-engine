@@ -26,7 +26,10 @@ import type { PersistentState } from "./persistence.js"
 import { resolve } from "node:path"
 import { homedir } from "node:os"
 import { existsSync, mkdirSync, statSync } from "node:fs"
+import { createRequire } from "node:module"
 import { AgenticError } from "../core/errors.js"
+
+const _require = createRequire(import.meta.url)
 
 export interface SQLiteConfig {
   /** Path ke file database (default: ~/.config/opencode/agentic-store/agentic.db) */
@@ -89,8 +92,7 @@ export class SQLitePersistence {
   private _initDbSync(cfg: SQLiteConfig): void {
     // Try better-sqlite3 (Node.js)
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const mod = require("better-sqlite3")
+      const mod = _require("better-sqlite3")
       const Database = mod.default || mod
       this.db = new Database(this.dbPath)
       this._driver = "better-sqlite3"
@@ -110,8 +112,7 @@ export class SQLitePersistence {
     // Try bun:sqlite (Bun)
     try {
       // bun:sqlite is a built-in module, no need to install
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { Database } = require("bun:sqlite")
+      const { Database } = _require("bun:sqlite")
       this.db = new Database(this.dbPath)
       this._driver = "bun:sqlite"
 

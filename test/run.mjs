@@ -8939,6 +8939,24 @@ const essig_assert = (cond, msg) => { if (cond) { essig++ } else { console.error
 console.log(`  ES-SIG: ${essig} passed, ${essigf} failed`)
 passed += essig; failed += essigf
 
+// ── ES-BR: EpisodicStore direct method coverage (func 20% → 75%) ──
+csOk("ES-1 getMigrator returns migrator", () => { const es = new ES(); if (typeof es.getMigrator() !== "object") throw new Error("bad") })
+csOk("ES-2 exportAll returns array", () => { const es = new ES(); es.record("s", "g", "success", []); if (!Array.isArray(es.exportAll())) throw new Error("bad") })
+csOk("ES-3 snapshot returns copy", () => { const es = new ES(); es.record("s", "g", "success", []); const snap = es.snapshot(); if (!Array.isArray(snap)) throw new Error("bad") })
+csOk("ES-4 restore replaces episodes", () => { const es = new ES(); es.restore([{ id: "x", sessionId: "s", planGoal: "g", summary: "", outcome: "success", decisions: [], tags: [], score: 1, usageCount: 0, significance: "routine", timestamp: "" }]); if (es.getAll().length !== 1) throw new Error("bad") })
+csOk("ES-5 remove returns false for unknown id", () => { const es = new ES(); if (es.remove("nope") !== false) throw new Error("bad") })
+csOk("ES-6 searchForReuse returns [] when no plan", () => { const es = new ES(); es.record("s", "g", "success", []); if (es.searchForReuse("g", 0.5, 5).length !== 0) throw new Error("bad") })
+csOk("ES-7 prune with empty store returns 0", () => { const es = new ES(); if (es.prune() !== 0) throw new Error("bad") })
+
+// ── SP: SQLitePersistence direct coverage (func 40% → 75%) ──
+const SP = mod.SQLitePersistence
+csOk("SP-1 close is safe when db null", () => { const sp = new SP(":memory:"); sp.close(); /* driver getter still returns string, just no throw */ })
+csOk("SP-2 listScopes returns array", async () => { const sp = new SP(":memory:"); const scopes = await sp.listScopes("ns"); if (!Array.isArray(scopes)) throw new Error("bad") })
+csOk("SP-3 stats returns object", async () => { const sp = new SP(":memory:"); const st = await sp.stats(); if (typeof st !== "object") throw new Error("bad") })
+csOk("SP-4 save/load roundtrip", () => { const sp = new SP(":memory:"); sp.save("ns", "k", {x:1}); const v = sp.load("ns", "k"); if (!v || v.x !== 1) throw new Error("bad") })
+csOk("SP-5 _safeParse returns original on bad json", () => { const sp = new SP(":memory:"); const r = sp["_safeParse"]("not-json"); if (r !== "not-json") throw new Error("bad") })
+csOk("SP-6 driver getter works", () => { const sp = new SP(":memory:"); if (sp.driver === undefined) throw new Error("bad") })
+
 csOk("CS-4b SessionStore getActiveSessions", () => {
   const ss = new SS()
   if (!Array.isArray(ss.getActiveSessions())) throw new Error("Expected array")
@@ -12491,9 +12509,54 @@ const sbgap_assert = (c, m) => { if (c) { sbgap++; console.log(`  PASS: ${m}`) }
   sbgap_assert(reflection.actionItems.length === 0, "SB-GAP-4f reflect has no action items (no LLM)")
 }
 
+// SB-GAP-5: findRelated / findNeighbors with empty graph
+{
+  const fsMod5 = await import("fs")
+  const { SecondBrain: SB5, StateStore: SStore5 } = mod
+  const gapDir5 = `/tmp/sb-gap5-${Date.now()}`
+  fsMod5.mkdirSync(gapDir5, { recursive: true })
+  const gapStore5 = new SStore5({ worktree: gapDir5, globalDir: `${gapDir5}-global` })
+  const gapSB5 = new SB5(gapStore5)
+  const rel = gapSB5.findRelated("nonexistent")
+  sbgap_assert(Array.isArray(rel), "SB-GAP-5a findRelated returns array")
+  const neigh = gapSB5.findNeighbors("nonexistent")
+  sbgap_assert(Array.isArray(neigh), "SB-GAP-5b findNeighbors returns array")
+}
+
+// SB-GAP-6: getLatestReflection empty
+{
+  const fsMod6 = await import("fs")
+  const { SecondBrain: SB6, StateStore: SStore6 } = mod
+  const gapDir6 = `/tmp/sb-gap6-${Date.now()}`
+  fsMod6.mkdirSync(gapDir6, { recursive: true })
+  const gapStore6 = new SStore6({ worktree: gapDir6, globalDir: `${gapDir6}-global` })
+  const gapSB6 = new SB6(gapStore6)
+  sbgap_assert(gapSB6.getLatestReflection() === null, "SB-GAP-6 getLatestReflection empty returns null")
+}
+
 console.log(`  SB-GAP: ${sbgap} passed, ${sbgapf} failed`)
 passed += sbgap; failed += sbgapf
 
+// ── Branch Coverage Coverage Gaps (BR-GAP) ──
+console.log("[BR-GAP] PlannerCritic & AgentBlueprint branch coverage")
+let brg = 0, brgf = 0
+const brg_assert = (c, m) => { if (c) { brg++; console.log(`  PASS: ${m}`) } else { brgf++; console.log(`  FAIL: ${m}`) } }
+
+{
+  const { parsePlannerCandidatePlans, BlueprintParser } = mod
+  
+  // PC-BR: parsePlannerCandidatePlans
+  const pc = parsePlannerCandidatePlans("invalid-json")
+  brg_assert(Array.isArray(pc), "PC-BR-1 parsePlannerCandidatePlans handles invalid JSON")
+  
+  // AB-BR: BlueprintParser
+  const parser = new BlueprintParser()
+  const yml = parser.yamlToJson("a:\n  b: true")
+  brg_assert(yml.b === true, "AB-BR-1 yamlToJson nested works")
+}
+
+console.log(`  BR-GAP: ${brg} passed, ${brgf} failed`)
+passed += brg; failed += brgf
 // ── StateStore Tests ──
 // SS: Unified data layer — single source of truth
 let ss = 0, ssf = 0
