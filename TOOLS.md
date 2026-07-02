@@ -1,8 +1,8 @@
-# OpenCode Agentic Engine — 30 Tools Reference
+# OpenCode Agentic Engine — 31 Tools Reference
 
 > **Plugin**: opencode-agentic-engine  
-> **Version**: 0.5.3  
-> **Total Tools**: 33 (Stage I–V + Blueprint)
+> **Version**: 0.5.13-dev  
+> **Total Tools**: 31 (Stage I–V + Blueprint)
 
 ---
 
@@ -159,11 +159,11 @@ Menyimpan dan me-restore execution snapshots (checkpoint).
 
 | Parameter | Tipe | Required | Deskripsi |
 |-----------|------|----------|-----------|
-| `action` | `"save" \| "list"` | ✅ | `save` → checkpoint; `list` → lihat semua snapshot |
-| `label` | `string` | ❌ | Label untuk snapshot (opsional) |
+| `action` | `"save" \| "list" \| "restore"` | ✅ | `save` → checkpoint; `list` → lihat semua snapshot; `restore` → reload checkpoint |
+| `label` | `string` | ❌ | Label untuk snapshot (wajib untuk `restore`, opsional untuk `save`) |
 
 **Deskripsi**:  
-Simpan state progres plan, perubahan file, dan keputusan sebagai checkpoint. Bisa di-restore nanti.
+Simpan state progres plan, perubahan file, dan keputusan sebagai checkpoint. `save` sebelum risky refactoring, `restore` jika gagal, `list` untuk melihat semua snapshot.
 
 **Stage**: II
 
@@ -203,16 +203,18 @@ Menganalisa coupling, file size, scope, dan code patterns. Gunakan sebelum menye
 
 ### agentic_model
 
-Konfigurasi preferensi model LLM per role.
+Konfigurasi preferensi model LLM per role, per tool, atau per category complexity tier.
 
 | Parameter | Tipe | Required | Deskripsi |
 |-----------|------|----------|-----------|
 | `action` | `"set" \| "get" \| "list" \| "clear"` | ✅ | Operasi pada preferensi model |
 | `role` | `string` | ❌ | Agent role (architect, developer, qa, coordinator, pm) |
-| `model` | `string` | ❌ | Nama model (e.g., `"gpt-4o"`, `"claude-sonnet-4-20250514"`) |
+| `tool` | `string` | ❌ | Tool name (e.g., `agentic_plan`, `agentic_verify`) — override per-tool |
+| `category` | `string` | ❌ | Complexity tier: `quick`, `unspecified-low`, `unspecified-high`, `deep` — fallback by category |
+| `model` | `string` | ❌ | Nama model (e.g., `"gpt-4o"`, `"claude-sonnet-4-20250514"`, atau `"providerID/modelID"`) |
 
 **Deskripsi**:  
-Konfigurasi model LLM yang berbeda untuk setiap agent role dalam sesi yang sama. Persisten per session, tidak lintas session.
+3-level resolution: per-tool override > category fallback by complexity > per-role (via delegate) > engine default. Preferences persisted ke `.agentic/models.json`. Format `"providerID/modelID"` untuk explicit provider routing.
 
 **Stage**: II
 
@@ -238,6 +240,52 @@ Tracks tokens, steps, time, and cost per session/task. PEP check runs synchronou
 
 **Stage**: II  
 **LLM-dependent**: Tidak
+
+---
+
+### agentic_memo
+
+Second Brain: manage decisions (ADR), TODOs, run reflection, and inspect knowledge graph.
+
+| Parameter | Tipe | Required | Deskripsi |
+|-----------|------|----------|-----------|
+| `action` | `"decision" \| "todo" \| "todo-done" \| "list" \| "reflect" \| "graph"` | ✅ | Operasi Second Brain |
+| `title` | `string` | ❌ | Decision title (untuk `decision`) |
+| `context` | `string` | ❌ | Decision context/rationale (untuk `decision`) |
+| `alternatives` | `string` | ❌ | Alternative options considered (untuk `decision`) |
+| `consequence` | `string` | ❌ | Expected consequence (untuk `decision`) |
+| `text` | `string` | ❌ | TODO text (untuk `action=todo`) |
+| `priority` | `"low" \| "medium" \| "high" \| "critical"` | ❌ | TODO priority (untuk `action=todo`) |
+| `category` | `string` | ❌ | TODO/Search category |
+| `todoId` | `string` | ❌ | TODO ID (untuk `todo-done`) |
+| `source` | `string` | ❌ | Entity name (untuk `graph`) |
+| `target` | `string` | ❌ | Related entity name (untuk `graph`) |
+| `relation` | `string` | ❌ | Relation type (untuk `graph`) |
+
+**Deskripsi**:  
+`decision` — record Architecture Decision Record (ADR). `todo` — add task item. `todo-done` — mark task complete. `list` — show pending items. `reflect` — run reflection synthesis. `graph` — inspect entity relation knowledge graph.
+
+**Stage**: II
+
+---
+
+### agentic_db
+
+SQLite database backend.
+
+| Parameter | Tipe | Required | Deskripsi |
+|-----------|------|----------|-----------|
+| `action` | `"query" \| "save" \| "load" \| "list" \| "stats" \| "tables" \| "migrate"` | ✅ | Operasi database |
+| `sql` | `string` | ❌ | SQL query (untuk action=query) |
+| `namespace` | `string` | ❌ | Namespace (untuk save/load/list) |
+| `key` | `string` | ❌ | Key (untuk save/load) |
+| `data` | `string` | ❌ | JSON data string (untuk save) |
+| `scope` | `string` | ❌ | Scope/projectId |
+| `params` | `string` | ❌ | JSON array of query parameters (for action=query) |
+
+**Deskripsi**: Query, key-value save/load, list tables, migrate JSON → SQLite. WHERE, JOIN, GROUP BY support.
+
+**Stage**: II
 
 ---
 
@@ -349,9 +397,11 @@ Cross-session memory browser.
 |-----------|------|----------|-----------|
 | `action` | `"search" \| "recent" \| "stats"` | ✅ | Operasi memori episodik |
 | `query` | `string` | ❌ | Search query (untuk `search` action) |
+| `levels` | `string[]` | ❌ | Memory levels to search: `working`, `episodic`, `semantic`, `procedural` (default: all) |
+| `minImportance` | `number` | ❌ | Minimum importance threshold 0–1 (default: 0) |
 
 **Deskripsi**:  
-Search past tasks dan outcomes untuk belajar dari sesi sebelumnya. Gunakan sebelum planning task serupa untuk menghindari pengulangan kesalahan. Mendukung versioned schema.
+Search past tasks dan outcomes untuk belajar dari sesi sebelumnya. Gunakan sebelum planning task serupa untuk menghindari pengulangan kesalahan. Mendukung versioned schema dan multi-level memory search.
 
 **Stage**: III
 
@@ -493,9 +543,10 @@ Debate loop antara dua agent (executor ↔ critic).
 | `context` | `string` | ❌ | Konteks tambahan |
 | `maxRounds` | `number` | ❌ | Maksimum debate rounds (default: 3, max: 5) |
 | `format` | `"markdown" \| "json"` | ❌ | Output format (default: `json`) |
+| `verbose` | `boolean` | ❌ | Tampilkan progress debate real-time + full transcript per round (default: `false`) |
 
 **Deskripsi**:  
-Menghasilkan hasil yang lebih bersih dan akurat daripada single LLM call. Terbaik untuk complex analysis, data validation, dan reviews.
+Menghasilkan hasil yang lebih bersih dan akurat daripada single LLM call. Terbaik untuk complex analysis, data validation, dan reviews. `verbose` berguna untuk debugging atau transparansi penuh.
 
 ---
 
@@ -535,7 +586,7 @@ Multi-index RAG dengan category segregation.
 
 | Parameter | Tipe | Required | Deskripsi |
 |-----------|------|----------|-----------|
-| `action` | `"search" \| "store" \| "stats" \| "categories"` | ✅ | Operasi RAG |
+| `action` | `"search" \| "store" \| "stats" \| "categories" \| "list" \| "clear"` | ✅ | Operasi RAG |
 | `query` | `string` | ❌ | Search query |
 | `category` | `string` | ❌ | Kategori (kosongkan untuk all) |
 | `title` | `string` | ❌ | Title untuk stored entry |
@@ -566,6 +617,8 @@ MCP (Model Context Protocol) client.
 **Deskripsi**:  
 Konek ke external servers (databases, APIs, tools) via stdio atau HTTP. Temukan available tools dan panggil mereka. Memungkinkan agent berinteraksi dengan dunia nyata.
 
+> **Catatan**: Server actions (start/stop/status/restart) tersedia via `agentic_mcp` dengan action `server-start`, `server-stop`, `server-status`, `server-restart` — sudah merged ke tool ini.
+
 ---
 
 ### agentic_a2a
@@ -574,30 +627,16 @@ A2A (Agent-to-Agent) protocol — discover, delegate, dan berinteraksi dengan ag
 
 | Parameter | Tipe | Required | Deskripsi |
 |-----------|------|----------|-----------|
-| `action` | `"serve" \| "stop" \| "discover" \| "delegate" \| "list" \| "ping" \| "stats"` | ✅ | Operasi A2A |
-| `agentUrl` | `string` | ❌ | URL target agent (untuk delegate/ping) |
-| `task` | `string` | ❌ | Task description untuk delegasi |
-| `agentCard` | `object` | ❌ | Agent Card untuk serve (name, description, capabilities) |
+| `action` | `"serve" \| "stop" \| "discover" \| "delegate" \| "list" \| "ping" \| "stats" \| "status"` | ✅ | Operasi A2A |
+| `url` | `string` | ❌ | URL target agent (untuk discover/delegate/ping) |
+| `agentName` | `string` | ❌ | Agent name untuk Agent Card (untuk serve) |
+| `port` | `number` | ❌ | Port untuk A2A server (default: 4123) |
+| `serverUrl` | `string` | ❌ | A2A server URL untuk task delegation |
+| `taskDescription` | `string` | ❌ | Task description untuk delegasi |
+| `instructions` | `string` | ❌ | Additional instructions untuk delegated task |
 
 **Deskripsi**:  
-Implementasi standar Google A2A protocol untuk cross-framework interoperability. `serve` untuk expose Agent Card, `discover` untuk mencari remote agents, `delegate` untuk mengirim task ke agent lain, `list` untuk melihat agent yang terhubung, `ping` untuk health check, dan `stats` untuk melihat statistik interaksi.
-
----
-
-### agentic_db
-
-SQLite database backend.
-
-| Parameter | Tipe | Required | Deskripsi |
-|-----------|------|----------|-----------|
-| `action` | `"query" \| "save" \| "load" \| "list" \| "stats" \| "tables" \| "migrate"` | ✅ | Operasi database |
-| `sql` | `string` | ❌ | SQL query (untuk action=query) |
-| `namespace` | `string` | ❌ | Namespace (untuk save/load/list) |
-| `key` | `string` | ❌ | Key (untuk save/load) |
-| `data` | `string` | ❌ | JSON data string (untuk save) |
-| `scope` | `string` | ❌ | Scope/projectId |
-
-**Deskripsi**: Query, key-value save/load, list tables, migrate JSON → SQLite. WHERE, JOIN, GROUP BY support.
+Implementasi standar Google A2A protocol untuk cross-framework interoperability. `serve` untuk expose Agent Card on port, `discover` untuk mencari remote agents via URL, `delegate` untuk mengirim task ke agent lain, `list` untuk melihat agent yang terhubung, `ping` untuk health check, dan `stats` untuk melihat statistik interaksi.
 
 ---
 
@@ -623,7 +662,7 @@ Unified tool discovery dan calling across MCP + A2A protocols.
 ```
 Stage I    Foundation     [5 tools]   plan, execute, reflect, verify, status
 Stage II   Discovery      [9 tools]   nav, context, snapshot, pr, score, model, budget,
-                                      db, memo
+                                      memo, db
 Stage III  Multi-Agent    [8 tools]   delegate, pipeline, message, parallel, skill,
                                       episodes, guard, finetune
 Stage IV   Evolution      [1 tool]    evolve
