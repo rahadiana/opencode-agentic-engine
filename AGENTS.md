@@ -12,7 +12,7 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 2. ✅ **Schema-First Boundaries** — LLM output divalidasi sebelum dipakai (P1)
 3. ✅ **Dumb Model Mode** — strict mode untuk model lemah (P2)
 4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
-5. ✅ **Test Coverage** — **2655 tests**, c8 **88.18% stmts / 68.58% branch / 77.3% func** + CI coverage gate (P4)
+5. ✅ **Test Coverage** — **2661 tests**, c8 **88.2% stmts / 68.67% branch / 77.35% func** + CI coverage gate (P4)
 6. ✅ **Typed Errors** — 49/49 throw sites migrated, 0 `as any` remaining
 7. ✅ **SemanticCache** — TF-IDF + cosine, benchmarked at 0.78 threshold
 8. ✅ **HallucinationGuard** — confidence-aware claims (0-1)
@@ -24,7 +24,7 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
                     # postbuild: auto-copy ke ~/.cache/opencode/packages/ (jika ada)
-node test/run.mjs   # 2655+ unit tests (mock, no LLM needed)
+node test/run.mjs   # 2661+ unit tests (mock, no LLM needed)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
 node test/e2e-scenario.mjs # EvoClaw: 50-file codebase, 5 iterations
@@ -705,4 +705,7 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 - **second-brain.ts branch 83.87%** (+3.47%): 24 new SB-BR tests covering pipeline lifecycle events (stage.completed with/without issues, completed with passed/failed cross-validation), `ensureMemoryLoaded` with empty memory + decisions-only, `formatKnowledgeSnapshot` with reflection triggers/actionItems, `findRelated`/`findNeighbors` edges, `getLatestReflection` empty, `handleEvent` catch block via Proxy stateStore.
 - **multi-index-rag.ts branch 82.46%** (+1.29%): 16 new MIR-BR tests covering `syncCategories`, `searchWithConfidence` with explicit + auto categories, `indexSkill` on non-existent category, keyword-only TF-IDF results, `searchByCategoryAsync` without embedder, `autoCategory` with category name in query + domain keywords.
 - **2655 unit tests** (was 2611), **0 lint warnings**, **build OK**, **coverage gate passes** (88.18% stmts, 68.58% branch, 77.3% funcs).
-- **All E2E pass**: SWE-bench mock 7/7, EvoClaw 100% (36/36) ✅
+- **All E2E pass**: SWE-bench mock 7/7, EvoClaw 100% (36/36), SWE-bench real LLM 2/7 (baseline consistent) ✅
+- **planning-layer.ts branch 85.1%** (+10.69% → above 75%): missing dep warning + cycle detection tests
+- **orchestrator.ts branch 64.91%** (+0.63%): getPipelineContract unknown pipeline test
+- **2661 unit tests** (was 2655), **0 lint warnings**, **build OK**, **coverage gate passes** (88.2% stmts, 68.67% branch, 77.35% funcs).

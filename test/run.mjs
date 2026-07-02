@@ -873,6 +873,20 @@ const semanticBadShape = mod.parseSemanticValidationPayload(JSON.stringify({
 }))
 assert(semanticBadShape === null, "P1-orchestrator semantic validation rejects malformed shape")
 
+// P1-orchestrator-b: Orchestrator.getPipelineContract branch coverage (lines 897-898)
+{
+  const DAGEngine = mod.DAGEngine
+  const Orchestrator = mod.Orchestrator
+  const orch = new Orchestrator()
+  // Known contract
+  const known = orch.getPipelineContract("feature-dev")
+  assert(known !== null, "P1-orch-b1 getPipelineContract known pipeline returns contract")
+  assert(known.pipelineId === "feature-dev", "P1-orch-b2 correct pipeline ID")
+  // Unknown contract → null (line 897-898 else branch)
+  const unknown = orch.getPipelineContract("nonexistent-pipeline")
+  assert(unknown === null, "P1-orch-b3 getPipelineContract unknown pipeline returns null")
+}
+
 // 42e. P1 schema-first LLM boundary — router classifier parser
 console.log("\n[42e] router classifier schema gate")
 const routerGood = mod.parseRouterClassificationPayload(JSON.stringify({
@@ -11418,6 +11432,39 @@ const plbr_assert = (cond, msg) => { if (cond) { plbr++ } else { console.error(`
   const pll = new PlanningLayer(new DAGEngine())
   const ver = pll.getCurrentVersionNumber("never-created-goal-2")
   plbr_assert(ver === 0, "PL-BR-4 getCurrentVersionNumber unknown → 0")
+}
+
+// PL-BR-5: validate with missing dependency → warning (line 176)
+{
+  const DAGEngine = mod.DAGEngine
+  const pll = new PlanningLayer(new DAGEngine())
+  // Create a plan where a node depends on a non-existent node
+  const { plan, context } = pll.createPlan("br-test-5", [
+    { id: "a", description: "exists", dependsOn: [], verificationCriteria: [] },
+    { id: "b", description: "needs missing", dependsOn: ["a", "missing-node"], verificationCriteria: [] },
+  ])
+  // But validate() on the DAGPlan directly — createPlan might strip missing deps
+  // The DAGEngine might filter out unknown deps during buildDAG
+  // So we build manually: create a DAGPlan with a node that has a dep on missing id
+  const dag = new DAGEngine()
+  // Actually let's work through the public API and check if the warning appears
+  const valid = pll.validate("br-test-5", plan)
+  plbr_assert(valid.warnings.some(w => w.includes("missing")), "PL-BR-5 missing dep warning")
+}
+
+// PL-BR-6: validate with circular dependency → error (lines 204-207)
+{
+  const DAGEngine = mod.DAGEngine
+  const pll = new PlanningLayer(new DAGEngine())
+  // Build a DAGPlan directly with a circular dependency
+  const { plan, context } = pll.createPlan("br-test-6", [
+    { id: "x", description: "step x", dependsOn: ["z"], verificationCriteria: [] },
+    { id: "y", description: "step y", dependsOn: ["x"], verificationCriteria: [] },
+    { id: "z", description: "step z", dependsOn: ["y"], verificationCriteria: [] },
+  ])
+  const valid = pll.validate("br-test-6", plan)
+  plbr_assert(valid.cycleDetected, "PL-BR-6a cycle detected flag")
+  plbr_assert(valid.errors.some(e => e.includes("Cycle")), "PL-BR-6b cycle error message")
 }
 
 console.log(`  PL-BR: ${plbr} passed, ${plbrf} failed`)
