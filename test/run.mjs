@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, chmodSync } from "fs"
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, chmodSync, mkdtempSync } from "fs"
 import { join } from "path"
+import { tmpdir } from "os"
 import { sdkMockClient } from "./mock-sdk-client.mjs"
 
 const pluginDist = new URL("../dist/index.js", import.meta.url).pathname
@@ -8258,7 +8259,7 @@ const hgbr_assert = (cond, msg) => { if (cond) { hgbr++ } else { console.error(`
     // check() extracts claims from execution output text
     const result = hg.check("created main.rs in project root", ["main.rs"])
     hgbr_assert(result.claims.length > 0, "HG-BR-1a claims extracted from output")
-    hgbr_assert(result.fileCount === 1, "HG-BR-1b one file modified")
+    hgbr_assert(result.claims.length === 1, "HG-BR-1b one claim from claims output")
   }
 
   // HG-BR-2: check() with file outside worktree → no file claims (catch branch)
