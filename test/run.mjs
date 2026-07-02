@@ -12440,6 +12440,60 @@ const sbbr_assert = (cond, msg) => { if (cond) { sbbr++ } else { console.error(`
 console.log(`  SB-BR: ${sbbr} passed, ${sbbrf} failed`)
 passed += sbbr; failed += sbbrf
 
+// SB-GAP: uncovered branch paths in second-brain.ts
+console.log("[SB-GAP] SecondBrain — uncovered branch coverage")
+let sbgap = 0, sbgapf = 0
+const sbgap_assert = (c, m) => { if (c) { sbgap++; console.log(`  PASS: ${m}`) } else { sbgapf++; console.log(`  FAIL: ${m}`) } }
+
+{
+  const { SecondBrain: SB2, StateStore: SStore2, SessionStore: SessionStore2 } = mod
+  const fsMod = await import("fs")
+
+  // GAP-1: updateTodoStatus — valid found
+  const gapDir1 = `/tmp/sb-gap1-${Date.now()}`
+  fsMod.mkdirSync(gapDir1, { recursive: true })
+  const gapStore1 = new SStore2({ worktree: gapDir1, globalDir: `${gapDir1}-global` })
+  const gapSB = new SB2(gapStore1)
+  const gapTodo = gapSB.addTodo({ text: "GAP test todo", priority: "medium" })
+  const resultGap1 = gapSB.updateTodoStatus(gapTodo.id, "completed")
+  sbgap_assert(resultGap1 === true, "SB-GAP-1 updateTodoStatus valid ID returns true")
+
+  // GAP-2: updateTodoStatus — nonexistent ID
+  const resultGap2 = gapSB.updateTodoStatus("nonexistent-id", "completed")
+  sbgap_assert(resultGap2 === false, "SB-GAP-2 updateTodoStatus nonexistent ID returns false")
+
+  // GAP-3: ensureMemoryLoaded with pending todos (line 534)
+  const gapDir3 = `/tmp/sb-gap3-${Date.now()}`
+  fsMod.mkdirSync(gapDir3, { recursive: true })
+  const gapStore3 = new SStore2({ worktree: gapDir3, globalDir: `${gapDir3}-global` })
+  const gapSessStore3 = new SessionStore2()
+  const gapSB3 = new SB2(gapStore3, gapSessStore3)
+  gapSB3.addTodo({ text: "GAP pending todo 1", priority: "high" })
+  gapSB3.addTodo({ text: "GAP pending todo 2", priority: "medium" })
+  const loadGap3 = gapSB3.ensureMemoryLoaded("gap-test-session", 0) // staleMs=0 ensures stale
+  sbgap_assert(loadGap3.loaded === false, "SB-GAP-3a ensureMemoryLoaded returns loaded=false for stale memory")
+  sbgap_assert(loadGap3.warning !== undefined, "SB-GAP-3b warning is set")
+  sbgap_assert(loadGap3.warning.includes("Pending:"), "SB-GAP-3c warning includes pending todos")
+
+  // GAP-4: reflect without LLM (line 321-323 no-llmEngine path)
+  const gapDir4 = `/tmp/sb-gap4-${Date.now()}`
+  fsMod.mkdirSync(gapDir4, { recursive: true })
+  const gapStore4 = new SStore2({ worktree: gapDir4, globalDir: `${gapDir4}-global` })
+  const gapSB4 = new SB2(gapStore4) // no sessionStore, no llmEngine
+  gapSB4.addTodo({ text: "GAP reflect todo", priority: "low" })
+  gapSB4.addDecision({ title: "GAP decision 1", context: "test context", alternatives: "optA", consequence: "optB" })
+  const reflection = await gapSB4.reflect("gap-session-4")
+  sbgap_assert(reflection.id !== undefined, "SB-GAP-4a reflect returns id")
+  sbgap_assert(reflection.timestamp !== undefined, "SB-GAP-4b reflect returns timestamp")
+  sbgap_assert(reflection.summary.includes("1 decisions,"), "SB-GAP-4c reflect summary includes decision count")
+  sbgap_assert(typeof reflection.summary === "string" && reflection.summary.length > 10, "SB-GAP-4d reflect summary is meaningful")
+  sbgap_assert(reflection.triggers.length === 0, "SB-GAP-4e reflect has no triggers (no LLM)")
+  sbgap_assert(reflection.actionItems.length === 0, "SB-GAP-4f reflect has no action items (no LLM)")
+}
+
+console.log(`  SB-GAP: ${sbgap} passed, ${sbgapf} failed`)
+passed += sbgap; failed += sbgapf
+
 // ── StateStore Tests ──
 // SS: Unified data layer — single source of truth
 let ss = 0, ssf = 0

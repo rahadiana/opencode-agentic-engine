@@ -11,8 +11,8 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 1. ✅ **WorkflowPolicy Gate** — runtime enforcement, bukan prompt (P0)
 2. ✅ **Schema-First Boundaries** — LLM output divalidasi sebelum dipakai (P1)
 3. ✅ **Dumb Model Mode** — strict mode untuk model lemah (P2)
-4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
-5. ✅ **Test Coverage** — **2661 tests**, c8 **88.2% stmts / 68.67% branch / 77.35% func** + CI coverage gate (P4)
+ 4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
+ 5. ✅ **Test Coverage** — **2686 tests**, c8 **88.27% stmts / 68.7% branch / 77.52% func** + CI coverage gate (P4)
 6. ✅ **Typed Errors** — 49/49 throw sites migrated, 0 `as any` remaining
 7. ✅ **SemanticCache** — TF-IDF + cosine, benchmarked at 0.78 threshold
 8. ✅ **HallucinationGuard** — confidence-aware claims (0-1)
@@ -24,7 +24,7 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
                     # postbuild: auto-copy ke ~/.cache/opencode/packages/ (jika ada)
-node test/run.mjs   # 2661+ unit tests (mock, no LLM needed)
+node test/run.mjs   # 2686+ unit tests (mock, no LLM needed)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
 node test/e2e-scenario.mjs # EvoClaw: 50-file codebase, 5 iterations
@@ -709,3 +709,21 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 - **planning-layer.ts branch 85.1%** (+10.69% → above 75%): missing dep warning + cycle detection tests
 - **orchestrator.ts branch 64.91%** (+0.63%): getPipelineContract unknown pipeline test
 - **2661 unit tests** (was 2655), **0 lint warnings**, **build OK**, **coverage gate passes** (88.2% stmts, 68.67% branch, 77.35% funcs).
+
+### v0.5.14-dev — Temp-Session Reliability + Docs Sync (2026-07-02)
+
+- **Revert to temp-session approach**: Removed session ID swap (`setChatMode` no longer modifies `pluginSessionId`). Restored `_callOpenCodeTempSession` with two reliability upgrades vs original: (1) session reuse — ONE temp session per engine lifetime (was delete+create every call), (2) retry once on transient failure with fresh session. Removed confusing `[NO_LLM] Chat mode...` fallback message.
+- **Docs sync**: Updated AGENTS.md test count 2661→2675, coverage 88.2%/68.67%/77.35% → 88.18%/68.69%/77.4%. Updated PLAN.md metrics and branch coverage table.
+- **2675 unit tests** (was 2661), **0 lint warnings**, **build OK**, **coverage gate passes** (88.18% stmts, 68.69% branch, 77.4% funcs).
+
+### v0.5.15-dev — Branch Coverage: second-brain uncovered paths (2026-07-02)
+
+- **SB-GAP tests**: 12 new tests covering `updateTodoStatus` (found + not found), `ensureMemoryLoaded` with pending todos (line 534), and `reflect` without LLM (no-LLM fallback path). second-brain.ts func coverage 62.5%→67.5%.
+- **Overall coverage**: Stmts 88.27%, Branch 68.7%, Funcs 77.52% — all gates pass ✅
+- **2663 unit tests** (was 2675), **0 lint warnings**, **build OK**.
+
+### v0.5.15-dev — Branch Coverage: second-brain uncovered paths (2026-07-02)
+
+- **SB-GAP tests**: 11 new tests covering `updateTodoStatus` (found + not found), `ensureMemoryLoaded` with pending todos (line 534), and `reflect` without LLM (no-LLM fallback path). second-brain.ts func coverage 62.5%→67.5%.
+- **Overall coverage**: Stmts 88.27%, Branch 68.7%, Funcs 77.52% — all gates pass ✅
+- **2686 unit tests** (was 2675), **0 lint warnings**, **build OK**.
