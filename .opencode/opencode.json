@@ -1,7 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": [
-    "opencode-agentic-engine@latest",
-    "@dietrichgebert/ponytail"
+    "opencode-agentic-engine@latest"
   ]
 }
