@@ -47,8 +47,6 @@ export class LLMEngine {
   private memoryOrchestrator?: MemoryOrchestrator
   /** Cached temp session ID for chat mode — reuse instead of create+delete per call. */
   private _tempSessionId: string | null = null
-  /** Backup of original pluginSessionId when chat mode overrides it. */
-  private _backupSessionId: string | null = null
 
   /** Cost auto-switch tracking */
   private costSwitchStats = { totalSwitches: 0, totalSavingsUsd: 0, switches: [] as CostSwitchEvent[] }
@@ -297,29 +295,10 @@ export class LLMEngine {
     return chain.slice(0, maxChainLength)
   }
 
-  /** Set chat mode flag. Called from experimental.chat.system.transform hook.
-   *  In chat mode: swaps pluginSessionId to a unique synthetic ID so
-   *  session.prompt() avoids the parent session's agent loop.
-   *  This mirrors agentRuntime sub-engines which use synthetic session IDs
-   *  like "${parentSessionId}-${role}" and always work in chat mode.
-   */
+  /** Set chat mode flag. Called from experimental.chat.system.transform hook. */
   setChatMode(chat: boolean): void {
     this._chatMode = chat
-    if (chat && this.pluginSessionId && !this._chatSessionId) {
-      this._backupSessionId = this.pluginSessionId
-      // Use a session ID that doesn't share the parent session's prefix,
-      // so the SDK treats it as an independent session without agent loop.
-      this._chatSessionId = `agentic-chat-${this._chatNonce}`
-      this.pluginSessionId = this._chatSessionId
-    } else if (!chat && this._backupSessionId) {
-      this.pluginSessionId = this._backupSessionId
-      this._backupSessionId = null
-    }
   }
-
-  /** Unique synthetic session ID for chat mode (avoids parent agent loop). */
-  private _chatSessionId: string | null = null
-  private _chatNonce = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 
   /** Check if running in chat mode. */
   isChatMode(): boolean {
@@ -1095,10 +1074,13 @@ export class LLMEngine {
     const client = this._getClient()
     if (!client) return this.fallbackResponse(req)
 
-    // Chat mode: pluginSessionId was swapped to a unique synthetic ID
-    // (agentic-chat-{nonce}) by setChatMode(), so session.prompt() calls
-    // an independent session without the parent session's agent loop.
-    // This mirrors how agentRuntime sub-engines always work in chat mode.
+    // In chat mode: session.prompt({ noReply: false }) on the current session
+    // would hang because the chat's agent loop is already running.
+    // Solution: create/reuse a temp child session for the LLM call.
+    if (this._chatMode) {
+      return this._callOpenCodeTempSession(client, req)
+    }
+
     try {
       const body = this._buildPromptBody(req)
       const text = await this._promptWithTimeout(client, this.pluginSessionId, body, req.timeoutMs ?? 300_000, req.signal)
@@ -1113,6 +1095,57 @@ export class LLMEngine {
     return this.fallbackResponse(req)
   }
 
+  /**
+   * Call LLM in chat mode via a temp child session.
+   * Avoids hanging the parent chat session's agent loop.
+   * Reuses ONE temp session per engine lifetime. Retries once on failure.
+   */
+  private async _callOpenCodeTempSession(
+    client: NonNullable<ReturnType<LLMEngine['_getClient']>>,
+    req: LLMRequest,
+  ): Promise<LLMResponse> {
+    for (let attempt = 0; attempt <= 1; attempt++) {
+      // Create temp session if first call or retrying
+      if (!this._tempSessionId) {
+        try {
+          const tempSession = await client.session.create({
+            body: { title: `agentic-${Date.now()}` },
+          })
+          this._tempSessionId = tempSession.data?.id ?? (tempSession as Record<string, unknown>).id as string ?? null
+          if (!this._tempSessionId) {
+            logParseError('callOpenCode chat mode', new Error('Created temp session but got no ID'))
+            return this.fallbackResponse(req)
+          }
+        } catch (error) {
+          logParseError('callOpenCode chat mode', error)
+          if (attempt === 0) { this._tempSessionId = null; continue }
+          return this.fallbackResponse(req)
+        }
+      }
+
+      try {
+        const body = this._buildPromptBody(req)
+        const text = await this._promptWithTimeout(client, this._tempSessionId, body, req.timeoutMs ?? 300_000, req.signal)
+        if (text.trim()) {
+          return { content: text.trim(), finishReason: 'stop' }
+        }
+      } catch (error) {
+        logParseError('callOpenCode chat mode', error)
+      }
+
+      // Empty/error — retry once with fresh session
+      if (attempt === 0) {
+        if (this._tempSessionId) {
+          try { await client.session.delete({ path: { id: this._tempSessionId } }) } catch { /* ignore */ }
+          this._tempSessionId = null
+        }
+        continue
+      }
+    }
+
+    return this.fallbackResponse(req)
+  }
+
   /** Dispose the cached temp session. Called when engine is no longer needed. */
   async disposeTempSession(): Promise<void> {
     if (!this._tempSessionId) return
@@ -1121,32 +1154,17 @@ export class LLMEngine {
       try { await client.session.delete({ path: { id: this._tempSessionId } }) } catch { /* ignore */ }
     }
     this._tempSessionId = null
-    // Restore original session ID
-    if (this._backupSessionId) {
-      this.pluginSessionId = this._backupSessionId
-      this._backupSessionId = null
-    }
   }
 
   /**
-   * Fallback response when LLM is unavailable (not running inside OpenCode,
-   * SDK call failed, or running in chat mode where session.prompt() would hang).
-   *
-   * @param reason - Optional context for the fallback message.
+   * Fallback response when LLM is unavailable — not running inside OpenCode,
+   * or SDK call failed/replied empty.
    */
-  private fallbackResponse(req: LLMRequest, reason?: string): LLMResponse {
-    let msg: string
-    if (reason === 'chat') {
-      msg = '[NO_LLM] Chat mode: agentic_* tools cannot call LLM directly. Use /plan, /execute, /verify commands instead, or run in agent mode (opencode run).'
-    } else if (reason === 'sdk') {
-      msg = '[NO_LLM] OpenCode SDK unavailable. Plugin requires OpenCode runtime.'
-    } else {
-      msg = '[NO_LLM] No LLM available. Run within OpenCode for native LLM access. Plugin does NOT call external APIs directly.'
-    }
+  private fallbackResponse(req: LLMRequest): LLMResponse {
     if (req.jsonMode) {
-      return { content: `{"status":"no_llm","data":null,"reason":"${reason ?? 'unavailable'}"}`, finishReason: "no_llm" }
+      return { content: `{"status":"no_llm","data":null,"reason":"unavailable"}`, finishReason: "no_llm" }
     }
-    return { content: msg, finishReason: "no_llm" }
+    return { content: '[NO_LLM] No LLM available. Run within OpenCode for native LLM access. Plugin does NOT call external APIs directly.', finishReason: "no_llm" }
   }
 }
 
