@@ -52,8 +52,10 @@ export class AgentRuntime {
   }
 
   dispose(): void {
+    const engines = [...this.engines.entries()]
     this.engines.clear()
     this.engineOrder = []
+    Promise.all(engines.map(([, e]) => e.disposeTempSession().catch(() => {})))
   }
 
   [Symbol.dispose](): void {
@@ -89,8 +91,12 @@ export class AgentRuntime {
     const key = `${parentSessionId}::${role}`
     if (!this.engines.has(key)) {
       if (this.engines.size >= this.maxEngines) {
-        const oldest = this.engineOrder.shift()
-        if (oldest) this.engines.delete(oldest)
+        const oldestKey = this.engineOrder.shift()
+        if (oldestKey) {
+          const oldEngine = this.engines.get(oldestKey)
+          if (oldEngine) oldEngine.disposeTempSession().catch(() => {})
+          this.engines.delete(oldestKey)
+        }
       }
       const engine = new LLMEngine()
       engine.setOpencodeClient(this.opencodeClient)

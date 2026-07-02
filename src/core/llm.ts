@@ -45,6 +45,8 @@ export class LLMEngine {
   private _lastKnownModel?: string
   /** Memory orchestrator for knowledge-first injection */
   private memoryOrchestrator?: MemoryOrchestrator
+  /** Cached temp session ID for chat mode — reuse instead of create+delete per call. */
+  private _tempSessionId: string | null = null
 
   /** Cost auto-switch tracking */
   private costSwitchStats = { totalSwitches: 0, totalSavingsUsd: 0, switches: [] as CostSwitchEvent[] }
@@ -1096,41 +1098,54 @@ export class LLMEngine {
   /**
    * Call LLM in chat mode via a temporary child session.
    * Avoids hanging the parent chat session's agent loop.
+   * Creates a fresh temp session per call to prevent accumulated conversation history
+   * from slowing down subsequent calls. Deletes old session before creating new one.
    */
   private async _callOpenCodeTempSession(
     client: NonNullable<ReturnType<LLMEngine['_getClient']>>,
     req: LLMRequest,
   ): Promise<LLMResponse> {
-    let tempSessionId: string | undefined
-
+    // Dispose old temp session to avoid accumulated conversation history
+    if (this._tempSessionId) {
+      try { await client.session.delete({ path: { id: this._tempSessionId } }) } catch { /* ignore */ }
+      this._tempSessionId = null
+    }
     try {
-      // Create temporary child session
-      // SDK returns { data: { id } } — plugin client may return { id } directly
       const tempSession = await client.session.create({
         body: { title: `agentic-${Date.now()}` },
       })
-      tempSessionId = tempSession.data?.id ?? (tempSession as Record<string, unknown>).id as string | undefined
-      if (!tempSessionId) {
+      this._tempSessionId = tempSession.data?.id ?? (tempSession as Record<string, unknown>).id as string ?? null
+      if (!this._tempSessionId) {
         logParseError('callOpenCode chat mode', new Error('Failed to create temp session — no ID returned'))
         return this.fallbackResponse(req, 'chat')
       }
+    } catch (error) {
+      logParseError('callOpenCode chat mode', error)
+      return this.fallbackResponse(req, 'chat')
+    }
 
+    try {
       const body = this._buildPromptBody(req)
-      const text = await this._promptWithTimeout(client, tempSessionId, body, 120_000, req.signal)
+      const text = await this._promptWithTimeout(client, this._tempSessionId, body, req.timeoutMs ?? 300_000, req.signal)
 
       if (text.trim()) {
         return { content: text.trim(), finishReason: 'stop' }
       }
     } catch (error) {
       logParseError('callOpenCode chat mode', error);
-    } finally {
-      // Clean up temp session
-      if (tempSessionId) {
-        try { await client.session.delete({ path: { id: tempSessionId } }) } catch { /* ignore */ }
-      }
     }
 
     return this.fallbackResponse(req, 'chat')
+  }
+
+  /** Dispose the cached temp session. Called when engine is no longer needed. */
+  async disposeTempSession(): Promise<void> {
+    if (!this._tempSessionId) return
+    const client = this._getClient()
+    if (client) {
+      try { await client.session.delete({ path: { id: this._tempSessionId } }) } catch { /* ignore */ }
+    }
+    this._tempSessionId = null
   }
 
   /**

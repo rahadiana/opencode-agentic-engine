@@ -3,22 +3,38 @@ import { join } from "path"
 import { tmpdir } from "os"
 import { sdkMockClient } from "./mock-sdk-client.mjs"
 
+const runStart = Date.now()
 const pluginDist = new URL("../dist/index.js", import.meta.url).pathname
 
 let passed = 0
 let failed = 0
 let sid = 0
 let mod
+let currentSection = ""
+const failedTests = []
 function freshSid() { return `test-session-${++sid}` }
+
+const G = "\x1b[32m", R = "\x1b[31m", Y = "\x1b[33m", B = "\x1b[34m", D = "\x1b[2m", RST = "\x1b[0m"
 
 function assert(condition, msg) {
   if (condition) {
-    console.log(`  PASS: ${msg}`)
+    console.log(`  ${G}PASS${RST}: ${msg}`)
     passed++
   } else {
-    console.error(`  FAIL: ${msg}`)
+    console.error(`  ${R}FAIL${RST}: ${msg}`)
     failed++
+    failedTests.push({ section: currentSection, msg })
   }
+}
+
+let sectionStart = 0
+function section(name) {
+  if (sectionStart > 0) {
+    const ms = Date.now() - sectionStart
+    console.log(`  ${D}(${ms}ms)${RST}`)
+  }
+  currentSection = name
+  sectionStart = Date.now()
 }
 
 function mockCtx(sessionID) {
@@ -49,7 +65,8 @@ writeFileSync(join(projectDir, "tests/index.test.ts"), 'import { main } from "..
 async function runAll() {
 
 // 1. Module loading
-console.log("\n[1] Module loading")
+section("[1] Module loading")
+console.log(`\n${B}[1] Module loading${RST}`)
 assert(existsSync(pluginDist), "dist/index.js exists")
 try { mod = await import(pluginDist); assert(true, "plugin module loaded") }
 catch (e) { assert(false, `plugin module load: ${e.message}`) }
@@ -717,6 +734,71 @@ const rvUpd = await hooks.tool.agentic_delegate.execute({
 }, rvCtx)
 const rvOut = typeof rvUpd === "string" ? rvUpd : rvUpd.output
 assert(rvOut.includes("Review Requested") || rvOut.includes("review"), "review request sent")
+
+// 38b. Batch delegate — parallel fan-out (3 agents barengan)
+console.log("\n[38b] agentic_delegate — batch parallel fan-out")
+const batchCtx = mockCtx(freshSid())
+const batchTasks = [
+  { taskId: "b1", role: "architect", description: "Design database schema" },
+  { taskId: "b2", role: "developer", description: "Implement auth module", dependsOn: ["b1"] },
+  { taskId: "b3", role: "qa", description: "Write integration tests", dependsOn: ["b2"] },
+]
+const batchOut = await hooks.tool.agentic_delegate.execute({
+  tasks: batchTasks,
+  maxParallel: 3,
+}, batchCtx)
+assert(batchOut.output.includes("Batch Delegate"), "batch mode activated")
+assert(batchOut.output.includes("b1"), "task b1 in output")
+assert(batchOut.output.includes("b2"), "task b2 in output")
+assert(batchOut.output.includes("b3"), "task b3 in output")
+assert(batchOut.output.includes("architect"), "architect role shown")
+assert(batchOut.output.includes("developer"), "developer role shown")
+assert(batchOut.output.includes("qa"), "qa role shown")
+// DependsOn creates phases
+assert(batchOut.output.includes("Phases") || batchOut.output.includes("Phase"), "phases from dependencies")
+
+// 38c. Batch delegate — all independent (single phase, pure parallel)
+console.log("\n[38c] agentic_delegate — batch all independent")
+const batchIndepCtx = mockCtx(freshSid())
+const batchIndep = await hooks.tool.agentic_delegate.execute({
+  tasks: [
+    { taskId: "i1", role: "developer", description: "Task A" },
+    { taskId: "i2", role: "developer", description: "Task B" },
+    { taskId: "i3", role: "developer", description: "Task C" },
+  ],
+  maxParallel: 5,
+}, batchIndepCtx)
+assert(batchIndep.output.includes("Batch Delegate"), "batch independent mode")
+assert(batchIndep.output.includes("3 tasks"), "all 3 tasks shown")
+assert(!batchIndep.output.includes("Phases:"), "no phases (all independent)")
+
+// 38d. Batch delegate — unknown role error
+console.log("\n[38d] agentic_delegate — batch unknown role")
+const batchErrCtx = mockCtx(freshSid())
+const batchErr = await hooks.tool.agentic_delegate.execute({
+  tasks: [
+    // @ts-expect-error testing unknown role
+    { taskId: "e1", role: "designer", description: "Design UI" },
+  ],
+}, batchErrCtx)
+assert(batchErr.output.includes("Failed") || batchErr.output.includes("unknown"), "batch unknown role handled")
+
+// 38e. Batch delegate — error if called without taskId/tasks
+console.log("\n[38e] agentic_delegate — no taskId or tasks")
+const noArgsCtx = mockCtx(freshSid())
+const noArgs = await hooks.tool.agentic_delegate.execute({}, noArgsCtx)
+assert(noArgs.output.includes("provide") || noArgs.output.includes("taskId"), "no args error shown")
+
+// 38f. Batch delegate — update task still works (regression test)
+console.log("\n[38f] agentic_delegate — single mode update task")
+const regCtx = mockCtx(freshSid())
+await hooks.tool.agentic_delegate.execute({
+  taskId: "reg1", role: "developer", description: "Regression test",
+}, regCtx)
+const regOut = await hooks.tool.agentic_delegate.execute({
+  taskId: "reg1", status: "done", result: "All good",
+}, regCtx)
+assert(regOut.output.includes("Task Updated"), "regression: single task update still works")
 
 // 39. agentic_skill — extract + find + list
 console.log("\n[39] agentic_skill — extract")
@@ -14337,6 +14419,15 @@ const mrd_assert = (c, m) => { if (c) { mrd++; console.log(`  PASS: ${m}`) } els
 console.log(`  ModelRegistry: ${mrd} passed, ${mrdf} failed`)
 passed += mrd; failed += mrdf
 
-console.log(`Results: ${passed} passed, ${failed} failed`)
-if (failed === 0) console.log("ALL TESTS PASSED")
+const totalMs = Date.now() - runStart
+const totalSec = (totalMs / 1000).toFixed(1)
+console.log(`\nResults: ${G}${passed} passed${RST}, ${failed > 0 ? R : G}${failed} failed${RST} in ${totalSec}s`)
+if (failed === 0) {
+  console.log(`${G}ALL TESTS PASSED${RST}`)
+} else {
+  console.log(`\n${R}── Failed Tests ──${RST}`)
+  for (const f of failedTests) {
+    console.log(`  ${R}✗${RST} ${f.section ? f.section + " → " : ""}${f.msg}`)
+  }
+}
 process.exit(failed > 0 ? 1 : 0)

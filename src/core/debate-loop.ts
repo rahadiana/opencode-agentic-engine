@@ -132,7 +132,7 @@ export class DebateLoop {
   async execute(config: DebateConfig): Promise<DebateResult> {
     const maxRounds = config.maxRounds ?? 2
     const format = config.format ?? "json"
-    const totalTimeoutMs = config.totalTimeoutMs ?? 120_000 // 120s total
+    const totalTimeoutMs = config.totalTimeoutMs ?? 110_000 // 110s — stay under SDK ~120s tool timeout; configurable via timeoutMs arg
     const rounds: DebateRound[] = []
     let currentDraft = ""
     let approved = false
@@ -344,54 +344,74 @@ export class DebateLoop {
     round: number,
     signal: AbortSignal,
   ): Promise<{ output: string; error?: string }> {
-    if (this.agentRuntime && config.sessionId) {
-      const ctx: AgentContext = {
-        systemPrompt: EXECUTOR_PROMPT,
-        sessionId: config.sessionId,
-        role: 'debate-executor',
-        taskDescription: input,
-        modelPreference: config.executorModel
-          ? `${config.executorModel.providerID}/${config.executorModel.modelID}`
-          : undefined,
-        reasoningEffort: config.executorReasoning,
-      }
-      const result = await this.agentRuntime.execute(ctx)
-      if (!result.success || isNoLlm(result.output)) {
-        return { output: '', error: result.error || NO_LLM_RESPONSE }
-      }
-      return { output: result.output }
-    }
-
-    // Fallback: direct llmEngine.call()
-    try {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 60_000)
-      const resp = await Promise.race([
-        this.llmEngine.call({
+    const MAX_RETRIES = 1 // max 2 attempts per call
+    const PER_CALL_TIMEOUT = 45_000
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (this.agentRuntime && config.sessionId) {
+        const ctx: AgentContext = {
           systemPrompt: EXECUTOR_PROMPT,
-          userPrompt: input,
-          temperature: 0.2,
-          maxTokens: 4096,
-          bypassCache: round > 1,
-          model: config.executorModel,
-          toolName: 'debate-executor',
-          signal,
-        }),
-        new Promise<never>((_, reject) => {
-          controller.signal.addEventListener("abort", () => {
-            reject(new TimeoutError("LLM call", 60000))
-          })
-        }),
-      ])
-      clearTimeout(timeoutId)
-      if (isNoLlm(resp.content)) {
-        return { output: '', error: NO_LLM_RESPONSE }
+          sessionId: config.sessionId,
+          role: 'debate-executor',
+          taskDescription: input,
+          modelPreference: config.executorModel
+            ? `${config.executorModel.providerID}/${config.executorModel.modelID}`
+            : undefined,
+          reasoningEffort: config.executorReasoning,
+          timeoutMs: PER_CALL_TIMEOUT,
+        }
+        const result = await this.agentRuntime.execute(ctx)
+        if (!result.success || isNoLlm(result.output)) {
+          if (attempt < MAX_RETRIES) {
+            await sleep(Math.min(1000 * Math.pow(2, attempt), 4000))
+            continue
+          }
+          return { output: '', error: result.error || NO_LLM_RESPONSE }
+        }
+        return { output: result.output }
       }
-      return { output: resp.content }
-    } catch (error) {
-      logParseError("executor call", error)
-      return { output: '', error: `Executor failed: ${error}` }
+
+      // Fallback: direct llmEngine.call()
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), PER_CALL_TIMEOUT)
+        const resp = await Promise.race([
+          this.llmEngine.call({
+            systemPrompt: EXECUTOR_PROMPT,
+            userPrompt: input,
+            temperature: 0.2,
+            maxTokens: 4096,
+            bypassCache: round > 1,
+            model: config.executorModel,
+            toolName: 'debate-executor',
+            signal,
+            timeoutMs: PER_CALL_TIMEOUT,
+          }),
+          new Promise<never>((_, reject) => {
+            controller.signal.addEventListener("abort", () => {
+              reject(new TimeoutError("LLM call", PER_CALL_TIMEOUT))
+            })
+          }),
+        ])
+        clearTimeout(timeoutId)
+        if (isNoLlm(resp.content)) {
+          if (attempt < MAX_RETRIES) {
+            await sleep(Math.min(1000 * Math.pow(2, attempt), 4000))
+            continue
+          }
+          return { output: '', error: NO_LLM_RESPONSE }
+        }
+        return { output: resp.content }
+      } catch (error) {
+        if (attempt < MAX_RETRIES) {
+          await sleep(Math.min(1000 * Math.pow(2, attempt), 4000))
+          continue
+        }
+        logParseError("executor call", error)
+        return { output: '', error: `Executor failed: ${error}` }
+      }
     }
+    /* istanbul ignore next — unreachable, type checker comfort */
+    return { output: '', error: 'Executor: max retries exceeded' }
   }
 
   /**
@@ -406,54 +426,74 @@ export class DebateLoop {
   ): Promise<{ output: string; error?: string }> {
     const criticInput = `Executor's output for task "${config.task}":\n\n${draft}\n\nReview this output. If APPROVED, respond with "APPROVED: (message)". Otherwise list all issues.`
 
-    if (this.agentRuntime && config.sessionId) {
-      const ctx: AgentContext = {
-        systemPrompt: CRITIC_PROMPT,
-        sessionId: config.sessionId,
-        role: 'debate-critic',
-        taskDescription: criticInput,
-        modelPreference: config.criticModel
-          ? `${config.criticModel.providerID}/${config.criticModel.modelID}`
-          : undefined,
-        reasoningEffort: config.criticReasoning,
-      }
-      const result = await this.agentRuntime.execute(ctx)
-      if (!result.success || isNoLlm(result.output)) {
-        return { output: '', error: result.error || NO_LLM_RESPONSE }
-      }
-      return { output: result.output }
-    }
-
-    // Fallback: direct llmEngine.call()
-    try {
-      const criticController = new AbortController()
-      const criticTimeoutId = setTimeout(() => criticController.abort(), 45_000)
-      const resp = await Promise.race([
-        this.llmEngine.call({
+    const MAX_RETRIES = 1
+    const PER_CALL_TIMEOUT = 45_000
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (this.agentRuntime && config.sessionId) {
+        const ctx: AgentContext = {
           systemPrompt: CRITIC_PROMPT,
-          userPrompt: criticInput,
-          temperature: 0.2,
-          maxTokens: 2048,
-          bypassCache: round > 1,
-          model: config.criticModel,
-          toolName: 'debate-critic',
-          signal,
-        }),
-        new Promise<never>((_, reject) => {
-          criticController.signal.addEventListener("abort", () => {
-            reject(new TimeoutError("Critic LLM call", 45000))
-          })
-        }),
-      ])
-      clearTimeout(criticTimeoutId)
-      if (isNoLlm(resp.content)) {
-        return { output: '', error: NO_LLM_RESPONSE }
+          sessionId: config.sessionId,
+          role: 'debate-critic',
+          taskDescription: criticInput,
+          modelPreference: config.criticModel
+            ? `${config.criticModel.providerID}/${config.criticModel.modelID}`
+            : undefined,
+          reasoningEffort: config.criticReasoning,
+          timeoutMs: PER_CALL_TIMEOUT,
+        }
+        const result = await this.agentRuntime.execute(ctx)
+        if (!result.success || isNoLlm(result.output)) {
+          if (attempt < MAX_RETRIES) {
+            await sleep(Math.min(1000 * Math.pow(2, attempt), 4000))
+            continue
+          }
+          return { output: '', error: result.error || NO_LLM_RESPONSE }
+        }
+        return { output: result.output }
       }
-      return { output: resp.content }
-    } catch (error) {
-      logParseError("critic call", error)
-      return { output: '', error: `Critic failed: ${error}` }
+
+      // Fallback: direct llmEngine.call()
+      try {
+        const criticController = new AbortController()
+        const criticTimeoutId = setTimeout(() => criticController.abort(), PER_CALL_TIMEOUT)
+        const resp = await Promise.race([
+          this.llmEngine.call({
+            systemPrompt: CRITIC_PROMPT,
+            userPrompt: criticInput,
+            temperature: 0.2,
+            maxTokens: 2048,
+            bypassCache: round > 1,
+            model: config.criticModel,
+            toolName: 'debate-critic',
+            signal,
+            timeoutMs: PER_CALL_TIMEOUT,
+          }),
+          new Promise<never>((_, reject) => {
+            criticController.signal.addEventListener("abort", () => {
+              reject(new TimeoutError("Critic LLM call", PER_CALL_TIMEOUT))
+            })
+          }),
+        ])
+        clearTimeout(criticTimeoutId)
+        if (isNoLlm(resp.content)) {
+          if (attempt < MAX_RETRIES) {
+            await sleep(Math.min(1000 * Math.pow(2, attempt), 4000))
+            continue
+          }
+          return { output: '', error: NO_LLM_RESPONSE }
+        }
+        return { output: resp.content }
+      } catch (error) {
+        if (attempt < MAX_RETRIES) {
+          await sleep(Math.min(1000 * Math.pow(2, attempt), 4000))
+          continue
+        }
+        logParseError("critic call", error)
+        return { output: '', error: `Critic failed: ${error}` }
+      }
     }
+    /* istanbul ignore next — unreachable, type checker comfort */
+    return { output: '', error: 'Critic: max retries exceeded' }
   }
 }
 
@@ -488,6 +528,11 @@ export function formatDebateResult(result: DebateResult): string {
   }
 
   return lines.join("\n")
+}
+
+/** Minimal sleep for retry backoff */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 function levenshteinDistance(a: string, b: string): number {

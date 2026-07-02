@@ -997,6 +997,102 @@ const confidenceStore = new ConfidenceStore()
     }
   })
 
+  // ── Batch Delegate: fan-out parallel execution for multiple agents ──
+  // Based on A2A Fan-Out / Anthropic orchestrator-worker pattern.
+  // Groups tasks by dependency phases, runs each phase concurrently via Promise.allSettled.
+  async function executeBatchDelegate(
+    tasks: Array<{ taskId: string; role: string; description: string; context?: string; dependsOn?: string[] }>,
+    maxParallel: number,
+    abortOnFailure: boolean,
+    ctx: { sessionID: string; directory?: string; worktree?: string },
+  ) {
+    // 1. Dependency graph + topological phases (Kahn's algorithm)
+    const taskMap = new Map(tasks.map(t => [t.taskId, t]))
+    const depGraph = new Map<string, string[]>()
+    for (const t of tasks) depGraph.set(t.taskId, t.dependsOn?.filter(d => taskMap.has(d)) ?? [])
+
+    const phases: string[][] = []
+    const remaining = new Set(tasks.map(t => t.taskId))
+    const completed = new Set<string>()
+
+    while (remaining.size > 0) {
+      const ready = [...remaining].filter(id =>
+        (depGraph.get(id) ?? []).every(d => completed.has(d)))
+      if (ready.length === 0) { phases.push([...remaining]); break } // circular dependency fallback
+      phases.push(ready)
+      for (const id of ready) { remaining.delete(id); completed.add(id) }
+    }
+
+    // 2. Phase-by-phase execution with fan-out cap
+    interface BatchTaskResult { taskId: string; role: string; success: boolean; result?: string; error?: string; durationMs: number }
+    const allResults: BatchTaskResult[] = []
+    let aborted = false
+
+    for (const phase of phases) {
+      if (aborted) break
+      for (let i = 0; i < phase.length && !aborted; i += maxParallel) {
+        const chunk = phase.slice(i, i + maxParallel)
+        const promises = chunk.map(async (taskId) => {
+          const task = taskMap.get(taskId)!
+          const start = Date.now()
+          try {
+            const role = task.role as AgentRole
+            const agent = coordinator.getAgent(role)
+            if (!agent) return { taskId, role: task.role, success: false, error: `Unknown role "${role}"`, durationMs: Date.now() - start }
+
+            const sessionModelPref = sessionStore.getModelPreference(ctx.sessionID, role)
+            const relevantSkills = skillStore.find(task.description).slice(0, 3).map(s => ({
+              name: s.definition.meta.name, successRate: s.successRate,
+              steps: s.definition.workflow.steps.map(st => `${st.action}: ${st.description}`).join("; "),
+            }))
+
+            coordinator.delegate(role, { id: taskId, assignedTo: role, description: task.description, input: task.context ?? task.description, status: "running" }, ctx.sessionID, 0, relevantSkills)
+            eventBus.emit({ type: "task.delegated", payload: { sessionID: ctx.sessionID, taskId, role, description: task.description, delegationDepth: 0 } })
+
+            const agentCtx = {
+              systemPrompt: agent.prompt ?? `You are a ${role} in a software engineering team.`,
+              sessionId: ctx.sessionID, role,
+              taskDescription: task.context ?? task.description,
+              modelPreference: sessionModelPref || undefined,
+            }
+            const resultObj = await agentRuntime.execute(agentCtx)
+            const ok = resultObj.success ? resultObj.output : null
+            const err = resultObj.success ? null : (resultObj.error ?? "Agent execution failed")
+
+            if (ok) { await coordinator.updateTask(ctx.sessionID, taskId, "done", ok); await coordinator.writeSharedMemory(`task:${taskId}`, ok.slice(0, 500), role) }
+            else { await coordinator.updateTask(ctx.sessionID, taskId, "failed", err ?? "Unknown error") }
+
+            return { taskId, role: task.role, success: !!ok, result: ok ?? undefined, error: err ?? undefined, durationMs: Date.now() - start }
+          } catch (e) {
+            return { taskId, role: task.role, success: false, error: (e as Error).message, durationMs: Date.now() - start }
+          }
+        })
+
+        const settled = await Promise.allSettled(promises)
+        for (const s of settled) {
+          if (s.status === "fulfilled") { allResults.push(s.value); if (abortOnFailure && !s.value.success) aborted = true }
+          else { allResults.push({ taskId: "unknown", role: "unknown", success: false, error: `Task crashed: ${s.reason}`, durationMs: 0 }) }
+        }
+      }
+    }
+
+    // 3. Build output
+    const passed = allResults.filter(r => r.success).length
+    let output = `## ⚡ Batch Delegate Complete\n\n`
+    output += `**Total:** ${allResults.length} tasks | **Passed:** ${passed} | **Failed:** ${allResults.length - passed}\n`
+    output += `**Max Parallel:** ${maxParallel}`
+    if (phases.length > 1) output += ` | **Phases:** ${phases.length}`
+    output += `\n\n`
+    for (const r of allResults) {
+      output += `${r.success ? "✅" : "❌"} **${r.taskId}** (${r.role}) — ${(r.durationMs / 1000).toFixed(1)}s\n`
+      if (r.result) output += `   Result: ${r.result.slice(0, 200)}\n`
+      if (r.error) output += `   Error: ${r.error.slice(0, 200)}\n`
+    }
+
+    traceLogger.log({ step: "delegate:batch", input: `${allResults.length} tasks`, output: `${passed}/${allResults.length} passed`, toolUsed: "agentic_delegate", success: passed === allResults.length, durationMs: allResults.reduce((s, r) => s + r.durationMs, 0) / allResults.length })
+    return { output }
+  }
+
   return {
     tool: {
       agentic_plan: registryTool("agentic_plan", {
@@ -2264,6 +2360,28 @@ const confidenceStore = new ConfidenceStore()
             output += allFiles.map(f => `- \`${f}\``).join("\n") + "\n"
           }
 
+          // ── Delegated task status (batch + single) ──
+          const delegatedTasks = coordinator.getTasks(context.sessionID)
+          if (delegatedTasks.length > 0) {
+            const running = delegatedTasks.filter(t => t.status === "running")
+            const done = delegatedTasks.filter(t => t.status === "done")
+            const failed = delegatedTasks.filter(t => t.status === "failed")
+            const pending = delegatedTasks.filter(t => t.status === "pending" || !t.status)
+            if (running.length > 0 || done.length > 0 || failed.length > 0 || pending.length > 0) {
+              output += `\n### 🤖 Delegated Tasks (${delegatedTasks.length})\n`
+              output += `| Status | Count |\n|--------|-------|\n`
+              output += `| ⏳ Running | ${running.length} |\n`
+              output += `| ✅ Done | ${done.length} |\n`
+              output += `| ❌ Failed | ${failed.length} |\n`
+              output += `| ⏸️ Pending | ${pending.length} |\n\n`
+              for (const t of delegatedTasks.slice(0, 10)) {
+                const icon = t.status === "done" ? "✅" : t.status === "failed" ? "❌" : t.status === "running" ? "⏳" : "⏸️"
+                output += `${icon} **${t.id}** → ${t.assignedTo}: ${t.description.slice(0, 80)}\n`
+              }
+              if (delegatedTasks.length > 10) output += `... and ${delegatedTasks.length - 10} more\n`
+            }
+          }
+
           output += `\n### 🤖 Model Reliability\n`
           const modelSummary = modelRegistry.getSummary()
           output += modelSummary + "\n"
@@ -2890,11 +3008,14 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
+      // ── Batch delegate helper ──
+      // Fan-out parallel execution based on A2A / Anthropic orchestrator-worker pattern.
+      // Groups tasks by dependency phases, runs each phase concurrently via Promise.allSettled.
       agentic_delegate: registryTool("agentic_delegate", {
-        description: "Assign a task to a specialized agent role (architect/developer/qa/coordinator/pm). Supports pipeline-aware delegation with cross-validation between stages and inter-agent messaging.",
+        description: "Assign a task to a specialized agent role (architect/developer/qa/coordinator/pm). Supports pipeline-aware delegation with cross-validation between stages, inter-agent messaging, and batch parallel fan-out delegation for multiple agents.",
         args: {
-          taskId: tool.schema.string().describe("Unique ID for this delegated task"),
-          description: tool.schema.string().describe("What this agent should do"),
+          taskId: tool.schema.string().optional().describe("Unique ID for this delegated task (required for single mode)"),
+          description: tool.schema.string().optional().describe("What this agent should do (required for single mode)"),
           role: tool.schema.enum(["architect", "developer", "qa", "coordinator", "pm"]).optional().describe("Target role (auto-detected if omitted)"),
           context: tool.schema.string().optional().describe("Additional context or instructions for the agent"),
           pipelineRunId: tool.schema.string().optional().describe("Pipeline run ID (format: `run-{sessionID}-{pipelineId}`). Links this task into the ID chain: sessionID ⊃ pipelineRunId ⊃ taskId ⊃ stepId"),
@@ -2902,11 +3023,32 @@ const confidenceStore = new ConfidenceStore()
           status: tool.schema.enum(["pending", "running", "done", "failed"]).optional().describe("Set the task status"),
           requestReview: tool.schema.boolean().optional().describe("Request review from a downstream role after completing this task"),
           reasoningEffort: tool.schema.enum(["low", "medium", "high"]).optional().describe("Reasoning effort untuk model yg support (OpenAI o-series, GPT-5). low=cepat, medium=balance, high=mendalam."),
+          tasks: tool.schema.array(tool.schema.object({
+            taskId: tool.schema.string().describe("Unique ID for this delegated task"),
+            role: tool.schema.enum(["architect", "developer", "qa", "coordinator", "pm"]).describe("Target role"),
+            description: tool.schema.string().describe("What this agent should do"),
+            context: tool.schema.string().optional().describe("Additional context or instructions"),
+            dependsOn: tool.schema.array(tool.schema.string()).optional().describe("Task IDs this task depends on (creates execution phases)"),
+          })).optional().describe("Array of tasks for batch parallel fan-out delegation. Runs independent tasks concurrently via Promise.allSettled."),
+          maxParallel: tool.schema.number().optional().describe("Maximum parallel agents per phase (fan-out cap, default: 5). Based on Anthropic research: 3-5 optimal."),
+          abortOnFailure: tool.schema.boolean().optional().describe("Stop all tasks in phase if one fails (default: false)"),
         },
         async execute(args, context) {
-          const allTasks = coordinator.getTasks(context.sessionID)
+          // ── Batch mode: multiple tasks in parallel (fan-out) ──
+          if (args.tasks && Array.isArray(args.tasks) && args.tasks.length > 0) {
+            // If user also passed single-mode params (taskId+description+role),
+            // merge it into the batch so nothing gets silently dropped.
+            let mergedTasks = args.tasks
+            if (args.taskId && args.description) {
+              const singleTask = { taskId: args.taskId, role: args.role ?? 'developer', description: args.description, context: args.context }
+              mergedTasks = [singleTask, ...args.tasks]
+            }
+            return executeBatchDelegate(mergedTasks, args.maxParallel ?? 5, args.abortOnFailure ?? false, context)
+          }
 
-          // If result is provided, we're completing a task
+          // ── Single mode ──
+
+          // Update/completion path: only needs taskId + result/status
           if (args.result || args.status) {
             const updated = await coordinator.updateTask(context.sessionID, args.taskId, args.status ?? "done", args.result)
             if (!updated) return { output: `Task "${args.taskId}" not found.` }
@@ -3001,6 +3143,11 @@ const confidenceStore = new ConfidenceStore()
             })
 
             return { output }
+          }
+
+          // Full delegation flow: description is required
+          if (!args.description) {
+            return { output: "❌ For single delegation, provide `description`. For batch parallel delegation, use `tasks` array." }
           }
 
           // Normal delegation flow (LLM-based role suggestion, Gap #6)
@@ -3140,7 +3287,7 @@ const confidenceStore = new ConfidenceStore()
             }
           }
 
-          output += `\n### Active Tasks (${allTasks.length + 1})\n`
+          output += `\n### Active Tasks (${coordinator.getTasks(context.sessionID).length})\n`
           output += [...coordinator.getTasks(context.sessionID)].map(t =>
             `- ${t.status === "done" ? "✅" : t.status === "failed" ? "❌" : "⏳"} **${t.id}** → ${t.assignedTo}: ${t.description}`
           ).join("\n")
@@ -4612,6 +4759,7 @@ const confidenceStore = new ConfidenceStore()
           maxRounds: tool.schema.number().optional().default(3).describe("Maximum debate rounds (default: 3, max: 5)"),
           format: tool.schema.enum(["markdown", "json"]).optional().default("json").describe("Output format: structured JSON or readable markdown"),
           verbose: tool.schema.boolean().optional().default(false).describe("Tampilkan progress debate real-time + full transcript per round"),
+          timeoutMs: tool.schema.number().optional().describe("Total timeout in ms for entire debate (default: 300000 = 5 menit)"),
         },
         async execute(args, context) {
           const startTime = Date.now()
@@ -4629,6 +4777,7 @@ const confidenceStore = new ConfidenceStore()
             format: args.format ?? "json",
             verbose: args.verbose ?? false,
             sessionId: context.sessionID,
+            totalTimeoutMs: args.timeoutMs,
           })
 
           // Record as episode for future learning
