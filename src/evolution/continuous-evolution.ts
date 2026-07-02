@@ -18,6 +18,8 @@ export interface StepResult {
   sessionId: string
   timestamp: number
   category?: string
+  /** EvoClaw-inspired significance tier: pivotal failures trigger evolution more aggressively (optional) */
+  significance?: "routine" | "notable" | "pivotal"
 }
 
 export interface ForecastData {
@@ -36,6 +38,7 @@ export interface PerformanceTrend {
   rolling: { windowSize: number; successRate: number; direction: "improving" | "stable" | "degrading" }
   degradationDetected: boolean
   anomalyCount: number
+  significantFailures: number
   recentErrors: Array<{ stepId: string; output: string; category: string; timestamp: number }>
   recommendations: string[]
   /** Predictive degradation forecast (Gap #12) */
@@ -123,7 +126,15 @@ export class ContinuousEvolution {
         ? ContinuousEvolution.DIR_DEGRADING
         : ContinuousEvolution.DIR_STABLE
 
-    const degradationDetected = direction === ContinuousEvolution.DIR_DEGRADING && recentRate < 0.6
+    // ── Significance-weighted degradation ──
+    // Count significant failures (pivotal/notable) in recent window
+    const significantFailures = recent.filter(r => !r.success && (r.significance === "pivotal" || r.significance === "notable")).length
+    // Also count total significant failures across all results
+    const totalSigFailures = this.results.filter(r => !r.success && (r.significance === "pivotal" || r.significance === "notable")).length
+
+    // Weighted degradation: if significant failures exist, lower the threshold
+    const sigAdjustedRate = recentRate - (significantFailures * 0.1 / Math.max(recent.length, 1))
+    const degradationDetected = direction === ContinuousEvolution.DIR_DEGRADING && (recentRate < 0.6 || (sigAdjustedRate < 0.6 && significantFailures > 0))
 
     const recentErrors: PerformanceTrend["recentErrors"] = []
     const categories = new Map<string, number>()
@@ -228,12 +239,16 @@ export class ContinuousEvolution {
     if (this.results.length >= this.windowSize && recentRate === 1 && overallRate < 0.8) {
       recommendations.push("Recent improvement trend detected. Extract successful patterns as reusable skills via `agentic_skill extract`.")
     }
+    if (totalSigFailures > 0) {
+      recommendations.push(`High-significance failures detected: ${totalSigFailures} pivotal/notable step(s) failed. Prioritize evolution analysis for critical paths.`)
+    }
 
     const trend: PerformanceTrend = {
       overall: { total, success: successes, successRate: overallRate },
       rolling: { windowSize: this.windowSize, successRate: recentRate, direction },
       degradationDetected,
       anomalyCount: this.results.filter(r => !r.success).length,
+      significantFailures: totalSigFailures,
       recentErrors,
       recommendations,
       forecast,
@@ -282,6 +297,23 @@ export class ContinuousEvolution {
 
     // Require minimum data points before evolution triggers
     if (this.results.length < 10) return null
+
+    // Trigger 0: Significant failures — pivotal/notable failures trigger immediately
+    // (even without sustained degradation, critical paths need attention)
+    if (trend.significantFailures > 0 && trend.rolling.successRate < 0.7) {
+      this.lastEvolveSession = sessionId
+      this.lastEvolveTime = Date.now()
+      this.evolveCount++
+      return {
+        reason: `Auto-evolution triggered by ${trend.significantFailures} high-significance failure(s) (success rate: ${(trend.rolling.successRate * 100).toFixed(0)}%)`,
+        type: "anomaly_spike",
+        metrics: {
+          recentRate: trend.rolling.successRate,
+          overallRate: trend.overall.successRate,
+          anomalyRatio: trend.significantFailures / Math.max(trend.rolling.windowSize, 1),
+        },
+      }
+    }
 
     // Trigger 1: Degradation — requires sustained degradation, not single dip
     if (trend.degradationDetected) {

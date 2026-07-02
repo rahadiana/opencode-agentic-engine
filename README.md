@@ -97,7 +97,7 @@ agentic_status detail="full"
 ## Testing
 
 ```bash
-node test/run.mjs        # 2529 unit tests (mock, no LLM)
+node test/run.mjs        # 2655 unit tests (mock, no LLM)
 node test/e2e-llm.mjs    # LLM E2E: 19 tests
 ./test-container.sh      # Full Docker pipeline (7 layers)
 ```

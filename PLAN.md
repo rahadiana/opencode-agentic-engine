@@ -8,11 +8,11 @@
 
 | Metrik | Nilai |
 |--------|-------|
-| **Versi** | v0.5.11-dev |
-| **Unit tests** | 2561 (all mock, no LLM needed) |
+| **Versi** | v0.5.12-dev |
+| **Unit tests** | 2655 (all mock, no LLM needed) |
 | **Agentic tools** | 31 (`agentic_*` prefix) |
 | **Source files** | 80+ di `src/` (7 subdirektori) |
-| **Coverage gate** | ✅ Stmts 87.94%+, Branch 68.32%+, Func 76.77%+, Lines 87.94%+ |
+| **Coverage gate** | ✅ Stmts 88.18%+, Branch 68.58%+, Func 77.3%+, Lines 88.18%+ |
 | **navigator.ts branch** | ✅ 77.77% (baru: 17 direct tests via CodebaseNavigator) |
 | **router-agent.ts branch** | ✅ 76.47% (+11.77%) |
 | **tool-router.ts branch** | ✅ 63.63% |
@@ -24,7 +24,8 @@
 | **skill-schema.ts branch** | ✅ 100% |
 | **recovery-layer.ts branch** | ✅ 100% |
 | **tech-debt-scorer.ts branch** | ✅ 96.42% |
-| **multi-index-rag.ts branch** | ✅ 79.19% |
+| **multi-index-rag.ts branch** | ✅ 82.46% |
+| **second-brain.ts branch** | ✅ 83.87% |
 | **persistence.ts branch** | ✅ 79.31% |
 | **git.ts branch** | ✅ 94.73% |
 | **model-registry.ts branch** | ✅ 77.95% |
@@ -78,7 +79,7 @@ src/
 | NPM publish | 🔮 Future | `npm publish` untuk `opencode plugin opencode-agentic-engine` |
 | Streaming | 🔮 Future | Didelegasikan ke OpenCode SDK (47/48 capabilities) |
 | SWE-bench real LLM eval | ✅ **7/7 (100%)** via delegate + manual fix | Baseline 2/7 (29%) via agentic_auto (OpenCode Free). Butuh model capable untuk >70% via agentic_auto. |
-| Branch coverage >75% | 🔮 Future | Saat ini 68.32% (CI gate). Files <75% branch: planning-layer.ts 65%, orchestrator.ts 64.28%, llm.ts 65.4%, context-compressor.ts 67.74%, role-registry.ts 69.49%, agent-blueprint.ts 50%, a2a-server.ts 60.9%. **navigator.ts ✅ 77.77%** dan **router-agent.ts ✅ 76.47%** sudah di atas 75%. |
+| Branch coverage >75% | 🔮 Future | Saat ini 68.58% (CI gate). Files <75% branch: planning-layer.ts 65%, orchestrator.ts 64.28%, llm.ts 65.4%, context-compressor.ts 67.74%, role-registry.ts 69.49%, agent-blueprint.ts 50%, a2a-server.ts 60.9%. **navigator.ts ✅ 77.77%**, **router-agent.ts ✅ 76.47%**, **multi-index-rag.ts ✅ 82.46%**, **second-brain.ts ✅ 83.87%** sudah di atas 75%. |
 | EvoClaw scoring | ✅ 100% | Target >55% — tercapai (36/36 assertions, 5 iterasi, 22 plan steps) |
 | Streaming | 🔮 Future | Didelegasikan ke OpenCode SDK (47/48 capabilities). Cek dokumentasi SDK terbaru. |
 | Lint warnings 0 | ✅ **0 warnings** | All `no-explicit-any` eliminated across `src/` |
