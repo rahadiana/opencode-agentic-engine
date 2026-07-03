@@ -64,23 +64,31 @@ export class AgentRuntime {
     if (this._sharedSessionId) return this._sharedSessionId
     if (!this.opencodeClient) return null
 
-    try {
-      const client = this.opencodeClient as {
-        session: {
-          create: (opts: { body: { title?: string; parentID?: string } }) => Promise<{ data?: { id: string }; id?: string }>
-          delete: (opts: { path: { id: string } }) => Promise<unknown>
+    // Retry session creation once if it fails (transient SDK issue after rotation)
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const client = this.opencodeClient as {
+          session: {
+            create: (opts: { body: { title?: string; parentID?: string } }) => Promise<{ data?: { id: string }; id?: string }>
+            delete: (opts: { path: { id: string } }) => Promise<unknown>
+          }
         }
+        const resp = await client.session.create({
+          body: {
+            title: `agentic-shared-${Date.now()}`,
+            parentID: parentSessionId,
+          },
+        })
+        this._sharedSessionId = resp.data?.id ?? (resp as Record<string, unknown>).id as string ?? null
+        this._sharedSessionCount = 0
+        if (this._sharedSessionId) break
+      } catch {
+        this._sharedSessionId = null
       }
-      const resp = await client.session.create({
-        body: {
-          title: `agentic-shared-${Date.now()}`,
-          parentID: parentSessionId,
-        },
-      })
-      this._sharedSessionId = resp.data?.id ?? (resp as Record<string, unknown>).id as string ?? null
-      this._sharedSessionCount = 0
-    } catch {
-      this._sharedSessionId = null
+      if (!this._sharedSessionId && attempt === 0) {
+        // Brief pause before retry — SDK may need time to propagate session deletion
+        await new Promise(r => setTimeout(r, 200))
+      }
     }
     return this._sharedSessionId
   }
@@ -218,10 +226,13 @@ export class AgentRuntime {
 
     try {
       const fullPrompt = promptParts.join("\n")
-      // Dynamic timeout: estimate ~4 chars per token, min 30s, max 600s (10 menit)
+      // Dynamic timeout: estimate ~4 chars per token, noise floor 15s, max 300s
+      // Per arXiv:2606.05608 §5.2: timeout should scale with task complexity,
+      // not be a fixed constant. Small tasks (~25 tokens) → ~15s (noise floor).
+      // Medium (~250 tokens) → ~75s. Large (~2500 tokens) → capped at 300s.
       const approxTokens = Math.ceil(fullPrompt.length / 4)
-      const minTimeout = ctx.timeoutMs ?? 120_000
-      const dynamicTimeout = Math.min(Math.max(approxTokens * 0.3, minTimeout), 600_000)
+      const noiseFloor = ctx.timeoutMs ?? 15_000
+      const dynamicTimeout = Math.min(Math.max(approxTokens * 300, noiseFloor), 300_000)
       const timeoutMs = Math.round(dynamicTimeout)
 
       const controller = new AbortController()
