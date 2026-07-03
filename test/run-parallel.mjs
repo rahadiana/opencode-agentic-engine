@@ -21,19 +21,25 @@ const RESET = "\x1b[0m"
 
 // All test files to run in parallel
 const FILES = [
-  // Part A (8 sub-files)
+  // Part A (11 sub-files)
   "_runall-core.mjs",
   "_runall-verify.mjs",
   "_runall-adv.mjs",
+  "_runall-adv-verifier.mjs",
+  "_runall-adv-branch.mjs",
   "_runall-evo.mjs",
   "_runall-edge-tools.mjs",
   "_runall-edge-training.mjs",
   "_runall-edge-verify.mjs",
+  "_runall-edge-gap4.mjs",
+  "_runall-edge-deep.mjs",
+  "_runall-edge-config.mjs",
   "_runall-gaps.mjs",
-  // Part B (8 files)
+  // Part B (9 files)
   "_b_sandbox.mjs",
   "_b_planners.mjs",
   "_b_dag.mjs",
+  "_b_dag-async.mjs",
   "_b_dagworld.mjs",
   "_b_memory.mjs",
   "_b_agents.mjs",
