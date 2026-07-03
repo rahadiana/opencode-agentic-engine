@@ -1,10 +1,12 @@
-// test/_runall.mjs — Part A orchestrator (dispatches to 6 focused sub-files)
+// test/_runall.mjs — Part A orchestrator (dispatches to 8 focused sub-files)
 import { assert, section, pluginDist, G, R, B, D, Y, RST, existsSync, join, tmpdir, mkdirSync, rmSync, writeFileSync, chmodSync, mkdtempSync, readFileSync, sdkMockClient, state, projectDir, mockCtx, freshSid } from "./_common.mjs"
 import { runCoreTests } from "./_runall-core.mjs"
 import { runVerifyTests } from "./_runall-verify.mjs"
 import { runAdvancedTests } from "./_runall-adv.mjs"
 import { runEvolutionTests } from "./_runall-evo.mjs"
-import { runEdgeTests } from "./_runall-edge.mjs"
+import { runEdgeToolTests } from "./_runall-edge-tools.mjs"
+import { runEdgeTrainingTests } from "./_runall-edge-training.mjs"
+import { runEdgeVerifyTests } from "./_runall-edge-verify.mjs"
 import { runGapTests } from "./_runall-gaps.mjs"
 
 export async function runAll() {
@@ -17,6 +19,8 @@ export async function runAll() {
   await runVerifyTests(mod)
   await runAdvancedTests(mod)
   await runEvolutionTests(mod)
-  await runEdgeTests(mod)
+  await runEdgeToolTests(mod)
+  await runEdgeTrainingTests(mod)
+  await runEdgeVerifyTests(mod)
   await runGapTests(mod)
 }

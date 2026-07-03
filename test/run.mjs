@@ -18,6 +18,7 @@ await runAll()
 // Load sequentially to maintain test order for deterministic results
 await import("./_b_sandbox.mjs")
 await import("./_b_planners.mjs")
+await import("./_b_dag.mjs")
 await import("./_b_dagworld.mjs")
 await import("./_b_memory.mjs")
 await import("./_b_agents.mjs")

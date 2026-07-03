@@ -1,9 +1,13 @@
 // test/run-parallel.mjs — Parallel test runner (true multi-process parallelism)
 //
 // Runs each test file in a separate Node.js child process for REAL parallelism.
-// 13 workers total: 6 Part A + 7 Part B, all concurrent after plugin load.
+// 16 workers total: 9 Part A + 7 Part B, all concurrent.
 //
 // Usage: node test/run-parallel.mjs
+//
+// NOTE: Intermittent failures (~1 per run) may occur due to shared /tmp/test-project
+// directory being accessed concurrently by multiple child processes. For stable
+// results use: node test/run.mjs
 
 import { execFile } from "child_process"
 import { fileURLToPath } from "url"
@@ -17,16 +21,19 @@ const RESET = "\x1b[0m"
 
 // All test files to run in parallel
 const FILES = [
-  // Part A (6 sub-files)
+  // Part A (8 sub-files)
   "_runall-core.mjs",
   "_runall-verify.mjs",
   "_runall-adv.mjs",
   "_runall-evo.mjs",
-  "_runall-edge.mjs",
+  "_runall-edge-tools.mjs",
+  "_runall-edge-training.mjs",
+  "_runall-edge-verify.mjs",
   "_runall-gaps.mjs",
-  // Part B (7 files)
+  // Part B (8 files)
   "_b_sandbox.mjs",
   "_b_planners.mjs",
+  "_b_dag.mjs",
   "_b_dagworld.mjs",
   "_b_memory.mjs",
   "_b_agents.mjs",
@@ -91,6 +98,7 @@ function runFile(file) {
           failed = r.failed || 0
         } catch {}
       }
+
 
       // Show summary line for this file
       const status = failed === 0 ? GREEN : RED
