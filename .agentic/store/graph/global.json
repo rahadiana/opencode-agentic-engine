@@ -599,7 +599,58 @@
       "metadata": {
         "timestamp": 1783090467523
       }
+    },
+    {
+      "source": "developer",
+      "target": "verify-parentid-fix",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create a TypeScript function that implements a simple LRU cache with get, set, and delete methods. Return the implementation code.",
+        "timestamp": 1783091369643
+      }
+    },
+    {
+      "source": "verify-parentid-fix",
+      "target": "developer",
+      "relation": "completed_by",
+      "metadata": {
+        "timestamp": 1783091402218
+      }
+    },
+    {
+      "source": "pm",
+      "target": "verify-pm-confirm",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create product requirements for adding WebSocket real-time notifications to the monitoring dashboard. List: target users, key features, acceptance criteria, and success metrics.",
+        "timestamp": 1783091411364
+      }
+    },
+    {
+      "source": "verify-pm-confirm",
+      "target": "pm",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783091531375
+      }
+    },
+    {
+      "source": "developer",
+      "target": "verify-dev-2",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Write a TypeScript function that debounces async function calls. The function should return a debounced version that waits for a configurable delay after the last call before executing. Handle promise",
+        "timestamp": 1783091561816
+      }
+    },
+    {
+      "source": "verify-dev-2",
+      "target": "developer",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783091681820
+      }
     }
   ],
-  "updatedAt": "2026-07-03T14:54:27.523Z"
+  "updatedAt": "2026-07-03T15:14:41.820Z"
 }

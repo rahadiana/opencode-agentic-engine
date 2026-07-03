@@ -6102,6 +6102,63 @@
           "successRate": 0.5,
           "successWindow": [],
           "lastUsed": "2026-07-03T14:26:45.687Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783090723685-rk9j",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T14:58:43.685Z",
+              "lastUsed": "2026-07-03T14:58:43.685Z",
+              "lastModified": "2026-07-03T14:58:43.685Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T14:58:43.685Z"
         }
       ],
       "tfidfDocs": [
@@ -8458,6 +8515,28 @@
             "type": "skill",
             "skillId": "skill-1783088805687-rxqv"
           }
+        },
+        {
+          "id": "sk-skill-1783090723685-rk9j",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783090723685-rk9j"
+          }
         }
       ]
     },
@@ -10028,5 +10107,5 @@
       ]
     }
   },
-  "updatedAt": "2026-07-03T14:54:15.894Z"
+  "updatedAt": "2026-07-03T15:09:18.358Z"
 }

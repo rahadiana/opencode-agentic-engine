@@ -207,7 +207,27 @@
       "status": "pending",
       "createdAt": 1783088760453,
       "updatedAt": 1783088760453
+    },
+    {
+      "text": "[task] Delegated task verify-pm-confirm (pm) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783091531376-2ucy",
+      "status": "pending",
+      "createdAt": 1783091531376,
+      "updatedAt": 1783091531376
+    },
+    {
+      "text": "[task] Delegated task verify-dev-2 (developer) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783091681820-yf5l",
+      "status": "pending",
+      "createdAt": 1783091681820,
+      "updatedAt": 1783091681820
     }
   ],
-  "updatedAt": "2026-07-03T14:26:00.453Z"
+  "updatedAt": "2026-07-03T15:14:41.820Z"
 }
