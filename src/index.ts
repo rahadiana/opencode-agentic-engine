@@ -3032,7 +3032,7 @@ const confidenceStore = new ConfidenceStore()
             context: tool.schema.string().optional().describe("Additional context or instructions"),
             dependsOn: tool.schema.array(tool.schema.string()).optional().describe("Task IDs this task depends on (creates execution phases)"),
           })).optional().describe("Array of tasks for batch parallel fan-out delegation. Runs independent tasks concurrently via Promise.allSettled."),
-          maxParallel: tool.schema.number().optional().describe("Maximum parallel agents per phase (fan-out cap, default: 5). Based on Anthropic research: 3-5 optimal."),
+          maxParallel: tool.schema.number().optional().describe("Maximum parallel agents per phase (fan-out cap, default: 2). SDK session limit is ~2-3 concurrent prompts; higher values cause queued timeout."),
           abortOnFailure: tool.schema.boolean().optional().describe("Stop all tasks in phase if one fails (default: false)"),
         },
         async execute(args, context) {
@@ -3046,7 +3046,7 @@ const confidenceStore = new ConfidenceStore()
               const singleTask = { taskId: args.taskId, role: args.role ?? 'developer', description: args.description, context: args.context }
               mergedTasks = [singleTask, ...args.tasks]
             }
-            return executeBatchDelegate(mergedTasks, args.maxParallel ?? 5, args.abortOnFailure ?? false, context)
+            return executeBatchDelegate(mergedTasks, args.maxParallel ?? 2, args.abortOnFailure ?? false, context)
           }
 
           // ── Single mode ──
