@@ -1002,21 +1002,23 @@ export class LLMEngine {
   /**
    * Shared client type for session operations.
    */
+  /** Real OpenCode SDK client types (from @opencode-ai/sdk).
+   *  session.create body: { title?, parentID? }
+   *  session.prompt body: { noReply?, system?, tools?, parts }
+   *  session.prompt response: { info, parts } — no data wrapper */
   private _getClient(): {
     session: {
-      create: (opts: { body: { title?: string } }) => Promise<{ data?: { id: string }; id?: string }>
+      create: (opts: { body: { title?: string; parentID?: string } }) => Promise<{ data?: { id: string }; id?: string }>
       delete: (opts: { path: { id: string } }) => Promise<{ data?: boolean } | boolean>
       prompt: (opts: {
         body: {
           system?: string
           noReply?: boolean
-          model?: { providerID: string; modelID: string }
-          agent?: string
-          reasoningEffort?: 'low' | 'medium' | 'high'
+          tools?: Record<string, boolean>
           parts: Array<{ type: string; text: string }>
         }
         path: { id: string }
-      }) => Promise<{ data?: { parts?: Array<{ type: string; text?: string }> }; parts?: Array<{ type: string; text?: string }> }>
+      }) => Promise<{ info?: { id: string }; parts?: Array<{ type: string; text?: string }> }>
     }
   } | null {
     return this.opencodeClient as ReturnType<LLMEngine['_getClient']>
@@ -1025,6 +1027,9 @@ export class LLMEngine {
   /**
    * Extract text response from a session.prompt result.
    */
+  /** Extract text from session.prompt response.
+   *  Real SDK returns { info, parts } directly (no data wrapper).
+   *  Mock SDK may return { data: { info, parts } } — handle both. */
   private _extractResponse(result: { data?: { parts?: Array<{ type: string; text?: string }> }; parts?: Array<{ type: string; text?: string }> }): string {
     const parts = result.data?.parts ?? result.parts ?? []
     const textPart = parts.find((p: { type: string; text?: string }) => p.type === "text")
@@ -1037,20 +1042,13 @@ export class LLMEngine {
   private _buildPromptBody(req: LLMRequest): {
     system: string
     noReply: boolean
-    model?: { providerID: string; modelID: string }
-    reasoningEffort?: 'low' | 'medium' | 'high'
-    agent?: string
     parts: Array<{ type: 'text'; text: string }>
   } {
-    const sdkModel = req.model ?? this.parseModelForSDK()
-    const body: ReturnType<LLMEngine['_buildPromptBody']> = {
+    const body = {
       system: req.jsonMode
         ? `${req.systemPrompt}\n\nRespond with ONLY valid JSON. No markdown, no explanation.`
         : req.systemPrompt,
       noReply: false,
-      ...(sdkModel ? { model: sdkModel } : {}),
-      ...(req.reasoningEffort ? { reasoningEffort: req.reasoningEffort } : {}),
-      agent: 'agentic',
       parts: [{ type: 'text' as const, text: req.userPrompt }],
     }
     return body
@@ -1219,60 +1217,48 @@ export class LLMEngine {
   }
 
   /**
-   * Call LLM in chat mode (sub-engine context).
+   * Call LLM via a temp child session in chat mode.
    *
-   * Uses the parent session ID (real OpenCode session) with noReply: true
-   * instead of creating/deleting temp sessions. Temp session create+prompt+delete
-   * pattern hangs because the real SDK needs proper session initialization.
+   * Creates a temp session LINKED to the parent session via parentID.
+   * This is CRITICAL — without parentID, the SDK doesn't know how to
+   * route prompts (no agent, no model context).
    *
-   * If parent session ID is not available (shouldn't happen), falls back to
-   * temp session creation as last resort.
-   *
-   * One attempt — no retry loop to prevent concurrent prompt calls.
+   * Fresh session per call (create → prompt → delete).
+   * No retry loop — prevents concurrent session.prompt() calls.
+   * Progress-based timeout via session activity polling.
    */
   private async _callOpenCodeTempSession(
     client: NonNullable<ReturnType<LLMEngine['_getClient']>>,
     req: LLMRequest,
   ): Promise<LLMResponse> {
-    // Use parent session ID with noReply: true instead of temp session
-    const sessionId = this._parentSessionId ?? this.pluginSessionId
-    if (sessionId) {
-      try {
-        const body = this._buildPromptBody(req)
-        // Override noReply to true — sub-engine doesn't need user reply
-        body.noReply = true
-        const text = await this._promptWithTimeout(
-          client, sessionId, body,
-          req.timeoutMs ?? 300_000,
-          req.signal,
-        )
-        if (text.trim()) {
-          return { content: text.trim(), finishReason: 'stop' }
-        }
-      } catch (error) {
-        logParseError('callOpenCode chat mode (parent session)', error)
-      }
-    }
-
-    // Fallback: temp session (if parent session ID not available)
-    let tempSessionId: string | null = null
+    // Create a fresh temp session linked to parent
+    let sessionId: string | null = null
     try {
+      const createBody: { title: string; parentID?: string } = { 
+        title: `agentic-${Date.now()}` 
+      }
+      // Link to parent session so SDK can route prompts
+      const parentId = this._parentSessionId ?? this.pluginSessionId
+      if (parentId) createBody.parentID = parentId
+
       const tempSession = await client.session.create({
-        body: { title: `agentic-${Date.now()}` },
+        body: createBody,
       })
-      tempSessionId = tempSession.data?.id ?? (tempSession as Record<string, unknown>).id as string ?? null
-      if (!tempSessionId) {
+      sessionId = tempSession.data?.id ?? (tempSession as Record<string, unknown>).id as string ?? null
+      if (!sessionId) {
+        logParseError('callOpenCode chat mode', new Error('Created temp session but got no ID'))
         return this.fallbackResponse(req)
       }
     } catch (error) {
-      logParseError('callOpenCode chat mode (temp session fallback)', error)
+      logParseError('callOpenCode chat mode', error)
       return this.fallbackResponse(req)
     }
 
+    // One attempt — no retry loop to prevent concurrent prompt calls
     try {
       const body = this._buildPromptBody(req)
       const text = await this._promptWithProgressTracking(
-        client, tempSessionId, body,
+        client, sessionId, body,
         req.timeoutMs ?? 600_000,
         120_000,
         req.signal,
@@ -1281,9 +1267,11 @@ export class LLMEngine {
         return { content: text.trim(), finishReason: 'stop' }
       }
     } catch (error) {
-      logParseError('callOpenCode chat mode (temp session)', error)
+      logParseError('callOpenCode chat mode', error)
     } finally {
-      try { await client.session.delete({ path: { id: tempSessionId } }) } catch { /* ignore */ }
+      if (sessionId) {
+        try { await client.session.delete({ path: { id: sessionId } }) } catch { /* ignore */ }
+      }
     }
 
     return this.fallbackResponse(req)
