@@ -41,7 +41,7 @@
   ],
   "scripts": {
     "build": "tsc --emitDeclarationOnly && node esbuild.config.mjs",
-    "postbuild": "CACHE_DIR=\"$HOME/.cache/opencode/packages/opencode-agentic-engine@latest\"; if [ -d \"$CACHE_DIR\" ]; then cp -r dist/* \"$CACHE_DIR/node_modules/opencode-agentic-engine/dist/\" && cp package.json \"$CACHE_DIR/node_modules/opencode-agentic-engine/package.json\" && (cd \"$CACHE_DIR\" && (npm install better-sqlite3 --no-save --no-fund --no-audit 2>&1 || true)) && echo \"  → copied to opencode cache\"; fi",
+    "postbuild": "CACHE_DIR=\"$HOME/.cache/opencode/packages/opencode-agentic-engine@latest\"; if [ -d \"$CACHE_DIR\" ]; then mkdir -p \"$CACHE_DIR/node_modules/opencode-agentic-engine/dist\" && cp -r dist/* \"$CACHE_DIR/node_modules/opencode-agentic-engine/dist/\" && cp package.json \"$CACHE_DIR/node_modules/opencode-agentic-engine/package.json\" && (cd \"$CACHE_DIR\" && (npm install better-sqlite3 --no-save --no-fund --no-audit 2>&1 || true)) && echo \"  → copied to opencode cache\"; fi",
     "dev": "concurrently -n types,bundle -c blue,green \"tsc --emitDeclarationOnly --watch\" \"node esbuild.config.mjs --watch\"",
     "dev:simple": "tsc --emitDeclarationOnly --watch & node esbuild.config.mjs --watch",
     "clean": "rm -rf dist",

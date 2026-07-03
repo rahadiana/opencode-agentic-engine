@@ -739,7 +739,7 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
   private async executeStage(
     stage: PipelineStage, params: PipelineParams, stageTaskId: string, runId: string,
   ): Promise<{ stop: boolean; verifyNote?: string; hasNoLLM?: boolean; budgetExceeded?: boolean; raw?: string }> {
-    const { goal, constraints, filesBlock, codebaseSummary, memoryContexts, skillContexts, coordinator, sessionID } = params
+    const { goal, constraints, filesBlock, codebaseSummary, memoryContexts, skillContexts, coordinator, sessionID, configLoader } = params
     const sysPrompts = this.sysPrompts
 
     coordinator.delegate(stage.role, {
@@ -757,34 +757,66 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
 
     const up = `Goal: ${goal}${constraints?.length ? `\nConstraints: ${constraints.join(", ")}` : ""}${pipelineContextHints ? `\nPast tasks: ${pipelineContextHints}` : ""}${stageCtx ? `\n\nContext from previous stages:\n${stageCtx}` : ""}\n${stage.role} task: ${stage.description}\n${filesBlock || "(new)"}\n${(codebaseSummary ?? "").slice(0, 100)}`
 
+    // ── Build blocking config from plugin config for model filtering ──
+    const config = configLoader?.get()
+    const blockingConfig = config ? {
+      hardBlockReliability: config.agent.hardBlockReliability,
+      softBlockReliability: config.agent.softBlockReliability,
+      minSampleSize: config.agent.minSampleSize,
+    } : undefined
+
     // ── Model resolution for this stage ──
-    // Priority: stage.model override > ModelRegistry selectBestModel > engine default
+    // Priority: stage.model override > ModelRegistry selectBestModel (with blocking filter) > engine default
     let stageModel: { providerID: string; modelID: string } | undefined
+    let resolvedModelName: string | undefined
     if (stage.model) {
       const parts = stage.model.split("/")
       stageModel = parts.length >= 2
         ? { providerID: parts[0], modelID: parts.slice(1).join("/") }
         : { providerID: "opencode", modelID: stage.model }
+      resolvedModelName = stage.model
     } else if (this.modelRegistry) {
       const availableModels = this.modelRegistry.getAllScores().map(s => s.model).filter(m => m && m !== "default")
       if (availableModels.length > 0) {
-        const bestModel = this.modelRegistry.selectBestModel(stage.role, availableModels)
+        const bestModel = this.modelRegistry.selectBestModel(stage.role, availableModels, blockingConfig)
         if (bestModel && bestModel !== "default") {
           const parts = bestModel.split("/")
           stageModel = parts.length >= 2
             ? { providerID: parts[0], modelID: parts.slice(1).join("/") }
             : { providerID: "opencode", modelID: bestModel }
+          resolvedModelName = bestModel
         }
       }
     }
 
-    // Try primary model first, then fallback if available
+    // ── Build fallback model list ──
+    // Strategy: try primary → fallback (using selectWithFallback for tiered fallback)
     const modelAttempts: Array<{ model: typeof stageModel; isFallback: boolean }> = [
       { model: stageModel, isFallback: false },
     ]
 
-    // If primary model is set, try a fallback (remove model to use engine default)
-    if (stageModel) {
+    if (this.modelRegistry && resolvedModelName && blockingConfig) {
+      // Use selectWithFallback to find the next best healthy model (excluding the failed primary)
+      const fallbackModels = this.modelRegistry.getAllScores()
+        .map(s => s.model)
+        .filter(m => m && m !== "default" && m !== resolvedModelName)
+      if (fallbackModels.length > 0) {
+        const fallbackResult = this.modelRegistry.selectWithFallback(stage.role, fallbackModels, blockingConfig)
+        if (fallbackResult.model && fallbackResult.model !== "default" && fallbackResult.model !== resolvedModelName) {
+          const parts = fallbackResult.model.split("/")
+          const fallbackModel = parts.length >= 2
+            ? { providerID: parts[0], modelID: parts.slice(1).join("/") }
+            : { providerID: "opencode", modelID: fallbackResult.model }
+          modelAttempts.push({ model: fallbackModel, isFallback: true })
+          if (fallbackResult.warnings.length > 0) {
+            log.warn(`[Orchestrator] Fallback model warnings for ${stage.role}: ${fallbackResult.warnings.join("; ")}`)
+          }
+        }
+      }
+    }
+
+    // Final fallback: engine default (no model override)
+    if (modelAttempts.length === 1 && stageModel) {
       modelAttempts.push({ model: undefined, isFallback: true })
     }
 
@@ -794,7 +826,7 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
 
     for (const attempt of modelAttempts) {
       if (attempt.isFallback) {
-        log.warn(`[Orchestrator] Stage ${stage.role}: primary model failed, retrying with fallback`)
+        log.warn(`[Orchestrator] Stage ${stage.role}: primary model failed, retrying with fallback${attempt.model ? ` (${attempt.model.providerID}/${attempt.model.modelID})` : " (engine default)"}`)
         usedFallback = true
       }
 

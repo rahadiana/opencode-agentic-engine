@@ -7335,6 +7335,7 @@ export { STOP_WORDS, isStopWord, filterStopWords, getStopWordStats } from "./mem
 export { PromptTemplate, type KnowledgeEntry } from "./core/prompt-template.js"
 export { ToolRouter } from "./core/tool-router.js"
 export { SemanticCache } from "./core/semantic-cache.js"
+export { LRUCache, type LRUCacheOptions } from "./core/lru-cache.js"
 export { DslExecutor, validateDSL, resolvePath, setPath, resolveValue, type DslInstruction, type DslOp, type CompareOp, type DslContext, type DslResult, type DslFullResult, type DslStepResult, type DslTrace, type DslValidationError, type SkillDef } from "./core/dsl-executor.js"
 export { SchemaValidator, type SchemaField, type SchemaFieldType, type SkillSchema, type SchemaValidationResult, type SchemaValidationError, type SchemaErrorCode } from "./core/skill-schema.js"
 export { CodeSandbox, CodeModuleRegistry, checkBannedTokens, sandboxExecute, runSandboxTests, type BannedToken, type BannedTokenIssue, type CodeModule, type SandboxExecutionResult, type SandboxTestCase, type SandboxTestResult, type CodeGenerationResult, type SandboxSchemaField } from "./core/code-sandbox.js"
@@ -7389,3 +7390,4 @@ export { MultiIndexRAG, enrichWithVectors, type IndexData, type IndexSearchResul
 export { LocalEmbedder, type EmbedderConfig, type EmbeddingResult } from "./memory/local-embedder.js"
 export { SkillExtractor, normalize } from "./memory/skill-extractor.js"
 export { hello } from "./hello.js"
+export { debounce, throttle, type DebounceOptions, type ThrottleOptions } from "./core/rate-limit.js"

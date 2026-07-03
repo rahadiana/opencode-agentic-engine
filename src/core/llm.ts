@@ -47,10 +47,28 @@ export class LLMEngine {
   private memoryOrchestrator?: MemoryOrchestrator
   /** Cached temp session ID for chat mode — reuse instead of create+delete per call. */
   private _tempSessionId: string | null = null
+  /** Real parent session ID (chat session) for sub-engine LLM calls.
+   *  Set by setParentSessionId(). Sub-engines have synthetic pluginSessionId
+   *  (e.g. "ses_x-dev") but need the REAL parent session to call
+   *  session.prompt() with noReply: true. */
+  private _parentSessionId: string | null = null
 
   /** Expose temp session ID for progress tracking by AgentRuntime */
   getTempSessionId(): string | null {
     return this._tempSessionId
+  }
+
+  /** Set parent session ID for chat mode sub-engine calls.
+   *  Sub-engines have synthetic pluginSessionId but need the real
+   *  parent session to call session.prompt() with noReply: true.
+   *  Called by AgentRuntime when creating sub-engines. */
+  setParentSessionId(sessionId: string): void {
+    this._parentSessionId = sessionId
+  }
+
+  /** Get the parent session ID, if set. */
+  getParentSessionId(): string | null {
+    return this._parentSessionId
   }
 
   /** Expose the SDK client for direct API access */
@@ -1201,42 +1219,60 @@ export class LLMEngine {
   }
 
   /**
-   * Call LLM via a temp child session in chat mode.
-   * Sub-engines have synthetic session IDs (not valid OpenCode sessions),
-   * so we create a REAL temp session for each call.
+   * Call LLM in chat mode (sub-engine context).
    *
-   * Fresh session per call (create → prompt → delete).
-   * No retry loop — prevents concurrent session.prompt() calls that drain tokens.
-   * Progress-based timeout via session activity polling.
+   * Uses the parent session ID (real OpenCode session) with noReply: true
+   * instead of creating/deleting temp sessions. Temp session create+prompt+delete
+   * pattern hangs because the real SDK needs proper session initialization.
    *
-   * Passes agent: 'agentic' to avoid SDK "default agent not found" errors
-   * that occur when temp sessions lack agent context.
+   * If parent session ID is not available (shouldn't happen), falls back to
+   * temp session creation as last resort.
+   *
+   * One attempt — no retry loop to prevent concurrent prompt calls.
    */
   private async _callOpenCodeTempSession(
     client: NonNullable<ReturnType<LLMEngine['_getClient']>>,
     req: LLMRequest,
   ): Promise<LLMResponse> {
-    // Create a fresh temp session for this call
-    let sessionId: string | null = null
+    // Use parent session ID with noReply: true instead of temp session
+    const sessionId = this._parentSessionId ?? this.pluginSessionId
+    if (sessionId) {
+      try {
+        const body = this._buildPromptBody(req)
+        // Override noReply to true — sub-engine doesn't need user reply
+        body.noReply = true
+        const text = await this._promptWithTimeout(
+          client, sessionId, body,
+          req.timeoutMs ?? 300_000,
+          req.signal,
+        )
+        if (text.trim()) {
+          return { content: text.trim(), finishReason: 'stop' }
+        }
+      } catch (error) {
+        logParseError('callOpenCode chat mode (parent session)', error)
+      }
+    }
+
+    // Fallback: temp session (if parent session ID not available)
+    let tempSessionId: string | null = null
     try {
       const tempSession = await client.session.create({
         body: { title: `agentic-${Date.now()}` },
       })
-      sessionId = tempSession.data?.id ?? (tempSession as Record<string, unknown>).id as string ?? null
-      if (!sessionId) {
-        logParseError('callOpenCode chat mode', new Error('Created temp session but got no ID'))
+      tempSessionId = tempSession.data?.id ?? (tempSession as Record<string, unknown>).id as string ?? null
+      if (!tempSessionId) {
         return this.fallbackResponse(req)
       }
     } catch (error) {
-      logParseError('callOpenCode chat mode', error)
+      logParseError('callOpenCode chat mode (temp session fallback)', error)
       return this.fallbackResponse(req)
     }
 
-    // One attempt — no retry loop to prevent concurrent prompt calls
     try {
       const body = this._buildPromptBody(req)
       const text = await this._promptWithProgressTracking(
-        client, sessionId, body,
+        client, tempSessionId, body,
         req.timeoutMs ?? 600_000,
         120_000,
         req.signal,
@@ -1245,11 +1281,9 @@ export class LLMEngine {
         return { content: text.trim(), finishReason: 'stop' }
       }
     } catch (error) {
-      logParseError('callOpenCode chat mode', error)
+      logParseError('callOpenCode chat mode (temp session)', error)
     } finally {
-      if (sessionId) {
-        try { await client.session.delete({ path: { id: sessionId } }) } catch { /* ignore */ }
-      }
+      try { await client.session.delete({ path: { id: tempSessionId } }) } catch { /* ignore */ }
     }
 
     return this.fallbackResponse(req)

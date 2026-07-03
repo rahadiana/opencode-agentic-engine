@@ -531,7 +531,58 @@
         "event": "step.completed",
         "timestamp": 1783085463475
       }
+    },
+    {
+      "source": "developer",
+      "target": "verify-fix-dev",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create a simple TypeScript utility that implements Debounce and Throttle functions. Show the implementation code.",
+        "timestamp": 1783088211300
+      }
+    },
+    {
+      "source": "verify-fix-dev",
+      "target": "developer",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783088331306
+      }
+    },
+    {
+      "source": "developer",
+      "target": "verify-fix-after-restart",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create a simple TypeScript utility that implements Debounce and Throttle functions. Show the implementation code.",
+        "timestamp": 1783088449075
+      }
+    },
+    {
+      "source": "verify-fix-after-restart",
+      "target": "developer",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783088569086
+      }
+    },
+    {
+      "source": "developer",
+      "target": "verify-final",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Write a TypeScript function that implements a simple LRU (Least Recently Used) cache with get, set, and delete methods. Show the implementation.",
+        "timestamp": 1783088640438
+      }
+    },
+    {
+      "source": "verify-final",
+      "target": "developer",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783088760452
+      }
     }
   ],
-  "updatedAt": "2026-07-03T13:31:03.475Z"
+  "updatedAt": "2026-07-03T14:26:00.452Z"
 }

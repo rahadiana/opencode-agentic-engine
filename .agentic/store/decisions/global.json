@@ -2,6 +2,27 @@
   "key": "global",
   "data": [
     {
+      "title": "Plan: Fix multi-agent reliability (63%→90%) and task success (73%→80%) + fix LiveEvalu",
+      "context": "Fix multi-agent reliability (63%→90%) and task success (73%→80%) + fix LiveEvaluator CI bug + clean stale TODOs (3 subtasks)",
+      "sessionId": "ses_0d7cbce7bffeFUzh4JdB7Zxzxv",
+      "id": "dec-1783086051273-tdevyz",
+      "timestamp": 1783086051273
+    },
+    {
+      "title": "Plan: Fix LiveEvaluator CI bug + clean stale TODOs + reset budget + update docs",
+      "context": "Fix LiveEvaluator CI bug + clean stale TODOs + reset budget + update docs (4 subtasks)",
+      "sessionId": "ses_0d7cd590cffeW8flb4Xxu437GA",
+      "id": "dec-1783085933561-zsj3lb",
+      "timestamp": 1783085933561
+    },
+    {
+      "title": "Plan: Fix multi-agent reliability (63%→90%) and task success (70%→80%) via 3 fixes: (1",
+      "context": "Fix multi-agent reliability (63%→90%) and task success (70%→80%) via 3 fixes: (1) CompilePasses invariant bug in orchestrator, (2) add model fallback/retry on pipeline stage failure, (3) clean up stale/duplicate TODOs (3 subtasks)",
+      "sessionId": "ses_0d7d31d26ffexxreCXL0z5sM9h",
+      "id": "dec-1783085509551-o0dvk0",
+      "timestamp": 1783085509551
+    },
+    {
       "title": "Plan: Fix multi-agent reliability: inject ModelRegistry into Orchestrator + fix Compil",
       "context": "Fix multi-agent reliability: inject ModelRegistry into Orchestrator + fix CompilePasses invariant bug + clean stale TODOs (3 subtasks)",
       "sessionId": "ses_0d7db5f20ffe3S4A1nNpddAf9A",
@@ -180,12 +201,12 @@
       "timestamp": 1783052777584
     },
     {
-      "title": "Plan: Fix multi-agent reliability (63%→90%) and task success (70%→80%) via 3 fixes: (1",
-      "context": "Fix multi-agent reliability (63%→90%) and task success (70%→80%) via 3 fixes: (1) CompilePasses invariant bug in orchestrator, (2) add model fallback/retry on pipeline stage failure, (3) clean up stale/duplicate TODOs (3 subtasks)",
-      "sessionId": "ses_0d7d31d26ffexxreCXL0z5sM9h",
-      "id": "dec-1783085509551-o0dvk0",
-      "timestamp": 1783085509551
+      "title": "Plan: Fix remaining gaps: multi-agent reliability 63%→90%, task success 73%→80%, conte",
+      "context": "Fix remaining gaps: multi-agent reliability 63%→90%, task success 73%→80%, context stability 78%→80% (3 subtasks)",
+      "sessionId": "ses_0d7cb3a95ffetZ1PKEgI3uMmV2",
+      "id": "dec-1783086098567-g307m5",
+      "timestamp": 1783086098567
     }
   ],
-  "updatedAt": "2026-07-03T13:31:49.551Z"
+  "updatedAt": "2026-07-03T13:41:38.567Z"
 }

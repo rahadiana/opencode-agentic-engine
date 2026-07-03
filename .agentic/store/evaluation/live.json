@@ -271,6 +271,132 @@
         "success": true,
         "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
         "timestamp": 1783084525022
+      },
+      {
+        "stepId": "s1",
+        "success": true,
+        "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+        "timestamp": 1783084895826
+      },
+      {
+        "stepId": "s1",
+        "success": true,
+        "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+        "timestamp": 1783084895829
+      },
+      {
+        "stepId": "confidence-p1",
+        "success": false,
+        "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+        "timestamp": 1783084916870
+      },
+      {
+        "stepId": "p1",
+        "success": true,
+        "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+        "timestamp": 1783084916871
+      },
+      {
+        "stepId": "p1",
+        "success": true,
+        "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+        "timestamp": 1783084916872
+      },
+      {
+        "stepId": "test-fail-1",
+        "success": false,
+        "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+        "timestamp": 1783085418592
+      },
+      {
+        "stepId": "test-fail-1",
+        "success": false,
+        "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+        "timestamp": 1783085418593
+      },
+      {
+        "stepId": "confidence-test-fail-1",
+        "success": false,
+        "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+        "timestamp": 1783085432952
+      },
+      {
+        "stepId": "test-fail-1",
+        "success": true,
+        "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+        "timestamp": 1783085432952
+      },
+      {
+        "stepId": "test-fail-1",
+        "success": true,
+        "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+        "timestamp": 1783085432953
+      },
+      {
+        "stepId": "confidence-p2",
+        "success": false,
+        "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+        "timestamp": 1783085461671
+      },
+      {
+        "stepId": "p2",
+        "success": true,
+        "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+        "timestamp": 1783085461671
+      },
+      {
+        "stepId": "p2",
+        "success": true,
+        "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+        "timestamp": 1783085461674
+      },
+      {
+        "stepId": "confidence-p3",
+        "success": false,
+        "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+        "timestamp": 1783085463475
+      },
+      {
+        "stepId": "p3",
+        "success": true,
+        "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+        "timestamp": 1783085463475
+      },
+      {
+        "stepId": "p3",
+        "success": true,
+        "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+        "timestamp": 1783085463476
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+        "timestamp": 1783085501516
+      },
+      {
+        "stepId": "fix-repro",
+        "success": true,
+        "sessionId": "ses_0d7d31d26ffexxreCXL0z5sM9h",
+        "timestamp": 1783085520908
+      },
+      {
+        "stepId": "fix-repro",
+        "success": true,
+        "sessionId": "ses_0d7d31d26ffexxreCXL0z5sM9h",
+        "timestamp": 1783085520909
+      },
+      {
+        "stepId": "fix-liveeval-ci",
+        "success": true,
+        "sessionId": "ses_0d7cd590cffeW8flb4Xxu437GA",
+        "timestamp": 1783085960408
+      },
+      {
+        "stepId": "fix-liveeval-ci",
+        "success": true,
+        "sessionId": "ses_0d7cd590cffeW8flb4Xxu437GA",
+        "timestamp": 1783085960409
       }
     ],
     "errorRecoveries": [
@@ -316,6 +442,42 @@
       },
       {
         "errorId": "reflect-s1",
+        "recovered": true
+      },
+      {
+        "errorId": "exec-test-fail-1",
+        "recovered": false
+      },
+      {
+        "errorId": "reflect-test-fail-1",
+        "recovered": true
+      },
+      {
+        "errorId": "reflect-session-start",
+        "recovered": true
+      },
+      {
+        "errorId": "reflect-session-reflection",
+        "recovered": true
+      },
+      {
+        "errorId": "reflect-session-state",
+        "recovered": true
+      },
+      {
+        "errorId": "reflect-session-start",
+        "recovered": true
+      },
+      {
+        "errorId": "reflect-multi-agent-gap-review",
+        "recovered": true
+      },
+      {
+        "errorId": "reflect-session-start",
+        "recovered": true
+      },
+      {
+        "errorId": "reflect-current-state-assessment",
         "recovered": true
       }
     ],
@@ -774,6 +936,321 @@
         "query": "agent-runtime delegate timeout LLM call _callOpenCodeTempSession",
         "resultsCount": 5,
         "focused": true
+      },
+      {
+        "query": "multi-agent reliability orchestrator model registry",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "stress test scenarios",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "stress test scenarios",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "test/stress",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "orchestrator multi-agent reliability ModelRegistry",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "model-registry selectBestModel reliability",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "pipeline cross-validation compile-passes bug",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "How do I add Redis caching to the monitoring dashboard?",
+        "resultsCount": 1,
+        "focused": true
+      },
+      {
+        "query": "orchestrator.ts ModelRegistry integration",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "multi-agent reliability model registry compile passes fix",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "multi-agent reliability orchestrator ModelRegistry",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "live evaluator multiAgent score computation",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "orchestrator model registry multi-agent reliability cross-validation compile passes",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "orchestrator multi-agent reliability ModelRegistry",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "microservices monitoring system service registry health metrics",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "orchestrator multi-agent reliability delegation ModelRegistry",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "multi-agent reliability orchestrator pipeline",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "multi-agent reliability orchestrator ModelRegistry",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "stress test scenarios",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "test stress",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "multi-agent reliability orchestrator pipeline",
+        "resultsCount": 8,
+        "focused": true
+      },
+      {
+        "query": "branch coverage second-brain episodic-store",
+        "resultsCount": 8,
+        "focused": true
+      },
+      {
+        "query": "orchestrator multi-agent model registry compile passes",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "current project state multi-agent reliability stress test",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "multi-agent reliability orchestrator ModelRegistry",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "live evaluation multiAgent reliability orchestrator pipeline",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "orchestrator multi-agent reliability compilePasses invariant",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "model fallback retry pipeline stage failure",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "current project state health",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "agentic_delegate handler delegate tool",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "project health, recent changes, coverage",
+        "resultsCount": 4,
+        "focused": true
+      },
+      {
+        "query": "orchestrator model registry compile passes retry fallback",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "orchestrator ModelRegistry pipeline delegate compile passes invariant",
+        "resultsCount": 12,
+        "focused": false
+      },
+      {
+        "query": "current project state multi-agent reliability",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "orchestrator pipeline multi-agent reliability ModelRegistry",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "orchestrator.ts compilePasses invariant bug",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "current project state multi-agent reliability orchestrator",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "orchestrator multi-agent reliability ModelRegistry CompilePasses",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "multi-agent reliability orchestrator model registry",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "current project state and recent changes",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "multi-agent reliability orchestrator model fallback",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "orchestrator reliability model fallback compile passes",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "stress test scenarios",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "orchestrator multi-agent reliability",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "live evaluator",
+        "resultsCount": 1,
+        "focused": true
+      },
+      {
+        "query": "orchestrator.ts pipeline stage cross-validation compile-passes bug",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "ModelRegistry selectBestModel orchestrator integration",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "websocket-notification-service polluting src/observability",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "multi-agent reliability orchestrator ModelRegistry",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "live evaluator step result mapping bug CI",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "orchestrator multi-agent reliability model fallback",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "live evaluator CI computation bug",
+        "resultsCount": 1,
+        "focused": true
+      },
+      {
+        "query": "compile passes invariant bug orchestrator",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "orchestrator multi-agent pipeline reliability model fallback",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "stress test scenarios S2 S3 S4 S5 S6 S7 S8 S9 S10",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "websocket-notification-service.ts",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "orchestrator ModelRegistry integration multi-agent reliability",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "LiveEvaluator scoring bug CI compile",
+        "resultsCount": 1,
+        "focused": true
+      },
+      {
+        "query": "multi-agent pipeline stage fallback retry model tiering",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "orchestrator ModelRegistry model fallback pipeline stage failure",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "compile passes invariant bug orchestrator cross-validation",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "multi-agent reliability orchestrator ModelRegistry fix",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "stress test scenarios completed",
+        "resultsCount": 10,
+        "focused": true
       }
     ],
     "delegations": [
@@ -951,6 +1428,26 @@
         "taskId": "test-delegate-fix-1",
         "role": "developer",
         "success": true
+      },
+      {
+        "taskId": "verify-fix-dev",
+        "role": "developer",
+        "success": false
+      },
+      {
+        "taskId": "verify-fix-dev",
+        "role": "developer",
+        "success": true
+      },
+      {
+        "taskId": "verify-fix-after-restart",
+        "role": "developer",
+        "success": false
+      },
+      {
+        "taskId": "verify-fix-after-restart",
+        "role": "developer",
+        "success": true
       }
     ],
     "skillLookups": [
@@ -965,8 +1462,11 @@
       },
       {
         "found": true
+      },
+      {
+        "found": true
       }
     ]
   },
-  "updatedAt": "2026-07-03T13:20:12.399Z"
+  "updatedAt": "2026-07-03T14:23:42.021Z"
 }

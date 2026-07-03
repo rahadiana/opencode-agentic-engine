@@ -101,6 +101,10 @@ export class AgentRuntime {
       const engine = new LLMEngine()
       engine.setOpencodeClient(this.opencodeClient)
       engine.setSessionId(`${parentSessionId}-${role}`)
+      // Pass the REAL parent session ID for sub-engine LLM calls.
+      // Sub-engines have synthetic pluginSessionId but use the parent
+      // session with noReply: true for actual LLM calls.
+      engine.setParentSessionId(parentSessionId)
       // Sub-engines always need real temp OpenCode sessions.
       // Their synthetic session IDs (`parentSessionId-role`) are not
       // valid OpenCode session IDs — without this, client.session.prompt()
