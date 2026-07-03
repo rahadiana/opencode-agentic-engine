@@ -3036,6 +3036,7 @@ const confidenceStore = new ConfidenceStore()
           abortOnFailure: tool.schema.boolean().optional().describe("Stop all tasks in phase if one fails (default: false)"),
         },
         async execute(args, context) {
+          const delegateStartTime = Date.now()
           // ── Batch mode: multiple tasks in parallel (fan-out) ──
           if (args.tasks && Array.isArray(args.tasks) && args.tasks.length > 0) {
             // If user also passed single-mode params (taskId+description+role),
@@ -3327,7 +3328,7 @@ const confidenceStore = new ConfidenceStore()
             output: `→ ${role}: ${agentResult ? "done" : "failed"}`,
             toolUsed: "agentic_delegate",
             success: !!agentResult,
-            durationMs: 0,
+            durationMs: Date.now() - delegateStartTime,
           })
 
           return { output }

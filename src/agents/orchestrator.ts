@@ -930,6 +930,7 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
   }
 
   getSuggestedPipeline(description: string): string {
+    if (!description || typeof description !== "string") return "feature-dev"
     const d = description.toLowerCase()
     if (d.includes("feature") || d.includes("new") || d.includes("implement") || d.includes("add")) return "feature-dev"
     if (d.includes("fix") || d.includes("bug") || d.includes("repair")) return "fix-verify"
