@@ -684,7 +684,24 @@
       "metadata": {
         "timestamp": 1783092081807
       }
+    },
+    {
+      "source": "developer",
+      "target": "test-dev-1",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Write a TypeScript function that implements a simple LRU cache with get, set, and delete methods. Return the implementation code.",
+        "timestamp": 1783092417553
+      }
+    },
+    {
+      "source": "test-dev-1",
+      "target": "developer",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783092537558
+      }
     }
   ],
-  "updatedAt": "2026-07-03T15:21:21.807Z"
+  "updatedAt": "2026-07-03T15:28:57.558Z"
 }

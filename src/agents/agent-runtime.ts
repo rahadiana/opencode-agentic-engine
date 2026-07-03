@@ -44,14 +44,52 @@ export class AgentRuntime {
   private opencodeClient: unknown = null
   private modelRegistry?: ModelRegistry
   private roleRegistry: RoleRegistry
+  /** ONE shared temp session ID for ALL sub-engine LLM calls.
+   *  SDK only allows one child session per parent — creating multiple
+   *  temp sessions causes hangs on subsequent session.create(). */
+  private _sharedSessionId: string | null = null
+
   constructor() {
     this.roleRegistry = new RoleRegistry()
+  }
+
+  /** Create ONE shared temp session linked to parent. All sub-engines
+   *  use this same session for LLM calls (sequential, no concurrency). */
+  private async _getOrCreateSharedSession(parentSessionId: string): Promise<string | null> {
+    if (this._sharedSessionId) return this._sharedSessionId
+    if (!this.opencodeClient) return null
+
+    try {
+      const client = this.opencodeClient as {
+        session: {
+          create: (opts: { body: { title?: string; parentID?: string } }) => Promise<{ data?: { id: string }; id?: string }>
+          delete: (opts: { path: { id: string } }) => Promise<unknown>
+        }
+      }
+      const resp = await client.session.create({
+        body: {
+          title: `agentic-shared-${Date.now()}`,
+          parentID: parentSessionId,
+        },
+      })
+      this._sharedSessionId = resp.data?.id ?? (resp as Record<string, unknown>).id as string ?? null
+    } catch {
+      this._sharedSessionId = null
+    }
+    return this._sharedSessionId
   }
 
   dispose(): void {
     const engines = [...this.engines.entries()]
     this.engines.clear()
     this.engineOrder = []
+    // Delete shared temp session
+    if (this._sharedSessionId && this.opencodeClient) {
+      try {
+        const client = this.opencodeClient as { session: { delete: (opts: { path: { id: string } }) => Promise<unknown> } }
+        client.session.delete({ path: { id: this._sharedSessionId } }).catch(() => {})
+      } catch { /* ignore */ }
+    }
     Promise.all(engines.map(([, e]) => e.disposeTempSession().catch(() => {})))
   }
 
@@ -91,13 +129,15 @@ export class AgentRuntime {
       }
       const engine = new LLMEngine()
       engine.setOpencodeClient(this.opencodeClient)
-      // Use the REAL parent session ID for ALL LLM calls.
-      // Sub-engines share the parent session — sequential calls only,
-      // no concurrent prompt risk since delegate waits for completion.
-      // The synthetic `${parentSessionId}-${role}` is NOT used because
-      // it's not a valid OpenCode session.
-      engine.setSessionId(parentSessionId)
-      // No chat mode — use non-chat _promptWithTimeout directly on parent
+      // Use the SHARED temp session ID. All sub-engines prompt on the
+      // same session (sequential, no concurrency since delegate awaits).
+      // The shared session is linked to parent via parentID so the SDK
+      // can properly route prompts with the parent's model/agent context.
+      // We set the session ID lazily (after shared session is created).
+      if (this._sharedSessionId) {
+        engine.setSessionId(this._sharedSessionId)
+      }
+      // No chat mode — use non-chat _promptWithTimeout on shared session
       engine.setChatMode(false)
       if (this.modelRegistry) engine.setModelRegistry(this.modelRegistry)
       this.engines.set(key, engine)
@@ -114,6 +154,10 @@ export class AgentRuntime {
    * The engine is isolated per (session, role) pair.
    */
   async execute(ctx: AgentContext): Promise<AgentResult> {
+    // Ensure shared temp session exists (lazy create, one per AgentRuntime)
+    if (!this._sharedSessionId) {
+      await this._getOrCreateSharedSession(ctx.sessionId)
+    }
     const engine = this.getEngine(ctx.sessionId, ctx.role)
 
     const roleDef = this.roleRegistry.getBuiltIn(ctx.role as AgentRole)
