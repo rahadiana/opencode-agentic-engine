@@ -160,20 +160,23 @@ export class AgentRuntime {
       }
       const engine = new LLMEngine()
       engine.setOpencodeClient(this.opencodeClient)
-      // Use SHARED temp session ID (created once per AgentRuntime)
-      if (this._sharedSessionId) {
-        engine.setSessionId(this._sharedSessionId)
-      }
       // Non-chat mode: use _promptWithTimeout directly on shared session
       engine.setChatMode(false)
       if (this.modelRegistry) engine.setModelRegistry(this.modelRegistry)
       this.engines.set(key, engine)
     }
+    // Sync session ID EVERY time (not just on creation) — session may have
+    // been rotated since the engine was first created. Using stale session
+    // ID causes [NO_LLM] on the cached engine after rotation.
+    const engine = this.engines.get(key)!
+    if (this._sharedSessionId) {
+      engine.setSessionId(this._sharedSessionId)
+    }
     // Move to most-recently-used position
     const idx = this.engineOrder.indexOf(key)
     if (idx >= 0) this.engineOrder.splice(idx, 1)
     this.engineOrder.push(key)
-    return this.engines.get(key)!
+    return engine
   }
 
   /**
