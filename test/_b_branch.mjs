@@ -1716,6 +1716,25 @@ function we_assert(cond, msg) { if (cond) { we++ } else { console.error(`  ❌ $
 }
 console.log(`  WE: ${we} passed, ${wef} failed`)
 state.passed += we; state.failed += wef
+
+// ── HELLO World Function Tests (HELLO) ──
+let helloPassed = 0, helloFailed = 0
+function hello_assert(cond, msg) { if (cond) { helloPassed++ } else { console.error(`  ❌ ${msg}`); helloFailed++ } }
+console.log("\n[HELLO] hello world function")
+try {
+  const { hello } = await import(pluginDist)
+  hello_assert(typeof hello === "function", "HELLO-1 hello is a function")
+  hello_assert(hello() === "Hello, World!", "HELLO-2 hello() default greeting")
+  hello_assert(hello("Alice") === "Hello, Alice!", "HELLO-3 hello('Alice') custom greeting")
+  hello_assert(hello("") === "Hello, !", "HELLO-4 hello('') empty name")
+  hello_assert(hello("123") === "Hello, 123!", "HELLO-5 hello('123') numeric string")
+  hello_assert(hello("x".repeat(100)).startsWith("Hello, "), "HELLO-6 hello() long name prefix")
+} catch (e) {
+  hello_assert(false, `HELLO-ERR hello import/execution error: ${e.message}`)
+}
+console.log(`  HELLO: ${helloPassed} passed, ${helloFailed} failed`)
+state.passed += helloPassed; state.failed += helloFailed
+
 console.log(`__RESULT__:${JSON.stringify({passed:state.passed,failed:state.failed})}`)
 // Standalone: if (state.failed > 0) process.exit(1)
 

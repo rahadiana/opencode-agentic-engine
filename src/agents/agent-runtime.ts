@@ -101,7 +101,12 @@ export class AgentRuntime {
       const engine = new LLMEngine()
       engine.setOpencodeClient(this.opencodeClient)
       engine.setSessionId(`${parentSessionId}-${role}`)
-      if (this._chatMode) engine.setChatMode(true)
+      // Sub-engines always need real temp OpenCode sessions.
+      // Their synthetic session IDs (`parentSessionId-role`) are not
+      // valid OpenCode session IDs — without this, client.session.prompt()
+      // fails silently → [NO_LLM] fallback.
+      // _chatMode from parent is included for backward compat (set from index.ts transform hook).
+      engine.setChatMode(this._chatMode || true)
       if (this.modelRegistry) engine.setModelRegistry(this.modelRegistry)
       this.engines.set(key, engine)
     }
