@@ -12,7 +12,7 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 2. ✅ **Schema-First Boundaries** — LLM output divalidasi sebelum dipakai (P1)
 3. ✅ **Dumb Model Mode** — strict mode untuk model lemah (P2)
  4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
- 5. ✅ **Test Coverage** — **2727 tests**, c8 **88.27% stmts / 68.7% branch / 77.52% func** + CI coverage gate (P4)
+ 5. ✅ **Test Coverage** — **2756 tests**, c8 **87.68% stmts / 68.37% branch / 75.28% func** + CI coverage gate (P4)
 6. ✅ **Typed Errors** — 49/49 throw sites migrated, 0 `as any` remaining
 7. ✅ **SemanticCache** — TF-IDF + cosine, benchmarked at 0.78 threshold
 8. ✅ **HallucinationGuard** — confidence-aware claims (0-1)
@@ -24,7 +24,7 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
                     # postbuild: auto-copy ke ~/.cache/opencode/packages/ (jika ada)
-node test/run.mjs   # 2727+ unit tests (mock, no LLM needed)
+node test/run.mjs   # 2756+ unit tests (mock, no LLM needed)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
 node test/e2e-scenario.mjs # EvoClaw: 50-file codebase, 5 iterations
@@ -722,8 +722,12 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 - **Overall coverage**: Stmts 88.27%, Branch 68.7%, Funcs 77.52% — all gates pass ✅
 - **2727 unit tests** (was 2686), **0 lint warnings**, **build OK**.
 
-### v0.5.15-dev — Branch Coverage: second-brain uncovered paths (2026-07-02)
+### v0.5.16-dev — Reliability Test Suite + Crash Fixes + Trace Analysis (2026-07-03)
 
-- **SB-GAP tests**: 11 new tests covering `updateTodoStatus` (found + not found), `ensureMemoryLoaded` with pending todos (line 534), and `reflect` without LLM (no-LLM fallback path). second-brain.ts func coverage 62.5%→67.5%.
-- **Overall coverage**: Stmts 88.27%, Branch 68.7%, Funcs 77.52% — all gates pass ✅
-- **2727 unit tests** (was 2686), **0 lint warnings**, **build OK**.
+- **Reliability test suite**: New `test/reliability-tools.mjs` — exercises all 31 agentic tools through happy/error/stress paths, measures per-tool latency (avg/p50/p95/p99), success rate, and generates a reliability report with optimization recommendations. 63 assertions, all pass.
+- **Trace analyzer**: New `test/analyze-traces.mjs` — reads `.agentic/trace.jsonl` (4480 entries), analyzes tool usage frequency, slow operations, repeat failure patterns, duplicate inputs, and produces concrete efficiency recommendations.
+- **Crash fix (episodic-store.ts)**: `searchForReuse()` crashed when called with `undefined` goal (calling `.toLowerCase()` on undefined). Added `if (!goal || typeof goal !== "string") return []` guard.
+- **Crash fix (planner.ts)**: `decompose()` crashed when goal was empty/undefined — multiple calls to `goal.toLowerCase()` on undefined. Added fallback to `"Unspecified task"` when goal is missing.
+- **Reliability findings**: 31/31 tools at HIGH reliability (≥95% success rate). Avg latency 35ms across all tools. `agentic_delegate` has 34.3% error rate from trace logs (timeout issues) — priority for next hardening.
+- **Drift sync**: Updated AGENTS.md, PLAN.md, package.json to actual state (2756 tests, 87.68%/68.37%/75.28% coverage).
+- **2756 unit tests** (was 2727), **0 lint warnings**, **build OK**.

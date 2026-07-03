@@ -8,11 +8,11 @@
 
 | Metrik | Nilai |
 |--------|-------|
-| **Versi** | v0.5.15-dev |
-| **Unit tests** | 2686 (all mock, no LLM needed) |
+| **Versi** | v0.5.16-dev |
+| **Unit tests** | 2756 (all mock, no LLM needed) |
 | **Agentic tools** | 31 (`agentic_*` prefix) |
 | **Source files** | 80+ di `src/` (7 subdirektori) |
-| **Coverage gate** | ✅ Stmts 88.27%+, Branch 68.7%+, Func 77.52%+, Lines 88.27%+ |
+| **Coverage gate** | ✅ Stmts 87.68%+, Branch 68.37%+, Func 75.28%+, Lines 87.68%+ |
 | **navigator.ts branch** | ✅ 77.77% (baru: 17 direct tests via CodebaseNavigator) |
 | **router-agent.ts branch** | ✅ 76.47% (+11.77%) |
 | **tool-router.ts branch** | ✅ 63.63% |

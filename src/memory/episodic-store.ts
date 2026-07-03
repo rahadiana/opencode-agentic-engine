@@ -186,6 +186,7 @@ export class EpisodicStore {
    */
   searchForReuse(goal: string, threshold = 0.8, maxResults = 3): Episode[] {
     this.applyDecay()
+    if (!goal || typeof goal !== "string") return []
     const q = goal.toLowerCase()
     const qTokens = new Set(q.split(/\s+/).filter(t => t.length > 2))
     if (qTokens.size === 0) return []
