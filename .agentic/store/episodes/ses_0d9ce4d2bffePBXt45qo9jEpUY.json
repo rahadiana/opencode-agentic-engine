@@ -1,0 +1,25 @@
+{
+  "key": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+  "data": {
+    "id": "ep-1783068907821-jmgz",
+    "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+    "planGoal": "Stress test planning system",
+    "plan": [
+      "Step 1",
+      "Step 2"
+    ],
+    "summary": "Completed: Stress test planning system",
+    "outcome": "success",
+    "decisions": [],
+    "domain": "devops",
+    "timestamp": "2026-07-03T08:55:07.821Z",
+    "tags": [
+      "stress",
+      "planning"
+    ],
+    "score": 1,
+    "usageCount": 0,
+    "significance": "routine"
+  },
+  "updatedAt": "2026-07-03T08:55:07.821Z"
+}

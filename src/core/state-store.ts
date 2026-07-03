@@ -94,6 +94,11 @@ export class StateStore {
   private flushTimer: ReturnType<typeof setTimeout> | null = null
   private readonly FLUSH_INTERVAL = 2000
 
+  /** Per-namespace max cache entries — prevents unbounded memory growth */
+  private readonly MAX_CACHE_ENTRIES = 2000
+  /** Default TTL for cache entries (7 days) */
+  private readonly DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
   constructor(config: StateStoreConfig) {
     this.localDir = resolve(config.worktree, ".agentic", "store")
     this.globalDir = config.globalDir ?? resolve(homedir(), ".config", "opencode", "agentic-store")
@@ -127,6 +132,11 @@ export class StateStore {
     }
     ns.set(key, entry as StoreEntry<unknown>)
     this._persist(namespace, key, entry, scope)
+    // Prune cache: evict oldest if namespace exceeds limit
+    if (ns.size > this.MAX_CACHE_ENTRIES) {
+      const toDelete = [...ns.keys()].slice(0, ns.size - this.MAX_CACHE_ENTRIES)
+      for (const k of toDelete) ns.delete(k)
+    }
   }
 
   /** Hapus entry. Sinkron: memory + file langsung dihapus. */
@@ -151,6 +161,28 @@ export class StateStore {
       this.cache.clear()
       this.loaded.clear()
     }
+  }
+
+  /** Manual pruning — hapus entry tertua jika melebihi MAX_CACHE_ENTRIES.
+   *  Hanya affect memory cache, tidak hapus dari disk.
+   *  Returns jumlah entry yang di-prune. */
+  prune(namespace?: StateNamespace, scope?: string): number {
+    let pruned = 0
+    if (namespace) {
+      const ns = this._getNS(namespace, scope)
+      if (ns.size > this.MAX_CACHE_ENTRIES) {
+        const toDelete = [...ns.keys()].slice(0, ns.size - this.MAX_CACHE_ENTRIES)
+        for (const k of toDelete) { ns.delete(k); pruned++ }
+      }
+    } else {
+      for (const [, ns] of this.cache) {
+        if (ns.size > this.MAX_CACHE_ENTRIES) {
+          const toDelete = [...ns.keys()].slice(0, ns.size - this.MAX_CACHE_ENTRIES)
+          for (const k of toDelete) { ns.delete(k); pruned++ }
+        }
+      }
+    }
+    return pruned
   }
 
   /** Cek apakah namespace sudah di-load */
@@ -229,6 +261,8 @@ export class StateStore {
         const raw = readFileSync(filePath, "utf-8")
         const entry = JSON.parse(raw) as StoreEntry<unknown>
         if (!entry.key || entry.data === undefined) continue
+        // Skip entries older than DEFAULT_TTL_MS (memory conservation)
+        if (this._isExpired(entry)) continue
         if (override || !ns.has(entry.key)) {
           ns.set(entry.key, entry)
         }
@@ -333,5 +367,12 @@ export class StateStore {
       }
     }
     return candidates
+  }
+
+  /** Cek apakah entry sudah expired berdasarkan DEFAULT_TTL_MS sejak updatedAt */
+  private _isExpired(entry: StoreEntry<unknown>): boolean {
+    if (!entry.updatedAt) return false
+    const age = Date.now() - new Date(entry.updatedAt).getTime()
+    return age > this.DEFAULT_TTL_MS
   }
 }

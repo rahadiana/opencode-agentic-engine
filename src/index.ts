@@ -991,9 +991,11 @@ const confidenceStore = new ConfidenceStore()
 
   // ModelRegistry: catat hallucination guard failures
   eventBus.on("guard.check.completed", (ev) => {
-    const p = ev.payload as { passed: boolean; sessionID: string }
+    const p = ev.payload as { passed: boolean; sessionID: string; modelName?: string }
     if (!p.passed) {
-      modelRegistry.recordHallucination(p.sessionID)
+      // Use actual model name if available, not session ID (which never matches)
+      const modelId = p.modelName ?? llmEngine.getCurrentModel() ?? "unknown"
+      modelRegistry.recordHallucination(modelId)
     }
   })
 
@@ -6954,8 +6956,10 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
             modelStr = `${pid}/${mid}`
           }
           if (modelStr && modelStr !== "opencode/default" && modelStr !== "unknown" && modelStr !== "opencode/unknown") {
-            modelRegistry?.recordCall(modelStr, true, 0, "chat")
-            // Sync ke llmEngine biar getCurrentModel() bisa return model yg bener
+            // Don't call recordCall here — it's already called in llm.ts:713
+            // with real success/failure + real latency. This hook fires BEFORE
+            // the LLM call completes, so latency=0 and success=true are wrong.
+            // Keep setCurrentModel so getCurrentModel() returns accurate model.
             llmEngine.setCurrentModel(modelStr)
           }
         }
@@ -7137,8 +7141,8 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
           if (modelStr !== "opencode/default" && modelStr !== "unknown" && modelStr !== "opencode/unknown") {
             // Sync ke llmEngine biar getCurrentModel() / getOpenCodeModel() return model beneran
             llmEngine.setCurrentModel(modelStr)
-            // Track ke registry (dengan taskType "chat" biar gak campur aduk sama agentic)
-            modelRegistry?.recordCall(modelStr, true, 0, "chat")
+            // NOT calling recordCall here — llm.ts:713 handles it with real stats.
+            // This hook fires during params, not after completion.
           }
         }
       } catch { /* silent — non-critical */ }

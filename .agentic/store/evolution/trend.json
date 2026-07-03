@@ -1,0 +1,92 @@
+{
+  "key": "trend",
+  "data": {
+    "results": [
+      {
+        "stepId": "step-1",
+        "success": true,
+        "output": "Completed step 1 test",
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052548628
+      },
+      {
+        "stepId": "step-1",
+        "success": true,
+        "output": "Completed step 1 test",
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052551576
+      },
+      {
+        "stepId": "step-feedback",
+        "success": true,
+        "output": "Step with positive feedback",
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052551622
+      },
+      {
+        "stepId": "step-feedback",
+        "success": true,
+        "output": "Step with positive feedback",
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052552719
+      },
+      {
+        "stepId": "step-feedback-neg",
+        "success": true,
+        "output": "Step with negative feedback",
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052552738
+      },
+      {
+        "stepId": "step-fail",
+        "success": false,
+        "output": "Failed step",
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052551594,
+        "category": "unknown"
+      },
+      {
+        "stepId": "step-fail",
+        "success": false,
+        "output": "Test error: something went wrong",
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052576930,
+        "category": "unknown"
+      },
+      {
+        "stepId": "feedback-step-feedback-neg",
+        "success": false,
+        "output": "User negative feedback: Step with negative feedback",
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052610313,
+        "category": "unknown"
+      },
+      {
+        "stepId": "step-feedback-neg",
+        "success": true,
+        "output": "Step with negative feedback",
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052610314
+      },
+      {
+        "stepId": "s1",
+        "success": true,
+        "output": "Stress test step 1 completed",
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783061568808
+      },
+      {
+        "stepId": "s1",
+        "success": true,
+        "output": "Stress test step 1 completed",
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783061571066
+      }
+    ],
+    "evolveCount": 0,
+    "windowSize": 30,
+    "lastEvolveSession": null,
+    "cumulativeResults": 11
+  },
+  "updatedAt": "2026-07-03T09:50:44.384Z"
+}

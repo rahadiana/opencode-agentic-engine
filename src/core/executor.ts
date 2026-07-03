@@ -30,6 +30,8 @@ export interface ExecutionState {
   failedSteps: Map<string, string>
   stepStates: Map<string, StepState>
   currentStepIndex: number
+  /** Last activity timestamp (ms) — used by cleanupStaleSessions() */
+  lastActivity: number
 }
 
 export class Executor {
@@ -115,12 +117,14 @@ export class Executor {
   }
 
   initExecution(sessionId: string, plan: Plan): ExecutionState {
+    this.cleanupStaleSessions()
     const state: ExecutionState = {
       plan,
       completedSteps: new Set(),
       failedSteps: new Map(),
       stepStates: new Map(),
       currentStepIndex: 0,
+      lastActivity: Date.now(),
     }
     this.states.set(sessionId, state)
     return state
@@ -178,6 +182,7 @@ export class Executor {
   recordResult(sessionId: string, result: ExecutionResult): void {
     const state = this.states.get(sessionId)
     if (!state) return
+    state.lastActivity = Date.now()
 
     let stepState = state.stepStates.get(result.stepId)
     if (!stepState) {
@@ -188,8 +193,16 @@ export class Executor {
     stepState.result = result
 
     if (result.success) {
-      state.completedSteps.add(result.stepId)
-      state.failedSteps.delete(result.stepId) // Clear from failed if succeeded after retry
+      // Only count steps that belong to the current plan — prevents
+      // negative Remaining when agentic_execute is called with orphan stepIds.
+      const belongsToPlan = state.plan?.intent?.subtasks?.some(s => s.id === result.stepId)
+      if (belongsToPlan) {
+        state.completedSteps.add(result.stepId)
+        state.failedSteps.delete(result.stepId) // Clear from failed if succeeded after retry
+      } else {
+        // Track but don't add to plan progress counters
+        state.stepStates.set(result.stepId, stepState)
+      }
       // NOTE: budgetTracker.recordStep() is NOT called here — it's handled in
       // execution-helpers.ts recordCompletion() to prevent double counting
     } else {
@@ -347,5 +360,19 @@ export class Executor {
 
   removeSession(sessionId: string): void {
     this.states.delete(sessionId)
+  }
+
+  /** Hapus session yang tidak aktif > maxAgeMs (default: 1 jam).
+   *  Dipanggil otomatis dari initExecution() dan getProgress(). */
+  cleanupStaleSessions(maxAgeMs: number = 3_600_000): number {
+    const now = Date.now()
+    let removed = 0
+    for (const [sid, state] of this.states) {
+      if (state.lastActivity && (now - state.lastActivity) > maxAgeMs) {
+        this.states.delete(sid)
+        removed++
+      }
+    }
+    return removed
   }
 }

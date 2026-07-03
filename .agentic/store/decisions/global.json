@@ -1,0 +1,22 @@
+{
+  "key": "global",
+  "data": [
+    {
+      "title": "Use stress test for regression",
+      "context": "All 31 tools need to be stress tested with various conditions including empty inputs, missing params, and boundary values.",
+      "alternatives": "Manual testing, unit tests only",
+      "consequence": "Higher confidence in tool robustness",
+      "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+      "id": "dec-1783052777584-i283ik",
+      "timestamp": 1783052777584
+    },
+    {
+      "title": "Plan: Stress test planning system",
+      "context": "Stress test planning system (2 subtasks)",
+      "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+      "id": "dec-1783061238778-jzo0v4",
+      "timestamp": 1783061238778
+    }
+  ],
+  "updatedAt": "2026-07-03T06:47:18.778Z"
+}

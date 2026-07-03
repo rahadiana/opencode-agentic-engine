@@ -1,0 +1,347 @@
+{
+  "key": "live",
+  "data": {
+    "stepResults": [
+      {
+        "stepId": "confidence-step-1",
+        "success": false,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052551574
+      },
+      {
+        "stepId": "step-1",
+        "success": true,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052551576
+      },
+      {
+        "stepId": "step-1",
+        "success": true,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052551577
+      },
+      {
+        "stepId": "step-feedback",
+        "success": true,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052552719
+      },
+      {
+        "stepId": "step-feedback",
+        "success": true,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052552720
+      },
+      {
+        "stepId": "step-fail",
+        "success": false,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052576930
+      },
+      {
+        "stepId": "step-fail",
+        "success": false,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052576931
+      },
+      {
+        "stepId": "step-feedback-neg",
+        "success": true,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052610314
+      },
+      {
+        "stepId": "step-feedback-neg",
+        "success": true,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052610314
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052761924
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_0d9c679ebffe5Ui0QsIPKCmunH",
+        "timestamp": 1783052772746
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_0d9c64fa8ffeUpJxEgMW7Tno02",
+        "timestamp": 1783052778378
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_0d9c639a7ffefr1Fym7Y5G7Zqg",
+        "timestamp": 1783052785242
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_0d9c61ed5ffe2UxTqgwOjdZWiD",
+        "timestamp": 1783052791004
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_0d9c5946affe6WpYif744dN7ZH",
+        "timestamp": 1783052795798
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_0d9c60855ffeFDkskgB0lqj40Y",
+        "timestamp": 1783052796679
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_0d9c5ab21ffeFrrRqdiOLiAYJu",
+        "timestamp": 1783052799804
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_0d9c60855ffeFDkskgB0lqj40Y",
+        "timestamp": 1783052801762
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_0d9c5f22affeIgNm44YHMAVlAV",
+        "timestamp": 1783052802470
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_0d9c5c15cffecFtuBSDOXypBoC",
+        "timestamp": 1783052803860
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_0d9c5db89ffedqARE48YvgXY5b",
+        "timestamp": 1783052807829
+      },
+      {
+        "stepId": "debate-Analyze the pros and cons of using TypeS",
+        "success": false,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783052821964
+      },
+      {
+        "stepId": "debate-What are the pros and cons of TypeScript",
+        "success": false,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783059157831
+      },
+      {
+        "stepId": "debate-What are the pros and cons of TypeScript",
+        "success": false,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783059417228
+      },
+      {
+        "stepId": "debate-What are the pros and cons of TypeScript",
+        "success": false,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783059718240
+      },
+      {
+        "stepId": "debate-What is 2+2? Answer briefly",
+        "success": false,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783059857846
+      },
+      {
+        "stepId": "debate-What are the pros and cons of TypeScript",
+        "success": false,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783059990120
+      },
+      {
+        "stepId": "debate-What is 2+2? Answer in one sentence.",
+        "success": false,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783060047280
+      },
+      {
+        "stepId": "debate-What are the pros and cons of TypeScript",
+        "success": false,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783060212723
+      },
+      {
+        "stepId": "debate-What are 3 key differences between SQL a",
+        "success": false,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783060376187
+      },
+      {
+        "stepId": "debate-What are the pros and cons of TypeScript",
+        "success": true,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783060949425
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_0d94b0c65ffeG0IWoZg0V24qWu",
+        "timestamp": 1783060972110
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_0d94b0c65ffeG0IWoZg0V24qWu",
+        "timestamp": 1783061019916
+      },
+      {
+        "stepId": "s1",
+        "success": true,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783061571066
+      },
+      {
+        "stepId": "s1",
+        "success": true,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783061571067
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783061618873
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_0d93ac095ffeFu4Ib01W48i3WP",
+        "timestamp": 1783061921558
+      },
+      {
+        "stepId": "debate-Compare SQL and NoSQL databases — list 3",
+        "success": true,
+        "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+        "timestamp": 1783061948398
+      },
+      {
+        "stepId": "clean",
+        "success": true,
+        "sessionId": "ses_0d93a4061ffespIQNmoxmevXFB",
+        "timestamp": 1783061961545
+      }
+    ],
+    "errorRecoveries": [
+      {
+        "errorId": "reflect-step-error-analysis",
+        "recovered": true
+      },
+      {
+        "errorId": "exec-step-fail",
+        "recovered": false
+      },
+      {
+        "errorId": "reflect-step-fail",
+        "recovered": true
+      },
+      {
+        "errorId": "reflect-nonexistent-step",
+        "recovered": true
+      }
+    ],
+    "navigations": [
+      {
+        "query": "planning",
+        "resultsCount": 2,
+        "focused": true
+      },
+      {
+        "query": "!@#$%^&*()_+ non-existent-file-xyz-12345",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "a",
+        "resultsCount": 0,
+        "focused": false
+      },
+      {
+        "query": "I want to fix a bug in the authentication module",
+        "resultsCount": 1,
+        "focused": true
+      },
+      {
+        "query": "llm",
+        "resultsCount": 3,
+        "focused": true
+      },
+      {
+        "query": "stress test feedback negative",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "stress test feedback step-feedback-neg",
+        "resultsCount": 20,
+        "focused": false
+      },
+      {
+        "query": "stress test failed step step-feedback-neg",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "stress test",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "step-feedback-neg test",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "test infrastructure run.mjs",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "debate",
+        "resultsCount": 2,
+        "focused": true
+      },
+      {
+        "query": "I need to fix a bug in the authentication flow",
+        "resultsCount": 1,
+        "focused": true
+      },
+      {
+        "query": "I need to fix a bug in the authentication flow",
+        "resultsCount": 1,
+        "focused": true
+      }
+    ],
+    "delegations": [
+      {
+        "taskId": "stress-task-1",
+        "role": "qa",
+        "success": false
+      }
+    ],
+    "skillLookups": [
+      {
+        "found": true
+      },
+      {
+        "found": true
+      }
+    ]
+  },
+  "updatedAt": "2026-07-03T09:50:44.384Z"
+}

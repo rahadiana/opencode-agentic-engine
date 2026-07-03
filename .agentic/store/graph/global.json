@@ -1,0 +1,77 @@
+{
+  "key": "global",
+  "data": [
+    {
+      "source": "/tmp/test-file.ts",
+      "target": "step-1",
+      "relation": "modified_by",
+      "metadata": {
+        "event": "step.completed",
+        "timestamp": 1783052551576
+      }
+    },
+    {
+      "source": "feedback",
+      "target": "step-feedback",
+      "relation": "user_positive",
+      "metadata": {
+        "model": "opencode/deepseek-v4-flash-free",
+        "taskType": "coding",
+        "timestamp": 1783052552718
+      }
+    },
+    {
+      "source": "feedback",
+      "target": "step-feedback-neg",
+      "relation": "user_negative",
+      "metadata": {
+        "model": "opencode/deepseek-v4-flash-free",
+        "taskType": "coding",
+        "errorCategory": "unknown",
+        "timestamp": 1783052553829
+      }
+    },
+    {
+      "source": "llm",
+      "target": "opencode/deepseek-v4-flash-free",
+      "relation": "cost",
+      "metadata": {
+        "costUsd": 0,
+        "timestamp": 1783052576928
+      }
+    },
+    {
+      "source": "step-fail",
+      "target": "unknown",
+      "relation": "has_error",
+      "metadata": {
+        "error": "Test error: something went wrong",
+        "timestamp": 1783052576930
+      }
+    },
+    {
+      "source": "stress-test",
+      "target": "agentic-tools",
+      "relation": "tests"
+    },
+    {
+      "source": "llm",
+      "target": "unknown",
+      "relation": "cost",
+      "metadata": {
+        "costUsd": 0,
+        "timestamp": 1783053356891
+      }
+    },
+    {
+      "source": "episode",
+      "target": "ep-1783071688075-19d0",
+      "relation": "recorded",
+      "metadata": {
+        "outcome": "success",
+        "timestamp": 1783071688075
+      }
+    }
+  ],
+  "updatedAt": "2026-07-03T09:41:28.075Z"
+}

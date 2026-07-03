@@ -1,0 +1,26 @@
+{
+  "key": "global",
+  "data": [
+    {
+      "text": "Review failed step: step-feedback-neg (model: opencode/deepseek-v4-flash-free, task: coding, error: unknown)",
+      "priority": "high",
+      "category": "feedback",
+      "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+      "id": "todo-1783052553829-0rm8",
+      "status": "pending",
+      "createdAt": 1783052553829,
+      "updatedAt": 1783052553829
+    },
+    {
+      "text": "Fix the remaining bugs found in stress test",
+      "priority": "high",
+      "category": "stress-test",
+      "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+      "id": "todo-1783052776469-znps",
+      "status": "pending",
+      "createdAt": 1783052776469,
+      "updatedAt": 1783052776469
+    }
+  ],
+  "updatedAt": "2026-07-03T04:26:16.469Z"
+}
