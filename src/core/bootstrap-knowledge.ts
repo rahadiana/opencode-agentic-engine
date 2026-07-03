@@ -60,9 +60,9 @@ const BOOTSTRAP_NOWLEDGE: BootstrapEntry[] = [
   },
   {
     goal: "How to add a new feature to the plugin",
-    summary: "1) Create source file in appropriate src/ subdirectory. 2) Add import + instance in src/index.ts. 3) Add tool definition in the tools object. 4) Add to expected tool list in test/run.mjs, test/dropin.mjs, test/load-samedir.mjs. 5) Add ≥2 test cases (happy path + error path). 6) Run npm run build && node test/run.mjs. 7) If Docker: ./test-container.sh. Conventions: English for code, Indonesian for communication, ESM imports with .js extensions, use execFileSync not execSync for shell safety.",
+    summary: "1) Create source file in appropriate src/ subdirectory. 2) Add import + instance in src/index.ts. 3) Add tool definition in the tools object. 4) Add to expected tool list in test/run.mjs, test/dropin.mjs, test/load-samedir.mjs. 5) Add ≥2 test cases — Part A core tests in test/_runall.mjs, specialized tests in test/_b_*.mjs. 6) Run npm run build && node test/run.mjs (orchestrator runs all). 7) If Docker: ./test-container.sh. Conventions: English for code, Indonesian for communication, ESM imports with .js extensions, use execFileSync not execSync for shell safety.",
     tags: ["development", "contribution", "new-feature", "howto"],
-    decisions: ["File in appropriate subdirectory", "Register in src/index.ts tools object", "Add to 3 test files", "2+ test cases per tool", "npm run build && node test/run.mjs"]
+    decisions: ["File in appropriate subdirectory", "Register in src/index.ts tools object", "Add to 3 test files + Part A in _runall.mjs or _b_*.mjs", "2+ test cases per tool", "npm run build && node test/run.mjs"]
   },
   {
     goal: "OpenCode Plugin API and hooks",
@@ -72,22 +72,22 @@ const BOOTSTRAP_NOWLEDGE: BootstrapEntry[] = [
   },
   {
     goal: "How testing works",
-    summary: "Tests live in test/run.mjs (1117+ unit tests spanning 50+ sections). Additional test files: dropin.mjs (plugin discovery), load-samedir.mjs (E2E workflow), e2e-scenario.mjs (EvoClaw benchmark), swebench-harness.mjs (SWE-bench), e2e-llm.mjs (LLM E2E). Tests use custom assert() functions, not Jest/Mocha. Each tool must have ≥2 test cases. Run with: node test/run.mjs for unit tests, LLM_OFF=true node test/swebench-harness.mjs for mock mode.",
+    summary: "Tests live across multiple files: test/_runall.mjs (core), test/_b_*.mjs (specialized), and test/run.mjs (orchestrator). 2727+ unit tests total. Additional test files: dropin.mjs (plugin discovery), load-samedir.mjs (E2E workflow), e2e-scenario.mjs (EvoClaw benchmark), swebench-harness.mjs (SWE-bench), e2e-llm.mjs (LLM E2E). Tests use custom assert() functions, not Jest/Mocha. Each tool must have ≥2 test cases. Run with: node test/run.mjs for unit tests, LLM_OFF=true node test/swebench-harness.mjs for mock mode.",
     tags: ["testing", "test", "run.mjs", "e2e", "benchmark"],
-    decisions: ["1117+ unit tests in run.mjs", "22+ test files total", "Custom assert() framework", "Each tool: 2+ test cases"]
+    decisions: ["2727+ unit tests across multiple files", "22+ test files total", "Custom assert() framework", "Each tool: 2+ test cases"]
   },
   // ── P3 Procedural Checklists ──
   {
     goal: "Checklist: How to add a new agentic_ tool",
-    summary: "STEP 1: Create source file in src/core/ or src/agents/ or src/memory/. STEP 2: Add import in src/index.ts at top. STEP 3: Add tool definition in the `tools` object inside AgenticEngine function — include name, description, schema, execute handler. STEP 4: Add new tool name to the expected list in test/run.mjs (EXPECTED_TOOLS array). STEP 5: Also add to test/dropin.mjs and test/load-samedir.mjs expected tool lists. STEP 6: Add ≥2 test cases in test/run.mjs — one happy path, one error path. STEP 7: Run `npm run build` — must pass with zero errors. STEP 8: Run `node test/run.mjs` — all tests must pass. STEP 9: Run `node test/realtest.mjs` — 166+ tests must pass. STEP 10: Commit with descriptive message.",
+    summary: "STEP 1: Create source file in src/core/ or src/agents/ or src/memory/. STEP 2: Add import in src/index.ts at top. STEP 3: Add tool definition in the `tools` object inside AgenticEngine function — include name, description, schema, execute handler. STEP 4: Add new tool name to the expected list in test/run.mjs (EXPECTED_TOOLS array). STEP 5: Also add to test/dropin.mjs and test/load-samedir.mjs expected tool lists. STEP 6: Add ≥2 test cases — Part A core tests in test/_runall.mjs, specialized tests in test/_b_*.mjs. STEP 7: Run `npm run build` — must pass with zero errors. STEP 8: Run `node test/run.mjs` (orchestrator runs all) — all tests must pass. STEP 9: Run `node test/realtest.mjs` — 166+ tests must pass. STEP 10: Commit with descriptive message.",
     tags: ["checklist", "procedure", "new-tool", "howto", "step-by-step"],
     decisions: ["Register in src/index.ts tools object", "Update 3 test files", "2+ test cases required", "Build + test before commit"]
   },
   {
     goal: "Checklist: How to update OpenCode plugin tests",
-    summary: "STEP 1: Open test/run.mjs — all unit tests live here. STEP 2: Find the section for the tool/feature being tested (sections are numbered [1], [2], etc.). STEP 3: Add new assert() calls — use the pattern: assert(condition, 'descriptive message'). STEP 4: If testing a new export, add it to the destructured import at the top of run.mjs. STEP 5: Run `npm run build` first — tests import from dist/. STEP 6: Run `node test/run.mjs` — check that new tests appear in output. STEP 7: Run `node test/realtest.mjs` — must still pass (166+ tests). STEP 8: If the new feature adds a tool, also update expected tool count in test/dropin.mjs and test/load-samedir.mjs.",
+    summary: "STEP 1: Tests live in test/_runall.mjs (core), test/_b_*.mjs (specialized), and test/run.mjs (orchestrator). STEP 2: Find the section for the tool/feature being tested (sections are numbered [1], [2], etc.). STEP 3: Add new assert() calls — use the pattern: assert(condition, 'descriptive message'). STEP 4: If testing a new export, add it to the destructured import at the top of the test file. STEP 5: Run `npm run build` first — tests import from dist/. STEP 6: Run `node test/run.mjs` — check that new tests appear in output. STEP 7: Run `node test/realtest.mjs` — must still pass (166+ tests). STEP 8: If the new feature adds a tool, also update expected tool count in test/dropin.mjs and test/load-samedir.mjs.",
     tags: ["checklist", "procedure", "testing", "howto", "step-by-step"],
-    decisions: ["All tests in test/run.mjs", "Custom assert() not Jest", "Build before test", "Check realtest.mjs too"]
+    decisions: ["Tests split: _runall.mjs (core), _b_*.mjs (specialized), run.mjs (orchestrator)", "Custom assert() not Jest", "Build before test", "Check realtest.mjs too"]
   },
   {
     goal: "Checklist: How to verify prompt injection changes",

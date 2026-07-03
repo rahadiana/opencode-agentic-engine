@@ -12,7 +12,7 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 2. ✅ **Schema-First Boundaries** — LLM output divalidasi sebelum dipakai (P1)
 3. ✅ **Dumb Model Mode** — strict mode untuk model lemah (P2)
  4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
- 5. ✅ **Test Coverage** — **2686 tests**, c8 **88.27% stmts / 68.7% branch / 77.52% func** + CI coverage gate (P4)
+ 5. ✅ **Test Coverage** — **2727 tests**, c8 **88.27% stmts / 68.7% branch / 77.52% func** + CI coverage gate (P4)
 6. ✅ **Typed Errors** — 49/49 throw sites migrated, 0 `as any` remaining
 7. ✅ **SemanticCache** — TF-IDF + cosine, benchmarked at 0.78 threshold
 8. ✅ **HallucinationGuard** — confidence-aware claims (0-1)
@@ -24,7 +24,7 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
                     # postbuild: auto-copy ke ~/.cache/opencode/packages/ (jika ada)
-node test/run.mjs   # 2686+ unit tests (mock, no LLM needed)
+node test/run.mjs   # 2727+ unit tests (mock, no LLM needed)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
 node test/e2e-scenario.mjs # EvoClaw: 50-file codebase, 5 iterations
@@ -432,9 +432,9 @@ Model dengan `consecutiveFailures >= 5` atau `hallucinationRate > 0.5` otomatis 
 
 - **Language**: English for code, Indonesian for communication
 - **Imports**: ESM with `.js` extensions (TypeScript convention for Node)
-- **New tools**: Add to `src/index.ts` in the `tools` object, then add test in `test/run.mjs`
+- **New tools**: Add to `src/index.ts` in the `tools` object, then add test in `test/_runall.mjs` (Part A) or `test/_b_*.mjs` (specialized)
 - **New modules**: Follow existing directory structure (core/agents/drift/memory/observability)
-- **Testing**: Every tool must have at least 2 test cases (happy path + error path)
+- **Testing**: Every tool must have at least 2 test cases (happy path + error path). Part A tests go in `test/_runall.mjs`, specialized in `test/_b_*.mjs`, orchestration in `test/run.mjs`.
 - **Docker**: Every new feature adds a Docker layer in `Dockerfile.test`
 - **Shell safety**: Use `execFileSync` not `execSync` — prevent injection
 - **Session scoping**: All state tracked per `sessionID`, never cross-session leak
@@ -541,8 +541,8 @@ KNOWLEDGE-FIRST PROMPT INJECTION PIPELINE
 2. Add import + instance in `src/index.ts`
 3. Add tool definition in `tools` object
 4. Add to expected tool list in `test/run.mjs`, `test/dropin.mjs`, `test/load-samedir.mjs`
-5. Add test cases in `test/run.mjs` (≥2: happy + error)
-6. `npm run build && node test/run.mjs` — must pass
+5. Add test cases — Part A core tests in `test/_runall.mjs`, specialized tests in `test/_b_*.mjs` (≥2: happy + error)
+6. `npm run build && node test/run.mjs` (orchestrator runs all) — must pass
 7. `./test-container.sh` — must pass all Docker layers
 
 Lanjutkan pekerjaan ini secara mandiri sampai checkpoint yang masuk akal.
@@ -584,7 +584,7 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 - **P2 (Types)**: Reduced `as any` casts from 25 → 3 (88% reduction). Exported `IndexData` type from multi-index-rag.ts
 - **P2 (Knowledge-First)**: Added `bootstrap-knowledge.ts` — seeds RAG with 10 high-confidence entries about plugin architecture, tools, and workflows
 - **P3 (UX)**: Cancelable debate loop via `AbortSignal` in `DebateConfig`. Documented alternative embedding providers (Ollama, etc.)
-- **1117+ unit tests** (was 744)
+- **2727+ unit tests** (was 2686)
 
 ### v0.5.4 — Ponytail Refactor + Second Brain Events + Gap #9 Feedback Events (2026-06-28)
 
@@ -598,7 +598,7 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
   - `combinedAbort()` duplicate di `debate-loop.ts` + `dag-engine.ts` → shared di `dag-helpers.ts`
 - **Second Brain events**: `agent-loop.ts` now emits `plan.created`, `step.completed`, `step.failed`, `plan.completed` events — SecondBrain auto-tracks execution
 - **Gap #9 feedback events**: New `feedback.recorded` event emitted by `agentic_execute` on user feedback — enables observability + real-time adaptation
-- **1798+ unit tests** (was 1117) — net 0 regressions
+- **1798+ unit tests** (was 2686) — net 0 regressions
 
 ### v0.5.5 — Gap #5+#6+#8+#9 Final Hardening + Typed Errors Cleanup (2026-07-01)
 
@@ -720,10 +720,10 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 
 - **SB-GAP tests**: 12 new tests covering `updateTodoStatus` (found + not found), `ensureMemoryLoaded` with pending todos (line 534), and `reflect` without LLM (no-LLM fallback path). second-brain.ts func coverage 62.5%→67.5%.
 - **Overall coverage**: Stmts 88.27%, Branch 68.7%, Funcs 77.52% — all gates pass ✅
-- **2663 unit tests** (was 2675), **0 lint warnings**, **build OK**.
+- **2727 unit tests** (was 2686), **0 lint warnings**, **build OK**.
 
 ### v0.5.15-dev — Branch Coverage: second-brain uncovered paths (2026-07-02)
 
 - **SB-GAP tests**: 11 new tests covering `updateTodoStatus` (found + not found), `ensureMemoryLoaded` with pending todos (line 534), and `reflect` without LLM (no-LLM fallback path). second-brain.ts func coverage 62.5%→67.5%.
 - **Overall coverage**: Stmts 88.27%, Branch 68.7%, Funcs 77.52% — all gates pass ✅
-- **2686 unit tests** (was 2675), **0 lint warnings**, **build OK**.
+- **2727 unit tests** (was 2686), **0 lint warnings**, **build OK**.
