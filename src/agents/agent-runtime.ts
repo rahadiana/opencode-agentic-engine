@@ -129,16 +129,14 @@ export class AgentRuntime {
       }
       const engine = new LLMEngine()
       engine.setOpencodeClient(this.opencodeClient)
-      // Use the SHARED temp session ID. All sub-engines prompt on the
-      // same session (sequential, no concurrency since delegate awaits).
-      // The shared session is linked to parent via parentID so the SDK
-      // can properly route prompts with the parent's model/agent context.
-      // We set the session ID lazily (after shared session is created).
-      if (this._sharedSessionId) {
-        engine.setSessionId(this._sharedSessionId)
-      }
-      // No chat mode — use non-chat _promptWithTimeout on shared session
-      engine.setChatMode(false)
+      // Synthetic session ID per role — not a real OpenCode session.
+      // But _chatMode=true means engine will create temp sessions
+      // via _callOpenCodeTempSession for actual LLM calls.
+      engine.setSessionId(`${parentSessionId}-${role}`)
+      // Chat mode: creates temp sessions linked via parentID
+      engine.setChatMode(true)
+      // Pass the real parent session ID for parentID linking
+      engine.setParentSessionId(parentSessionId)
       if (this.modelRegistry) engine.setModelRegistry(this.modelRegistry)
       this.engines.set(key, engine)
     }

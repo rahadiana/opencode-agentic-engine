@@ -1014,7 +1014,8 @@ export class LLMEngine {
         body: {
           system?: string
           noReply?: boolean
-          tools?: Record<string, boolean>
+          agent?: string
+          model?: { providerID: string; modelID: string }
           parts: Array<{ type: string; text: string }>
         }
         path: { id: string }
@@ -1042,13 +1043,18 @@ export class LLMEngine {
   private _buildPromptBody(req: LLMRequest): {
     system: string
     noReply: boolean
+    agent?: string
+    model?: { providerID: string; modelID: string }
     parts: Array<{ type: 'text'; text: string }>
   } {
-    const body = {
+    const sdkModel = req.model ?? this.parseModelForSDK()
+    const body: ReturnType<LLMEngine['_buildPromptBody']> = {
       system: req.jsonMode
         ? `${req.systemPrompt}\n\nRespond with ONLY valid JSON. No markdown, no explanation.`
         : req.systemPrompt,
       noReply: false,
+      agent: 'agentic',
+      ...(sdkModel ? { model: sdkModel } : {}),
       parts: [{ type: 'text' as const, text: req.userPrompt }],
     }
     return body
@@ -1217,54 +1223,39 @@ export class LLMEngine {
   }
 
   /**
-   * Call LLM via a REUSED temp child session in chat mode.
-   *
-   * Temp session is created ONCE (lazy) and cached in _tempSessionId.
-   * All subsequent calls reuse the same session — avoids SDK rate limits
-   * and session creation overhead.
-   *
-   * Temp session is LINKED to the parent session via parentID.
-   * This is CRITICAL — without parentID, the SDK doesn't know how to
-   * route prompts (no agent, no model context).
-   *
-   * Session is deleted in disposeTempSession() when the engine is disposed.
-   *
-   * One attempt — no retry loop to prevent concurrent prompt calls.
-   * Progress-based timeout via session activity polling.
+   * Call LLM via a fresh temp session in chat mode.
+   * create → prompt → delete per call.
+   * Includes agent:'agentic' and model in prompt body for SDK routing.
+   * Session created with parentID for context linking.
    */
   private async _callOpenCodeTempSession(
     client: NonNullable<ReturnType<LLMEngine['_getClient']>>,
     req: LLMRequest,
   ): Promise<LLMResponse> {
-    // Lazy-create temp session (one per engine lifetime)
-    if (!this._tempSessionId) {
-      try {
-        const createBody: { title: string; parentID?: string } = { 
-          title: `agentic-${Date.now()}` 
-        }
-        // Link to parent session so SDK can route prompts
-        const parentId = this._parentSessionId ?? this.pluginSessionId
-        if (parentId) createBody.parentID = parentId
+    let sessionId: string | null = null
+    try {
+      const createBody: { title: string; parentID?: string } = { 
+        title: `agentic-${Date.now()}` 
+      }
+      const parentId = this._parentSessionId ?? this.pluginSessionId
+      if (parentId) createBody.parentID = parentId
 
-        const tempSession = await client.session.create({
-          body: createBody,
-        })
-        this._tempSessionId = tempSession.data?.id ?? (tempSession as Record<string, unknown>).id as string ?? null
-        if (!this._tempSessionId) {
-          logParseError('callOpenCode chat mode', new Error('Created temp session but got no ID'))
-          return this.fallbackResponse(req)
-        }
-      } catch (error) {
-        logParseError('callOpenCode chat mode', error)
+      const tempSession = await client.session.create({
+        body: createBody,
+      })
+      sessionId = tempSession.data?.id ?? (tempSession as Record<string, unknown>).id as string ?? null
+      if (!sessionId) {
         return this.fallbackResponse(req)
       }
+    } catch (error) {
+      logParseError('callOpenCode chat mode', error)
+      return this.fallbackResponse(req)
     }
 
-    // One attempt — no retry loop to prevent concurrent prompt calls
     try {
       const body = this._buildPromptBody(req)
       const text = await this._promptWithProgressTracking(
-        client, this._tempSessionId, body,
+        client, sessionId, body,
         req.timeoutMs ?? 600_000,
         120_000,
         req.signal,
@@ -1274,6 +1265,10 @@ export class LLMEngine {
       }
     } catch (error) {
       logParseError('callOpenCode chat mode', error)
+    } finally {
+      if (sessionId) {
+        try { await client.session.delete({ path: { id: sessionId } }) } catch { /* ignore */ }
+      }
     }
 
     return this.fallbackResponse(req)

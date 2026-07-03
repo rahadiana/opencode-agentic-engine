@@ -2,6 +2,20 @@
   "key": "global",
   "data": [
     {
+      "title": "Plan: Run remaining stress test scenarios: S6 Pipeline, S8 Auto+Guard+Verify, S10 Prot",
+      "context": "Run remaining stress test scenarios: S6 Pipeline, S8 Auto+Guard+Verify, S10 Protocol & Evolution (3 subtasks)",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "dec-1783093144515-oulz8q",
+      "timestamp": 1783093144515
+    },
+    {
+      "title": "Plan: Fix remaining gaps: multi-agent reliability 63%→90%, task success 73%→80%, conte",
+      "context": "Fix remaining gaps: multi-agent reliability 63%→90%, task success 73%→80%, context stability 78%→80% (3 subtasks)",
+      "sessionId": "ses_0d7cb3a95ffetZ1PKEgI3uMmV2",
+      "id": "dec-1783086098567-g307m5",
+      "timestamp": 1783086098567
+    },
+    {
       "title": "Plan: Fix multi-agent reliability (63%→90%) and task success (73%→80%) + fix LiveEvalu",
       "context": "Fix multi-agent reliability (63%→90%) and task success (73%→80%) + fix LiveEvaluator CI bug + clean stale TODOs (3 subtasks)",
       "sessionId": "ses_0d7cbce7bffeFUzh4JdB7Zxzxv",
@@ -201,12 +215,19 @@
       "timestamp": 1783052777584
     },
     {
-      "title": "Plan: Fix remaining gaps: multi-agent reliability 63%→90%, task success 73%→80%, conte",
-      "context": "Fix remaining gaps: multi-agent reliability 63%→90%, task success 73%→80%, context stability 78%→80% (3 subtasks)",
-      "sessionId": "ses_0d7cb3a95ffetZ1PKEgI3uMmV2",
-      "id": "dec-1783086098567-g307m5",
-      "timestamp": 1783086098567
+      "title": "Plan: Fix LRU Cache issues identified by QA: fix undefined value ambiguity, constructo",
+      "context": "Fix LRU Cache issues identified by QA: fix undefined value ambiguity, constructor validation, add peek method, add documentation for iterators (3 subtasks)",
+      "sessionId": "ses_0d7636e0fffeqxeYzg81hshOUY",
+      "id": "dec-1783093190047-spj2bn",
+      "timestamp": 1783093190047
+    },
+    {
+      "title": "Plan: Fix LRU Cache bugs from QA audit",
+      "context": "Fix LRU Cache bugs from QA audit (5 subtasks)",
+      "sessionId": "ses_0d7636e0fffeqxeYzg81hshOUY",
+      "id": "dec-1783093203025-y5itom",
+      "timestamp": 1783093203025
     }
   ],
-  "updatedAt": "2026-07-03T13:41:38.567Z"
+  "updatedAt": "2026-07-03T15:40:03.025Z"
 }

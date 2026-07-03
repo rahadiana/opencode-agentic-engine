@@ -247,7 +247,37 @@
       "status": "pending",
       "createdAt": 1783092537558,
       "updatedAt": 1783092537558
+    },
+    {
+      "text": "[task] Delegated task pipeline-pm (pm) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783093292739-metb",
+      "status": "pending",
+      "createdAt": 1783093292739,
+      "updatedAt": 1783093292739
+    },
+    {
+      "text": "[task] Delegated task fix-lru-cache-v2 (developer) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0d7636e0fffeqxeYzg81hshOUY",
+      "id": "todo-1783093356446-dd88",
+      "status": "pending",
+      "createdAt": 1783093356446,
+      "updatedAt": 1783093356446
+    },
+    {
+      "text": "[task] Delegated task quick-test-simple (developer) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783093480367-4q1x",
+      "status": "pending",
+      "createdAt": 1783093480367,
+      "updatedAt": 1783093480367
     }
   ],
-  "updatedAt": "2026-07-03T15:28:57.558Z"
+  "updatedAt": "2026-07-03T15:44:40.367Z"
 }

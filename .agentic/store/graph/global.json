@@ -752,7 +752,58 @@
       "metadata": {
         "timestamp": 1783092952231
       }
+    },
+    {
+      "source": "pm",
+      "target": "pipeline-pm",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Define detailed requirements for a real-time monitoring dashboard with WebSocket notifications. Include: target users, key features, acceptance criteria, and success metrics. Format as structured PRD.",
+        "timestamp": 1783093172735
+      }
+    },
+    {
+      "source": "developer",
+      "target": "fix-lru-cache-v2",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Fix the LRU Cache (src/core/lru-cache.ts) based on QA findings. There are 6 issues found — two are MEDIUM severity (must fix), the rest are LOW/INFO (nice-to-have):\n\n**P0 — MUST FIX: Constructor valid",
+        "timestamp": 1783093236437
+      }
+    },
+    {
+      "source": "pipeline-pm",
+      "target": "pm",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783093292739
+      }
+    },
+    {
+      "source": "fix-lru-cache-v2",
+      "target": "developer",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783093356446
+      }
+    },
+    {
+      "source": "developer",
+      "target": "quick-test-simple",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Write a one-line TypeScript arrow function that adds two numbers.",
+        "timestamp": 1783093360353
+      }
+    },
+    {
+      "source": "quick-test-simple",
+      "target": "developer",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783093480366
+      }
     }
   ],
-  "updatedAt": "2026-07-03T15:35:52.231Z"
+  "updatedAt": "2026-07-03T15:44:40.366Z"
 }
