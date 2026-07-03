@@ -48,6 +48,16 @@ export class LLMEngine {
   /** Cached temp session ID for chat mode — reuse instead of create+delete per call. */
   private _tempSessionId: string | null = null
 
+  /** Expose temp session ID for progress tracking by AgentRuntime */
+  getTempSessionId(): string | null {
+    return this._tempSessionId
+  }
+
+  /** Expose the SDK client for direct API access */
+  getClient(): unknown {
+    return this._getClient()
+  }
+
   /** Cost auto-switch tracking */
   private costSwitchStats = { totalSwitches: 0, totalSavingsUsd: 0, switches: [] as CostSwitchEvent[] }
   /** Cost auto-switch observer callback */
@@ -1006,7 +1016,7 @@ export class LLMEngine {
    */
   private _buildPromptBody(req: LLMRequest): {
     system: string
-    noReply: false
+    noReply: boolean
     model?: { providerID: string; modelID: string }
     reasoningEffort?: 'low' | 'medium' | 'high'
     parts: Array<{ type: 'text'; text: string }>
@@ -1025,6 +1035,7 @@ export class LLMEngine {
 
   /**
    * Run session.prompt with timeout + abort controller.
+   * Used for non-chat mode (single-round LLM calls).
    */
   private async _promptWithTimeout(
     client: NonNullable<ReturnType<LLMEngine['_getClient']>>,
@@ -1066,6 +1077,95 @@ export class LLMEngine {
     }
   }
 
+  /**
+   * Progress-aware prompt with session activity polling.
+   * Instead of a blind timeout, polls the session's time_updated periodically
+   * via `client.session.get()`. If the session keeps making progress
+   * (new tool-call messages being recorded), lastActivity resets.
+   * Only aborts if the session stalls for STALL_LIMIT_MS.
+   *
+   * Designed for chat mode (temp session) where the sub-agent may run
+   * multiple rounds of tool calls (read/grep/write) before returning.
+   * Gap: Track by session ID/PID instead of blind clock timeout.
+   */
+  private async _promptWithProgressTracking(
+    client: NonNullable<ReturnType<LLMEngine['_getClient']>>,
+    sessionId: string,
+    body: ReturnType<LLMEngine['_buildPromptBody']>,
+    maxTimeoutMs: number = 600_000,    // max 10 menit wall-clock
+    stallLimitMs: number = 120_000,    // timeout kalo 2 menit tanpa aktivitas
+    externalSignal?: AbortSignal,
+  ): Promise<string> {
+    const POLL_MS = 10_000
+    const controller = new AbortController()
+    let lastActivity = Date.now()
+
+    // Forward external abort (dari AgentRuntime atau parent)
+    if (externalSignal) {
+      externalSignal.addEventListener('abort', () => controller.abort(), { once: true })
+    }
+
+    // Poll session activity via SDK — async interval
+    let pollTimer: ReturnType<typeof setInterval> | undefined
+    const startPolling = () => {
+      pollTimer = setInterval(async () => {
+        if (controller.signal.aborted) return
+        try {
+          const sdk = client as unknown as {
+            session?: {
+              get: (opts: { path: { id: string }; throwOnError?: boolean }) => Promise<{
+                data?: { time_updated?: number } | null
+              }>
+            }
+          }
+          const info = await sdk.session?.get?.({ path: { id: sessionId }, throwOnError: false })
+          const updated = info?.data?.time_updated ?? 0
+          if (updated > lastActivity) {
+            lastActivity = updated
+            log.debug(`[Progress] ses ${sessionId.slice(0, 12)}... active at ${new Date(updated).toISOString().slice(11, 19)}`)
+          }
+        } catch {
+          // transient polling error — jangan abort
+        }
+
+        // Stall check
+        if (!controller.signal.aborted && Date.now() - lastActivity > stallLimitMs) {
+          controller.abort()
+        }
+        // Max timeout check
+        if (!controller.signal.aborted && Date.now() - lastActivity > maxTimeoutMs) {
+          controller.abort()
+        }
+      }, POLL_MS)
+    }
+    startPolling()
+
+    // Inner abort handler — untuk logging + reject reason
+    const rejectPromise = new Promise<never>((_, reject) => {
+      const onAbort = () => {
+        const idleSec = Math.round((Date.now() - lastActivity) / 1000)
+        const reason = externalSignal?.aborted
+          ? 'LLM call cancelled (parent abort)'
+          : idleSec > Math.round(stallLimitMs / 1000)
+            ? `LLM call stalled: no activity for ${idleSec}s (session ${sessionId.slice(0, 12)}...)`
+            : `LLM call timed out after ${Math.round((Date.now() - (Date.now() - lastActivity)) / 1000)}s`
+        log.warn(`[Progress] ${reason}`)
+        reject(new Error(reason))
+      }
+      controller.signal.addEventListener('abort', onAbort, { once: true })
+    })
+
+    try {
+      const result = await Promise.race([
+        client.session.prompt({ body, path: { id: sessionId } }),
+        rejectPromise,
+      ])
+      return this._extractResponse(result)
+    } finally {
+      if (pollTimer) clearInterval(pollTimer)
+    }
+  }
+
   private async callOpenCode(req: LLMRequest): Promise<LLMResponse> {
     if (!this.opencodeClient || !this.pluginSessionId) {
       return this.fallbackResponse(req)
@@ -1074,9 +1174,9 @@ export class LLMEngine {
     const client = this._getClient()
     if (!client) return this.fallbackResponse(req)
 
-    // In chat mode: session.prompt({ noReply: false }) on the current session
-    // would hang because the chat's agent loop is already running.
-    // Solution: create/reuse a temp child session for the LLM call.
+    // In chat mode: sub-engines have synthetic session IDs (e.g. "ses_x-dev")
+    // that are NOT valid OpenCode sessions. Create a real temp session.
+    // Main engine uses parent session directly with noReply: true.
     if (this._chatMode) {
       return this._callOpenCodeTempSession(client, req)
     }
@@ -1096,50 +1196,54 @@ export class LLMEngine {
   }
 
   /**
-   * Call LLM in chat mode via a temp child session.
-   * Avoids hanging the parent chat session's agent loop.
-   * Reuses ONE temp session per engine lifetime. Retries once on failure.
+   * Call LLM via a temp child session in chat mode.
+   * Sub-engines have synthetic session IDs (not valid OpenCode sessions),
+   * so we create a REAL temp session for each call.
+   *
+   * Fresh session per call (create → prompt → delete).
+   * No retry loop — prevents concurrent session.prompt() calls that drain tokens.
+   * Progress-based timeout via session activity polling.
+   *
+   * Passes agent: 'agentic' to avoid SDK "default agent not found" errors
+   * that occur when temp sessions lack agent context.
    */
   private async _callOpenCodeTempSession(
     client: NonNullable<ReturnType<LLMEngine['_getClient']>>,
     req: LLMRequest,
   ): Promise<LLMResponse> {
-    for (let attempt = 0; attempt <= 1; attempt++) {
-      // Create temp session if first call or retrying
-      if (!this._tempSessionId) {
-        try {
-          const tempSession = await client.session.create({
-            body: { title: `agentic-${Date.now()}` },
-          })
-          this._tempSessionId = tempSession.data?.id ?? (tempSession as Record<string, unknown>).id as string ?? null
-          if (!this._tempSessionId) {
-            logParseError('callOpenCode chat mode', new Error('Created temp session but got no ID'))
-            return this.fallbackResponse(req)
-          }
-        } catch (error) {
-          logParseError('callOpenCode chat mode', error)
-          if (attempt === 0) { this._tempSessionId = null; continue }
-          return this.fallbackResponse(req)
-        }
+    // Create a fresh temp session for this call
+    let sessionId: string | null = null
+    try {
+      const tempSession = await client.session.create({
+        body: { title: `agentic-${Date.now()}` },
+      })
+      sessionId = tempSession.data?.id ?? (tempSession as Record<string, unknown>).id as string ?? null
+      if (!sessionId) {
+        logParseError('callOpenCode chat mode', new Error('Created temp session but got no ID'))
+        return this.fallbackResponse(req)
       }
+    } catch (error) {
+      logParseError('callOpenCode chat mode', error)
+      return this.fallbackResponse(req)
+    }
 
-      try {
-        const body = this._buildPromptBody(req)
-        const text = await this._promptWithTimeout(client, this._tempSessionId, body, req.timeoutMs ?? 300_000, req.signal)
-        if (text.trim()) {
-          return { content: text.trim(), finishReason: 'stop' }
-        }
-      } catch (error) {
-        logParseError('callOpenCode chat mode', error)
+    // One attempt — no retry loop to prevent concurrent prompt calls
+    try {
+      const body = this._buildPromptBody(req)
+      const text = await this._promptWithProgressTracking(
+        client, sessionId, body,
+        req.timeoutMs ?? 600_000,
+        120_000,
+        req.signal,
+      )
+      if (text.trim()) {
+        return { content: text.trim(), finishReason: 'stop' }
       }
-
-      // Empty/error — retry once with fresh session
-      if (attempt === 0) {
-        if (this._tempSessionId) {
-          try { await client.session.delete({ path: { id: this._tempSessionId } }) } catch { /* ignore */ }
-          this._tempSessionId = null
-        }
-        continue
+    } catch (error) {
+      logParseError('callOpenCode chat mode', error)
+    } finally {
+      if (sessionId) {
+        try { await client.session.delete({ path: { id: sessionId } }) } catch { /* ignore */ }
       }
     }
 

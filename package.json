@@ -56,7 +56,8 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
     "test:swebench": "node test/swebench-harness.mjs",
-    "test:swebench-llm": "OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_MODEL=qwen2.5:0.5b node test/swebench-harness.mjs",
+    "test:fixture": "npx vitest run test/e2e-codebase-fixture/tests/integration/profile-endpoint.test.ts --reporter=verbose",
+"test:swebench-llm": "OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_MODEL=qwen2.5:0.5b node test/swebench-harness.mjs",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
