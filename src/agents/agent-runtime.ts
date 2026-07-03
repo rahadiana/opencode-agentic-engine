@@ -45,17 +45,22 @@ export class AgentRuntime {
   private modelRegistry?: ModelRegistry
   private roleRegistry: RoleRegistry
   /** ONE shared temp session ID for ALL sub-engine LLM calls.
-   *  SDK only allows one child session per parent — creating multiple
-   *  temp sessions causes hangs on subsequent session.create(). */
+   *  SDK only allows ~2-3 prompts per child session before hanging.
+   *  Session is rotated (create new, delete old) after every 2 calls. */
   private _sharedSessionId: string | null = null
+  private _sharedSessionCount: number = 0
 
   constructor() {
     this.roleRegistry = new RoleRegistry()
   }
 
-  /** Create ONE shared temp session linked to parent. All sub-engines
-   *  use this same session for LLM calls (sequential, no concurrency). */
+  /** Get or rotate shared temp session. Rotates after every 2 calls. */
   private async _getOrCreateSharedSession(parentSessionId: string): Promise<string | null> {
+    // Rotate session after 2 calls (SDK limits ~2-3 prompts per child session)
+    if (this._sharedSessionId && this._sharedSessionCount >= 2) {
+      this._rotateSharedSession()
+    }
+    
     if (this._sharedSessionId) return this._sharedSessionId
     if (!this.opencodeClient) return null
 
@@ -73,10 +78,28 @@ export class AgentRuntime {
         },
       })
       this._sharedSessionId = resp.data?.id ?? (resp as Record<string, unknown>).id as string ?? null
+      this._sharedSessionCount = 0
     } catch {
       this._sharedSessionId = null
     }
     return this._sharedSessionId
+  }
+
+  /** Rotate: delete old session async, null out so next call creates new one. */
+  private _rotateSharedSession(): void {
+    if (this._sharedSessionId && this.opencodeClient) {
+      try {
+        const client = this.opencodeClient as { session: { delete: (opts: { path: { id: string } }) => Promise<unknown> } }
+        client.session.delete({ path: { id: this._sharedSessionId } }).catch(() => {})
+      } catch { /* ignore */ }
+    }
+    this._sharedSessionId = null
+    this._sharedSessionCount = 0
+  }
+
+  /** Increment prompt count on the shared session. Called after each successful LLM call. */
+  private _incrementSharedSessionCount(): void {
+    this._sharedSessionCount++
   }
 
   dispose(): void {
@@ -129,14 +152,12 @@ export class AgentRuntime {
       }
       const engine = new LLMEngine()
       engine.setOpencodeClient(this.opencodeClient)
-      // Synthetic session ID per role — not a real OpenCode session.
-      // But _chatMode=true means engine will create temp sessions
-      // via _callOpenCodeTempSession for actual LLM calls.
-      engine.setSessionId(`${parentSessionId}-${role}`)
-      // Chat mode: creates temp sessions linked via parentID
-      engine.setChatMode(true)
-      // Pass the real parent session ID for parentID linking
-      engine.setParentSessionId(parentSessionId)
+      // Use SHARED temp session ID (created once per AgentRuntime)
+      if (this._sharedSessionId) {
+        engine.setSessionId(this._sharedSessionId)
+      }
+      // Non-chat mode: use _promptWithTimeout directly on shared session
+      engine.setChatMode(false)
       if (this.modelRegistry) engine.setModelRegistry(this.modelRegistry)
       this.engines.set(key, engine)
     }
@@ -152,7 +173,10 @@ export class AgentRuntime {
    * The engine is isolated per (session, role) pair.
    */
   async execute(ctx: AgentContext): Promise<AgentResult> {
-    // Ensure shared temp session exists (lazy create, one per AgentRuntime)
+    // Ensure shared temp session exists and isn't stale (rotate after 2 calls)
+    if (this._sharedSessionId && this._sharedSessionCount >= 2) {
+      this._rotateSharedSession()
+    }
     if (!this._sharedSessionId) {
       await this._getOrCreateSharedSession(ctx.sessionId)
     }
@@ -225,6 +249,8 @@ export class AgentRuntime {
       if (output.startsWith("LLM error") || output.startsWith("[NO_LLM]")) {
         return { output, success: false, error: output }
       }
+      // Increment shared session counter after successful LLM call
+      this._incrementSharedSessionCount()
       return { output, success: true, modelUsed: modelOverride ? `${modelOverride.providerID}/${modelOverride.modelID}` : "opencode/default" }
     } catch (e) {
       const err = e as Error
