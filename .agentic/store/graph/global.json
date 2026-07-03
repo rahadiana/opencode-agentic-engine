@@ -71,7 +71,467 @@
         "outcome": "success",
         "timestamp": 1783071688075
       }
+    },
+    {
+      "source": "llm",
+      "target": "opencode/big-pickle",
+      "relation": "cost",
+      "metadata": {
+        "costUsd": 0,
+        "timestamp": 1783074974727
+      }
+    },
+    {
+      "source": "pm",
+      "target": "pm-001",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Define requirements and acceptance criteria for a new REST API endpoint that returns user profile data (GET /api/users/:id/profile). The endpoint should return: name, email, avatar, bio, joinDate, and",
+        "timestamp": 1783074986501
+      }
+    },
+    {
+      "source": "pm-001",
+      "target": "pm",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783075016504
+      }
+    },
+    {
+      "source": "pm",
+      "target": "pm-002",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Define requirements and acceptance criteria for GET /api/users/:id/profile. Return: name, email, avatar, bio, joinDate, stats. Include auth, error handling, input validation. Output spec + acceptance ",
+        "timestamp": 1783075077549
+      }
+    },
+    {
+      "source": "pm-002",
+      "target": "pm",
+      "relation": "completed_by",
+      "metadata": {
+        "timestamp": 1783075100881
+      }
+    },
+    {
+      "source": "architect",
+      "target": "arch-001",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Design architecture and interface contracts for GET /api/users/:id/profile based on these requirements: auth required (Bearer token), UUID validation on :id, privacy filtering (email omitted for other",
+        "timestamp": 1783075122479
+      }
+    },
+    {
+      "source": "developer",
+      "target": "dev-001",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Implement TypeScript Express.js endpoint GET /api/users/:id/profile following this spec: auth via Bearer token middleware, UUID validation on req.params.id, query user from DB, privacy filter (remove ",
+        "timestamp": 1783075122480
+      }
+    },
+    {
+      "source": "qa",
+      "target": "qa-001",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Define test plan for GET /api/users/:id/profile covering: auth (no token, expired, malformed), UUID validation (invalid format, valid UUID not found), privacy (own vs other user email visibility), sta",
+        "timestamp": 1783075122480
+      }
+    },
+    {
+      "source": "architect",
+      "target": "arch-002",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Design architecture for GET /api/users/:id/profile endpoint. Auth: Bearer token middleware. UUID validation. Privacy: email hidden for other users. Stats shape. Return architecture design + interface ",
+        "timestamp": 1783075263016
+      }
+    },
+    {
+      "source": "developer",
+      "target": "dev-002",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Implement TypeScript Express endpoint GET /api/users/:id/profile. Auth middleware, UUID validation, DB query, privacy filter, return user profile shape.",
+        "timestamp": 1783075263017
+      }
+    },
+    {
+      "source": "qa",
+      "target": "qa-002",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create test plan for GET /api/users/:id/profile. Auth tests, UUID validation, privacy, edge cases.",
+        "timestamp": 1783075263017
+      }
+    },
+    {
+      "source": "architect",
+      "target": "arch-003",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Design architecture and interface contracts for GET /api/users/:id/profile. Auth: Bearer token. UUID validation on :id. Privacy filtering (email hidden for other users). Stats shape: postCount, commen",
+        "timestamp": 1783075392838
+      }
+    },
+    {
+      "source": "arch-003",
+      "target": "architect",
+      "relation": "completed_by",
+      "metadata": {
+        "timestamp": 1783075470686
+      }
+    },
+    {
+      "source": "developer",
+      "target": "dev-003",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Implement TypeScript Express.js endpoint GET /api/users/:id/profile. Auth: Bearer token middleware. UUID validation. DB query user by UUID. Privacy: if requester !== target, omit email. Return: name, ",
+        "timestamp": 1783075475756
+      }
+    },
+    {
+      "source": "dev-003",
+      "target": "developer",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783075595762
+      }
+    },
+    {
+      "source": "developer",
+      "target": "dev-004",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Implement TypeScript Express.js endpoint GET /api/users/:id/profile. Auth: Bearer token middleware. UUID validation. DB query user by UUID. Privacy: if requester !== target, omit email. Return: name, ",
+        "timestamp": 1783075608633
+      }
+    },
+    {
+      "source": "developer",
+      "target": "dev-005",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Implement TypeScript Express.js endpoint GET /api/users/:id/profile. Auth Bearer token middleware, UUID validation, DB query user by UUID, privacy filter: if requester !== target omit email. Return: n",
+        "timestamp": 1783075708613
+      }
+    },
+    {
+      "source": "dev-004",
+      "target": "developer",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783075728634
+      }
+    },
+    {
+      "source": "dev-005",
+      "target": "developer",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783075828624
+      }
+    },
+    {
+      "source": "pm",
+      "target": "test-pm-001",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Define requirements for a health check endpoint GET /api/health that returns status, version, uptime and database connectivity.",
+        "timestamp": 1783079742961
+      }
+    },
+    {
+      "source": "test-pm-001",
+      "target": "pm",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783079742981
+      }
+    },
+    {
+      "source": "pm",
+      "target": "test-pm-002",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Define requirements for a health check endpoint GET /api/health that returns status, version, uptime and database connectivity.",
+        "timestamp": 1783079925745
+      }
+    },
+    {
+      "source": "test-pm-002",
+      "target": "pm",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783079925759
+      }
+    },
+    {
+      "source": "architect",
+      "target": "swarm-arch-1",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Design API rate limiting architecture for a microservices platform with Redis backend",
+        "timestamp": 1783084388184
+      }
+    },
+    {
+      "source": "architect",
+      "target": "swarm-arch-2",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Design event-driven notification system architecture with Kafka",
+        "timestamp": 1783084388696
+      }
+    },
+    {
+      "source": "developer",
+      "target": "swarm-dev-1",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Implement JWT authentication middleware with token refresh support",
+        "timestamp": 1783084389209
+      }
+    },
+    {
+      "source": "developer",
+      "target": "swarm-dev-2",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Implement file upload service with virus scanning hook point",
+        "timestamp": 1783084389710
+      }
+    },
+    {
+      "source": "developer",
+      "target": "swarm-dev-3",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Implement WebSocket real-time notification service",
+        "timestamp": 1783084390181
+      }
+    },
+    {
+      "source": "qa",
+      "target": "swarm-qa-1",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Write integration tests for rate limiting middleware",
+        "timestamp": 1783084390681
+      }
+    },
+    {
+      "source": "qa",
+      "target": "swarm-qa-2",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Write load tests for WebSocket notification service targeting 10k concurrent connections",
+        "timestamp": 1783084391174
+      }
+    },
+    {
+      "source": "pm",
+      "target": "swarm-pm-1",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create sprint plan for Q3 feature delivery: rate limiting, notifications, file upload",
+        "timestamp": 1783084391818
+      }
+    },
+    {
+      "source": "swarm-arch-1",
+      "target": "architect",
+      "relation": "completed_by",
+      "metadata": {
+        "timestamp": 1783084423388
+      }
+    },
+    {
+      "source": "swarm-arch-2",
+      "target": "architect",
+      "relation": "completed_by",
+      "metadata": {
+        "timestamp": 1783084437586
+      }
+    },
+    {
+      "source": "swarm-dev-1",
+      "target": "developer",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783084509214
+      }
+    },
+    {
+      "source": "swarm-dev-2",
+      "target": "developer",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783084509717
+      }
+    },
+    {
+      "source": "swarm-dev-3",
+      "target": "developer",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783084510187
+      }
+    },
+    {
+      "source": "swarm-qa-1",
+      "target": "qa",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783084510686
+      }
+    },
+    {
+      "source": "swarm-qa-2",
+      "target": "qa",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783084511181
+      }
+    },
+    {
+      "source": "swarm-pm-1",
+      "target": "pm",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783084511820
+      }
+    },
+    {
+      "source": "developer",
+      "target": "test-delegate-fix-1",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Write a simple function that validates email addresses. Return the code only.",
+        "timestamp": 1783084761380
+      }
+    },
+    {
+      "source": "test-delegate-fix-1",
+      "target": "developer",
+      "relation": "completed_by",
+      "metadata": {
+        "timestamp": 1783084767364
+      }
+    },
+    {
+      "source": "qa",
+      "target": "test-qa-002",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Review the email validation function for edge cases: empty strings, null, very long strings, unicode emails, IP-based domains. List all issues found.",
+        "timestamp": 1783084779217
+      }
+    },
+    {
+      "source": "src/services/ServiceRegistry.ts",
+      "target": "p1",
+      "relation": "modified_by",
+      "metadata": {
+        "event": "step.completed",
+        "timestamp": 1783084916871
+      }
+    },
+    {
+      "source": "src/models/ServiceModel.ts",
+      "target": "p1",
+      "relation": "modified_by",
+      "metadata": {
+        "event": "step.completed",
+        "timestamp": 1783084916872
+      }
+    },
+    {
+      "source": "src/routes/discovery.ts",
+      "target": "p1",
+      "relation": "modified_by",
+      "metadata": {
+        "event": "step.completed",
+        "timestamp": 1783084916872
+      }
+    },
+    {
+      "source": "llm",
+      "target": "nusantaracode/oc/deepseek-v4-flash-free",
+      "relation": "cost",
+      "metadata": {
+        "costUsd": 0,
+        "timestamp": 1783085167486
+      }
+    },
+    {
+      "source": "test-fail-1",
+      "target": "retry-2",
+      "relation": "retried",
+      "metadata": {
+        "attempt": 2,
+        "timestamp": 1783085418591
+      }
+    },
+    {
+      "source": "test-fail-1",
+      "target": "unknown",
+      "relation": "has_error",
+      "metadata": {
+        "error": "TypeError: Cannot read properties of undefined (reading 'port') at ServiceRegistry.register",
+        "timestamp": 1783085418592
+      }
+    },
+    {
+      "source": "src/services/ServiceRegistry.ts",
+      "target": "test-fail-1",
+      "relation": "modified_by",
+      "metadata": {
+        "event": "step.completed",
+        "timestamp": 1783085432953
+      }
+    },
+    {
+      "source": "src/services/HealthChecker.ts",
+      "target": "p2",
+      "relation": "modified_by",
+      "metadata": {
+        "event": "step.completed",
+        "timestamp": 1783085461671
+      }
+    },
+    {
+      "source": "src/routes/health.ts",
+      "target": "p2",
+      "relation": "modified_by",
+      "metadata": {
+        "event": "step.completed",
+        "timestamp": 1783085461672
+      }
+    },
+    {
+      "source": "src/services/MetricsAggregator.ts",
+      "target": "p3",
+      "relation": "modified_by",
+      "metadata": {
+        "event": "step.completed",
+        "timestamp": 1783085463475
+      }
+    },
+    {
+      "source": "src/routes/metrics.ts",
+      "target": "p3",
+      "relation": "modified_by",
+      "metadata": {
+        "event": "step.completed",
+        "timestamp": 1783085463475
+      }
     }
   ],
-  "updatedAt": "2026-07-03T09:41:28.075Z"
+  "updatedAt": "2026-07-03T13:31:03.475Z"
 }

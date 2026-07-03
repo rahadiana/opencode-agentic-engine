@@ -3366,6 +3366,1887 @@
           "successRate": 0.5,
           "successWindow": [],
           "lastUsed": "2026-07-03T09:35:37.047Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783074977121-6lpc",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T10:36:17.121Z",
+              "lastUsed": "2026-07-03T10:36:17.121Z",
+              "lastModified": "2026-07-03T10:36:17.121Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T10:36:17.121Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783077341502-e08o",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:15:41.502Z",
+              "lastUsed": "2026-07-03T11:15:41.502Z",
+              "lastModified": "2026-07-03T11:15:41.502Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:15:41.502Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783077936925-spou",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:25:36.925Z",
+              "lastUsed": "2026-07-03T11:25:36.925Z",
+              "lastModified": "2026-07-03T11:25:36.925Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:25:36.925Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783076719127-ausr",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:05:19.127Z",
+              "lastUsed": "2026-07-03T11:05:19.127Z",
+              "lastModified": "2026-07-03T11:05:19.127Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:05:19.127Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783077236596-2bin",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:13:56.596Z",
+              "lastUsed": "2026-07-03T11:13:56.596Z",
+              "lastModified": "2026-07-03T11:13:56.596Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:13:56.596Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783077575345-von5",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:19:35.345Z",
+              "lastUsed": "2026-07-03T11:19:35.345Z",
+              "lastModified": "2026-07-03T11:19:35.345Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:19:35.345Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783076542501-mtqs",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:02:22.501Z",
+              "lastUsed": "2026-07-03T11:02:22.501Z",
+              "lastModified": "2026-07-03T11:02:22.501Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:02:22.501Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783075502932-iv5a",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T10:45:02.932Z",
+              "lastUsed": "2026-07-03T10:45:02.932Z",
+              "lastModified": "2026-07-03T10:45:02.932Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T10:45:02.932Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783076879100-1pka",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:07:59.099Z",
+              "lastUsed": "2026-07-03T11:07:59.099Z",
+              "lastModified": "2026-07-03T11:07:59.099Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:07:59.099Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783077719007-dd0e",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:21:59.007Z",
+              "lastUsed": "2026-07-03T11:21:59.007Z",
+              "lastModified": "2026-07-03T11:21:59.007Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:21:59.007Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783078315476-mtnn",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:31:55.476Z",
+              "lastUsed": "2026-07-03T11:31:55.476Z",
+              "lastModified": "2026-07-03T11:31:55.476Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:31:55.476Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783076028077-v1gg",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T10:53:48.077Z",
+              "lastUsed": "2026-07-03T10:53:48.077Z",
+              "lastModified": "2026-07-03T10:53:48.077Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T10:53:48.077Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783075519015-637a",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T10:45:19.015Z",
+              "lastUsed": "2026-07-03T10:45:19.015Z",
+              "lastModified": "2026-07-03T10:45:19.015Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T10:45:19.015Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783077481293-9p4n",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:18:01.293Z",
+              "lastUsed": "2026-07-03T11:18:01.293Z",
+              "lastModified": "2026-07-03T11:18:01.293Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:18:01.293Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783075862739-jyk7",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T10:51:02.739Z",
+              "lastUsed": "2026-07-03T10:51:02.739Z",
+              "lastModified": "2026-07-03T10:51:02.739Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T10:51:02.739Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783077577587-qpy2",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:19:37.587Z",
+              "lastUsed": "2026-07-03T11:19:37.587Z",
+              "lastModified": "2026-07-03T11:19:37.587Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:19:37.587Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783076969905-no4a",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:09:29.905Z",
+              "lastUsed": "2026-07-03T11:09:29.905Z",
+              "lastModified": "2026-07-03T11:09:29.905Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:09:29.905Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783077548237-wiw8",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:19:08.237Z",
+              "lastUsed": "2026-07-03T11:19:08.237Z",
+              "lastModified": "2026-07-03T11:19:08.237Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:19:08.237Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783077199781-6y2f",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:13:19.781Z",
+              "lastUsed": "2026-07-03T11:13:19.781Z",
+              "lastModified": "2026-07-03T11:13:19.781Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:13:19.781Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783077761698-vb0b",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:22:41.698Z",
+              "lastUsed": "2026-07-03T11:22:41.698Z",
+              "lastModified": "2026-07-03T11:22:41.698Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:22:41.698Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783076797316-hb1r",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:06:37.316Z",
+              "lastUsed": "2026-07-03T11:06:37.316Z",
+              "lastModified": "2026-07-03T11:06:37.316Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:06:37.316Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783077410459-y93s",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:16:50.459Z",
+              "lastUsed": "2026-07-03T11:16:50.459Z",
+              "lastModified": "2026-07-03T11:16:50.459Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:16:50.459Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783076970378-b619",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:09:30.378Z",
+              "lastUsed": "2026-07-03T11:09:30.378Z",
+              "lastModified": "2026-07-03T11:09:30.378Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:09:30.378Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783078464042-vte0",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:34:24.042Z",
+              "lastUsed": "2026-07-03T11:34:24.042Z",
+              "lastModified": "2026-07-03T11:34:24.042Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:34:24.042Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783076853764-9y3z",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:07:33.764Z",
+              "lastUsed": "2026-07-03T11:07:33.764Z",
+              "lastModified": "2026-07-03T11:07:33.764Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:07:33.764Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783078612826-jzhq",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:36:52.826Z",
+              "lastUsed": "2026-07-03T11:36:52.826Z",
+              "lastModified": "2026-07-03T11:36:52.826Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:36:52.826Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783078578253-dv39",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:36:18.253Z",
+              "lastUsed": "2026-07-03T11:36:18.253Z",
+              "lastModified": "2026-07-03T11:36:18.253Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:36:18.253Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783078607274-8kmz",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:36:47.274Z",
+              "lastUsed": "2026-07-03T11:36:47.274Z",
+              "lastModified": "2026-07-03T11:36:47.274Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:36:47.274Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783078613287-itpf",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:36:53.287Z",
+              "lastUsed": "2026-07-03T11:36:53.287Z",
+              "lastModified": "2026-07-03T11:36:53.287Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:36:53.287Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783079140638-igog",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:45:40.638Z",
+              "lastUsed": "2026-07-03T11:45:40.638Z",
+              "lastModified": "2026-07-03T11:45:40.638Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:45:40.638Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783079536858-mya2",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:52:16.858Z",
+              "lastUsed": "2026-07-03T11:52:16.858Z",
+              "lastModified": "2026-07-03T11:52:16.858Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:52:16.858Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783079675188-nlp2",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:54:35.188Z",
+              "lastUsed": "2026-07-03T11:54:35.188Z",
+              "lastModified": "2026-07-03T11:54:35.188Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:54:35.188Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783079869380-eq51",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:57:49.380Z",
+              "lastUsed": "2026-07-03T11:57:49.380Z",
+              "lastModified": "2026-07-03T11:57:49.380Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:57:49.380Z"
         }
       ],
       "tfidfDocs": [
@@ -4666,6 +6547,732 @@
             "type": "skill",
             "skillId": "skill-1783071337047-vk7o"
           }
+        },
+        {
+          "id": "sk-skill-1783074977121-6lpc",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783074977121-6lpc"
+          }
+        },
+        {
+          "id": "sk-skill-1783077341502-e08o",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783077341502-e08o"
+          }
+        },
+        {
+          "id": "sk-skill-1783077936925-spou",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783077936925-spou"
+          }
+        },
+        {
+          "id": "sk-skill-1783076719127-ausr",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783076719127-ausr"
+          }
+        },
+        {
+          "id": "sk-skill-1783077236596-2bin",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783077236596-2bin"
+          }
+        },
+        {
+          "id": "sk-skill-1783077575345-von5",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783077575345-von5"
+          }
+        },
+        {
+          "id": "sk-skill-1783076542501-mtqs",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783076542501-mtqs"
+          }
+        },
+        {
+          "id": "sk-skill-1783075502932-iv5a",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783075502932-iv5a"
+          }
+        },
+        {
+          "id": "sk-skill-1783076879100-1pka",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783076879100-1pka"
+          }
+        },
+        {
+          "id": "sk-skill-1783077719007-dd0e",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783077719007-dd0e"
+          }
+        },
+        {
+          "id": "sk-skill-1783078315476-mtnn",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783078315476-mtnn"
+          }
+        },
+        {
+          "id": "sk-skill-1783076028077-v1gg",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783076028077-v1gg"
+          }
+        },
+        {
+          "id": "sk-skill-1783075519015-637a",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783075519015-637a"
+          }
+        },
+        {
+          "id": "sk-skill-1783077481293-9p4n",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783077481293-9p4n"
+          }
+        },
+        {
+          "id": "sk-skill-1783075862739-jyk7",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783075862739-jyk7"
+          }
+        },
+        {
+          "id": "sk-skill-1783077577587-qpy2",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783077577587-qpy2"
+          }
+        },
+        {
+          "id": "sk-skill-1783076969905-no4a",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783076969905-no4a"
+          }
+        },
+        {
+          "id": "sk-skill-1783077548237-wiw8",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783077548237-wiw8"
+          }
+        },
+        {
+          "id": "sk-skill-1783077199781-6y2f",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783077199781-6y2f"
+          }
+        },
+        {
+          "id": "sk-skill-1783077761698-vb0b",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783077761698-vb0b"
+          }
+        },
+        {
+          "id": "sk-skill-1783076797316-hb1r",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783076797316-hb1r"
+          }
+        },
+        {
+          "id": "sk-skill-1783077410459-y93s",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783077410459-y93s"
+          }
+        },
+        {
+          "id": "sk-skill-1783076970378-b619",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783076970378-b619"
+          }
+        },
+        {
+          "id": "sk-skill-1783078464042-vte0",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783078464042-vte0"
+          }
+        },
+        {
+          "id": "sk-skill-1783076853764-9y3z",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783076853764-9y3z"
+          }
+        },
+        {
+          "id": "sk-skill-1783078612826-jzhq",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783078612826-jzhq"
+          }
+        },
+        {
+          "id": "sk-skill-1783078578253-dv39",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783078578253-dv39"
+          }
+        },
+        {
+          "id": "sk-skill-1783078607274-8kmz",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783078607274-8kmz"
+          }
+        },
+        {
+          "id": "sk-skill-1783078613287-itpf",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783078613287-itpf"
+          }
+        },
+        {
+          "id": "sk-skill-1783079140638-igog",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783079140638-igog"
+          }
+        },
+        {
+          "id": "sk-skill-1783079536858-mya2",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783079536858-mya2"
+          }
+        },
+        {
+          "id": "sk-skill-1783079675188-nlp2",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783079675188-nlp2"
+          }
+        },
+        {
+          "id": "sk-skill-1783079869380-eq51",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783079869380-eq51"
+          }
         }
       ]
     },
@@ -4687,7 +7294,607 @@
     "general": {
       "episodes": [],
       "skills": [],
-      "tfidfDocs": []
+      "tfidfDocs": [
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/core/model-registry.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/core/model-registry.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/core/model-registry.ts",
+          "keywords": [
+            "model-registry",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/core/model-registry.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/core/domain-registry.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/core/domain-registry.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/core/domain-registry.ts",
+          "keywords": [
+            "domain-registry",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/core/domain-registry.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/agents/role-registry.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/agents/role-registry.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/agents/role-registry.ts",
+          "keywords": [
+            "role-registry",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/agents/role-registry.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/memory/memory-orchestrator.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/memory/memory-orchestrator.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/memory/memory-orchestrator.ts",
+          "keywords": [
+            "memory-orchestrator",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/memory/memory-orchestrator.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/agents/orchestrator.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/agents/orchestrator.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/agents/orchestrator.ts",
+          "keywords": [
+            "orchestrator",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/agents/orchestrator.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/memory/multi-index-rag.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/memory/multi-index-rag.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/memory/multi-index-rag.ts",
+          "keywords": [
+            "multi-index-rag",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/memory/multi-index-rag.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/core/dynamic-tool-registry.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/core/dynamic-tool-registry.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/core/dynamic-tool-registry.ts",
+          "keywords": [
+            "dynamic-tool-registry",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/core/dynamic-tool-registry.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/core/economic-model.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/core/economic-model.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/core/economic-model.ts",
+          "keywords": [
+            "economic-model",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/core/economic-model.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/models/AuditModel.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/models/AuditModel.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/models/AuditModel.ts",
+          "keywords": [
+            "AuditModel",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/models/AuditModel.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/models/WebhookModel.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/models/WebhookModel.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/models/WebhookModel.ts",
+          "keywords": [
+            "WebhookModel",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/models/WebhookModel.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/CacheService.test.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/CacheService.test.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/CacheService.test.ts",
+          "keywords": [
+            "CacheService",
+            "test",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/CacheService.test.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/UserService.test.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/UserService.test.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/UserService.test.ts",
+          "keywords": [
+            "UserService",
+            "test",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/UserService.test.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/FlagsService.test.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/FlagsService.test.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/FlagsService.test.ts",
+          "keywords": [
+            "FlagsService",
+            "test",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/FlagsService.test.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/Paginator.test.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/Paginator.test.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/Paginator.test.ts",
+          "keywords": [
+            "Paginator",
+            "test",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/Paginator.test.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/AuthService.test.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/AuthService.test.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/AuthService.test.ts",
+          "keywords": [
+            "AuthService",
+            "test",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/AuthService.test.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/Validation.test.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/Validation.test.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/Validation.test.ts",
+          "keywords": [
+            "Validation",
+            "test",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/unit/Validation.test.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/integration/webhook-flow.test.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/integration/webhook-flow.test.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/integration/webhook-flow.test.ts",
+          "keywords": [
+            "webhook-flow",
+            "test",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/integration/webhook-flow.test.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/integration/profile-endpoint.test.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/integration/profile-endpoint.test.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/integration/profile-endpoint.test.ts",
+          "keywords": [
+            "profile-endpoint",
+            "test",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/integration/profile-endpoint.test.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/integration/api-crud-flow.test.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/integration/api-crud-flow.test.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/integration/api-crud-flow.test.ts",
+          "keywords": [
+            "api-crud-flow",
+            "test",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/integration/api-crud-flow.test.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/integration/api-auth-flow.test.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/integration/api-auth-flow.test.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/integration/api-auth-flow.test.ts",
+          "keywords": [
+            "api-auth-flow",
+            "test",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/tests/integration/api-auth-flow.test.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/core/workflow-engine.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/core/workflow-engine.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/core/workflow-engine.ts",
+          "keywords": [
+            "workflow-engine",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/core/workflow-engine.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/memory/second-brain.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/memory/second-brain.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/memory/second-brain.ts",
+          "keywords": [
+            "second-brain",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/memory/second-brain.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/index.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/index.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/index.ts",
+          "keywords": [
+            "index",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/index.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/core/bootstrap-knowledge.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/core/bootstrap-knowledge.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/core/bootstrap-knowledge.ts",
+          "keywords": [
+            "bootstrap-knowledge",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/core/bootstrap-knowledge.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/core/llm.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/core/llm.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/core/llm.ts",
+          "keywords": [
+            "llm",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/core/llm.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/memory/memory-query-engine.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/memory/memory-query-engine.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/memory/memory-query-engine.ts",
+          "keywords": [
+            "memory-query-engine",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/memory/memory-query-engine.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/memory/consolidation-scheduler.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/memory/consolidation-scheduler.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/memory/consolidation-scheduler.ts",
+          "keywords": [
+            "consolidation-scheduler",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/memory/consolidation-scheduler.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/memory/execution-tracer.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/memory/execution-tracer.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/memory/execution-tracer.ts",
+          "keywords": [
+            "execution-tracer",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/memory/execution-tracer.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/memory/importance-index.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/memory/importance-index.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/memory/importance-index.ts",
+          "keywords": [
+            "importance-index",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/memory/importance-index.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/core/agent-blueprint.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/core/agent-blueprint.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/core/agent-blueprint.ts",
+          "keywords": [
+            "agent-blueprint",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/core/agent-blueprint.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/core/agent-loop.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/core/agent-loop.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/core/agent-loop.ts",
+          "keywords": [
+            "agent-loop",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/core/agent-loop.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/models/ReportModel.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/models/ReportModel.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/models/ReportModel.ts",
+          "keywords": [
+            "ReportModel",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/models/ReportModel.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/core/world-model.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/core/world-model.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/core/world-model.ts",
+          "keywords": [
+            "world-model",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/core/world-model.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/middleware/UuidValidationMiddleware.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/middleware/UuidValidationMiddleware.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/middleware/UuidValidationMiddleware.ts",
+          "keywords": [
+            "UuidValidationMiddleware",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/middleware/UuidValidationMiddleware.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/errors/validation-error.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/errors/validation-error.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/errors/validation-error.ts",
+          "keywords": [
+            "validation-error",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/errors/validation-error.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/middleware/ValidationMiddleware.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/middleware/ValidationMiddleware.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/middleware/ValidationMiddleware.ts",
+          "keywords": [
+            "ValidationMiddleware",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/middleware/ValidationMiddleware.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/utils/validation.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/utils/validation.ts",
+          "content": "File /home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/utils/validation.ts",
+          "keywords": [
+            "validation",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/test/e2e-codebase-fixture/src/utils/validation.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/core/id-chain.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/core/id-chain.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/core/id-chain.ts",
+          "keywords": [
+            "id-chain",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/core/id-chain.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/core/planning-layer.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/core/planning-layer.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/core/planning-layer.ts",
+          "keywords": [
+            "planning-layer",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/core/planning-layer.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/core/config.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/core/config.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/core/config.ts",
+          "keywords": [
+            "config",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/core/config.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/core/data-cleaner.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/core/data-cleaner.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/core/data-cleaner.ts",
+          "keywords": [
+            "data-cleaner",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/core/data-cleaner.ts"
+          }
+        },
+        {
+          "id": "ep:ses_0d9ce4d2bffePBXt45qo9jEpUY",
+          "category": "general",
+          "title": "Stress test planning system",
+          "content": "success ",
+          "keywords": [
+            "stress",
+            "planning"
+          ],
+          "metadata": {
+            "type": "episode",
+            "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
+            "outcome": "success"
+          }
+        }
+      ]
     },
     "knowledge-tech": {
       "episodes": [
@@ -5106,7 +8313,100 @@
           "significance": "routine"
         }
       ],
-      "skills": [],
+      "skills": [
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783077119196-ng1i",
+              "name": "QA review passed",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "complete review passed acceptance criteria",
+              "keywords": [
+                "flag",
+                "complete",
+                "passed",
+                "acceptance",
+                "criteria",
+                "verified",
+                "evaluation",
+                "logic"
+              ],
+              "context": [
+                "f6",
+                "src/models/FlagsModel.ts",
+                "src/services/FlagsService.ts",
+                "src/middleware/FlagsMiddleware.ts",
+                "src/routes/flags.ts",
+                "tests/integration/flags-flow.test.ts"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "Verified flag evaluation logic handles all toggle states",
+                  "tool": "agentic_verify",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                },
+                {
+                  "order": 2,
+                  "action": "verify",
+                  "description": "Checked middleware injection for edge cases",
+                  "tool": "agentic_verify",
+                  "expectedOutput": "Step 2 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                },
+                {
+                  "order": 3,
+                  "action": "execute",
+                  "description": "Validated admin CRUD endpoints return correct HTTP codes",
+                  "expectedOutput": "Step 3 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                },
+                {
+                  "order": 4,
+                  "action": "verify",
+                  "description": "Confirmed no regression: all 40 existing tests pass",
+                  "tool": "agentic_verify",
+                  "expectedOutput": "Step 4 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                },
+                {
+                  "order": 5,
+                  "action": "create",
+                  "description": "Performance benchmark: flag check adds < 5ms p99 latency",
+                  "tool": "agentic_verify",
+                  "expectedOutput": "Step 5 completed",
+                  "rollback": "Delete the created file or revert the addition"
+                }
+              ],
+              "estimatedDuration": "10m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 9,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-03T11:11:59.196Z",
+              "lastUsed": "2026-07-03T11:28:45.109Z",
+              "lastModified": "2026-07-03T11:28:45.109Z",
+              "modifiedBy": "agent"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-03T11:28:45.109Z"
+        }
+      ],
       "tfidfDocs": [
         {
           "id": "ep-bootstrap-understand-opencode-agentic-engine-archi",
@@ -5401,9 +8701,129 @@
             "type": "episode",
             "episodeId": "bootstrap-checklist--how-to-recover-typescript-bui"
           }
+        },
+        {
+          "id": "sk-skill-1783077119196-ng1i",
+          "category": "knowledge-tech",
+          "title": "QA review passed",
+          "content": "complete review passed acceptance criteria",
+          "keywords": [
+            "flag",
+            "complete",
+            "passed",
+            "acceptance",
+            "criteria",
+            "verified",
+            "evaluation",
+            "logic"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783077119196-ng1i"
+          }
+        }
+      ]
+    },
+    "planning": {
+      "episodes": [
+        {
+          "id": "rag-ep-1783085407231",
+          "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+          "planGoal": "Stress Test S2 Plan",
+          "summary": "S2 Deep Plan Cascade: 6-step plan for microservices monitoring system. Service Discovery → Health Check + Metrics → Alerting → Dashboard API → Integration Tests",
+          "outcome": "success",
+          "decisions": [],
+          "filesChanged": [],
+          "timestamp": "2026-07-03T13:30:07.231Z",
+          "tags": [
+            "deep",
+            "plan",
+            "cascade",
+            "step",
+            "plan",
+            "microservices",
+            "monitoring",
+            "system"
+          ],
+          "score": 1,
+          "usageCount": 0,
+          "significance": "routine"
+        }
+      ],
+      "skills": [],
+      "tfidfDocs": [
+        {
+          "id": "ep-rag-ep-1783085407231",
+          "category": "planning",
+          "title": "Stress Test S2 Plan",
+          "content": "S2 Deep Plan Cascade: 6-step plan for microservices monitoring system. Service Discovery → Health Check + Metrics → Alerting → Dashboard API → Integration Tests\n",
+          "keywords": [
+            "deep",
+            "plan",
+            "cascade",
+            "step",
+            "plan",
+            "microservices",
+            "monitoring",
+            "system"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "rag-ep-1783085407231"
+          }
+        }
+      ]
+    },
+    "debug": {
+      "episodes": [
+        {
+          "id": "rag-ep-1783085407967",
+          "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+          "planGoal": "Timeout Root Cause",
+          "summary": "Agentic delegate timeout root cause: _buildPromptBody missing agent:'agentic' field. SDK needs this to route temp session prompts to the correct agent. Without it, session.prompt() hangs indefinitely.",
+          "outcome": "success",
+          "decisions": [],
+          "filesChanged": [],
+          "timestamp": "2026-07-03T13:30:07.967Z",
+          "tags": [
+            "agentic",
+            "delegate",
+            "timeout",
+            "root",
+            "cause",
+            "missing",
+            "agent",
+            "agentic"
+          ],
+          "score": 1,
+          "usageCount": 0,
+          "significance": "routine"
+        }
+      ],
+      "skills": [],
+      "tfidfDocs": [
+        {
+          "id": "ep-rag-ep-1783085407967",
+          "category": "debug",
+          "title": "Timeout Root Cause",
+          "content": "Agentic delegate timeout root cause: _buildPromptBody missing agent:'agentic' field. SDK needs this to route temp session prompts to the correct agent. Without it, session.prompt() hangs indefinitely.\n",
+          "keywords": [
+            "agentic",
+            "delegate",
+            "timeout",
+            "root",
+            "cause",
+            "missing",
+            "agent",
+            "agentic"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "rag-ep-1783085407967"
+          }
         }
       ]
     }
   },
-  "updatedAt": "2026-07-03T09:50:46.929Z"
+  "updatedAt": "2026-07-03T13:30:07.968Z"
 }

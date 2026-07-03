@@ -490,10 +490,10 @@ export class SecondBrain {
     if (snap.reflections.length > 0) {
       const latest = snap.reflections[snap.reflections.length - 1]
       parts.push(`=== Last Reflection ===\n${latest.summary.slice(0, 300)}`)
-      if (latest.triggers.length > 0) {
+      if (latest.triggers?.length > 0) {
         parts.push(`Triggers: ${latest.triggers.join(", ")}`)
       }
-      if (latest.actionItems.length > 0) {
+      if (latest.actionItems?.length > 0) {
         parts.push(`Action items: ${latest.actionItems.join(", ")}`)
       }
     }

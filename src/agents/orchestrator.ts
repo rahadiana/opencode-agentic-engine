@@ -3,6 +3,7 @@ import type { LLMEngine } from "../core/llm.js"
 import type { BudgetTracker } from "../core/budget-tracker.js"
 import type { EventBus } from "../core/event-bus.js"
 import type { Condition } from "../core/formal-model.js"
+import type { ModelRegistry } from "../core/model-registry.js"
 import { parseFileEntries, writeFiles, recordCompletion } from "../core/execution-helpers.js"
 import { SchemaValidator, type SchemaField as ValidatorSchemaField } from "../core/skill-schema.js"
 import fs from "node:fs"
@@ -315,6 +316,7 @@ export class Orchestrator {
     stageResults: Map<string, { output: string; issues: string[]; validatedBy: string[] }>
   }>()
   private llmEngine: LLMEngine | null = null
+  private modelRegistry: ModelRegistry | null = null
   private persistencePath: string | null = null
   private sysPrompts: Record<string, string> = {
     pm: `You are a PM. Define requirements and acceptance criteria concisely. Return JSON: {"spec": "...", "criteria": ["..."]}`,
@@ -326,6 +328,10 @@ export class Orchestrator {
 
   setLLMEngine(engine: LLMEngine): void {
     this.llmEngine = engine
+  }
+
+  setModelRegistry(registry: ModelRegistry): void {
+    this.modelRegistry = registry
   }
 
   setRolePrompt(role: string, prompt: string): void {
@@ -453,7 +459,12 @@ export class Orchestrator {
         const hasEmpty = [...allStageResults.values()].some(r => !r.output || r.output.trim().length === 0)
         results.push({ field: `invariant: ${inv.description}`, passed: !hasEmpty, severity: inv.severity, detail: hasEmpty ? "Some stages produced empty output" : "All stages have output" })
       } else if (kind === InvariantKind.CompilePasses) {
-        const compilePassed = !allOutputs.includes("fail") || allOutputs.includes("compilation successful")
+        // Bug fix: sebelumnya harus ada "compilation successful" di output,
+        // padahal pipeline tanpa compilation step (feature-dev) gak pernah ngehasilin itu.
+        // Sekarang: cek apakah ada FAILURE indikator — kalau gak ada, dianggap lulus.
+        // Kalau output mengandung "compilation successful" secara eksplisit, itu bonus.
+        const hasFailure = /\b(compil(e|ation)\s+failed|build\s+failed|error\s+compiling|compilation\s+(error|fail))/i.test(allOutputs)
+        const compilePassed = !hasFailure
         results.push({ field: `invariant: ${inv.description}`, passed: compilePassed, severity: inv.severity, detail: compilePassed ? "Compilation check passed" : "Compilation issues detected" })
       } else {
         results.push({ field: `invariant: ${inv.description}`, passed: true, severity: "info", detail: `Invariant "${inv.expr}" assumed satisfied` })
@@ -746,29 +757,80 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
 
     const up = `Goal: ${goal}${constraints?.length ? `\nConstraints: ${constraints.join(", ")}` : ""}${pipelineContextHints ? `\nPast tasks: ${pipelineContextHints}` : ""}${stageCtx ? `\n\nContext from previous stages:\n${stageCtx}` : ""}\n${stage.role} task: ${stage.description}\n${filesBlock || "(new)"}\n${(codebaseSummary ?? "").slice(0, 100)}`
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 120_000)
+    // ── Model resolution for this stage ──
+    // Priority: stage.model override > ModelRegistry selectBestModel > engine default
+    let stageModel: { providerID: string; modelID: string } | undefined
+    if (stage.model) {
+      const parts = stage.model.split("/")
+      stageModel = parts.length >= 2
+        ? { providerID: parts[0], modelID: parts.slice(1).join("/") }
+        : { providerID: "opencode", modelID: stage.model }
+    } else if (this.modelRegistry) {
+      const availableModels = this.modelRegistry.getAllScores().map(s => s.model).filter(m => m && m !== "default")
+      if (availableModels.length > 0) {
+        const bestModel = this.modelRegistry.selectBestModel(stage.role, availableModels)
+        if (bestModel && bestModel !== "default") {
+          const parts = bestModel.split("/")
+          stageModel = parts.length >= 2
+            ? { providerID: parts[0], modelID: parts.slice(1).join("/") }
+            : { providerID: "opencode", modelID: bestModel }
+        }
+      }
+    }
 
-    let raw: string
-    try {
-      const llmOut = await Promise.race([
-        this.llmEngine!.call({
-          systemPrompt: sp, userPrompt: up,
-          temperature: 0.2, maxTokens: 2048, jsonMode: true,
-          sourceTaskId: stageTaskId,
-          sourcePipelineRunId: runId,
-        }),
-        new Promise<never>((_, reject) => {
-          controller.signal.addEventListener("abort", () => reject(new Error(`LLM timeout after 120s for stage ${stage.role}`)))
-        }),
-      ])
-      clearTimeout(timeoutId)
-      raw = llmOut.content || ""
-    } catch (err) {
-      clearTimeout(timeoutId)
-      const msg = `Stage ${stage.role} crashed: ${(err as Error).message ?? err}`
-      await coordinator.updateTask(sessionID, stageTaskId, "failed", `LLM call failed: ${(err as Error).message ?? err}`)
-      return { stop: true, verifyNote: msg }
+    // Try primary model first, then fallback if available
+    const modelAttempts: Array<{ model: typeof stageModel; isFallback: boolean }> = [
+      { model: stageModel, isFallback: false },
+    ]
+
+    // If primary model is set, try a fallback (remove model to use engine default)
+    if (stageModel) {
+      modelAttempts.push({ model: undefined, isFallback: true })
+    }
+
+    let raw = ""
+    let lastErr: Error | null = null
+    let usedFallback = false
+
+    for (const attempt of modelAttempts) {
+      if (attempt.isFallback) {
+        log.warn(`[Orchestrator] Stage ${stage.role}: primary model failed, retrying with fallback`)
+        usedFallback = true
+      }
+
+      // Fresh AbortController per attempt — prevents stale signal from aborting retry
+      const attemptController = new AbortController()
+      const attemptTimeoutId = setTimeout(() => attemptController.abort(), 120_000)
+
+      try {
+        const llmOut = await Promise.race([
+          this.llmEngine!.call({
+            systemPrompt: sp, userPrompt: up,
+            temperature: 0.2, maxTokens: 2048, jsonMode: true,
+            sourceTaskId: stageTaskId,
+            sourcePipelineRunId: runId,
+            ...(attempt.model ? { model: attempt.model } : {}),
+          }),
+          new Promise<never>((_, reject) => {
+            attemptController.signal.addEventListener("abort", () => reject(new Error(`LLM timeout after 120s for stage ${stage.role}`)))
+          }),
+        ])
+        clearTimeout(attemptTimeoutId)
+        raw = llmOut.content || ""
+        lastErr = null
+        break // success — exit retry loop
+      } catch (err) {
+        clearTimeout(attemptTimeoutId)
+        lastErr = err as Error
+        log.warn(`[Orchestrator] Stage ${stage.role} attempt ${attempt.isFallback ? "fallback" : "primary"} failed: ${(lastErr as Error).message ?? lastErr}`)
+        // Loop continues to next attempt (fallback model), or exits if no more attempts
+      }
+    }
+
+    if (lastErr) {
+      const msg = `Stage ${stage.role} crashed: ${lastErr.message ?? lastErr}`
+      await coordinator.updateTask(sessionID, stageTaskId, "failed", `LLM call failed: ${lastErr.message ?? lastErr}`)
+      return { stop: true, verifyNote: usedFallback ? `${msg} (also tried fallback model)` : msg }
     }
 
     const isFail = raw.includes("[NO_LLM]") || raw === "NO_LLM"

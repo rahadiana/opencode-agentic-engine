@@ -993,6 +993,8 @@ export class LLMEngine {
           system?: string
           noReply?: boolean
           model?: { providerID: string; modelID: string }
+          agent?: string
+          reasoningEffort?: 'low' | 'medium' | 'high'
           parts: Array<{ type: string; text: string }>
         }
         path: { id: string }
@@ -1019,18 +1021,21 @@ export class LLMEngine {
     noReply: boolean
     model?: { providerID: string; modelID: string }
     reasoningEffort?: 'low' | 'medium' | 'high'
+    agent?: string
     parts: Array<{ type: 'text'; text: string }>
   } {
     const sdkModel = req.model ?? this.parseModelForSDK()
-    return {
+    const body: ReturnType<LLMEngine['_buildPromptBody']> = {
       system: req.jsonMode
         ? `${req.systemPrompt}\n\nRespond with ONLY valid JSON. No markdown, no explanation.`
         : req.systemPrompt,
       noReply: false,
       ...(sdkModel ? { model: sdkModel } : {}),
       ...(req.reasoningEffort ? { reasoningEffort: req.reasoningEffort } : {}),
+      agent: 'agentic',
       parts: [{ type: 'text' as const, text: req.userPrompt }],
     }
+    return body
   }
 
   /**

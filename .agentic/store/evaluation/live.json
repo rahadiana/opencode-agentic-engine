@@ -235,6 +235,42 @@
         "success": true,
         "sessionId": "ses_0d93a4061ffespIQNmoxmevXFB",
         "timestamp": 1783061961545
+      },
+      {
+        "stepId": "review-state",
+        "success": true,
+        "sessionId": "ses_0d8404ab7ffeMvJw0qjm0loGxA",
+        "timestamp": 1783078421815
+      },
+      {
+        "stepId": "review-state",
+        "success": true,
+        "sessionId": "ses_0d8404ab7ffeMvJw0qjm0loGxA",
+        "timestamp": 1783078421819
+      },
+      {
+        "stepId": "improve-diagnose",
+        "success": true,
+        "sessionId": "ses_0d8404aa7ffeVuQXlVP0dwKRPb",
+        "timestamp": 1783078503554
+      },
+      {
+        "stepId": "improve-diagnose",
+        "success": true,
+        "sessionId": "ses_0d8404aa7ffeVuQXlVP0dwKRPb",
+        "timestamp": 1783078503555
+      },
+      {
+        "stepId": "s1",
+        "success": true,
+        "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+        "timestamp": 1783084525020
+      },
+      {
+        "stepId": "s1",
+        "success": true,
+        "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+        "timestamp": 1783084525022
       }
     ],
     "errorRecoveries": [
@@ -252,6 +288,34 @@
       },
       {
         "errorId": "reflect-nonexistent-step",
+        "recovered": true
+      },
+      {
+        "errorId": "reflect-step-feedback-neg",
+        "recovered": true
+      },
+      {
+        "errorId": "reflect-step-feedback-neg",
+        "recovered": true
+      },
+      {
+        "errorId": "reflect-step-feedback-neg",
+        "recovered": true
+      },
+      {
+        "errorId": "reflect-step-feedback-neg",
+        "recovered": true
+      },
+      {
+        "errorId": "reflect-step-feedback-neg",
+        "recovered": true
+      },
+      {
+        "errorId": "reflect-reflection-system",
+        "recovered": true
+      },
+      {
+        "errorId": "reflect-s1",
         "recovered": true
       }
     ],
@@ -325,6 +389,391 @@
         "query": "I need to fix a bug in the authentication flow",
         "resultsCount": 1,
         "focused": true
+      },
+      {
+        "query": "swarm agent multi-agent coordination",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "coordinator orchestrator delegate parallel agent",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "project structure overview",
+        "resultsCount": 3,
+        "focused": true
+      },
+      {
+        "query": "PLAN.md TODO.md recent changes",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "project structure overview",
+        "resultsCount": 3,
+        "focused": true
+      },
+      {
+        "query": "user profile auth API acceptance criteria",
+        "resultsCount": 20,
+        "focused": false
+      },
+      {
+        "query": "PM spec A1 A2 A3 A4 A5 A6 A7 A8 architecture interface contract",
+        "resultsCount": 2,
+        "focused": true
+      },
+      {
+        "query": "stress test bugs",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "stress test",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "step-feedback-neg stress test planning system",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "stress test",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "user profile endpoint implementation",
+        "resultsCount": 8,
+        "focused": true
+      },
+      {
+        "query": "stress test results bugs",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "stress test planning system bugs fix",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "GET /api/users/:id/profile endpoint implementation",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "stress test bugs tools recent changes",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "feature development pipeline PM spec profile endpoint",
+        "resultsCount": 6,
+        "focused": true
+      },
+      {
+        "query": "GET /api/users/:id/profile endpoint implementation",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "GET /api/users/:id/profile endpoint",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "stress test",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "stress test",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "feedback step-feedback-neg test",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "stress test planning system",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "stress test planning system 2 subtasks",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "agentic tools list 31 tools index.ts",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "current project state recent changes TODO remaining work",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "project state TODO remaining work",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "current project state coverage tests latest changes",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "project state, plan, todo, current priorities",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "stress test stress.mjs tool testing",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "stress test tools 31 tools empty inputs boundary",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "test/stress.mjs test/run.mjs test harness",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "project structure recent changes TODO",
+        "resultsCount": 3,
+        "focused": true
+      },
+      {
+        "query": "stress test tool verification current state",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "current project state and recent work",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "project health pending work",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "project state recent changes",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "multi-agent delegation orchestrator coordinator",
+        "resultsCount": 20,
+        "focused": false
+      },
+      {
+        "query": "agent-runtime delegate model selection reliability",
+        "resultsCount": 20,
+        "focused": false
+      },
+      {
+        "query": "multi-agent delegation coordinator orchestrator pipeline",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "model selection reliability agent delegate",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "project state remaining work pending",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "episodic-store module memory",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "project state overview",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "stress test infrastructure framework",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "project state pending work next steps",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "stress test patterns tool testing",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "current project state stress testing tools",
+        "resultsCount": 14,
+        "focused": false
+      },
+      {
+        "query": "current project state todo pending issues bugs",
+        "resultsCount": 14,
+        "focused": false
+      },
+      {
+        "query": "project state coverage gaps remaining work",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "current project state TODO remaining work",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "multi-agent delegate orchestrator coordinator role registry",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "stress test regression testing tools",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "delegate model selection reliability role assignment",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "project structure and recent changes",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "current project state configuration",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "project state, recent changes, pending work",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "stress.mjs tool regression",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "multi-agent delegation success failure rate",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "branch coverage uncovered paths branches",
+        "resultsCount": 0,
+        "focused": false
+      },
+      {
+        "query": "stress test all 31 tools empty input boundary values",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "test/stress.mjs",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "stress test tools empty input boundary",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "project structure and recent changes",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "current project state gaps remaining work",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "current project state, latest changes, pending items",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "project structure and current state",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "current project state priorities next work",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "stress test infrastructure",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "all 31 agentic tools list",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "multi-agent reliability orchestrator delegate model assignment",
+        "resultsCount": 15,
+        "focused": false
+      },
+      {
+        "query": "orchestrator multi-agent reliability pipeline cross-validation",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "current project state coverage gaps",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "current project state README AGENTS.md PLAN.md",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "notification system event-driven architecture",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "rate limit notification file upload",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "agent-runtime delegate timeout LLM call _callOpenCodeTempSession",
+        "resultsCount": 5,
+        "focused": true
       }
     ],
     "delegations": [
@@ -332,6 +781,176 @@
         "taskId": "stress-task-1",
         "role": "qa",
         "success": false
+      },
+      {
+        "taskId": "pm-001",
+        "role": "pm",
+        "success": false
+      },
+      {
+        "taskId": "pm-001",
+        "role": "pm",
+        "success": true
+      },
+      {
+        "taskId": "pm-002",
+        "role": "pm",
+        "success": true
+      },
+      {
+        "taskId": "pm-002",
+        "role": "pm",
+        "success": true
+      },
+      {
+        "taskId": "arch-003",
+        "role": "architect",
+        "success": true
+      },
+      {
+        "taskId": "arch-003",
+        "role": "architect",
+        "success": true
+      },
+      {
+        "taskId": "dev-003",
+        "role": "developer",
+        "success": false
+      },
+      {
+        "taskId": "dev-003",
+        "role": "developer",
+        "success": true
+      },
+      {
+        "taskId": "dev-004",
+        "role": "developer",
+        "success": false
+      },
+      {
+        "taskId": "dev-004",
+        "role": "developer",
+        "success": true
+      },
+      {
+        "taskId": "dev-005",
+        "role": "developer",
+        "success": false
+      },
+      {
+        "taskId": "dev-005",
+        "role": "developer",
+        "success": true
+      },
+      {
+        "taskId": "test-pm-001",
+        "role": "pm",
+        "success": false
+      },
+      {
+        "taskId": "test-pm-001",
+        "role": "pm",
+        "success": true
+      },
+      {
+        "taskId": "test-pm-002",
+        "role": "pm",
+        "success": false
+      },
+      {
+        "taskId": "test-pm-002",
+        "role": "pm",
+        "success": true
+      },
+      {
+        "taskId": "swarm-arch-1",
+        "role": "architect",
+        "success": true
+      },
+      {
+        "taskId": "swarm-arch-1",
+        "role": "architect",
+        "success": true
+      },
+      {
+        "taskId": "swarm-arch-2",
+        "role": "architect",
+        "success": true
+      },
+      {
+        "taskId": "swarm-arch-2",
+        "role": "architect",
+        "success": true
+      },
+      {
+        "taskId": "swarm-dev-1",
+        "role": "developer",
+        "success": false
+      },
+      {
+        "taskId": "swarm-dev-1",
+        "role": "developer",
+        "success": true
+      },
+      {
+        "taskId": "swarm-dev-2",
+        "role": "developer",
+        "success": false
+      },
+      {
+        "taskId": "swarm-dev-2",
+        "role": "developer",
+        "success": true
+      },
+      {
+        "taskId": "swarm-dev-3",
+        "role": "developer",
+        "success": false
+      },
+      {
+        "taskId": "swarm-dev-3",
+        "role": "developer",
+        "success": true
+      },
+      {
+        "taskId": "swarm-qa-1",
+        "role": "qa",
+        "success": false
+      },
+      {
+        "taskId": "swarm-qa-1",
+        "role": "qa",
+        "success": true
+      },
+      {
+        "taskId": "swarm-qa-2",
+        "role": "qa",
+        "success": false
+      },
+      {
+        "taskId": "swarm-qa-2",
+        "role": "qa",
+        "success": true
+      },
+      {
+        "taskId": "swarm-pm-1",
+        "role": "pm",
+        "success": false
+      },
+      {
+        "taskId": "swarm-pm-1",
+        "role": "pm",
+        "success": true
+      },
+      {
+        "taskId": "test-delegate-fix-1",
+        "role": "developer",
+        "success": true
+      },
+      {
+        "taskId": "test-delegate-fix-1",
+        "role": "developer",
+        "success": true
       }
     ],
     "skillLookups": [
@@ -340,8 +959,14 @@
       },
       {
         "found": true
+      },
+      {
+        "found": true
+      },
+      {
+        "found": true
       }
     ]
   },
-  "updatedAt": "2026-07-03T09:50:44.384Z"
+  "updatedAt": "2026-07-03T13:20:12.399Z"
 }

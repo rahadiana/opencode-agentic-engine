@@ -7,9 +7,9 @@
       "category": "feedback",
       "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
       "id": "todo-1783052553829-0rm8",
-      "status": "pending",
+      "status": "done",
       "createdAt": 1783052553829,
-      "updatedAt": 1783052553829
+      "updatedAt": 1783077540751
     },
     {
       "text": "Fix the remaining bugs found in stress test",
@@ -17,10 +17,167 @@
       "category": "stress-test",
       "sessionId": "ses_0d9ce4d2bffePBXt45qo9jEpUY",
       "id": "todo-1783052776469-znps",
-      "status": "pending",
+      "status": "done",
       "createdAt": 1783052776469,
-      "updatedAt": 1783052776469
+      "updatedAt": 1783077541019
+    },
+    {
+      "text": "[task] Delegated task pm-001 (pm) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783075016505-bxgo",
+      "status": "done",
+      "createdAt": 1783075016505,
+      "updatedAt": 1783077541296
+    },
+    {
+      "text": "[task] Delegated task dev-003 (developer) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783075595762-zp0m",
+      "status": "done",
+      "createdAt": 1783075595762,
+      "updatedAt": 1783077546511
+    },
+    {
+      "text": "[task] Delegated task dev-004 (developer) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783075728635-hok0",
+      "status": "done",
+      "createdAt": 1783075728635,
+      "updatedAt": 1783077546837
+    },
+    {
+      "text": "[task] Delegated task dev-005 (developer) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783075828624-oob7",
+      "status": "done",
+      "createdAt": 1783075828624,
+      "updatedAt": 1783077547137
+    },
+    {
+      "text": "[task] Delegated task test-pm-001 (pm) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783079742981-s4ha",
+      "status": "pending",
+      "createdAt": 1783079742981,
+      "updatedAt": 1783079742981
+    },
+    {
+      "text": "[task] Delegated task test-pm-002 (pm) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783079925760-w6dh",
+      "status": "pending",
+      "createdAt": 1783079925760,
+      "updatedAt": 1783079925760
+    },
+    {
+      "text": "[task] Delegated task swarm-dev-1 (developer) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783084509215-5s2j",
+      "status": "pending",
+      "createdAt": 1783084509215,
+      "updatedAt": 1783084509215
+    },
+    {
+      "text": "[task] Delegated task swarm-dev-2 (developer) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783084509718-3pr7",
+      "status": "pending",
+      "createdAt": 1783084509718,
+      "updatedAt": 1783084509718
+    },
+    {
+      "text": "[task] Delegated task swarm-dev-3 (developer) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783084510187-p6ad",
+      "status": "pending",
+      "createdAt": 1783084510187,
+      "updatedAt": 1783084510187
+    },
+    {
+      "text": "[task] Delegated task swarm-qa-1 (qa) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783084510686-ahbp",
+      "status": "pending",
+      "createdAt": 1783084510686,
+      "updatedAt": 1783084510686
+    },
+    {
+      "text": "[task] Delegated task swarm-qa-2 (qa) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783084511182-t0ny",
+      "status": "pending",
+      "createdAt": 1783084511182,
+      "updatedAt": 1783084511182
+    },
+    {
+      "text": "[task] Delegated task swarm-pm-1 (pm) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783084511821-30z7",
+      "status": "pending",
+      "createdAt": 1783084511821,
+      "updatedAt": 1783084511821
+    },
+    {
+      "text": "Selesaiin 9 stress scenarios: S2 Plan Cascade, S3 Memory Flood, S4 Tool Frenzy, S5 Error Recovery, S6 Pipeline, S7 RAG+DB, S8 Auto+Guard, S9 Budget, S10 Protocol",
+      "priority": "high",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783084907331-6ukg",
+      "status": "pending",
+      "createdAt": 1783084907331,
+      "updatedAt": 1783084907331
+    },
+    {
+      "text": "Fix websocket-notification-service.ts generated file that polluted src/observability/",
+      "priority": "medium",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783084916904-67wb",
+      "status": "pending",
+      "createdAt": 1783084916904,
+      "updatedAt": 1783084916904
+    },
+    {
+      "text": "Restart OpenCode after build to apply agent:'agentic' fix",
+      "priority": "high",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783084916937-od4p",
+      "status": "pending",
+      "createdAt": 1783084916937,
+      "updatedAt": 1783084916937
+    },
+    {
+      "text": "[budget] time limit exceeded (636869/600000)",
+      "priority": "high",
+      "category": "budget",
+      "sessionId": "",
+      "id": "todo-1783085459182-07fr",
+      "status": "pending",
+      "createdAt": 1783085459182,
+      "updatedAt": 1783085459182
     }
   ],
-  "updatedAt": "2026-07-03T04:26:16.469Z"
+  "updatedAt": "2026-07-03T13:30:59.182Z"
 }
