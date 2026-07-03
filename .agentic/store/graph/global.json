@@ -650,7 +650,41 @@
       "metadata": {
         "timestamp": 1783091681820
       }
+    },
+    {
+      "source": "developer",
+      "target": "final-dev-1",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Write a TypeScript function that implements a simple LRU cache with get, set, and delete methods. Return the implementation code.",
+        "timestamp": 1783091920088
+      }
+    },
+    {
+      "source": "final-dev-1",
+      "target": "developer",
+      "relation": "completed_by",
+      "metadata": {
+        "timestamp": 1783091955500
+      }
+    },
+    {
+      "source": "pm",
+      "target": "final-pm-1",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create product requirements for adding WebSocket real-time notifications. List target users, key features, acceptance criteria.",
+        "timestamp": 1783091961796
+      }
+    },
+    {
+      "source": "final-pm-1",
+      "target": "pm",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783092081807
+      }
     }
   ],
-  "updatedAt": "2026-07-03T15:14:41.820Z"
+  "updatedAt": "2026-07-03T15:21:21.807Z"
 }

@@ -44,9 +44,6 @@ export class AgentRuntime {
   private opencodeClient: unknown = null
   private modelRegistry?: ModelRegistry
   private roleRegistry: RoleRegistry
-  /** Chat mode flag — propagated to sub-engines so they use temp child sessions instead of hanging. */
-  private _chatMode: boolean = false
-
   constructor() {
     this.roleRegistry = new RoleRegistry()
   }
@@ -72,12 +69,6 @@ export class AgentRuntime {
     this.modelRegistry = registry
   }
 
-  /** Set chat mode flag (called from index.ts during initialization).
-   *  When true, sub-engines use temp child sessions instead of hanging. */
-  setChatMode(chat: boolean): void {
-    this._chatMode = chat
-  }
-
   getRoleRegistry(): RoleRegistry {
     return this.roleRegistry
   }
@@ -100,17 +91,14 @@ export class AgentRuntime {
       }
       const engine = new LLMEngine()
       engine.setOpencodeClient(this.opencodeClient)
-      engine.setSessionId(`${parentSessionId}-${role}`)
-      // Pass the REAL parent session ID for sub-engine LLM calls.
-      // Sub-engines have synthetic pluginSessionId but use the parent
-      // session with noReply: true for actual LLM calls.
-      engine.setParentSessionId(parentSessionId)
-      // Sub-engines always need real temp OpenCode sessions.
-      // Their synthetic session IDs (`parentSessionId-role`) are not
-      // valid OpenCode session IDs — without this, client.session.prompt()
-      // fails silently → [NO_LLM] fallback.
-      // _chatMode from parent is included for backward compat (set from index.ts transform hook).
-      engine.setChatMode(this._chatMode || true)
+      // Use the REAL parent session ID for ALL LLM calls.
+      // Sub-engines share the parent session — sequential calls only,
+      // no concurrent prompt risk since delegate waits for completion.
+      // The synthetic `${parentSessionId}-${role}` is NOT used because
+      // it's not a valid OpenCode session.
+      engine.setSessionId(parentSessionId)
+      // No chat mode — use non-chat _promptWithTimeout directly on parent
+      engine.setChatMode(false)
       if (this.modelRegistry) engine.setModelRegistry(this.modelRegistry)
       this.engines.set(key, engine)
     }

@@ -227,7 +227,17 @@
       "status": "pending",
       "createdAt": 1783091681820,
       "updatedAt": 1783091681820
+    },
+    {
+      "text": "[task] Delegated task final-pm-1 (pm) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0d876cb30ffeQDwVTlisCmWX0h",
+      "id": "todo-1783092081808-mr63",
+      "status": "pending",
+      "createdAt": 1783092081808,
+      "updatedAt": 1783092081808
     }
   ],
-  "updatedAt": "2026-07-03T15:14:41.820Z"
+  "updatedAt": "2026-07-03T15:21:21.808Z"
 }
