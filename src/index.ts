@@ -7388,3 +7388,4 @@ export { evaluateWorkflowPolicy, formatWorkflowPolicyDecisions, verificationEvid
 export { MultiIndexRAG, enrichWithVectors, type IndexData, type IndexSearchResult, type IndexEntry, type RAGConfig, type RAGStats, type SearchWithConfidenceResult } from "./memory/multi-index-rag.js"
 export { LocalEmbedder, type EmbedderConfig, type EmbeddingResult } from "./memory/local-embedder.js"
 export { SkillExtractor, normalize } from "./memory/skill-extractor.js"
+export { hello } from "./hello.js"
