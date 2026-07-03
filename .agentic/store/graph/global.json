@@ -701,7 +701,58 @@
       "metadata": {
         "timestamp": 1783092537558
       }
+    },
+    {
+      "source": "developer",
+      "target": "final-shared-1",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Write a TypeScript function that implements a simple LRU cache with get, set, and delete methods. Return the implementation code.",
+        "timestamp": 1783092777451
+      }
+    },
+    {
+      "source": "final-shared-1",
+      "target": "developer",
+      "relation": "completed_by",
+      "metadata": {
+        "timestamp": 1783092835454
+      }
+    },
+    {
+      "source": "pm",
+      "target": "final-shared-2",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create product requirements for adding WebSocket real-time notifications to a monitoring dashboard. List: target users, key features, acceptance criteria.",
+        "timestamp": 1783092841740
+      }
+    },
+    {
+      "source": "final-shared-2",
+      "target": "pm",
+      "relation": "completed_by",
+      "metadata": {
+        "timestamp": 1783092870641
+      }
+    },
+    {
+      "source": "qa",
+      "target": "final-shared-3",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Review the LRU cache implementation for edge cases: empty cache, single entry, max capacity eviction, key update, undefined/null handling, concurrent access patterns. List all issues found.",
+        "timestamp": 1783092877244
+      }
+    },
+    {
+      "source": "final-shared-3",
+      "target": "qa",
+      "relation": "completed_by",
+      "metadata": {
+        "timestamp": 1783092952231
+      }
     }
   ],
-  "updatedAt": "2026-07-03T15:28:57.558Z"
+  "updatedAt": "2026-07-03T15:35:52.231Z"
 }

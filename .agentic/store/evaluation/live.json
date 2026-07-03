@@ -1533,6 +1533,16 @@
         "taskId": "final-pm-1",
         "role": "pm",
         "success": true
+      },
+      {
+        "taskId": "test-dev-1",
+        "role": "developer",
+        "success": false
+      },
+      {
+        "taskId": "test-dev-1",
+        "role": "developer",
+        "success": true
       }
     ],
     "skillLookups": [
@@ -1553,5 +1563,5 @@
       }
     ]
   },
-  "updatedAt": "2026-07-03T15:26:43.012Z"
+  "updatedAt": "2026-07-03T15:32:40.819Z"
 }
