@@ -8,7 +8,7 @@
 
 | Metrik | Nilai |
 |--------|-------|
-| **Versi** | v0.5.5 |
+| **Versi** | v0.5.6 |
 | **Unit tests** | 2756 (all mock, no LLM needed) |
 | **Agentic tools** | 32 (`agentic_*` prefix) |
 | **Source files** | 80+ di `src/` (7 subdirektori) |
