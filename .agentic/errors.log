@@ -7,3 +7,4 @@
   FAIL: DASH-COV-8 evolutionMetrics present
 
 [2026-07-03T11:17:31.240Z] [agentic_db] tool output error: ❌ Query failed: no such table: episodes
+[2026-07-04T13:02:10.949Z] [agentic_rag] tool output error: Unknown action. Use: search, store, stats, categories, list, clear

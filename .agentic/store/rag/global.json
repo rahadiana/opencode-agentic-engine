@@ -6558,6 +6558,348 @@
           "successRate": 0.5,
           "successWindow": [],
           "lastUsed": "2026-07-03T15:44:29.636Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783167433302-pog8",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-04T12:17:13.302Z",
+              "lastUsed": "2026-07-04T12:17:13.302Z",
+              "lastModified": "2026-07-04T12:17:13.302Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-04T12:17:13.302Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783167339563-t7q6",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-04T12:15:39.563Z",
+              "lastUsed": "2026-07-04T12:15:39.563Z",
+              "lastModified": "2026-07-04T12:15:39.563Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-04T12:15:39.563Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783168407953-7uxf",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-04T12:33:27.953Z",
+              "lastUsed": "2026-07-04T12:33:27.953Z",
+              "lastModified": "2026-07-04T12:33:27.953Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-04T12:33:27.953Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783167546009-7gbf",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-04T12:19:06.009Z",
+              "lastUsed": "2026-07-04T12:19:06.009Z",
+              "lastModified": "2026-07-04T12:19:06.009Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-04T12:19:06.009Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783169819909-b9k4",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-04T12:56:59.909Z",
+              "lastUsed": "2026-07-04T12:56:59.909Z",
+              "lastModified": "2026-07-04T12:56:59.909Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-04T12:56:59.909Z"
+        },
+        {
+          "definition": {
+            "meta": {
+              "format": "agentic-skill/v1",
+              "id": "skill-1783167695136-f4re",
+              "name": "Cara hitung pajak penghasilan",
+              "version": 1,
+              "author": "agent"
+            },
+            "trigger": {
+              "pattern": "Cara hitung pajak penghasilan",
+              "keywords": [
+                "hitung",
+                "pasal",
+                "penghasilan",
+                "bruto",
+                "kurangi",
+                "biaya",
+                "jabatan",
+                "terapkan",
+                "tarif",
+                "progresif"
+              ],
+              "context": [
+                "financial"
+              ]
+            },
+            "workflow": {
+              "steps": [
+                {
+                  "order": 1,
+                  "action": "execute",
+                  "description": "PPh Pasal 21: Hitung penghasilan bruto, kurangi biaya jabatan, hitung PKP, terapkan tarif progresif",
+                  "expectedOutput": "Step 1 completed",
+                  "rollback": "Undo changes via git: git stash or git checkout"
+                }
+              ],
+              "estimatedDuration": "2m",
+              "parallelizable": false
+            },
+            "quality": {
+              "successRate": 1,
+              "usageCount": 1,
+              "failureScenarios": []
+            },
+            "audit": {
+              "createdAt": "2026-07-04T12:21:35.136Z",
+              "lastUsed": "2026-07-04T12:21:35.136Z",
+              "lastModified": "2026-07-04T12:21:35.136Z",
+              "modifiedBy": "system"
+            }
+          },
+          "usageCount": 0,
+          "successRate": 0.5,
+          "successWindow": [],
+          "lastUsed": "2026-07-04T12:21:35.136Z"
         }
       ],
       "tfidfDocs": [
@@ -9090,6 +9432,138 @@
             "type": "skill",
             "skillId": "skill-1783093469636-wbba"
           }
+        },
+        {
+          "id": "sk-skill-1783167433302-pog8",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783167433302-pog8"
+          }
+        },
+        {
+          "id": "sk-skill-1783167339563-t7q6",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783167339563-t7q6"
+          }
+        },
+        {
+          "id": "sk-skill-1783168407953-7uxf",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783168407953-7uxf"
+          }
+        },
+        {
+          "id": "sk-skill-1783167546009-7gbf",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783167546009-7gbf"
+          }
+        },
+        {
+          "id": "sk-skill-1783169819909-b9k4",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783169819909-b9k4"
+          }
+        },
+        {
+          "id": "sk-skill-1783167695136-f4re",
+          "category": "automotive",
+          "title": "Cara hitung pajak penghasilan",
+          "content": "Cara hitung pajak penghasilan",
+          "keywords": [
+            "hitung",
+            "pasal",
+            "penghasilan",
+            "bruto",
+            "kurangi",
+            "biaya",
+            "jabatan",
+            "terapkan",
+            "tarif",
+            "progresif"
+          ],
+          "metadata": {
+            "type": "skill",
+            "skillId": "skill-1783167695136-f4re"
+          }
         }
       ]
     },
@@ -9742,6 +10216,48 @@
             "type": "episode",
             "episodeId": "ses_0d9ce4d2bffePBXt45qo9jEpUY"
           }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/core/project-context.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/core/project-context.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/core/project-context.ts",
+          "keywords": [
+            "project-context",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/core/project-context.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/core/navigator.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/core/navigator.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/core/navigator.ts",
+          "keywords": [
+            "navigator",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/core/navigator.ts"
+          }
+        },
+        {
+          "id": "file:/home/runner/opencode-agentic-engine/src/core/prompt-builder.ts",
+          "category": "general",
+          "title": "/home/runner/opencode-agentic-engine/src/core/prompt-builder.ts",
+          "content": "File /home/runner/opencode-agentic-engine/src/core/prompt-builder.ts",
+          "keywords": [
+            "prompt-builder",
+            "ts"
+          ],
+          "metadata": {
+            "type": "file",
+            "path": "/home/runner/opencode-agentic-engine/src/core/prompt-builder.ts"
+          }
         }
       ]
     },
@@ -10160,6 +10676,167 @@
           "score": 0.95,
           "usageCount": 1,
           "significance": "routine"
+        },
+        {
+          "id": "rag-ep-1783164458122",
+          "sessionId": "ses_0d32386adffer41zEUFxF0e2yi",
+          "planGoal": "Agentic RAG architecture",
+          "summary": "Agentic RAG di opencode-agentic-engine adalah hybrid proactive-agentic RAG. Beda dengan traditional RAG: (1) TF-IDF first, vector optional — sparse retrieval bukan dense embedding. (2) Category-segregated indices — setiap category punya index sendiri. (3) Confidence-aware scoring — setiap hasil punya confidence 0.0-1.0. (4) Multi-tool retrieval — agent punya 5+ retrieval tools (agentic_rag, agentic_episodes, agentic_skill, agentic_nav, webfetch). (5) Mandatory research flow — jika confidence < 0",
+          "outcome": "success",
+          "decisions": [],
+          "filesChanged": [],
+          "timestamp": "2026-07-04T11:27:38.122Z",
+          "tags": [
+            "agentic",
+            "opencode",
+            "agentic",
+            "engine",
+            "adalah",
+            "hybrid",
+            "proactive",
+            "agentic"
+          ],
+          "score": 1,
+          "usageCount": 0,
+          "significance": "routine"
+        },
+        {
+          "id": "rag-ep-1783164503738",
+          "sessionId": "ses_0d32386adffer41zEUFxF0e2yi",
+          "planGoal": "Microsoft Agentic RAG definition 2026",
+          "summary": "Microsoft Azure Architecture Center (2026-06-23): Agentic RAG means the AI agent treats retrieval as a TOOL that it can invoke on demand. The agent reasons about the user query, decides which tools to call, evaluates intermediate results, and iterates until it has enough context. This enables multistep reasoning, dynamic query planning, and coordination across heterogeneous data sources. Berbeda dengan standard RAG yang mengikuti fixed pipeline (accept query → run search → assemble context → cal",
+          "outcome": "success",
+          "decisions": [],
+          "filesChanged": [],
+          "timestamp": "2026-07-04T11:28:23.738Z",
+          "tags": [
+            "microsoft",
+            "azure",
+            "architecture",
+            "center",
+            "agentic",
+            "means",
+            "agent",
+            "treats"
+          ],
+          "score": 1,
+          "usageCount": 0,
+          "significance": "routine"
+        },
+        {
+          "id": "rag-ep-1783164511535",
+          "sessionId": "ses_0d32386adffer41zEUFxF0e2yi",
+          "planGoal": "Hybrid RAG pattern is production winner 2026",
+          "summary": "SwarmSignal (2026-06-22) dan Microsoft Azure Architecture Center: Production RAG di 2026 menggunakan Hybrid approach — adaptive routing dengan small model untuk klasifikasi query complexity. Simple factoid → Naive RAG. Synthesis task → Agentic loop. Hybrid retrieval (TF-IDF + vector) consistently outperforms pure vector search in production benchmarks. Budget-aware tiered memory: hot memory (high-quality, high-cost) vs cold storage (archival). RAG bertransisi menjadi 'file system' untuk agentic ",
+          "outcome": "success",
+          "decisions": [],
+          "filesChanged": [],
+          "timestamp": "2026-07-04T11:28:31.535Z",
+          "tags": [
+            "swarmsignal",
+            "microsoft",
+            "azure",
+            "architecture",
+            "center",
+            "production",
+            "menggunakan",
+            "hybrid"
+          ],
+          "score": 1,
+          "usageCount": 0,
+          "significance": "routine"
+        },
+        {
+          "id": "rag-ep-1783167044960",
+          "sessionId": "ses_0d32386adffer41zEUFxF0e2yi",
+          "planGoal": "Web: Agentic RAG architecture comparison 2026",
+          "summary": "Microsoft Azure Architecture Center (2026): Agentic RAG changes from standard RAG. Instead of a fixed pipeline (accept query → run search → assemble context → call LLM), an AI agent treats retrieval as a TOOL it can invoke on demand. The agent reasons about queries, decides which tools to call, evaluates intermediate results, and iterates. SwarmSignal (2026): Production RAG di 2026 menggunakan Hybrid approach — adaptive routing, hybrid retrieval (TF-IDF + vector) outperforms pure vector search. ",
+          "outcome": "success",
+          "decisions": [],
+          "filesChanged": [],
+          "timestamp": "2026-07-04T12:10:44.960Z",
+          "tags": [
+            "microsoft",
+            "azure",
+            "architecture",
+            "center",
+            "agentic",
+            "changes",
+            "from",
+            "standard"
+          ],
+          "score": 1,
+          "usageCount": 0,
+          "significance": "routine"
+        },
+        {
+          "id": "rag-ep-1783167046904",
+          "sessionId": "ses_0d32386adffer41zEUFxF0e2yi",
+          "planGoal": "Web: GraphRAG vs Agentic RAG use cases",
+          "summary": "GraphRAG (Microsoft 2024) cocok untuk dokumen natural language besar (paper, artikel, datasheet) dengan entity extraction + community detection. Tidak cocok untuk source code atau dataset kecil. Agentic RAG lebih cocok untuk software engineering karena agent bisa multi-step retrieval. RAG patterns 2026: (1) Naive RAG untuk simple FAQ, (2) Agentic RAG untuk multi-hop reasoning + tool use, (3) GraphRAG untuk korpus dokumen besar dengan entity relations. Hybrid RAG (TF-IDF + vector) consistently ou",
+          "outcome": "success",
+          "decisions": [],
+          "filesChanged": [],
+          "timestamp": "2026-07-04T12:10:46.904Z",
+          "tags": [
+            "graphrag",
+            "microsoft",
+            "cocok",
+            "untuk",
+            "dokumen",
+            "natural",
+            "language",
+            "besar"
+          ],
+          "score": 1,
+          "usageCount": 0,
+          "significance": "routine"
+        },
+        {
+          "id": "rag-ep-1783167056226",
+          "sessionId": "ses_0d32386adffer41zEUFxF0e2yi",
+          "planGoal": "Web: research-agent opencode-search multi-round scraping",
+          "summary": "research-agent (rahadiana) punya OpencodeSearchCollector: multi-round LLM search via OpenCode SDK, tiap round 8 URL dengan angle berbeda. Cascade scrape: original URL → Wayback Machine → Google Cache. Content extraction via Mozilla Readability + Cheerio. Auto-index hasil ke vector DB di fase processing. LLM synthesize menghasilkan structured report dengan key findings, sections, conclusions, references. maxSources mengontrol jumlah source untuk synthesize, tapi semua source di-index ke vector DB",
+          "outcome": "success",
+          "decisions": [],
+          "filesChanged": [],
+          "timestamp": "2026-07-04T12:10:56.226Z",
+          "tags": [
+            "research",
+            "agent",
+            "rahadiana",
+            "punya",
+            "opencodesearchcollector",
+            "multi",
+            "round",
+            "search"
+          ],
+          "score": 1,
+          "usageCount": 0,
+          "significance": "routine"
+        },
+        {
+          "id": "rag-ep-1783170141840",
+          "sessionId": "ses_0d32386adffer41zEUFxF0e2yi",
+          "planGoal": "Web: Wikipedia RAG — Definisi dan Konsep Dasar",
+          "summary": "RAG (Retrieval-Augmented Generation) adalah teknik yang memungkinkan LLM mengambil informasi dari sumber data eksternal. Pertama kali diperkenalkan di paper Lewis et al. 2020. Proses: (1) Dokumen di-encode ke vector embeddings, (2) User query → document retriever cari dokumen relevan, (3) Dokumen + query jadi prompt ke LLM, (4) LLM generate output berdasarkan query dan retrieved documents. Hybrid search (vector + text search) bisa meningkatkan akurasi. Tantangan: RAG poisoning — sistem bisa retr",
+          "outcome": "success",
+          "decisions": [],
+          "filesChanged": [],
+          "timestamp": "2026-07-04T13:02:21.840Z",
+          "tags": [
+            "retrieval",
+            "augmented",
+            "generation",
+            "adalah",
+            "teknik",
+            "yang",
+            "memungkinkan",
+            "mengambil"
+          ],
+          "score": 1,
+          "usageCount": 0,
+          "significance": "routine"
         }
       ],
       "skills": [
@@ -10556,6 +11233,146 @@
             "type": "skill",
             "skillId": "skill-1783077119196-ng1i"
           }
+        },
+        {
+          "id": "ep-rag-ep-1783164458122",
+          "category": "knowledge-tech",
+          "title": "Agentic RAG architecture",
+          "content": "Agentic RAG di opencode-agentic-engine adalah hybrid proactive-agentic RAG. Beda dengan traditional RAG: (1) TF-IDF first, vector optional — sparse retrieval bukan dense embedding. (2) Category-segregated indices — setiap category punya index sendiri. (3) Confidence-aware scoring — setiap hasil punya confidence 0.0-1.0. (4) Multi-tool retrieval — agent punya 5+ retrieval tools (agentic_rag, agentic_episodes, agentic_skill, agentic_nav, webfetch). (5) Mandatory research flow — jika confidence < 0\n",
+          "keywords": [
+            "agentic",
+            "opencode",
+            "agentic",
+            "engine",
+            "adalah",
+            "hybrid",
+            "proactive",
+            "agentic"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "rag-ep-1783164458122"
+          }
+        },
+        {
+          "id": "ep-rag-ep-1783164503738",
+          "category": "knowledge-tech",
+          "title": "Microsoft Agentic RAG definition 2026",
+          "content": "Microsoft Azure Architecture Center (2026-06-23): Agentic RAG means the AI agent treats retrieval as a TOOL that it can invoke on demand. The agent reasons about the user query, decides which tools to call, evaluates intermediate results, and iterates until it has enough context. This enables multistep reasoning, dynamic query planning, and coordination across heterogeneous data sources. Berbeda dengan standard RAG yang mengikuti fixed pipeline (accept query → run search → assemble context → cal\n",
+          "keywords": [
+            "microsoft",
+            "azure",
+            "architecture",
+            "center",
+            "agentic",
+            "means",
+            "agent",
+            "treats"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "rag-ep-1783164503738"
+          }
+        },
+        {
+          "id": "ep-rag-ep-1783164511535",
+          "category": "knowledge-tech",
+          "title": "Hybrid RAG pattern is production winner 2026",
+          "content": "SwarmSignal (2026-06-22) dan Microsoft Azure Architecture Center: Production RAG di 2026 menggunakan Hybrid approach — adaptive routing dengan small model untuk klasifikasi query complexity. Simple factoid → Naive RAG. Synthesis task → Agentic loop. Hybrid retrieval (TF-IDF + vector) consistently outperforms pure vector search in production benchmarks. Budget-aware tiered memory: hot memory (high-quality, high-cost) vs cold storage (archival). RAG bertransisi menjadi 'file system' untuk agentic \n",
+          "keywords": [
+            "swarmsignal",
+            "microsoft",
+            "azure",
+            "architecture",
+            "center",
+            "production",
+            "menggunakan",
+            "hybrid"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "rag-ep-1783164511535"
+          }
+        },
+        {
+          "id": "ep-rag-ep-1783167044960",
+          "category": "knowledge-tech",
+          "title": "Web: Agentic RAG architecture comparison 2026",
+          "content": "Microsoft Azure Architecture Center (2026): Agentic RAG changes from standard RAG. Instead of a fixed pipeline (accept query → run search → assemble context → call LLM), an AI agent treats retrieval as a TOOL it can invoke on demand. The agent reasons about queries, decides which tools to call, evaluates intermediate results, and iterates. SwarmSignal (2026): Production RAG di 2026 menggunakan Hybrid approach — adaptive routing, hybrid retrieval (TF-IDF + vector) outperforms pure vector search. \n",
+          "keywords": [
+            "microsoft",
+            "azure",
+            "architecture",
+            "center",
+            "agentic",
+            "changes",
+            "from",
+            "standard"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "rag-ep-1783167044960"
+          }
+        },
+        {
+          "id": "ep-rag-ep-1783167046904",
+          "category": "knowledge-tech",
+          "title": "Web: GraphRAG vs Agentic RAG use cases",
+          "content": "GraphRAG (Microsoft 2024) cocok untuk dokumen natural language besar (paper, artikel, datasheet) dengan entity extraction + community detection. Tidak cocok untuk source code atau dataset kecil. Agentic RAG lebih cocok untuk software engineering karena agent bisa multi-step retrieval. RAG patterns 2026: (1) Naive RAG untuk simple FAQ, (2) Agentic RAG untuk multi-hop reasoning + tool use, (3) GraphRAG untuk korpus dokumen besar dengan entity relations. Hybrid RAG (TF-IDF + vector) consistently ou\n",
+          "keywords": [
+            "graphrag",
+            "microsoft",
+            "cocok",
+            "untuk",
+            "dokumen",
+            "natural",
+            "language",
+            "besar"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "rag-ep-1783167046904"
+          }
+        },
+        {
+          "id": "ep-rag-ep-1783167056226",
+          "category": "knowledge-tech",
+          "title": "Web: research-agent opencode-search multi-round scraping",
+          "content": "research-agent (rahadiana) punya OpencodeSearchCollector: multi-round LLM search via OpenCode SDK, tiap round 8 URL dengan angle berbeda. Cascade scrape: original URL → Wayback Machine → Google Cache. Content extraction via Mozilla Readability + Cheerio. Auto-index hasil ke vector DB di fase processing. LLM synthesize menghasilkan structured report dengan key findings, sections, conclusions, references. maxSources mengontrol jumlah source untuk synthesize, tapi semua source di-index ke vector DB\n",
+          "keywords": [
+            "research",
+            "agent",
+            "rahadiana",
+            "punya",
+            "opencodesearchcollector",
+            "multi",
+            "round",
+            "search"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "rag-ep-1783167056226"
+          }
+        },
+        {
+          "id": "ep-rag-ep-1783170141840",
+          "category": "knowledge-tech",
+          "title": "Web: Wikipedia RAG — Definisi dan Konsep Dasar",
+          "content": "RAG (Retrieval-Augmented Generation) adalah teknik yang memungkinkan LLM mengambil informasi dari sumber data eksternal. Pertama kali diperkenalkan di paper Lewis et al. 2020. Proses: (1) Dokumen di-encode ke vector embeddings, (2) User query → document retriever cari dokumen relevan, (3) Dokumen + query jadi prompt ke LLM, (4) LLM generate output berdasarkan query dan retrieved documents. Hybrid search (vector + text search) bisa meningkatkan akurasi. Tantangan: RAG poisoning — sistem bisa retr\n",
+          "keywords": [
+            "retrieval",
+            "augmented",
+            "generation",
+            "adalah",
+            "teknik",
+            "yang",
+            "memungkinkan",
+            "mengambil"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "rag-ep-1783170141840"
+          }
         }
       ]
     },
@@ -10660,5 +11477,5 @@
       ]
     }
   },
-  "updatedAt": "2026-07-03T15:49:10.649Z"
+  "updatedAt": "2026-07-04T13:02:21.841Z"
 }

@@ -4984,7 +4984,7 @@ const confidenceStore = new ConfidenceStore()
       agentic_rag: registryTool("agentic_rag", {
         description: "Multi-index RAG: search or store knowledge in category-segregated indices. Prevents cross-category context pollution. Use with agentic_router to scope searches to relevant domains.",
         args: {
-          action: tool.schema.enum(["search", "store", "stats", "categories", "list", "clear"]).describe("Action: search across categories, store new data, view stats, list categories, list all entries, or clear a category"),
+          action: tool.schema.enum(["search", "store", "stats", "categories", "list", "clear", "detail"]).describe("Action: search across categories, store new data, view stats, list categories, list all entries, clear a category, or get full detail of an entry"),
           query: tool.schema.string().optional().describe("Search query (required for search/stats)"),
           category: tool.schema.string().optional().describe("Category to search within (omit for all)"),
           title: tool.schema.string().optional().describe("Title for stored entry"),
@@ -5013,7 +5013,7 @@ const confidenceStore = new ConfidenceStore()
                   const score = entry.vectorScore !== undefined
                     ? ` [vec:${entry.vectorScore.toFixed(3)} tfidf:${(entry.tfidfScore ?? 0).toFixed(3)}]`
                     : ` [tfidf:${(entry.tfidfScore ?? 0).toFixed(3)}]`
-                  const snippet = (entry.episode?.summary ?? entry.skill?.definition?.trigger?.pattern ?? "").slice(0, 150)
+                  const snippet = (entry.episode?.summary ?? entry.skill?.definition?.trigger?.pattern ?? "").slice(0, 500)
                   lines.push(`- ${type}: **${title}** [${entry.category}]${score}`)
                   if (snippet) lines.push(`  > ${snippet}`)
                 }
@@ -5078,7 +5078,7 @@ const confidenceStore = new ConfidenceStore()
                 for (const entry of entries.slice(0, showCount)) {
                   const type = entry.episode ? "📖" : "🔧"
                   const ts = (entry.timestamp || "").slice(0, 10)
-                  const snippet = (entry.episode?.summary ?? entry.skill?.definition?.trigger?.pattern ?? "").slice(0, 120)
+                  const snippet = (entry.episode?.summary ?? entry.skill?.definition?.trigger?.pattern ?? "").slice(0, 400)
                   lines.push(`  ${type} [${ts}] **${entry.title}**`)
                   if (snippet) lines.push(`    ↳ ${snippet}`)
                 }
@@ -5091,6 +5091,67 @@ const confidenceStore = new ConfidenceStore()
                 output: lines.join("\n"),
                 metadata: { listResult: allEntries },
               }
+            }
+
+            case "detail": {
+              const dq = args.query || ""
+              if (!dq) return { output: "Query diperlukan. Gunakan `query` untuk mencari entry yang ingin dilihat detailnya." }
+              const dCat = args.category
+              let dResults: import("./memory/multi-index-rag.js").IndexEntry[]
+              if (dCat) {
+                const dr = await multiIndexRAG.searchByCategoryAsync(dq, dCat, 1)
+                dResults = dr.entries
+              } else {
+                const dr = await multiIndexRAG.searchAllAsync(dq, 1)
+                dResults = dr.flatMap(r => r.entries).slice(0, 1)
+              }
+              if (dResults.length === 0) return { output: `No entry found for "${dq}".` }
+              const de = dResults[0]
+              const dlines: string[] = []
+              if (de.episode) {
+                dlines.push(`## 📖 Episode: ${de.episode.planGoal}`)
+                dlines.push(`**ID:** ${de.episode.id}`)
+                dlines.push(`**Outcome:** ${de.episode.outcome}`)
+                dlines.push(`**Domain:** ${de.episode.domain || "—"}`)
+                dlines.push(`**Tags:** ${de.episode.tags.join(", ")}`)
+                dlines.push(`**Significance:** ${de.episode.significance}`)
+                dlines.push(``)
+                dlines.push(`### Summary`)
+                dlines.push(de.episode.summary)
+                if (de.episode.decisions.length > 0) {
+                  dlines.push(``)
+                  dlines.push(`### Decisions`)
+                  dlines.push(de.episode.decisions.map((d: string, i: number) => `${i + 1}. ${d}`).join("\n"))
+                }
+                if (de.episode.filesChanged && de.episode.filesChanged.length > 0) {
+                  dlines.push(``)
+                  dlines.push(`### Files Changed`)
+                  dlines.push(de.episode.filesChanged.map((f: string) => `- \`${f}\``).join("\n"))
+                }
+                if (de.episode.plan && de.episode.plan.length > 0) {
+                  dlines.push(``)
+                  dlines.push(`### Plan Steps`)
+                  dlines.push(de.episode.plan.map((s: string, i: number) => `${i + 1}. ${s}`).join("\n"))
+                }
+              } else if (de.skill) {
+                const sk = de.skill.definition
+                dlines.push(`## 🔧 Skill: ${sk.meta.name}`)
+                dlines.push(`**ID:** ${sk.meta.id}`)
+                dlines.push(`**Trigger:** ${sk.trigger.pattern}`)
+                dlines.push(`**Keywords:** ${sk.trigger.keywords?.join(", ") || "—"}`)
+                dlines.push(`**Success Rate:** ${(de.skill.successRate * 100).toFixed(0)}%`)
+                dlines.push(`**Lifecycle:** ${de.skill.lifecycle || "raw"}`)
+                dlines.push(``)
+                dlines.push(`### Steps`)
+                sk.workflow.steps.forEach((s: { action: string; description: string; tool?: string }, i: number) => {
+                  dlines.push(`${i + 1}. **[${s.action}]** ${s.description}`)
+                  if (s.tool) dlines.push(`   Tool: \`${s.tool}\``)
+                })
+              } else {
+                dlines.push(`**${de.title}**`)
+                dlines.push(`Category: ${de.category}`)
+              }
+              return { output: dlines.join("\n"), metadata: { entry: de } }
             }
 
             case "store": {
