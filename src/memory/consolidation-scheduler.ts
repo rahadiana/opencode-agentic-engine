@@ -164,6 +164,7 @@ export class ConsolidationScheduler {
         semanticDeduplicated: 0,
         patternsExtracted: 0,
         skillsConverted: 0,
+        ragPruned: 0,
         timestamp: Date.now(),
       }
       return report

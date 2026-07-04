@@ -664,6 +664,37 @@ export class MultiIndexRAG {
   }
 
   /**
+   * Prune low-quality RAG entries: kortom summary/konten, entry rutin >30 hari.
+   * Returns number of entries removed.
+   */
+  pruneEntries(minContentLength = 20, routineMaxAgeDays = 30): number {
+    let removed = 0
+    const now = Date.now()
+    for (const [, idx] of this.indices) {
+      idx.episodes = idx.episodes.filter(ep => {
+        // Hapus entry dengan summary terlalu pendek
+        if (ep.summary.trim().length < minContentLength) {
+          this.vectorStore.remove(`ep-${ep.id}`)
+          removed++
+          return false
+        }
+        // Hapus entry routine > N hari (low-value web fetch artifacts)
+        if (ep.significance === "routine" && ep.usageCount === 0) {
+          const ageDays = (now - new Date(ep.timestamp).getTime()) / 86400_000
+          if (ageDays > routineMaxAgeDays) {
+            this.vectorStore.remove(`ep-${ep.id}`)
+            removed++
+            return false
+          }
+        }
+        return true
+      })
+    }
+    if (removed > 0) this.notifyPersist()
+    return removed
+  }
+
+  /**
    * Import persisted data.
    */
   importAll(data: IndexData): void {

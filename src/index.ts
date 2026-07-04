@@ -4984,7 +4984,7 @@ const confidenceStore = new ConfidenceStore()
       agentic_rag: registryTool("agentic_rag", {
         description: "Multi-index RAG: search or store knowledge in category-segregated indices. Prevents cross-category context pollution. Use with agentic_router to scope searches to relevant domains.",
         args: {
-          action: tool.schema.enum(["search", "store", "stats", "categories", "list", "clear", "detail"]).describe("Action: search across categories, store new data, view stats, list categories, list all entries, clear a category, or get full detail of an entry"),
+          action: tool.schema.enum(["search", "store", "stats", "categories", "list", "clear", "detail", "edit", "delete", "reload"]).describe("Action: search, store, stats, categories, list, clear, detail (full content), edit (update entry), delete (remove single entry), or reload (restore from disk)"),
           query: tool.schema.string().optional().describe("Search query (required for search/stats)"),
           category: tool.schema.string().optional().describe("Category to search within (omit for all)"),
           title: tool.schema.string().optional().describe("Title for stored entry"),
@@ -5266,6 +5266,86 @@ const confidenceStore = new ConfidenceStore()
                 output: `## 🗑️ RAG Category Cleared\n\n**Category:** ${clearCat}\n**Removed:** ${statsBefore?.episodes ?? 0} episodes, ${statsBefore?.skills ?? 0} skills`,
                 metadata: { category: clearCat, cleared: true },
               }
+            }
+
+            case "edit": {
+              const eq = args.query || ""
+              if (!eq) return { output: "Query diperlukan untuk mencari entry yang akan diedit." }
+              const eCat = args.category
+              let eTarget: import("./memory/multi-index-rag.js").IndexEntry | undefined
+              if (eCat) {
+                const er = await multiIndexRAG.searchByCategoryAsync(eq, eCat, 1)
+                eTarget = er.entries[0]
+              } else {
+                const er = await multiIndexRAG.searchAllAsync(eq, 1)
+                eTarget = er.flatMap(r => r.entries)[0]
+              }
+              if (!eTarget) return { output: `Tidak menemukan entry untuk "${eq}".` }
+              const newContent = args.content
+              if (!newContent) return { output: "Parameter `content` diperlukan untuk update konten entry." }
+              // Find and update the episode in-memory
+              const targetCat = eTarget.category
+              const catIndex = (multiIndexRAG as unknown as {
+                indices: Map<string, { episodes: import("./memory/episodic-store.js").Episode[]; skills: import("./memory/skill-store.js").SkillRecord[] }>
+              }).indices.get(targetCat)
+              if (!catIndex) return { output: `Category "${targetCat}" not found.` }
+              const epId = eTarget.episode?.id
+              if (epId) {
+                const idx = catIndex.episodes.findIndex(e => e.id === epId)
+                if (idx >= 0) {
+                  catIndex.episodes[idx].summary = newContent
+                  // Re-index in vector store
+                  multiIndexRAG.vectorStore.index({
+                    id: `ep-${epId}`,
+                    category: targetCat,
+                    title: catIndex.episodes[idx].planGoal,
+                    content: `${newContent}\n${catIndex.episodes[idx].decisions.join("\n")}`,
+                    keywords: catIndex.episodes[idx].tags,
+                    metadata: { type: "episode", episodeId: epId },
+                  })
+                  return { output: `## ✅ Entry Updated\n\n**Title:** ${eTarget.title}\n**Category:** ${targetCat}\n**New summary:** ${newContent.slice(0, 200)}...` }
+                }
+              }
+              return { output: "Entry ditemukan tapi gagal di-update." }
+            }
+
+            case "delete": {
+              const dq2 = args.query || ""
+              if (!dq2) return { output: "Query diperlukan untuk mencari entry yang akan dihapus." }
+              const dCat2 = args.category
+              let dTarget: import("./memory/multi-index-rag.js").IndexEntry | undefined
+              if (dCat2) {
+                const dr2 = await multiIndexRAG.searchByCategoryAsync(dq2, dCat2, 1)
+                dTarget = dr2.entries[0]
+              } else {
+                const dr2 = await multiIndexRAG.searchAllAsync(dq2, 1)
+                dTarget = dr2.flatMap(r => r.entries)[0]
+              }
+              if (!dTarget) return { output: `Tidak menemukan entry untuk "${dq2}".` }
+              const delCat = dTarget.category
+              const delId = dTarget.episode?.id
+              if (delId) {
+                const catIdx = (multiIndexRAG as unknown as {
+                  indices: Map<string, { episodes: import("./memory/episodic-store.js").Episode[]; skills: import("./memory/skill-store.js").SkillRecord[] }>
+                }).indices.get(delCat)
+                if (catIdx) {
+                  const before = catIdx.episodes.length
+                  catIdx.episodes = catIdx.episodes.filter(e => e.id !== delId)
+                  multiIndexRAG.vectorStore.remove(`ep-${delId}`)
+                  return { output: `## 🗑️ Entry Deleted\n\n**Title:** ${dTarget.title}\n**Category:** ${delCat}\n**Removed:** ${before - catIdx.episodes.length} entry` }
+                }
+              }
+              return { output: "Entry ditemukan tapi gagal dihapus." }
+            }
+
+            case "reload": {
+              const saved = stateStore.getAll("rag")
+              let loaded = 0
+              for (const item of saved) {
+                multiIndexRAG.importAll(item.data as import("./memory/multi-index-rag.js").IndexData)
+                loaded++
+              }
+              return { output: `## 🔄 RAG Reloaded\n\n**Namespaces loaded:** ${loaded}\n**Stats setelah reload:** ${multiIndexRAG.getStats().totalEpisodes} episodes, ${multiIndexRAG.getStats().totalSkills} skills across ${multiIndexRAG.getStats().categories.length} categories` }
             }
 
             case "stats": {

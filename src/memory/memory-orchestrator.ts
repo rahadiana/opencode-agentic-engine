@@ -101,6 +101,8 @@ export interface ConsolidationReport {
   patternsExtracted: number
   /** New in Phase 3A: number of patterns auto-converted to SkillDefinitions */
   skillsConverted: number
+  /** RAG entries pruned (empty summary, stale routine) */
+  ragPruned: number
   timestamp: number
 }
 
@@ -421,6 +423,7 @@ export class MemoryOrchestrator {
       semanticDeduplicated: 0,
       patternsExtracted: 0,
       skillsConverted: 0,
+      ragPruned: 0,
       timestamp: Date.now(),
     }
 
@@ -531,6 +534,15 @@ export class MemoryOrchestrator {
 
     // Prune importance index if too large
     this.importanceIndex.pruneImportanceIndex()
+
+    // 6. RAG auto-prune: hapus entry kosong/stale (otomatis tiap konsolidasi)
+    if (this.ragStore) {
+      try {
+        report.ragPruned = this.ragStore.pruneEntries(20, 30)
+      } catch {
+        // non-fatal
+      }
+    }
 
     return report
   }
