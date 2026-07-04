@@ -5013,7 +5013,9 @@ const confidenceStore = new ConfidenceStore()
                   const score = entry.vectorScore !== undefined
                     ? ` [vec:${entry.vectorScore.toFixed(3)} tfidf:${(entry.tfidfScore ?? 0).toFixed(3)}]`
                     : ` [tfidf:${(entry.tfidfScore ?? 0).toFixed(3)}]`
+                  const snippet = (entry.episode?.summary ?? entry.skill?.definition?.trigger?.pattern ?? "").slice(0, 150)
                   lines.push(`- ${type}: **${title}** [${entry.category}]${score}`)
+                  if (snippet) lines.push(`  > ${snippet}`)
                 }
                 if (results.entries.length === 0) {
                   lines.push("*(no results)*")
@@ -5076,7 +5078,9 @@ const confidenceStore = new ConfidenceStore()
                 for (const entry of entries.slice(0, showCount)) {
                   const type = entry.episode ? "📖" : "🔧"
                   const ts = (entry.timestamp || "").slice(0, 10)
+                  const snippet = (entry.episode?.summary ?? entry.skill?.definition?.trigger?.pattern ?? "").slice(0, 120)
                   lines.push(`  ${type} [${ts}] **${entry.title}**`)
+                  if (snippet) lines.push(`    ↳ ${snippet}`)
                 }
                 if (entries.length > showCount) {
                   lines.push(`  *...and ${entries.length - showCount} more*`)
