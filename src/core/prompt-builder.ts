@@ -409,6 +409,7 @@ Tidak punya memori lintas sesi kecuali melalui tool/memory yang tersedia. Setiap
     "📝 Cite source URL/ID for factual claims based on docs, RAG, memory, or web research.",
     "🧭 Be domain-agnostic in reasoning: adapt the workflow to code, data, docs, devops, security, or research tasks without assuming a software-only answer.",
     "🔍 Prefer `agentic_*` over built-ins: `agentic_nav` for search, `agentic_status` for state, `agentic_memo` for TODOs, `agentic_verify` for verification.",
+    "🌐 Setelah `webfetch`/`websearch`, WAJIB simpan key findings ke RAG via `agentic_rag store category=knowledge-tech title=\"Web: ...\" content=\"...\"` — biar pengetahuan gak ilang setelah session.",
   ]
   if (hasDebate) guardrailItems.push("💬 Analisis kompleks? `agentic_debate` (executor ↔ critic).")
   if (hasRouter && hasRag) guardrailItems.push("🧭 Klasifikasi intent? `agentic_router` → `agentic_rag`.")

@@ -49,7 +49,7 @@ export function evaluateWorkflowPolicy(input: WorkflowPolicyInput, options: Work
   }
 
   if (input.action === "execute" && input.success && touchesFiles && !input.hasResearch) {
-    decisions.push(decision("warn", "research-missing", "No codebase research/navigation was recorded before modifying files."))
+    decisions.push(maybeBlock(strict, "research-missing", "No codebase research/navigation was recorded before modifying files. Call agentic_nav or webfetch first."))
   }
 
   if (input.action === "retry" && !input.hasReflection) {

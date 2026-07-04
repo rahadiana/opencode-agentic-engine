@@ -50,6 +50,7 @@ export const AGENTIC_TOOL_CATALOG: ToolCatalogEntry[] = [
   { name: "agentic_a2a", description: "Agent-to-Agent protocol: discover remote agents, delegate tasks, start/stop A2A server. Google A2A standard for cross-framework interoperability. Key: `action` (serve/discover/delegate/list/ping/stats).", keywords: ["a2a", "agent", "discover", "serve", "interop", "delegate"], category: "blueprint" },
   { name: "agentic_tools", description: "Unified tool search and calling across MCP + A2A protocols. Search for tools by keyword, auto-route calls, list all connections, view combined stats. Key: `action` (search/call/list/stats).", keywords: ["tools", "unified", "search", "discover", "protocol", "gateway", "mcp", "a2a"], category: "blueprint" },
   { name: "agentic_finetune", description: "End-to-end pipeline: prepare training data from skills → upload to OpenAI → create/monitor jobs. Use to fine-tune models from agent experience. Key: `action` (prepare/save/upload/create-job/status).", keywords: ["finetune", "fine-tune", "training", "dataset", "openai", "model"], category: "blueprint" },
+  { name: "agentic_fetch", description: "Fetch URL dan auto-index ke RAG. Hasilnya otomatis tersimpan di knowledge base dan bisa dicari lagi via agentic_rag. Gunakan ini sebagai pengganti webfetch bawaan — lebih hemat karena tidak perlu store manual.", keywords: ["fetch", "web", "url", "scrape", "research", "ambil", "dokumentasi", "web-search"], category: "core" },
 ]
 
 // ── Derived convenience exports ──────────────────────────────────

@@ -38,7 +38,7 @@ node test/e2e-llm.mjs       # LLM E2E: 19 tests (auto: OpenCode Free)
 
 ```
 src/
-├── index.ts                   # Plugin entry: registers 31 tools + 5 hooks
+├── index.ts                   # Plugin entry: registers 32 tools + 5 hooks
 ├── README.md                  # → Dokumentasi fungsi per folder untuk AI context
 │
 ├── core/                      # Inti engine: planning, execution, verification (63 file + 6 domain)
@@ -269,6 +269,7 @@ Semua tool menggunakan prefix `agentic_`. Dikelompokkan berdasarkan Stage:
 | Tool | Input | Output | Description |
 |------|-------|--------|-------------|
 | `agentic_auto` | `goal`, `constraints?`, `thorough?`, `maxSteps?` | `{ result }` | One-call autonomous loop: plan → execute → verify → retry. Memory + skills + guard + tech-debt. |
+| `agentic_fetch` | `url`, `category?` | `{ output }` | Fetch URL dan auto-index ke RAG. Hasilnya otomatis tersimpan di knowledge base (TF-IDF) untuk pencarian masa depan. **Gunakan ini sebagai pengganti `webfetch`** — lebih hemat karena tidak perlu store manual. |
 
 #### Blueprint (Prototype)
 
@@ -521,7 +522,13 @@ KNOWLEDGE-FIRST PROMPT INJECTION PIPELINE
    - Bukan saran — INSTRUKSI MANDATORY di system prompt
    - Termasuk untuk arXiv: `webfetch https://arxiv.org/search/?query=...`
 
-4. **Source Citations Wajib**
+4. **Web Results Wajib Disimpan ke RAG**
+   - Setelah `webfetch`/`websearch`, WAJIB simpan key findings ke RAG via `agentic_rag store category=knowledge-tech title="Web: ..." content="..." type=episode`
+   - Key findings sudah kamu extract secara natural saat membaca — tinggal store
+   - Biar pengetahuan tidak hilang setelah session expire
+   - Contoh: `agentic_rag store category="knowledge-tech" title="Web: Prisma Migration Guide" content="Intinya: prisma migrate deploy buat production, migrate dev buat development"`
+
+5. **Source Citations Wajib**
    - Setiap klaim harus cantumkan URL / arXiv ID / RAG entry ID
    - Format: `<source url="..." confidence="0.85">`
 

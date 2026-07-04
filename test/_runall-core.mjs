@@ -30,7 +30,7 @@ assert(typeof hooks.dispose === "function", "dispose hook registered")
 
 // 3. Tool registration (31 tools)
 console.log("\n[3] Tool registration")
-const expectedAgenticTools = ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_model", "agentic_budget", "agentic_episodes", "agentic_parallel", "agentic_guard", "agentic_evolve", "agentic_auto", "agentic_debate", "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp", "agentic_a2a", "agentic_tools", "agentic_finetune", "agentic_db", "agentic_memo"]
+const expectedAgenticTools = ["agentic_plan", "agentic_nav", "agentic_execute", "agentic_reflect", "agentic_verify", "agentic_status", "agentic_context", "agentic_snapshot", "agentic_pr", "agentic_score", "agentic_delegate", "agentic_pipeline", "agentic_message", "agentic_skill", "agentic_model", "agentic_budget", "agentic_episodes", "agentic_parallel", "agentic_guard", "agentic_evolve", "agentic_auto", "agentic_debate", "agentic_router", "agentic_clean", "agentic_rag", "agentic_mcp", "agentic_a2a", "agentic_tools", "agentic_finetune", "agentic_db", "agentic_memo", "agentic_fetch"]
 for (const name of expectedAgenticTools) {
   const tool = hooks.tool?.[name]
   assert(tool && typeof tool.execute === "function", `"${name}" has execute()`)
