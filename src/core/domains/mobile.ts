@@ -38,7 +38,7 @@ const mobileDetect = (input: string): number => {
     try {
       const fullPath = resolve(projectDir, f)
       if (existsSync(fullPath)) score += 0.25
-    } catch { /* skip */ }
+    } catch { console.warn("catch: skip") }
   }
   return Math.min(score, 1.0)
 }
@@ -76,7 +76,7 @@ const mobileVerifiers: VerifierStrategy[] = [
               issues.push(`${file}: Activity with exported=true but no intent-filter`)
             }
           }
-        } catch { /* skip */ }
+        } catch { console.warn("catch: skip") }
       }
       if (issues.length > 0) {
         return { passed: false, output: `Android manifest issues:\n${issues.join("\n")}` }
@@ -104,7 +104,7 @@ const mobileVerifiers: VerifierStrategy[] = [
               issues.push(`${file}: ATS disabled — consider specific exceptions instead`)
             }
           }
-        } catch { /* skip */ }
+        } catch { console.warn("catch: skip") }
       }
       if (issues.length > 0) {
         return { passed: false, output: `iOS plist issues:\n${issues.join("\n")}` }

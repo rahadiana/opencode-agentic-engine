@@ -352,7 +352,7 @@ export class Orchestrator {
     if (!this.persistencePath) return
     try {
       fs.writeFileSync(this.persistencePath, JSON.stringify([...this.pipelines.values()], null, 2))
-    } catch { /* non-fatal */ }
+    } catch { log.warn("Silent catch: non-fatal") }
   }
 
   definePipeline(pipeline: WorkflowPipeline): void {
@@ -424,7 +424,7 @@ export class Orchestrator {
     let parsed: Record<string, unknown> | null = null
     try {
       parsed = JSON.parse(output)
-    } catch { /* not JSON */ }
+    } catch { log.warn("Silent catch: not JSON") }
     for (const field of schema) {
       const name = field.name.toLowerCase()
       let found = false

@@ -35,7 +35,7 @@ const devopsDetect = (input: string): number => {
     "Chart.yaml", "k8s", "kubernetes",
   ]
   for (const f of devopsFiles) {
-    try { if (existsSync(f)) score += 0.25 } catch { /* skip */ }
+    try { if (existsSync(f)) score += 0.25 } catch { console.warn("catch: skip") }
   }
   return Math.min(score, 1.0)
 }
@@ -64,7 +64,7 @@ const devopsVerifiers: VerifierStrategy[] = [
           if (content.includes("apt-get upgrade") && !content.includes("--no-install-recommends")) {
             issues.push(`${file}: Add --no-install-recommends to apt-get`)
           }
-        } catch { /* skip */ }
+        } catch { console.warn("catch: skip") }
       }
 
       // Try hadolint if available
@@ -83,7 +83,7 @@ const devopsVerifiers: VerifierStrategy[] = [
             if (out.trim()) issues.push(`hadolint(${df}): ${out.slice(0, 300)}`)
           }
         }
-      } catch { /* hadolint not available */ }
+      } catch { console.warn("catch: hadolint not available") }
 
       if (issues.length > 0) {
         return { passed: false, output: `Dockerfile issues:\n${issues.join("\n")}` }
@@ -107,7 +107,7 @@ const devopsVerifiers: VerifierStrategy[] = [
           try {
             JSON.parse(content)
             issues.push(`${file}: Looks like JSON, not YAML — use .json extension`)
-          } catch { /* not JSON, good */ }
+          } catch { console.warn("catch: not JSON, good") }
           if (content.includes("\t") && (content.includes(":\n") || content.includes("-\n"))) {
             const lines = content.split("\n")
             for (let i = 0; i < lines.length; i++) {
@@ -117,7 +117,7 @@ const devopsVerifiers: VerifierStrategy[] = [
               }
             }
           }
-        } catch { /* skip unreadable */ }
+        } catch { console.warn("catch: skip unreadable") }
       }
       if (issues.length > 0) {
         return { passed: false, output: `YAML issues:\n${issues.join("\n")}` }

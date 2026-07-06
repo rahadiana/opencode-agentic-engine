@@ -135,7 +135,7 @@ export class CheckpointSystem {
               })
             }
           }
-        } catch { /* skip unreadable */ }
+        } catch { console.warn("catch: skip unreadable") }
       }
     }
 

@@ -5,7 +5,7 @@
  * 1. Semua state aplikasi baca/tulis lewat StateStore — gak ada jalur lain
  * 2. Cache-first: read dari memory, lazy-load dari file saat pertama akses
  * 3. Write-through: write ke memory + file sinkron, gak ada selisih
- * 4. Error propagation: gak ada silent catch{} — caller tangani sendiri
+ * 4. Error propagation: gak ada silent catch { log.warn("Silent catch (empty)") } — caller tangani sendiri
  * 5. Namespace isolation: rag, skills, episodes, evolution, dll terpisah
  * 6. Scope: project-scoped data disimpan di {ns}/@{scope}/{key}.json
  * 7. Reload: baca ulang dari disk kapan aja

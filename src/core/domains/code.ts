@@ -22,7 +22,7 @@ const codeDetect = (input: string): number => {
   const projectDir = process.cwd()
   const projectFiles = ["package.json", "Cargo.toml", "go.mod", "pyproject.toml", "setup.py", "tsconfig.json"]
   for (const f of projectFiles) {
-    try { if (existsSync(resolve(projectDir, f))) score += 0.2 } catch { /* skip */ }
+    try { if (existsSync(resolve(projectDir, f))) score += 0.2 } catch { console.warn("catch: skip") }
   }
   return Math.min(score, 1.0)
 }

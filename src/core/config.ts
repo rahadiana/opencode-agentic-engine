@@ -427,7 +427,7 @@ export class ConfigLoader {
         const merged = this.mergeDeep({ ...DEFAULT_CONFIG }, config)
         this.config = merged
         // Save fixed version back
-        try { this.save(merged) } catch { /* non-fatal */ }
+        try { this.save(merged) } catch { log.warn("Silent catch: non-fatal") }
         return this.config
       }
 
@@ -505,7 +505,7 @@ export class ConfigLoader {
             listener(this.config)
           }
         }
-      } catch { /* config file may not exist yet */ }
+      } catch { log.warn("Silent catch: config file may not exist yet") }
     }, 5000)
   }
 

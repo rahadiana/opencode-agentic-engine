@@ -344,7 +344,7 @@ export class SQLitePersistence {
     let fileSize = 0
     try {
       fileSize = statSync(this.dbPath).size
-    } catch { /* ignore */ }
+    } catch { console.warn("init: failed to create DB directory") }
 
     return {
       namespaces: rows,

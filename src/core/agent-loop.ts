@@ -567,7 +567,7 @@ export class AgentLoop {
             durationMs: 0,
             timestamp: Date.now(),
           })
-        } catch { /* non-fatal */ }
+        } catch { log.warn("Silent catch: non-fatal") }
       }
 
       // ── Context pressure tracking (Item #7) ──
@@ -641,7 +641,7 @@ export class AgentLoop {
             sessionId,
             timestamp: Date.now(),
           })
-        } catch { /* non-fatal */ }
+        } catch { log.warn("Silent catch: non-fatal") }
       }
 
       return result

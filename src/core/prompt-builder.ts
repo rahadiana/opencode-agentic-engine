@@ -325,7 +325,7 @@ Tidak punya memori lintas sesi kecuali melalui tool/memory yang tersedia. Setiap
   t.instructions(
 `### 📐 Code Standards
 
-🛑 **No silent errors** — every catch must log/propagate. Never \`catch{}\`. Validate inputs at boundaries.
+🛑 **No silent errors** — every catch must log/propagate. Never \`catch { log.warn("Silent catch (empty)") }\`. Validate inputs at boundaries.
 🎯 **Simplicity ladder** — YAGNI → reuse → stdlib → native → dep → 1 line → minimum. No interface-for-one, no factory-for-one.
 🔒 **Types** — strongest type language offers. No \`any\`/Object/interface{} where concrete type works.
 ⚡ **Fail fast** — invalid state = throw. Handle empty/null/zero/edge cases.

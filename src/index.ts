@@ -39,7 +39,7 @@ import { createLogger, setGlobalLogClient, type LogClient } from "./observabilit
 import { CheckpointSystem } from "./drift/checkpoints.js"
 import { SessionStore } from "./memory/session-store.js"
 import { TOOL_COMPLEXITY } from "./core/llm-types.js"
-import { TraceLogger } from "./observability/trace-logger.js"
+import { TraceLogger, type TraceEntry } from "./observability/trace-logger.js"
 import { RoleRegistry, type PromptEntry } from "./agents/role-registry.js"
 
 import { MemorySchemaVersion, createMemoryEnvelope } from "./memory/schema-version.js"
@@ -208,9 +208,7 @@ const createEngine: Plugin = async (input, _options) => {
       const timestamp = new Date().toISOString()
       const entry = `[${timestamp}] [${toolName}] ${message}${stack ? `\n${stack.split("\n").slice(0, 4).join("\n")}` : ""}\n`
       appendFileSync(errorLogPath, entry, "utf-8")
-    } catch {
-      // non-fatal: if file write fails, nothing we can do
-    }
+    } catch { log.warn("Silent catch: non-fatal: if file write fails, nothing we can do") }
   }
 
   // ── Config (load first, everything else depends on it) ──
@@ -411,14 +409,14 @@ const createEngine: Plugin = async (input, _options) => {
             if (entry.isDirectory() && !["node_modules", ".git", "dist", ".agentic"].includes(entry.name))
               walkDir(full, depth + 1)
             else if (entry.isFile() && /\.(ts|tsx|js|jsx|mjs)$/.test(entry.name) && Object.keys(scanBatch).length < 100)
-              try { scanBatch[full] = readFileSync(full, "utf-8") } catch { /* non-fatal */ }
+              try { scanBatch[full] = readFileSync(full, "utf-8") } catch { log.warn("Silent catch: non-fatal") }
           }
-        } catch { /* non-fatal */ }
+        } catch { log.warn("Silent catch: non-fatal") }
       }
       walkDir(sourceDir)
       depTracker.scanFiles(scanBatch, worktree)
     }
-  } catch { /* non-fatal */ }
+  } catch { log.warn("Silent catch: non-fatal") }
   const contextCompressor = new ContextCompressor()
   const git = new GitIntegration(worktree)
   const debtScorer = new TechDebtScorer()
@@ -535,8 +533,7 @@ const confidenceStore = new ConfidenceStore()
       if (fastModel) modelRegistry.registerAlias("fast", [fastModel])
       if (capableModel && capableModel !== fastModel) modelRegistry.addModel(capableModel)
       if (capableModel) modelRegistry.registerAlias("capable", [capableModel])
-    } catch {
-      // Silent fallback — discovery gagal, pake env var
+    } catch { log.warn("Silent catch: model discovery fallback — using env vars")
       const envModel = process.env.OPENAI_MODEL || process.env.LLM_MODEL || ""
       const fastModel = process.env.FAST_MODEL || envModel
       const capableModel = process.env.CAPABLE_MODEL || envModel
@@ -567,9 +564,7 @@ const confidenceStore = new ConfidenceStore()
         }
         blueprintResolver.setModelsDb(modelsDb)
       }
-    } catch {
-      // Silent — models.json cache gak wajib ada
-    }
+    } catch { log.warn("Silent catch: Silent — models.json cache gak wajib ada") }
   })()
 
   llmEngine.setMemoryStores({
@@ -627,7 +622,7 @@ const confidenceStore = new ConfidenceStore()
   const secondBrain = initSecondBrain(stateStore, sessionStore, memoryOrchestrator, llmEngine, agentRuntime)
   // Wire event-driven memory: auto-save on key events
   eventBus.onAny((event: { type: string; payload: Record<string, unknown> }) => {
-    try { secondBrain.handleEvent(event.type, event.payload, event.payload?.sessionID as string | undefined) } catch { /* non-fatal */ }
+    try { secondBrain.handleEvent(event.type, event.payload, event.payload?.sessionID as string | undefined) } catch { log.warn("Silent catch: non-fatal") }
   })
   // Build RAG config from config file
   const ragConfig: import("./memory/multi-index-rag.js").RAGConfig = {
@@ -670,8 +665,7 @@ const confidenceStore = new ConfidenceStore()
 
   // Restore persisted evolution trend + evaluator score (scoped per project) via StateStore
   const savedEvo = stateStore.get<Record<string, unknown>>("evolution", "trend", projectId)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if (savedEvo) continuousEvolution.fromJSON(savedEvo as any)
+  if (savedEvo) continuousEvolution.fromJSON(savedEvo as unknown as Parameters<typeof continuousEvolution.fromJSON>[0])
   const savedEval = stateStore.get<Record<string, unknown>>("evaluation", "live", projectId)
   if (savedEval) liveEvaluator.fromJSON(savedEval)
 
@@ -752,7 +746,7 @@ const confidenceStore = new ConfidenceStore()
     }
     // Store in a global for tool access
     ;(globalThis as { __agenticKnowledge?: typeof knowledge }).__agenticKnowledge = knowledge
-  } catch { /* knowledge.json may not exist yet — first session */ }
+  } catch { log.warn("Silent catch: knowledge.json may not exist yet — first session") }
 
   // Restore persisted prompt states (Stage IV: versioned prompt history) — global
   const savedPrompts = stateStore.getAll<Array<{ role: string; history: PromptEntry[] }>>("prompts")
@@ -780,7 +774,7 @@ const confidenceStore = new ConfidenceStore()
     }
   }
 
-  try { await traceLogger.init() } catch { /* non-fatal: cannot create trace dir */ }
+  try { await traceLogger.init() } catch { log.warn("Silent catch: non-fatal: cannot create trace dir") }
 
   // ── Auto-update: fire-and-forget version check + download ──
   if (typeof __VERSION__ !== "undefined") autoUpdatePlugin(__VERSION__, import.meta.url)
@@ -843,7 +837,7 @@ const confidenceStore = new ConfidenceStore()
         const parsed = JSON.parse(line)
         traces.push({ toolUsed: parsed.toolUsed ?? "unknown", success: parsed.success ?? true, step: parsed.step ?? "" })
       }
-    } catch { /* no traces yet */ }
+    } catch { log.warn("Silent catch: no traces yet") }
     selfEvolver.feedSkills(allSkills)
     selfEvolver.feedEpisodes(allEpisodes)
     selfEvolver.feedTasks(allTasks)
@@ -878,9 +872,9 @@ const confidenceStore = new ConfidenceStore()
             keywords: [tool, step, ...String(input).toLowerCase().split(/\W+/).filter(Boolean).slice(0, 10)],
             metadata: { type: "trace", tool, success: parsed.success, timestamp: parsed.timestamp },
           })
-        } catch { /* skip corrupted line */ }
+        } catch { log.warn("Silent catch: skip corrupted line") }
       }
-    } catch { /* no trace file yet */ }
+    } catch { log.warn("Silent catch: no trace file yet") }
 
     const report = selfEvolver.evolve()
 
@@ -895,7 +889,7 @@ const confidenceStore = new ConfidenceStore()
           prompt: `You are ${role.name}. ${role.reason}\n\nTrigger: ${role.triggerPattern}`,
         })
         appliedRoles.push(role.name)
-      } catch { /* non-fatal */ }
+      } catch { log.warn("Silent catch: non-fatal") }
     }
 
     // Auto-apply skill patches
@@ -949,7 +943,7 @@ const confidenceStore = new ConfidenceStore()
           stateStore.set("prompts", "state", roleRegistry.getAllPromptStates())
           appliedPatches.push(`${patch.role}: "${patch.instruction.slice(0, 60)}..."`)
         }
-      } catch { /* non-fatal */ }
+      } catch { log.warn("Silent catch: non-fatal") }
     }
 
     let result = `### 🔮 Auto-Evolution Complete\n`
@@ -995,9 +989,7 @@ const confidenceStore = new ConfidenceStore()
           })
         }).catch((err) => log.warn(`[auto-evolve] Fire-and-forget evolution error: ${(err as Error).message}`))
       }
-    } catch {
-      // Non-fatal — don't let evolution errors affect step execution
-    }
+    } catch { log.warn("Silent catch: Non-fatal — don't let evolution errors affect step execution") }
   }
 
   eventBus.on("step.completed", (ev) => {
@@ -1209,14 +1201,12 @@ const confidenceStore = new ConfidenceStore()
               const scanDir = context.directory || context.worktree || worktree
               try {
                 await navigator.scan(scanDir)
-              } catch { /* non-fatal */ }
+              } catch { log.warn("Silent catch: non-fatal") }
               const codebaseSummary = navigator.getSummary()
               try {
                 const llmIntent = await planner.decomposeWithLLM(llmEngine, args.goal, codebaseSummary)
                 subtasks = llmIntent.subtasks
-              } catch {
-                // Fall through to template-based
-              }
+              } catch { log.warn("Silent catch: Fall through to template-based") }
             }
           }
           }
@@ -1226,7 +1216,7 @@ const confidenceStore = new ConfidenceStore()
             try {
               const scanDir = context.directory || context.worktree || worktree
               let codebaseSummary = ""
-              try { await navigator.scan(scanDir); codebaseSummary = navigator.getSummary() } catch { /* non-fatal */ }
+              try { await navigator.scan(scanDir); codebaseSummary = navigator.getSummary() } catch { log.warn("Silent catch: non-fatal") }
               const criticResult = await planner.decomposeWithCritic(args.goal, codebaseSummary)
               if (criticResult.accepted && criticResult.plan.subtasks.length > 0) {
                 subtasks = criticResult.plan.subtasks.map(s => ({
@@ -1236,7 +1226,7 @@ const confidenceStore = new ConfidenceStore()
                   verificationCriteria: s.verificationCriteria ?? [],
                 }))
               }
-            } catch { /* non-fatal — fall through to existing plan */ }
+            } catch { log.warn("Silent catch: non-fatal — fall through to existing plan") }
           }
 
           const intent: TaskIntent = {
@@ -1288,9 +1278,7 @@ const confidenceStore = new ConfidenceStore()
                 plan.intent.context.relevantFiles = codeIntentMap.files.map(f => f.relativePath)
               }
             }
-          } catch {
-            // Non-fatal — plan works without intent analysis
-          }
+          } catch { log.warn("Silent catch: Non-fatal — plan works without intent analysis") }
 
           traceLogger.log({
             step: "plan",
@@ -1379,9 +1367,7 @@ const confidenceStore = new ConfidenceStore()
                   }
                 }
               }
-            } catch {
-              // Non-fatal — simulation is advisory
-            }
+            } catch { log.warn("Silent catch: Non-fatal — simulation is advisory") }
           }
 
           return {
@@ -1532,7 +1518,7 @@ const confidenceStore = new ConfidenceStore()
               try {
                 const content = readFileSync(absPath, "utf-8")
                 depTracker.updateFile(absPath, content, projectDir)
-              } catch { /* non-fatal: file may have been deleted */ }
+              } catch { log.warn("Silent catch: non-fatal: file may have been deleted") }
             }
           }
 
@@ -1832,9 +1818,7 @@ const confidenceStore = new ConfidenceStore()
                       } else {
                         response += `✅ Input schema validated\n`
                       }
-                    } catch {
-                      // non-fatal
-                    }
+                    } catch { log.warn("Silent catch: non-fatal") }
                   }
 
                   // DSL execution if skill has logic blocks
@@ -1878,9 +1862,7 @@ const confidenceStore = new ConfidenceStore()
                       } else {
                         response += `✅ Output schema validated\n`
                       }
-                    } catch {
-                      // non-fatal — output may not be JSON
-                    }
+                    } catch { log.warn("Silent catch: non-fatal — output may not be JSON") }
                   }
 
                   // Reinforce skill: call reinforce() on successful execution with DSL
@@ -1892,7 +1874,7 @@ const confidenceStore = new ConfidenceStore()
                     skillStore.reinforce(skillId, true)
                   }
                 }
-              } catch { /* non-fatal */ }
+              } catch { log.warn("Silent catch: non-fatal") }
             }
           }
 
@@ -2082,7 +2064,7 @@ const confidenceStore = new ConfidenceStore()
                   response += `Checked ${lifecycleReport.checked} skills: ${lifecycleReport.markedStale} marked stale, ${lifecycleReport.archived} archived, ${lifecycleReport.reactivated} reactivated.\n`
                 }
               }
-            } catch { /* curator lifecycle is best-effort */ }
+            } catch { log.warn("Silent catch: curator lifecycle is best-effort") }
           }
 
           return { output: response, metadata: { progress, nextStep: nextStep?.id, verifyResult } }
@@ -2256,11 +2238,10 @@ const confidenceStore = new ConfidenceStore()
             try {
               const content = readFileSync(tracePath, "utf-8")
               traces = content.trim().split("\n").filter(Boolean).map(l => JSON.parse(l))
-            } catch { /* no traces yet */ }
+            } catch { log.warn("Silent catch: no traces yet") }
 
             if (traces.length > 0) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const data = dashboard.generate(traces as any, Date.now(), {
+              const data = dashboard.generate(traces as unknown as TraceEntry[], Date.now(), {
                 skillStore: {
                   getAll: () => skillStore.getAll(),
                   getLifecycleStats: () => skillStore.getLifecycleStats(),
@@ -2317,7 +2298,7 @@ const confidenceStore = new ConfidenceStore()
                   output += `- **${provider}**: ${models.join(", ")}\n`
                 }
               }
-            } catch { /* silent */ }
+            } catch { log.warn("Silent catch: silent") }
 
             const allEpisodes = episodicStore.getRecent(200)
             if (allEpisodes.length >= 3) {
@@ -2469,7 +2450,7 @@ const confidenceStore = new ConfidenceStore()
               output += `⚠️ **Performance degradation detected!** Auto-running self-evolution...\n`
               try {
                 output += `${(await runAutoEvolve()).replace(/\n/g, "\n")}\n`
-              } catch {
+              } catch { log.warn("Silent catch: auto-evolution error")
                 output += `⚠️ Auto-evolution encountered an error.\n`
               }
             }
@@ -2670,7 +2651,7 @@ const confidenceStore = new ConfidenceStore()
             let snapshot: { plan?: unknown; completedSteps?: string[]; filesModified?: string[]; [key: string]: unknown }
             try {
               snapshot = JSON.parse(raw) as typeof snapshot
-            } catch {
+            } catch { log.warn("Silent catch: snapshot corrupted")
               return { output: `Snapshot "${args.label}" is corrupted and cannot be restored.` }
             }
 
@@ -2726,7 +2707,7 @@ const confidenceStore = new ConfidenceStore()
               try {
                 const s = JSON.parse(raw)
                 lines.push(`- \`${label}\` — ${s.planGoal ?? "N/A"} (${s.completedSteps?.length ?? 0}/${s.totalSteps ?? 0} steps, ${new Date(s.timestamp).toLocaleDateString()})`)
-              } catch {
+              } catch { log.warn("Silent catch: snapshot listing corrupted")
                 lines.push(`- \`${label}\` (corrupted)`)
               }
             } else {
@@ -2953,7 +2934,7 @@ const confidenceStore = new ConfidenceStore()
                 llmUsed = true
               }
             }
-          } catch { /* non-fatal — fall back to template */ }
+          } catch { log.warn("Silent catch: non-fatal — fall back to template") }
 
           let output = `## 📋 PR Description${llmUsed ? " (LLM-enhanced)" : ""}\n\n`
           output += `---\ntitle: ${pr.title}\n---\n\n`
@@ -3036,7 +3017,7 @@ const confidenceStore = new ConfidenceStore()
           for (const file of files) {
             try {
               contents.set(file, readFileSync(file, "utf-8"))
-            } catch {
+            } catch { log.warn("Silent catch: unable to read file")
               contents.set(file, `[Unable to read ${file}]`)
             }
           }
@@ -3580,7 +3561,7 @@ const confidenceStore = new ConfidenceStore()
               if (existsSync(modelsPath)) {
                 return JSON.parse(readFileSync(modelsPath, "utf-8"))
               }
-            } catch { /* corrupt or missing */ }
+            } catch { log.warn("Silent catch: corrupt or missing") }
             return {}
           }
 
@@ -3623,7 +3604,7 @@ const confidenceStore = new ConfidenceStore()
               const dir = dirname(modelsPath)
               mkdirSync(dir, { recursive: true })
               writeFileSync(modelsPath, JSON.stringify(prefs, null, 2), "utf-8")
-            } catch { /* non-fatal */ }
+            } catch { log.warn("Silent catch: non-fatal") }
           }
 
           // On first access, load: plugin defaults → project overrides
@@ -3702,7 +3683,7 @@ const confidenceStore = new ConfidenceStore()
                 }
                 output += `\nUse \`action:"set"\` to assign any of these to a role, tool, or category.`
               }
-            } catch { /* silent */ }
+            } catch { log.warn("Silent catch: silent") }
 
             return { output }
           }
@@ -4075,7 +4056,7 @@ const confidenceStore = new ConfidenceStore()
                   }
                 }
               }
-            } catch { /* non-fatal — search tetap jalan dari local */ }
+            } catch { log.warn("Silent catch: non-fatal — search tetap jalan dari local") }
 
             // Index all episodes into TF-IDF vector store
             for (const ep of allEpisodes) {
@@ -4524,7 +4505,7 @@ const confidenceStore = new ConfidenceStore()
                     prompt: `You are ${role.name}. ${role.reason}\n\nTrigger: ${role.triggerPattern}`,
                   })
                   appliedRoles.push(role.name)
-                } catch { /* non-fatal */ }
+                } catch { log.warn("Silent catch: non-fatal") }
               }
 
               // Auto-apply skill patches
@@ -4593,7 +4574,7 @@ const confidenceStore = new ConfidenceStore()
                     stateStore.set("prompts", "state", roleRegistry.getAllPromptStates())
                     appliedPatches.push(`${patch.role}: "${patch.instruction.slice(0, 60)}..."`)
                   }
-                } catch { /* non-fatal */ }
+                } catch { log.warn("Silent catch: non-fatal") }
               }
 
               if (patchedSkills.length > 0) {
@@ -4857,7 +4838,7 @@ const confidenceStore = new ConfidenceStore()
               domainRegistry.getCurrentDomain() ?? undefined,
               projectId,
             )
-          } catch { /* non-fatal */ }
+          } catch { log.warn("Silent catch: non-fatal") }
 
           // Try to extract skill if debate was successful
           if (result.approved) {
@@ -4866,7 +4847,7 @@ const confidenceStore = new ConfidenceStore()
                 role: "tool",
                 content: `✅ Debate completed: ${args.task}\nRounds: ${result.totalRounds}\nFinal output:\n${result.finalOutput.slice(0, 500)}`,
               }, [args.task])
-            } catch { /* non-fatal */ }
+            } catch { log.warn("Silent catch: non-fatal") }
           }
 
           traceLogger.log({
@@ -5409,7 +5390,7 @@ const confidenceStore = new ConfidenceStore()
 
               let headers: Record<string, string> | undefined
               if (args.headers) {
-                try { headers = JSON.parse(args.headers) } catch { headers = undefined }
+                try { headers = JSON.parse(args.headers) } catch { log.warn("Silent catch: invalid headers JSON"); headers = undefined }
               }
 
               const conn = await mcpClient.connect({
@@ -5456,7 +5437,7 @@ const confidenceStore = new ConfidenceStore()
 
               let params: Record<string, unknown> = {}
               if (args.params) {
-                try { params = JSON.parse(args.params) } catch { params = {} }
+                try { params = JSON.parse(args.params) } catch { log.warn("Silent catch: invalid params JSON"); params = {} }
               }
 
               const result = await mcpClient.callTool(args.server, args.tool, params)
@@ -5593,7 +5574,7 @@ const confidenceStore = new ConfidenceStore()
 
               // Stop existing server if running
               if (g.__opencode_a2aServer) {
-                try { await g.__opencode_a2aServer.stop() } catch { /* ignore */ }
+                try { await g.__opencode_a2aServer.stop() } catch { log.warn("Silent catch: ignore") }
               }
 
               const { A2AServer } = await import("./agents/a2a-server.js")
@@ -5825,7 +5806,7 @@ const confidenceStore = new ConfidenceStore()
 
               let params: Record<string, unknown> = {}
               if (args.params) {
-                try { params = JSON.parse(args.params) } catch { params = {} }
+                try { params = JSON.parse(args.params) } catch { log.warn("Silent catch: invalid params JSON"); params = {} }
               }
 
               const result = await protocolAdapter.call({
@@ -6460,7 +6441,7 @@ const confidenceStore = new ConfidenceStore()
                 log.info(`[agentic_auto] ${check.warning}`)
               }
             }
-          } catch { /* non-fatal */ }
+          } catch { log.warn("Silent catch: non-fatal") }
 
           // ═══════════════════════════════════════════════
           // PHASE 1: Knowledge — scan + memory + skills
@@ -6488,7 +6469,7 @@ const confidenceStore = new ConfidenceStore()
                 skillContexts.push(`${d.meta?.name || "skill"} (${(sk.successRate * 100).toFixed(0)}% success) — ${steps.slice(0, 2).map((w: { description?: string; action?: string }) => w.description || w.action || "").join("; ")}`)
               }
             }
-          } catch { /* non-fatal */ }
+          } catch { log.warn("Silent catch: non-fatal") }
           // Record research artifact for WorkflowPolicy
           sessionStore.getOrCreate(context.sessionID).artifacts.set("workflow:researched", String(Date.now()))
 
@@ -6521,7 +6502,7 @@ const confidenceStore = new ConfidenceStore()
             try {
               const llmIntent = await planner.decomposeWithLLM(llmEngine, args.goal, codebaseSummary.slice(0, 1000))
               if (llmIntent.subtasks.length > 0) subtasks = llmIntent.subtasks
-            } catch { /* fallback */ }
+            } catch { log.warn("Silent catch: fallback") }
           }
           if (subtasks.length === 0) {
             subtasks = [{ id: "step-1", description: args.goal || "Execute task", dependsOn: [], verificationCriteria: [] }]
@@ -6549,7 +6530,7 @@ const confidenceStore = new ConfidenceStore()
           // ═══════════════════════════════════════════════
           const fileContents: Record<string, string> = {}
           for (const f of relevantFiles) {
-            try { fileContents[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 1000) } catch { /* skip */ }
+            try { fileContents[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 1000) } catch { log.warn("Silent catch: skip") }
           }
 
           const filesBlock = Object.entries(fileContents)
@@ -6632,7 +6613,7 @@ const confidenceStore = new ConfidenceStore()
 
               const fileContentsForSubtask: Record<string, string> = {}
               for (const f of relevantFiles) {
-                try { fileContentsForSubtask[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 1000) } catch { /* skip */ }
+                try { fileContentsForSubtask[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 1000) } catch { log.warn("Silent catch: skip") }
               }
               const filesBlockForSubtask = Object.entries(fileContentsForSubtask)
                 .map(([p, c]) => `${p}:\n${c.slice(0, 600)}`).join("\n---\n")
@@ -6702,7 +6683,7 @@ const confidenceStore = new ConfidenceStore()
                   const writtenPaths = writeFilesHelper(filesToWrite, projectDir, context.sessionID, eventBus)
                   allModified.push(...writtenPaths)
                   return writtenPaths.length > 0
-                } catch { return false }
+                } catch { log.warn("Silent catch: writeFiles helper failed"); return false }
               },
             )
             verifyPassed = loopResult.success
@@ -6737,7 +6718,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                 preChangeCommit = stashResult || execFileSync("git", ["rev-parse", "HEAD"], { cwd: projectDir, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }).trim()
                 hasGitRollback = true
               }
-            } catch { /* non-fatal — rollback not available */ }
+            } catch { log.warn("Silent catch: non-fatal — rollback not available") }
 
             // ── Adaptive retry loop ──
             const autoRetry = new AutoRetryManager({ maxRetries: 3 })
@@ -6801,7 +6782,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                     }
                     allModified.length = 0
                     allModified.push(...keptFiles)
-                  } catch { /* rollback best-effort */ }
+                  } catch { log.warn("Silent catch: rollback best-effort") }
                 }
 
                 // Record retry attempt
@@ -6816,7 +6797,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                 )
 
                 firstAttempt = false
-              } catch {
+              } catch { log.warn("Silent catch: verify error in auto loop")
                 verifyNote = "⚠️ Verify error"
                 break
               }
@@ -6828,7 +6809,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                 execFileSync("git", ["checkout", "--", ...allModified.map(f => join(projectDir, f))],
                   { cwd: projectDir, stdio: "pipe", timeout: 15000 })
                 verifyNote += ` 🔄 Full rollback to pre-change state`
-              } catch {
+              } catch { log.warn("Silent catch: git rollback failed")
                 verifyNote += ` ⚠️ Rollback attempted but may be incomplete`
               }
               allModified.length = 0
@@ -6891,20 +6872,20 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                   const conf = guardResult.overallConfidence !== undefined ? ` (conf: ${guardResult.overallConfidence.toFixed(2)})` : ''
                   verifyNote += (failedClaims.length > 0 ? ` ⚠️ Guard:${failedClaims.length} issues` : " ✅ Guard") + conf
                 }
-              } catch { /* non-fatal */ }
+              } catch { log.warn("Silent catch: non-fatal") }
 
               // Save episode
               try {
                 episodicStore.record(context.sessionID, args.goal, verifyPassed ? "success" : "partial",
                   [`Auto via agentic_auto`, `Verify: ${verifyPassed}`, `Files: ${allModified.length}`], allModified,
                   domainRegistry.getCurrentDomain() ?? undefined, projectId)
-              } catch { /* non-fatal */ }
+              } catch { log.warn("Silent catch: non-fatal") }
 
               // Extract skill (async)
               try {
                 const skillOutput = `Goal: ${args.goal}\nFiles: ${allModified.join(", ")}\nVerify: ${verifyPassed ? "passed" : "failed"}\nSteps: ${activeSteps.map(s => s.description).join("; ")}`
                 await skillStore.extract({ role: "auto", content: skillOutput }, [args.goal])
-              } catch { /* non-fatal */ }
+              } catch { log.warn("Silent catch: non-fatal") }
 
               // Tech debt score
               try {
@@ -6912,10 +6893,10 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                 const absFiles = allModified.map(f => join(projectDir, f))
                 const contents = new Map<string, string>()
                 for (const f of absFiles) {
-                  try { contents.set(f, readFileSync(f, "utf-8")) } catch { /* skip */ }
+                  try { contents.set(f, readFileSync(f, "utf-8")) } catch { log.warn("Silent catch: skip") }
                 }
                 scorer.score(args.goal, absFiles, contents)
-              } catch { /* non-fatal */ }
+              } catch { log.warn("Silent catch: non-fatal") }
 
               // Memory consolidation — archive working → episodic + pattern extraction
               try {
@@ -6923,7 +6904,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                 if (report.workingArchived > 0 || report.patternsExtracted > 0) {
                   consolidationScheduler.onSessionEnd()
                 }
-              } catch { /* non-fatal */ }
+              } catch { log.warn("Silent catch: non-fatal") }
 
               // Phase 4B: Auto-evolution — check if evolution should be triggered
               try {
@@ -6931,7 +6912,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                 if (evoTrigger) {
                   runAutoEvolve().catch(() => { /* non-fatal */ })
                 }
-              } catch { /* non-fatal */ }
+              } catch { log.warn("Silent catch: non-fatal") }
 
               // Phase 4A: Auto-mature skills that meet next-stage criteria
               try {
@@ -6944,7 +6925,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                     log.debug(`[auto] Auto-matured ${totalMatured} skills: ${JSON.stringify(matureSummary)}`)
                   }
                 }
-              } catch { /* non-fatal */ }
+              } catch { log.warn("Silent catch: non-fatal") }
             })().catch((err) => log.warn(`[agentic_auto] thorough post-processing error:`, err))
           }
 
@@ -7102,7 +7083,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
           const startTime = Date.now()
           
           // Validate URL
-          try { new URL(url) } catch {
+          try { new URL(url) } catch { log.warn("Silent catch: invalid URL in agentic_fetch"); 
             return { output: `❌ URL tidak valid: ${url}`, metadata: { error: true, url, latency: Date.now() - startTime } }
           }
           
@@ -7174,7 +7155,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
           }
           
           // Track that research was done (for WorkflowPolicy Gate)
-          try { sessionStore.getOrCreate(context.sessionID).artifacts.set("workflow:researched", String(Date.now())) } catch { /* silent: session may not be ready */ }
+          try { sessionStore.getOrCreate(context.sessionID).artifacts.set("workflow:researched", String(Date.now())) } catch { log.warn("Silent catch: silent: session may not be ready") }
           
           return {
             output: outputText.slice(0, 50000),
@@ -7269,7 +7250,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
             llmEngine.setCurrentModel(modelStr)
           }
         }
-      } catch { /* silent — non-critical */ }
+      } catch { log.warn("Silent catch: silent — non-critical") }
 
       try {
         const systemText = output.system.join("\n")
@@ -7349,7 +7330,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
                 })
               }
             }
-          } catch { /* non-fatal */ }
+          } catch { log.warn("Silent catch: non-fatal") }
 
           // ── Tool recommendation: keep ALL tools visible, add ranked hints only ──
           const recommendedTools = toolRouter.selectTools({
@@ -7385,7 +7366,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
                 }
               }
             }
-          } catch { /* non-fatal */ }
+          } catch { log.warn("Silent catch: non-fatal") }
 
           // ── Mandatory research flow ──
           if (!hasHighConfidenceKnowledge) {
@@ -7428,7 +7409,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
           diag.lastError = "transform completed but injection may be incomplete"
         }
         diagnosticStore.set(sid, diag)
-      } catch { /* non-critical */ }
+      } catch { log.warn("Silent catch: non-critical") }
     },
 
     // ── Model detection via chat.params — source of truth dari OpenCode SDK ──
@@ -7451,7 +7432,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
             // This hook fires during params, not after completion.
           }
         }
-      } catch { /* silent — non-critical */ }
+      } catch { log.warn("Silent catch: silent — non-critical") }
     },
 
     "tool.execute.after": async (toolInput: { tool: string; args: Record<string, unknown>; sessionID: string; callID: string }, _output: { title: string; output: string; metadata: unknown }) => {
@@ -7563,18 +7544,18 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
             break
           }
         }
-      } catch { /* non-fatal */ }
+      } catch { log.warn("Silent catch: non-fatal") }
     },
 
     dispose: async () => {
-      try { configLoader.stopWatch() } catch { /* non-fatal */ }
-      try { stateStore.set("models", "registry", modelRegistry.toJSON()) } catch { /* non-fatal */ }
-      try { stateStore.set("prompts", "state", roleRegistry.getAllPromptStates()) } catch { /* non-fatal */ }
-      try { stateStore.set("evolution", "trend", continuousEvolution.toJSON(), projectId) } catch { /* non-fatal */ }
-      try { stateStore.set("evaluation", "live", liveEvaluator.toJSON(), projectId) } catch { /* non-fatal */ }
-      try { stateStore.flushSync() } catch { /* non-fatal */ } // ponytail: flush write-behind queue before shutdown
-      try { await traceLogger.dispose() } catch { /* non-fatal */ }
-      try { eventBus.clear() } catch { /* non-fatal */ } // ponytail: prevent subscriber leak across plugin reloads
+      try { configLoader.stopWatch() } catch { log.warn("Silent catch: non-fatal") }
+      try { stateStore.set("models", "registry", modelRegistry.toJSON()) } catch { log.warn("Silent catch: non-fatal") }
+      try { stateStore.set("prompts", "state", roleRegistry.getAllPromptStates()) } catch { log.warn("Silent catch: non-fatal") }
+      try { stateStore.set("evolution", "trend", continuousEvolution.toJSON(), projectId) } catch { log.warn("Silent catch: non-fatal") }
+      try { stateStore.set("evaluation", "live", liveEvaluator.toJSON(), projectId) } catch { log.warn("Silent catch: non-fatal") }
+      try { stateStore.flushSync() } catch { log.warn("Silent catch: non-fatal") } // ponytail: flush write-behind queue before shutdown
+      try { await traceLogger.dispose() } catch { log.warn("Silent catch: non-fatal") }
+      try { eventBus.clear() } catch { log.warn("Silent catch: non-fatal") } // ponytail: prevent subscriber leak across plugin reloads
     },
   }
 }

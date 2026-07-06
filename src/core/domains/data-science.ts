@@ -34,7 +34,7 @@ const dsDetect = (input: string): number => {
     "setup.py", "pyproject.toml",
   ]
   for (const f of dsFiles) {
-    try { if (existsSync(resolve(projectDir, f))) score += 0.1 } catch { /* skip */ }
+    try { if (existsSync(resolve(projectDir, f))) score += 0.1 } catch { console.warn("catch: skip") }
   }
   try {
     const files = readdirSync(projectDir).slice(0, 200)
@@ -48,9 +48,9 @@ const dsDetect = (input: string): number => {
         for (const imp of dsImports) {
           if (content.includes(imp)) { score += 0.1; break }
         }
-      } catch { /* skip */ }
+      } catch { console.warn("catch: skip") }
     }
-  } catch { /* skip */ }
+  } catch { console.warn("catch: skip") }
   return Math.min(score, 1.0)
 }
 
@@ -85,7 +85,7 @@ const dsVerifiers: VerifierStrategy[] = [
             }
           }
           if (emptyOutputs > 3) issues.push(`${file}: ${emptyOutputs} cells never executed`)
-        } catch { /* skip */ }
+        } catch { console.warn("catch: skip") }
       }
       if (issues.length > 0) {
         return { passed: false, output: `Notebook issues:\n${issues.join("\n")}` }
@@ -116,7 +116,7 @@ const dsVerifiers: VerifierStrategy[] = [
               issues.push(`${file}:${i + 1}: Bare except — catch specific exceptions`)
             }
           }
-        } catch { /* skip */ }
+        } catch { console.warn("catch: skip") }
       }
       if (issues.length > 0) {
         return { passed: false, output: `Python code issues:\n${issues.join("\n")}` }

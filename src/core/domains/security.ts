@@ -32,7 +32,7 @@ const securityDetect = (input: string): number => {
     try {
       const fullPath = resolve(projectDir, f)
       if (existsSync(fullPath)) score += 0.3
-    } catch { /* skip */ }
+    } catch { console.warn("catch: skip") }
   }
   try {
     const pkgPath = resolve(projectDir, "package.json")
@@ -43,7 +43,7 @@ const securityDetect = (input: string): number => {
     for (const dep of Object.keys(allDeps)) {
       if (secDeps.includes(dep)) score += 0.15
     }
-  } catch { /* no package.json or parse error */ }
+  } catch { console.warn("catch: no package.json or parse error") }
   return Math.min(score, 1.0)
 }
 
@@ -75,7 +75,7 @@ const securityVerifiers: VerifierStrategy[] = [
               issues.push(`${file}: ${name}`)
             }
           }
-        } catch { /* skip unreadable */ }
+        } catch { console.warn("catch: skip unreadable") }
       }
 
       // Also run trivy/grype if available
@@ -85,7 +85,7 @@ const securityVerifiers: VerifierStrategy[] = [
           timeout: 60000, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"],
         })
         if (output.length > 0) issues.push(`Trivy: ${output.slice(0, 500)}`)
-      } catch { /* trivy not available */ }
+      } catch { console.warn("catch: trivy not available") }
 
       if (issues.length > 0) {
         return { passed: false, output: `Security issues found:\n${issues.join("\n")}` }

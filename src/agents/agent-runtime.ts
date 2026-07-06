@@ -99,7 +99,7 @@ export class AgentRuntime {
       try {
         const client = this.opencodeClient as { session: { delete: (opts: { path: { id: string } }) => Promise<unknown> } }
         client.session.delete({ path: { id: this._sharedSessionId } }).catch(() => {})
-      } catch { /* ignore */ }
+      } catch { console.warn("catch: ignore") }
     }
     this._sharedSessionId = null
     this._sharedSessionCount = 0
@@ -119,7 +119,7 @@ export class AgentRuntime {
       try {
         const client = this.opencodeClient as { session: { delete: (opts: { path: { id: string } }) => Promise<unknown> } }
         client.session.delete({ path: { id: this._sharedSessionId } }).catch(() => {})
-      } catch { /* ignore */ }
+      } catch { console.warn("catch: ignore") }
     }
     Promise.all(engines.map(([, e]) => e.disposeTempSession().catch(() => {})))
   }

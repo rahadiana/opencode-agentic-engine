@@ -144,7 +144,7 @@ export class Verifier {
     const fileContents: Record<string, string> = {}
     for (const f of changedFiles) {
       const absPath = resolve(projectDir, f)
-      try { fileContents[f] = await readFile(absPath, "utf-8") } catch { /* skip */ }
+      try { fileContents[f] = await readFile(absPath, "utf-8") } catch { log.warn("Silent catch: skip") }
     }
     return fileContents
   }

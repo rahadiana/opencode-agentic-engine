@@ -241,7 +241,7 @@ export function saveTrainingDataToFile(
   outputPath: string,
 ): string {
   const dir = dirname(outputPath)
-  try { mkdirSync(dir, { recursive: true }) } catch { /* dir may already exist */ }
+  try { mkdirSync(dir, { recursive: true }) } catch { console.warn("mkdir failed (dir may already exist)") }
 
   const content = dataset.format === "openai" || dataset.format === "instructions"
     ? dataset.data + "\n"

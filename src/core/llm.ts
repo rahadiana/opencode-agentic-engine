@@ -1267,7 +1267,7 @@ export class LLMEngine {
       logParseError('callOpenCode chat mode', error)
     } finally {
       if (sessionId) {
-        try { await client.session.delete({ path: { id: sessionId } }) } catch { /* ignore */ }
+        try { await client.session.delete({ path: { id: sessionId } }) } catch { log.warn("Silent catch: ignore") }
       }
     }
 
@@ -1279,7 +1279,7 @@ export class LLMEngine {
     if (!this._tempSessionId) return
     const client = this._getClient()
     if (client) {
-      try { await client.session.delete({ path: { id: this._tempSessionId } }) } catch { /* ignore */ }
+      try { await client.session.delete({ path: { id: this._tempSessionId } }) } catch { log.warn("Silent catch: ignore") }
     }
     this._tempSessionId = null
   }

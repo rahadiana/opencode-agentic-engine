@@ -100,7 +100,7 @@ function parseMessages(buffer: string): { messages: unknown[]; remainder: string
       try {
         const parsed = parseBraceBalanced(line)
         if (parsed !== null) messages.push(parsed)
-      } catch { /* skip unparseable line */ }
+      } catch { console.warn("catch: skip unparseable line") }
     }
   }
 
@@ -260,7 +260,7 @@ export class MCPClient {
     if (conn.proc) {
       try {
         conn.proc.kill()
-      } catch { /* ignore */ }
+      } catch { console.warn("catch: ignore") }
     }
 
     conn.connected = false
@@ -389,7 +389,7 @@ export class MCPClient {
       const timeoutId = setTimeout(() => {
         if (!settled) {
           settled = true
-          try { proc.kill() } catch { /* already dead */ }
+          try { proc.kill() } catch { console.warn("catch: already dead") }
           reject(new Error(`MCP stdio connection timed out after ${STDIO_TIMEOUT}ms`))
         }
       }, STDIO_TIMEOUT)
@@ -426,14 +426,14 @@ export class MCPClient {
 
             try {
               proc.stdin?.write(notifMsg + "\n")
-            } catch { /* ignore */ }
+            } catch { console.warn("catch: ignore") }
 
             // Now send tools/list (id: 2)
             const listMsg = buildRpcMessage("tools/list", 2, {})
 
             try {
               proc.stdin?.write(listMsg + "\n")
-            } catch { /* ignore */ }
+            } catch { console.warn("catch: ignore") }
 
             continue
           }

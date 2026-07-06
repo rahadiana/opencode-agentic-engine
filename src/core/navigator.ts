@@ -311,7 +311,7 @@ export class CodebaseNavigator {
         if (!resolved.isDirectory()) continue
         if (this.isSystemDirectory(p)) continue
         return p
-      } catch { /* non-fatal */ }
+      } catch { console.warn("catch: non-fatal") }
     }
     return null
   }
@@ -337,7 +337,7 @@ export class CodebaseNavigator {
         if (!lang.sourceExtensions.includes(ext)) continue
 
         let size = 0
-        try { size = (await stat(fullPath)).size } catch { /* skip */ }
+        try { size = (await stat(fullPath)).size } catch { console.warn("catch: skip") }
 
         const imports: string[] = []
         const exports: string[] = []
@@ -353,7 +353,7 @@ export class CodebaseNavigator {
             const expMatch = line.match(lang.exportPattern)
             if (expMatch) exports.push(expMatch[expMatch.length - 1])
           }
-        } catch { /* skip */ }
+        } catch { console.warn("catch: skip") }
 
         modules.push({
           path: fullPath,
