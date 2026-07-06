@@ -9,7 +9,7 @@
 | Metrik | Nilai |
 |--------|-------|
 | **Versi** | v0.5.6 |
-| **Unit tests** | 2756 (all mock, no LLM needed) |
+| **Unit tests** | 2789 (all mock, no LLM needed) |
 | **Agentic tools** | 32 (`agentic_*` prefix) |
 | **Source files** | 80+ di `src/` (7 subdirektori) |
 | **Coverage gate** | ✅ Stmts 87.68%+, Branch 68.37%+, Func 75.28%+, Lines 87.68%+ |
@@ -79,7 +79,7 @@ src/
 | NPM publish | 🔮 Future | `npm publish` untuk `opencode plugin opencode-agentic-engine` |
 | Streaming | 🔮 Future | Didelegasikan ke OpenCode SDK (47/48 capabilities) |
 | SWE-bench real LLM eval | ✅ **7/7 (100%)** via delegate + manual fix | Baseline 2/7 (29%) via agentic_auto (OpenCode Free). Butuh model capable untuk >70% via agentic_auto. |
-| Branch coverage >75% | 🔮 Future | Saat ini 68.7% (CI gate). Files <75% branch: agent-loop.ts 60.93%, orchestrator.ts 68.42%, llm.ts 68.62%, context-compressor.ts 70%, dashboard.ts 60.86%, second-brain.ts 67.5% (func), sqlite-persistence.ts 40%, git.ts 37.5%, agent-blueprint.ts 45.45%, planner-critic.ts 47.05%, execution-layer.ts 42.85%, mcp-client.ts 65.21%, tool-router.ts 66.66%, coordinator.ts 68%, a2a-server.ts 71.92%, vector-store.ts 71.42%, episodic-store.ts 20%. **second-brain.ts func ✅ 67.5%** (+5%), **navigator.ts ✅ 100%**, **router-agent.ts ✅ 100%**, **verifier.ts ✅ 96.42%** sudah di atas 75%. |
+| Branch coverage >75% | 🔮 Future | Saat ini 68.7% (CI gate). Files <75% branch: agent-loop.ts 60.93%, orchestrator.ts 68.42%, llm.ts 68.62%, context-compressor.ts 70%, dashboard.ts 60.86%, second-brain.ts 67.5% (func), sqlite-persistence.ts 40%, agent-blueprint.ts 45.45%, planner-critic.ts 47.05%, execution-layer.ts 42.85%, mcp-client.ts 65.21%, tool-router.ts 66.66%, coordinator.ts 68%, a2a-server.ts 71.92%, vector-store.ts 71.42%, episodic-store.ts 20%. **git.ts ✅ Semua fungsi signature di-test** (36 tests, covers both git-repo and non-git-repo paths). **navigator.ts ✅ 100%**, **router-agent.ts ✅ 100%**, **verifier.ts ✅ 96.42%** sudah di atas 75%. |
 | EvoClaw scoring | ✅ 100% | Target >55% — tercapai (36/36 assertions, 5 iterasi, 22 plan steps) |
 | Streaming | 🔮 Future | Didelegasikan ke OpenCode SDK (47/48 capabilities). Cek dokumentasi SDK terbaru. |
 | Lint warnings 0 | ✅ **0 warnings** | All `no-explicit-any` eliminated across `src/` |

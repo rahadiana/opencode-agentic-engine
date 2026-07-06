@@ -1555,18 +1555,18 @@ section("[29] GitIntegration — 50 git operations")
   }
 
   try {
-    const diff = git.getUnstagedDiff()
-    assert(diff === null || typeof diff === "string", "Git getUnstagedDiff returns null or string")
+    const diff = git.getDiff("HEAD")
+    assert(typeof diff === "string", "Git getDiff returns string")
   } catch (e) {
-    assert(true, `Git getUnstagedDiff handled error gracefully: ${e.message.slice(0, 50)}`)
+    assert(true, `Git getDiff handled error gracefully: ${e.message.slice(0, 50)}`)
   }
 
   // Branch operations
   try {
-    const branches = git.listBranches()
-    assert(branches === null || Array.isArray(branches), "Git listBranches returns null or array")
+    const branch = git.getCurrentBranch()
+    assert(typeof branch === "string" && branch.length > 0, "Git getCurrentBranch returns non-empty string")
   } catch (e) {
-    assert(true, `Git listBranches handled error gracefully`)
+    assert(true, `Git getCurrentBranch handled error gracefully`)
   }
 
   // Stage and commit (no-op on test)

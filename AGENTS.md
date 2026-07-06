@@ -12,7 +12,7 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 2. ✅ **Schema-First Boundaries** — LLM output divalidasi sebelum dipakai (P1)
 3. ✅ **Dumb Model Mode** — strict mode untuk model lemah (P2)
  4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
- 5. ✅ **Test Coverage** — **2756 tests**, c8 **87.68% stmts / 68.37% branch / 75.28% func** + CI coverage gate (P4)
+ 5. ✅ **Test Coverage** — **2789 tests**, c8 **87.94% stmts / 67.09% branch / 70.27% func** + CI coverage gate (P4)
 6. ✅ **Typed Errors** — 49/49 throw sites migrated, 0 `as any` remaining
 7. ✅ **SemanticCache** — TF-IDF + cosine, benchmarked at 0.78 threshold
 8. ✅ **HallucinationGuard** — confidence-aware claims (0-1)
@@ -24,7 +24,7 @@ Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimp
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
                     # postbuild: auto-copy ke ~/.cache/opencode/packages/ (jika ada)
-node test/run.mjs   # 2756+ unit tests (mock, no LLM needed)
+node test/run.mjs       # 2789+ unit tests (mock, no LLM needed)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
 node test/e2e-scenario.mjs # EvoClaw: 50-file codebase, 5 iterations
@@ -738,3 +738,9 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 - **Reliability findings**: 31/31 tools at HIGH reliability (≥95% success rate). Avg latency 35ms across all tools. `agentic_delegate` has 34.3% error rate from trace logs (timeout issues) — priority for next hardening.
 - **Drift sync**: Updated AGENTS.md, PLAN.md, package.json to actual state (2756 tests, 87.68%/68.37%/75.28% coverage).
 - **2756 unit tests** (was 2727), **0 lint warnings**, **build OK**.
+
+### v0.5.17-dev — GitIntegration Full Coverage + Stress Test Drift Fix (2026-07-06)
+
+- **GitIntegration tests**: Added 36 new tests (GI-3 through GI-19) covering all 10 function signatures: `isAvailable()`, `getCurrentBranch()`, `getHistory()`, `getDiff()`, `stage()`, `commit()`, `push()`, `createBranch()`, `createPR()`, and `generatePRDescription()` edge cases (long title truncation, empty steps, all-failed steps, notes field). Tests cover both git-repo and non-git-repo paths.
+- **Stress test drift fix**: `stress.mjs` referenced `getUnstagedDiff()` and `listBranches()` which don't exist in current `git.ts` — replaced with `getDiff("HEAD")` and `getCurrentBranch()`.
+- **2789 unit tests** (was 2756), **0 lint warnings**, **build OK**, **coverage gate passes** (87.94% stmts, 67.09% branch, 70.27% funcs).

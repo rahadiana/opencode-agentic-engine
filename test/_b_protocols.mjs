@@ -1500,13 +1500,14 @@ state.passed += hkPassed; state.failed += hkFailed
 }
 
 // ── GitIntegration Tests (GI) ──
-console.log("\n[GI] GitIntegration — branch coverage gap")
+console.log("\n[GI] GitIntegration — all function signatures")
 let gi = 0, gif = 0
 const gi_assert = (c, m) => { if (c) { gi++; console.log(`  PASS: ${m}`) } else { gif++; console.log(`  FAIL: ${m}`) } }
 
 {
   const { GitIntegration } = await import(pluginDist)
   const git = new GitIntegration("/tmp/test-git-project")
+  const projectGit = new GitIntegration(process.cwd())
 
   // GI-1: generatePRDescription — all success
   const prAll = git.generatePRDescription("Add feature", [
@@ -1517,7 +1518,7 @@ const gi_assert = (c, m) => { if (c) { gi++; console.log(`  PASS: ${m}`) } else 
   gi_assert(prAll.breakingChanges === false, "GI-1b all success no breaking changes")
   gi_assert(prAll.changes.length === 2, "GI-1c both steps in changes")
 
-  // GI-2: generatePRDescription — partial success (uncovered branch)
+  // GI-2: generatePRDescription — partial success
   const prPartial = git.generatePRDescription("Fix partial feature", [
     { id: "s1", description: "Add types", success: true },
     { id: "s2", description: "Implement logic", success: false },
@@ -1527,6 +1528,104 @@ const gi_assert = (c, m) => { if (c) { gi++; console.log(`  PASS: ${m}`) } else 
   gi_assert(prPartial.breakingChanges === true, "GI-2c breakingChanges=true when steps fail")
   gi_assert(prPartial.changes.length === 1, "GI-2d only successful steps in changes")
   gi_assert(prPartial.title === "Fix partial feature", "GI-2e title preserved")
+
+  // GI-3: generatePRDescription — long title (>72 chars) truncation
+  const longTitle = "A very long title that definitely exceeds seventy two characters and should be truncated by the generatePRDescription method"
+  const prLong = git.generatePRDescription(longTitle, [
+    { id: "s1", description: "Do something", success: true },
+  ], ["src/file.ts"])
+  gi_assert(prLong.title.length <= 75, "GI-3a long title truncated (≤75 chars)")
+  gi_assert(prLong.title.endsWith("..."), "GI-3b long title ends with ellipsis")
+
+  // GI-4: generatePRDescription — empty steps array (vacuous truth: all 0 steps succeeded)
+  const prEmpty = git.generatePRDescription("Empty steps", [], [])
+  gi_assert(prEmpty.summary.includes("0 steps"), "GI-4a empty steps summary says 0 steps")
+  gi_assert(prEmpty.changes.length === 0, "GI-4b empty steps = no changes")
+  gi_assert(prEmpty.breakingChanges === false, "GI-4c breakingChanges=false when no steps (vacuous truth)")
+  gi_assert(prEmpty.summary.includes("Implements"), "GI-4d empty steps still says Implements (all 0 succeeded)")
+
+  // GI-5: generatePRDescription — all steps failed
+  const prAllFail = git.generatePRDescription("All fail", [
+    { id: "s1", description: "Step one", success: false },
+    { id: "s2", description: "Step two", success: false },
+  ], ["src/fail.ts"])
+  gi_assert(prAllFail.summary.includes("0/2 steps"), "GI-5a all fail shows 0/2")
+  gi_assert(prAllFail.breakingChanges === true, "GI-5b all fail = breakingChanges=true")
+
+  // GI-6: isAvailable — /tmp/test-git-project is NOT a git repo
+  // This also tests the catch block (isAvailable returns false)
+  const available = git.isAvailable()
+  gi_assert(available === false, "GI-6a isAvailable returns false for /tmp/test-git-project")
+
+  // GI-7: isAvailable — projectDir IS a git repo
+  const projectAvailable = projectGit.isAvailable()
+  gi_assert(projectAvailable === true, "GI-7a isAvailable returns true for project dir")
+
+  // GI-8: getCurrentBranch — non-git dir returns "main"
+  const branch = git.getCurrentBranch()
+  gi_assert(branch === "main", "GI-8a getCurrentBranch returns 'main' for non-git dir")
+
+  // GI-9: getCurrentBranch — real repo returns actual branch name
+  const realBranch = projectGit.getCurrentBranch()
+  gi_assert(typeof realBranch === "string" && realBranch.length > 0, "GI-9a getCurrentBranch returns non-empty string")
+
+  // GI-10: getHistory — non-git dir returns empty array
+  const hist = git.getHistory(5)
+  gi_assert(Array.isArray(hist) && hist.length === 0, "GI-10a getHistory returns [] for non-git dir")
+
+  // GI-11: getHistory — real repo returns parsed commits
+  const realHist = projectGit.getHistory(3)
+  gi_assert(Array.isArray(realHist), "GI-11a getHistory returns array for real repo")
+  if (realHist.length > 0) {
+    const commit = realHist[0]
+    gi_assert(typeof commit.hash === "string" && commit.hash.length >= 6, "GI-11b commit hash is valid")
+    gi_assert(typeof commit.message === "string", "GI-11c commit message is string")
+    gi_assert(Array.isArray(commit.files), "GI-11d commit files is array")
+    gi_assert(typeof commit.timestamp === "string", "GI-11e commit timestamp is string")
+  }
+
+  // GI-12: getDiff — non-git dir returns empty string
+  const diff = git.getDiff("main")
+  gi_assert(diff === "", "GI-12a getDiff returns '' for non-git dir")
+
+  // GI-13: getDiff — real repo returns string
+  const realDiff = projectGit.getDiff("HEAD~1")
+  gi_assert(typeof realDiff === "string", "GI-13a getDiff returns string for real repo")
+
+  // GI-14: stage — non-git dir returns false
+  const staged = git.stage([])
+  gi_assert(staged === false, "GI-14a stage returns false for non-git dir")
+
+  // GI-15: commit — non-git dir returns null
+  const committed = git.commit("test msg", [])
+  gi_assert(committed === null, "GI-15a commit returns null for non-git dir")
+
+  // GI-16: push — non-git dir returns false
+  const pushed = git.push()
+  gi_assert(pushed === false, "GI-16a push returns false for non-git dir")
+  const pushedBranch = git.push("main")
+  gi_assert(pushedBranch === false, "GI-16b push('main') returns false for non-git dir")
+
+  // GI-17: createBranch — non-git dir returns false
+  const branchCreated = git.createBranch("test-branch")
+  gi_assert(branchCreated === false, "GI-17a createBranch returns false for non-git dir")
+
+  // GI-18: createPR — non-git dir returns null
+  const prCreated = git.createPR("Test PR", "Body")
+  gi_assert(prCreated === null, "GI-18a createPR returns null for non-git dir")
+}
+
+// GI-19: New GitIntegration in project dir — verify non-destructive ops
+{
+  const { GitIntegration } = await import(pluginDist)
+  const pg = new GitIntegration(projectDir)
+  
+  // Generate PR description uses constructor cwd but is a pure function
+  const pr = pg.generatePRDescription("Test", [
+    { id: "s1", description: "Step 1", success: true },
+  ], ["a.ts"])
+  gi_assert(typeof pr.title === "string", "GI-19a generatePRDescription works from project dir")
+  gi_assert(pr.breakingChanges === false, "GI-19b breakingChanges false for single success step")
 }
 
 console.log(`  GitIntegration: ${gi} passed, ${gif} failed`)
