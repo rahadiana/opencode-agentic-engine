@@ -25,8 +25,8 @@ export function makeRagTool(ctx: ToolContext): ToolSpec {
     worldModel, simulationEngine, dataCleaner, configLoader,
     logErrorToFile, detectSubAgentRole, buildSubAgentInjection, ctxDir,
   } = ctx
-  const debtScorer = techDebtScorer
-  const curator = skillCurator
+  const _debtScorer = techDebtScorer
+  const _curator = skillCurator
   return {
       description: "Multi-index RAG: search or store knowledge in category-segregated indices. Prevents cross-category context pollution. Use with agentic_router to scope searches to relevant domains.",
       args: {

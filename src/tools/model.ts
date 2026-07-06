@@ -24,8 +24,8 @@ export function makeModelTool(ctx: ToolContext): ToolSpec {
     worldModel, simulationEngine, dataCleaner, configLoader,
     logErrorToFile, detectSubAgentRole, buildSubAgentInjection, ctxDir,
   } = ctx
-  const debtScorer = techDebtScorer
-  const curator = skillCurator
+  const _debtScorer = techDebtScorer
+  const _curator = skillCurator
   return {
       description: "Configure per-role, per-tool, or per-category LLM model preferences. Use 'set' to assign a model. Use 'get' to check current assignment. Use 'list' to view all. Use 'clear' to remove. Use 'reset'/'reset-stale'/'reset-all' to recover from degraded model performance. Accepts `role`, `tool`, or `category` parameter. Preferences are persisted to .agentic/models.json.",
       args: {

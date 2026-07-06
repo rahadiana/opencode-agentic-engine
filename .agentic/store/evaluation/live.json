@@ -1328,6 +1328,11 @@
         "query": "function patterns, code organization, architecture",
         "resultsCount": 10,
         "focused": true
+      },
+      {
+        "query": "definitions.ts tool definitions size structure",
+        "resultsCount": 5,
+        "focused": true
       }
     ],
     "delegations": [
@@ -1688,5 +1693,5 @@
       }
     ]
   },
-  "updatedAt": "2026-07-06T18:35:37.885Z"
+  "updatedAt": "2026-07-06T20:02:56.061Z"
 }

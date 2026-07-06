@@ -30,8 +30,8 @@ export function makeEvolveTool(ctx: ToolContext): ToolSpec {
     worldModel, simulationEngine, dataCleaner, configLoader,
     logErrorToFile, detectSubAgentRole, buildSubAgentInjection, ctxDir,
   } = ctx
-  const debtScorer = techDebtScorer
-  const curator = skillCurator
+  const _debtScorer = techDebtScorer
+  const _curator = skillCurator
 return {
   description: "Inspect and extend the agent system itself (Stage IV). Register custom agent roles, define versioned memory schemas, and export skills in self-describing format for other agents to consume.",
   args: {

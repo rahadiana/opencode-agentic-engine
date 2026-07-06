@@ -23,8 +23,8 @@ export function makeFinetuneTool(ctx: ToolContext): ToolSpec {
     worldModel, simulationEngine, dataCleaner, configLoader: _configLoader,
     logErrorToFile, detectSubAgentRole, buildSubAgentInjection, ctxDir,
   } = ctx
-  const debtScorer = techDebtScorer
-  const curator = skillCurator
+  const _debtScorer = techDebtScorer
+  const _curator = skillCurator
   return {
       description: "End-to-end fine-tuning pipeline: prepare dataset, save file, upload to OpenAI, create and monitor fine-tuning job.",
       args: {

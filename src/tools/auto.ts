@@ -32,8 +32,8 @@ export function makeAutoTool(ctx: ToolContext): ToolSpec {
     worldModel, simulationEngine, dataCleaner, configLoader,
     logErrorToFile, detectSubAgentRole, buildSubAgentInjection, ctxDir,
   } = ctx
-  const debtScorer = techDebtScorer
-  const curator = skillCurator
+  const _debtScorer = techDebtScorer
+  const _curator = skillCurator
   return {
       description: "Fully autonomous engineering orchestrator. One call handles: memory + skills → architecture → code → guard check → verify → score → learn.",
       args: {

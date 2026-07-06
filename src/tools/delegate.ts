@@ -22,8 +22,8 @@ export function makeDelegateTool(ctx: ToolContext): ToolSpec {
     worldModel, simulationEngine, dataCleaner, configLoader,
     logErrorToFile, detectSubAgentRole, buildSubAgentInjection, ctxDir,
   } = ctx
-  const debtScorer = techDebtScorer
-  const curator = skillCurator
+  const _debtScorer = techDebtScorer
+  const _curator = skillCurator
 
   async function executeBatchDelegate(
     tasks: Array<{ taskId: string; role: string; description: string; context?: string; dependsOn?: string[] }>,
