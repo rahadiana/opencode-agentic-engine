@@ -6,6 +6,7 @@ import { SessionReader } from "./session-reader.js"
 import { SemanticCache } from "./semantic-cache.js"
 import type { MemoryOrchestrator } from "../memory/memory-orchestrator.js"
 import { createLogger } from "../observability/logger.js"
+import { getSecondBrain } from "../memory/second-brain.js"
 
 const log = createLogger("LLM")
 
@@ -388,279 +389,32 @@ export class LLMEngine {
   async call(req: LLMRequest): Promise<LLMResponse> {
     const startTime = Date.now()
     let success = false
-    let response: LLMResponse
 
     // Early abort: if external signal already fired, return immediately
     if (req.signal?.aborted) {
       return { content: "[NO_LLM] LLM call cancelled before start", finishReason: "error" }
     }
 
-    // Resolve model: per-call > tool-context > category > engine default
+    // Resolve model + auto-switch
     const effectiveToolName = req.toolName ?? this._toolContext
-    if (!req.model && effectiveToolName) {
-      // Priority 1: per-tool override
-      if (this.sessionStore && this.pluginSessionId) {
-        const toolModel = this.sessionStore.getToolPreference(this.pluginSessionId, effectiveToolName)
-        if (toolModel) {
-          req.model = this.parseModelForSDK(toolModel)
-        }
-        // Priority 2: category by complexity tier
-        if (!req.model) {
-          const category = TOOL_COMPLEXITY[effectiveToolName]
-          if (category) {
-            const catModel = this.sessionStore.getCategoryPreference(this.pluginSessionId, category)
-            if (catModel) {
-              req.model = this.parseModelForSDK(catModel)
-            }
-          }
-        }
-      }
-    }
-    // Priority 3: NO fallback — kalo gak ada override, SDK pake session default
+    this._resolveModel(req, effectiveToolName)
+    this._applyCostAutoSwitch(req, effectiveToolName)
 
-    // ── Cost- & Satisfaction-Aware Auto-Switch (Gap #8 + Feedback Loop) ──
-    // Auto-switch to best model balancing: cost + reliability + user satisfaction.
-    // Supports all tool categories (default: quick + unspecified-low).
-    // Budget-aware: tightens threshold when budget > 80% utilized.
-    // User satisfaction from feedback loop: models with low satisfaction are deprioritized.
-    if (req.model && effectiveToolName && this.modelRegistry) {
-      const category = TOOL_COMPLEXITY[effectiveToolName]
-      const costCfg = this.config.costAutoSwitch ?? { enabled: true, minReliability: 0.5, minUserSatisfaction: 0.3, maxCostPerCall: 0.01, budgetTightMultiplier: 0.5, categories: ["quick", "unspecified-low"] }
-      const eligibleCategories = costCfg.categories ?? ["quick", "unspecified-low"]
-      const isEligible = !category || eligibleCategories.includes(category)
-
-      if (isEligible && costCfg.enabled) {
-        const currentModelStr = `${req.model.providerID}/${req.model.modelID}`
-        const currentScore = this.modelRegistry.getScore(currentModelStr)
-        const currentReliability = currentScore?.reliability ?? 0.5
-        const taskType = this.sessionStore && this.pluginSessionId
-          ? this.sessionStore.getOrCreate(this.pluginSessionId).currentTaskType
-          : undefined
-
-        // Budget-aware threshold: tighten when budget is tight
-        let budgetMultiplier = 1.0
-        if (this.budgetTracker) {
-          try {
-            const states = this.budgetTracker.getState(["session"])
-            if (states.length > 0) {
-              const s = states[0]
-              if (s.limits?.maxCostUsd != null && s.limits.maxCostUsd > 0) {
-                const utilization = (s.usage?.totalCostUsd ?? 0) / s.limits.maxCostUsd
-                if (utilization > 0.8) {
-                  budgetMultiplier = costCfg.budgetTightMultiplier
-                }
-              }
-            }
-          } catch {
-            // budget tracker getState failed — proceed with default multiplier
-          }
-        }
-
-        // Use absolute threshold (with budget adjustment), fall back to relative threshold
-        const minRequiredReliability = Math.min(
-          Math.max(costCfg.minReliability * budgetMultiplier, 0.2), // absolute, clamped 0.2-0.95
-          Math.max(currentReliability * 0.7 * budgetMultiplier, 0.2),
-        )
-
-        // Check if current model exceeds max cost → force switch
-        const forceSwitch = currentScore?.avgCostPerCall != null && currentScore.avgCostPerCall > costCfg.maxCostPerCall
-
-        // Gather available models from fallback chain + current
-        const availableModels = [currentModelStr, ...(this.config.fallbackModels ?? [])]
-        const candidates = availableModels
-          .map(m => ({
-            model: m,
-            score: this.modelRegistry!.getScore(m),
-            userSat: taskType ? this.modelRegistry!.getUserSatisfaction(m, taskType) : 0.5,
-          }))
-          .filter(s => s.score && s.score.totalCalls >= 3) // only models with sufficient data
-
-        // Score candidates by composite: userSat (30%) + reliability (35%) + inverse cost (35%)
-        // This ensures user feedback influences model selection alongside technical metrics.
-        const maxCost = candidates.reduce((max, c) => Math.max(max, c.score?.avgCostPerCall ?? 0), 0.001)
-        const scored = candidates
-          .map(c => ({
-            model: c.model,
-            score: c.score!,
-            userSat: c.userSat,
-            compositeScore: c.userSat * 0.3 + (c.score?.reliability ?? 0.5) * 0.35 + (1 - (c.score?.avgCostPerCall ?? 0) / maxCost) * 0.35,
-          }))
-          .sort((a, b) => b.compositeScore - a.compositeScore)
-
-        // Pick best composite score that meets reliability + satisfaction thresholds
-        const originalModel = { ...req.model }
-        for (const candidate of scored) {
-          const candidateReliability = candidate.score?.reliability ?? 0
-          const meetsReliability = candidateReliability >= minRequiredReliability
-          const meetsSatisfaction = candidate.userSat >= costCfg.minUserSatisfaction
-          const isDifferent = candidate.model !== currentModelStr
-
-          if (isDifferent && (meetsReliability && meetsSatisfaction) || forceSwitch) {
-            const parsed = this.parseModelForSDK(candidate.model)
-            if (parsed) {
-              req.model = parsed
-              break
-            }
-          }
-        }
-
-        // Record switch event if model changed
-        const switchedModel = req.model
-        if (switchedModel && (switchedModel.providerID !== originalModel.providerID || switchedModel.modelID !== originalModel.modelID)) {
-          const newScore = this.modelRegistry.getScore(`${switchedModel.providerID}/${switchedModel.modelID}`)
-          const estimatedSavings = (currentScore?.avgCostPerCall ?? 0) - (newScore?.avgCostPerCall ?? 0)
-          const switchedModelSat = taskType ? this.modelRegistry.getUserSatisfaction(`${switchedModel.providerID}/${switchedModel.modelID}`, taskType) : 0.5
-          const reasons: string[] = []
-          if (forceSwitch) reasons.push(`cost exceeded $${costCfg.maxCostPerCall}`)
-          if (switchedModelSat > (taskType ? this.modelRegistry.getUserSatisfaction(currentModelStr, taskType) : 0.5)) reasons.push(`higher user satisfaction (${(switchedModelSat * 100).toFixed(0)}%)`)
-          reasons.push(`composite score: ${scored.find(s => s.model === `${switchedModel.providerID}/${switchedModel.modelID}`)?.compositeScore.toFixed(2) ?? 'N/A'}`)
-          const event: CostSwitchEvent = {
-            fromModel: currentModelStr,
-            toModel: `${switchedModel.providerID}/${switchedModel.modelID}`,
-            reason: reasons.join(', '),
-            category: category ?? "unknown",
-            estimatedSavingsUsd: Math.max(0, estimatedSavings),
-            timestamp: Date.now(),
-          }
-          this.costSwitchStats.totalSwitches++
-          this.costSwitchStats.totalSavingsUsd += event.estimatedSavingsUsd
-          this.costSwitchStats.switches.push(event)
-          // Trim history to prevent unbounded growth
-          if (this.costSwitchStats.switches.length > 200) {
-            this.costSwitchStats.switches.splice(0, this.costSwitchStats.switches.length - 200)
-          }
-          this._onCostSwitch?.(event)
-        }
-      }
-    }
-
-    // ── Knowledge-first injection (tool mode) ──
-    // Chat mode already handled by system.transform hook.
-    // In tool mode, inject RAG knowledge into system prompt before LLM call.
-    if (!this._chatMode && !req.bypassCache && this.memoryOrchestrator) {
-      try {
-        const queryText = (req.userPrompt ?? "").slice(0, 500)
-        if (queryText) {
-          const memResult = await this.memoryOrchestrator.queryWithKnowledge(queryText, undefined, 5)
-          if (memResult.knowledge && memResult.knowledge.length > 0 && !req.systemPrompt.includes("<knowledge-context>")) {
-            const ctx = memResult.knowledge
-              .map(k => `  <source url="${k.source}" confidence="${k.confidence.toFixed(2)}">${k.content}</source>`)
-              .join("\n")
-            req.systemPrompt += `\n\n<knowledge-context>\n${ctx}\n</knowledge-context>`
-          }
-        }
-      } catch {
-        // Non-fatal — proceed without knowledge
-      }
-    }
-
-    // ── Second Brain injection (tool mode) ──
-    // Inject decisions, TODOs, and last reflection alongside RAG knowledge.
-    if (!this._chatMode && !req.bypassCache && !req.systemPrompt.includes("<second-brain>")) {
-      try {
-        const { getSecondBrain } = await import("../memory/second-brain.js")
-        const sb = getSecondBrain()
-        if (sb) {
-          const ctx = sb.formatKnowledgeSnapshot(3, 5)
-          if (ctx) req.systemPrompt += `\n${ctx}`
-        }
-      } catch {
-        // Non-fatal
-      }
-    }
+    // ── Knowledge-first injection (tool mode) + Second Brain ──
+    this._injectContext(req)
 
     // Simpan model override sebelum call — dipake buat fallback tracking
     const explicitModel = req.model ? { ...req.model } : undefined
 
-    // ── Gap #7: Semantic cache lookup ──
-    if (!req.bypassCache && this.semanticCache) {
-      const query = `${req.systemPrompt}${req.userPrompt}`
-      const semanticHit = this.semanticCache.get(query)
-      if (semanticHit) {
-        return {
-          content: semanticHit.text,
-          usage: semanticHit.usage ? {
-            promptTokens: semanticHit.usage.inputTokens ?? 0,
-            completionTokens: semanticHit.usage.outputTokens ?? 0,
-            reasoningTokens: semanticHit.usage.reasoningTokens ?? 0,
-            cacheReadTokens: semanticHit.usage.cacheReadTokens ?? 0,
-            cacheWriteTokens: semanticHit.usage.cacheWriteTokens ?? 0,
-          } : undefined,
-          finishReason: "cache-hit",
-        }
-      }
-    }
-
-    // Check exact-match cache (TTL: 30s)
+    // ── Gap #7: Semantic cache lookup + exact-match cache ──
     const cacheKey = this.getCacheKey(req)
-    if (!req.bypassCache) {
-      const cached = this.responseCache.get(cacheKey)
-      if (cached && (Date.now() - cached.timestamp) < this.CACHE_TTL) {
-        return cached.response
-      }
-    }
+    const cachedHit = this._checkCache(req, cacheKey)
+    if (cachedHit) return cachedHit
 
-    // ── ONLY call via OpenCode SDK — NO external API calls ──
-    try {
-      response = await this.callOpenCode(req)
-      success = !response.content.startsWith("LLM error") && !response.content.startsWith("[NO_LLM]") && !response.content.startsWith("LLM call failed")
-    } catch (error) {
-      logParseError('LLM call', error);
-      response = { content: "LLM call threw an exception", finishReason: "error" }
-      success = false
-    }
-
-    // ── Multi-provider auto fallback ──
-    // Priority: explicit model → fallback chain (registry-ranked) → session default
-    if (!success) {
-      const primaryModel = explicitModel ? `${explicitModel.providerID}/${explicitModel.modelID}` : null
-      const taskType = this.sessionStore && this.pluginSessionId
-        ? this.sessionStore.getOrCreate(this.pluginSessionId).currentTaskType
-        : undefined
-
-      // Record primary model failure
-      if (primaryModel) {
-        this.modelRegistry?.recordCall(primaryModel, false, Date.now() - startTime, taskType)
-      }
-
-      // Build fallback chain from registry + config
-      const fallbackChain = this.resolveFallbackChain(primaryModel, taskType)
-
-      // Try each fallback model in order
-      for (const fallbackModel of fallbackChain) {
-        if (success || req.signal?.aborted) break
-
-        const [providerID, ...modelParts] = fallbackModel.split('/')
-        const modelID = modelParts.join('/')
-        if (!modelID) continue // Skip malformed entries
-
-        req.model = { providerID, modelID }
-        try {
-          response = await this.callOpenCode(req)
-          success = !response.content.startsWith("LLM error") && !response.content.startsWith("[NO_LLM]") && !response.content.startsWith("LLM call failed")
-        } catch (fallbackError) {
-          logParseError(`LLM fallback call (${fallbackModel})`, fallbackError);
-          response = { content: "LLM call threw an exception", finishReason: "error" }
-          success = false
-        }
-
-        // Record fallback attempt
-        this.modelRegistry?.recordCall(fallbackModel, success, Date.now() - startTime, taskType)
-      }
-
-      // Final fallback: session default (no model override)
-      if (!success && !req.signal?.aborted) {
-        delete req.model
-        try {
-          response = await this.callOpenCode(req)
-          success = !response.content.startsWith("LLM error") && !response.content.startsWith("[NO_LLM]") && !response.content.startsWith("LLM call failed")
-        } catch (sessionFallbackError) {
-          logParseError('LLM session default fallback', sessionFallbackError);
-          response = { content: "LLM call threw an exception", finishReason: "error" }
-          success = false
-        }
-      }
-    }
+    // ── Execute with fallback: primary call + auto fallback chain ──
+    const execResult = await this._executeWithFallback(req, explicitModel, startTime)
+    const response = execResult.response
+    success = execResult.success
 
     // Cache successful responses
     if (success) {
@@ -770,6 +524,244 @@ export class LLMEngine {
     }
 
     return response
+  }
+
+  /** Resolve model: per-call > tool-context > category > engine default */
+  private _resolveModel(req: LLMRequest, effectiveToolName: string | undefined): void {
+    if (req.model || !effectiveToolName) return
+    if (!this.sessionStore || !this.pluginSessionId) return
+
+    // Priority 1: per-tool override
+    const toolModel = this.sessionStore.getToolPreference(this.pluginSessionId, effectiveToolName)
+    if (toolModel) {
+      req.model = this.parseModelForSDK(toolModel)
+      return
+    }
+    // Priority 2: category by complexity tier
+    const category = TOOL_COMPLEXITY[effectiveToolName]
+    if (category) {
+      const catModel = this.sessionStore.getCategoryPreference(this.pluginSessionId, category)
+      if (catModel) {
+        req.model = this.parseModelForSDK(catModel)
+      }
+    }
+  }
+
+  /** Cost- & Satisfaction-Aware Auto-Switch (Gap #8 + Feedback Loop) */
+  private _applyCostAutoSwitch(req: LLMRequest, effectiveToolName: string | undefined): void {
+    if (!req.model || !effectiveToolName || !this.modelRegistry) return
+    const category = TOOL_COMPLEXITY[effectiveToolName]
+    const costCfg = this.config.costAutoSwitch ?? { enabled: true, minReliability: 0.5, minUserSatisfaction: 0.3, maxCostPerCall: 0.01, budgetTightMultiplier: 0.5, categories: ["quick", "unspecified-low"] }
+    const eligibleCategories = costCfg.categories ?? ["quick", "unspecified-low"]
+    const isEligible = !category || eligibleCategories.includes(category)
+    if (!isEligible || !costCfg.enabled) return
+
+    const currentModelStr = `${req.model.providerID}/${req.model.modelID}`
+    const currentScore = this.modelRegistry.getScore(currentModelStr)
+    const currentReliability = currentScore?.reliability ?? 0.5
+    const taskType = this.sessionStore && this.pluginSessionId
+      ? this.sessionStore.getOrCreate(this.pluginSessionId).currentTaskType
+      : undefined
+
+    // Budget-aware threshold: tighten when budget is tight
+    let budgetMultiplier = 1.0
+    if (this.budgetTracker) {
+      try {
+        const states = this.budgetTracker.getState(["session"])
+        if (states.length > 0) {
+          const s = states[0]
+          if (s.limits?.maxCostUsd != null && s.limits.maxCostUsd > 0) {
+            const utilization = (s.usage?.totalCostUsd ?? 0) / s.limits.maxCostUsd
+            if (utilization > 0.8) budgetMultiplier = costCfg.budgetTightMultiplier
+          }
+        }
+      } catch { /* proceed with default multiplier */ }
+    }
+
+    // Use absolute threshold (with budget adjustment), fall back to relative threshold
+    const minRequiredReliability = Math.min(
+      Math.max(costCfg.minReliability * budgetMultiplier, 0.2),
+      Math.max(currentReliability * 0.7 * budgetMultiplier, 0.2),
+    )
+
+    // Check if current model exceeds max cost → force switch
+    const forceSwitch = currentScore?.avgCostPerCall != null && currentScore.avgCostPerCall > costCfg.maxCostPerCall
+    const availableModels = [currentModelStr, ...(this.config.fallbackModels ?? [])]
+    const candidates = availableModels
+      .map(m => ({
+        model: m,
+        score: this.modelRegistry!.getScore(m),
+        userSat: taskType ? this.modelRegistry!.getUserSatisfaction(m, taskType) : 0.5,
+      }))
+      .filter(s => s.score && s.score.totalCalls >= 3)
+
+    // Score candidates by composite: userSat (30%) + reliability (35%) + inverse cost (35%)
+    const maxCost = candidates.reduce((max, c) => Math.max(max, c.score?.avgCostPerCall ?? 0), 0.001)
+    const scored = candidates
+      .map(c => ({
+        model: c.model, score: c.score!, userSat: c.userSat,
+        compositeScore: c.userSat * 0.3 + (c.score?.reliability ?? 0.5) * 0.35 + (1 - (c.score?.avgCostPerCall ?? 0) / maxCost) * 0.35,
+      }))
+      .sort((a, b) => b.compositeScore - a.compositeScore)
+
+    // Pick best that meets thresholds
+    const originalModel = { ...req.model }
+    for (const candidate of scored) {
+      const candidateReliability = candidate.score?.reliability ?? 0
+      const meetsReliability = candidateReliability >= minRequiredReliability
+      const meetsSatisfaction = candidate.userSat >= costCfg.minUserSatisfaction
+      const isDifferent = candidate.model !== currentModelStr
+      if (isDifferent && (meetsReliability && meetsSatisfaction) || forceSwitch) {
+        const parsed = this.parseModelForSDK(candidate.model)
+        if (parsed) { req.model = parsed; break }
+      }
+    }
+
+    // Record switch event if model changed
+    const switchedModel = req.model
+    if (!switchedModel || (switchedModel.providerID === originalModel.providerID && switchedModel.modelID === originalModel.modelID)) return
+    const newScore = this.modelRegistry.getScore(`${switchedModel.providerID}/${switchedModel.modelID}`)
+    const estimatedSavings = (currentScore?.avgCostPerCall ?? 0) - (newScore?.avgCostPerCall ?? 0)
+    const switchedModelSat = taskType ? this.modelRegistry.getUserSatisfaction(`${switchedModel.providerID}/${switchedModel.modelID}`, taskType) : 0.5
+    const reasons: string[] = []
+    if (forceSwitch) reasons.push(`cost exceeded $${costCfg.maxCostPerCall}`)
+    if (switchedModelSat > (taskType ? this.modelRegistry.getUserSatisfaction(currentModelStr, taskType) : 0.5)) reasons.push(`higher user satisfaction (${(switchedModelSat * 100).toFixed(0)}%)`)
+    reasons.push(`composite score: ${scored.find(s => s.model === `${switchedModel.providerID}/${switchedModel.modelID}`)?.compositeScore.toFixed(2) ?? 'N/A'}`)
+    const event: CostSwitchEvent = {
+      fromModel: currentModelStr, toModel: `${switchedModel.providerID}/${switchedModel.modelID}`,
+      reason: reasons.join(', '), category: category ?? "unknown",
+      estimatedSavingsUsd: Math.max(0, estimatedSavings), timestamp: Date.now(),
+    }
+    this.costSwitchStats.totalSwitches++
+    this.costSwitchStats.totalSavingsUsd += event.estimatedSavingsUsd
+    this.costSwitchStats.switches.push(event)
+    if (this.costSwitchStats.switches.length > 200) {
+      this.costSwitchStats.switches.splice(0, this.costSwitchStats.switches.length - 200)
+    }
+    this._onCostSwitch?.(event)
+  }
+
+  /** Inject RAG knowledge + Second Brain context into system prompt */
+  private _injectContext(req: LLMRequest): void {
+    if (this._chatMode || req.bypassCache) return
+    // Knowledge-first injection (fire-and-forget — non-blocking context enrichment)
+    if (this.memoryOrchestrator && !req.systemPrompt.includes("<knowledge-context>")) {
+      const queryText = (req.userPrompt ?? "").slice(0, 500)
+      if (queryText) {
+        this.memoryOrchestrator.queryWithKnowledge(queryText, undefined, 5)
+          .then(memResult => {
+            if (memResult.knowledge && memResult.knowledge.length > 0) {
+              const ctx = memResult.knowledge
+                .map(k => `  <source url="${k.source}" confidence="${k.confidence.toFixed(2)}">${k.content}</source>`)
+                .join("\n")
+              req.systemPrompt += `\n\n<knowledge-context>\n${ctx}\n</knowledge-context>`
+            }
+          }).catch(() => {})
+      }
+    }
+    // Second Brain injection
+    if (!req.systemPrompt.includes("<second-brain>")) {
+      try {
+        const sb = getSecondBrain()
+        if (sb) {
+          const ctx = sb.formatKnowledgeSnapshot(3, 5)
+          if (ctx) req.systemPrompt += `\n${ctx}`
+        }
+      } catch { /* non-fatal */ }
+    }
+  }
+
+  /** Check semantic + exact-match cache, return cached response if hit */
+  private _checkCache(req: LLMRequest, cacheKey: string): LLMResponse | null {
+    // Semantic cache (Gap #7)
+    if (!req.bypassCache && this.semanticCache) {
+      const query = `${req.systemPrompt}${req.userPrompt}`
+      const semanticHit = this.semanticCache.get(query)
+      if (semanticHit) {
+        return {
+          content: semanticHit.text,
+          usage: semanticHit.usage ? {
+            promptTokens: semanticHit.usage.inputTokens ?? 0,
+            completionTokens: semanticHit.usage.outputTokens ?? 0,
+            reasoningTokens: semanticHit.usage.reasoningTokens ?? 0,
+            cacheReadTokens: semanticHit.usage.cacheReadTokens ?? 0,
+            cacheWriteTokens: semanticHit.usage.cacheWriteTokens ?? 0,
+          } : undefined,
+          finishReason: "cache-hit",
+        }
+      }
+    }
+    // Exact-match cache (TTL: 30s)
+    if (!req.bypassCache) {
+      const cached = this.responseCache.get(cacheKey)
+      if (cached && (Date.now() - cached.timestamp) < this.CACHE_TTL) {
+        return cached.response
+      }
+    }
+    return null
+  }
+
+  /** Execute LLM call with multi-provider auto fallback */
+  private async _executeWithFallback(
+    req: LLMRequest, explicitModel: { providerID: string; modelID: string } | undefined, startTime: number,
+  ): Promise<{ response: LLMResponse; success: boolean }> {
+    let success = false
+    let response: LLMResponse
+
+    // Primary call via OpenCode SDK
+    try {
+      response = await this.callOpenCode(req)
+      success = !response.content.startsWith("LLM error") && !response.content.startsWith("[NO_LLM]") && !response.content.startsWith("LLM call failed")
+    } catch (error) {
+      logParseError('LLM call', error);
+      response = { content: "LLM call threw an exception", finishReason: "error" }
+      success = false
+    }
+
+    // Multi-provider auto fallback
+    if (!success) {
+      const primaryModel = explicitModel ? `${explicitModel.providerID}/${explicitModel.modelID}` : null
+      const taskType = this.sessionStore && this.pluginSessionId
+        ? this.sessionStore.getOrCreate(this.pluginSessionId).currentTaskType
+        : undefined
+
+      // Record primary model failure
+      if (primaryModel) this.modelRegistry?.recordCall(primaryModel, false, Date.now() - startTime, taskType)
+
+      // Try each fallback model in order
+      const fallbackChain = this.resolveFallbackChain(primaryModel, taskType)
+      for (const fallbackModel of fallbackChain) {
+        if (success || req.signal?.aborted) break
+        const [providerID, ...modelParts] = fallbackModel.split('/')
+        const modelID = modelParts.join('/')
+        if (!modelID) continue
+        req.model = { providerID, modelID }
+        try {
+          response = await this.callOpenCode(req)
+          success = !response.content.startsWith("LLM error") && !response.content.startsWith("[NO_LLM]") && !response.content.startsWith("LLM call failed")
+        } catch (fallbackError) {
+          logParseError(`LLM fallback call (${fallbackModel})`, fallbackError);
+          response = { content: "LLM call threw an exception", finishReason: "error" }
+          success = false
+        }
+        this.modelRegistry?.recordCall(fallbackModel, success, Date.now() - startTime, taskType)
+      }
+
+      // Final fallback: session default (no model override)
+      if (!success && !req.signal?.aborted) {
+        delete req.model
+        try {
+          response = await this.callOpenCode(req)
+          success = !response.content.startsWith("LLM error") && !response.content.startsWith("[NO_LLM]") && !response.content.startsWith("LLM call failed")
+        } catch (sessionFallbackError) {
+          logParseError('LLM session default fallback', sessionFallbackError);
+          response = { content: "LLM call threw an exception", finishReason: "error" }
+          success = false
+        }
+      }
+    }
+
+    return { response, success }
   }
 
   async decomposeTask(goal: string, context: string): Promise<string[]> {
