@@ -3,9 +3,15 @@
   "data": {
     "stepResults": [],
     "errorRecoveries": [],
-    "navigations": [],
+    "navigations": [
+      {
+        "query": "project architecture overview",
+        "resultsCount": 3,
+        "focused": true
+      }
+    ],
     "delegations": [],
     "skillLookups": []
   },
-  "updatedAt": "2026-07-04T11:20:15.748Z"
+  "updatedAt": "2026-07-06T12:17:11.603Z"
 }

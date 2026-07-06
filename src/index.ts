@@ -7694,6 +7694,7 @@ export { MultiIndexRAG, enrichWithVectors, type IndexData, type IndexSearchResul
 export { LocalEmbedder, type EmbedderConfig, type EmbeddingResult } from "./memory/local-embedder.js"
 export { SkillExtractor, normalize } from "./memory/skill-extractor.js"
 export { TraceLogger } from "./observability/trace-logger.js"
+export { ContextCompressor } from "./drift/context-compressor.js"
 export { SQLitePersistence } from "./memory/sqlite-persistence.js"
 export { hello } from "./hello.js"
 export { debounce, throttle, type DebounceOptions, type ThrottleOptions } from "./core/rate-limit.js"

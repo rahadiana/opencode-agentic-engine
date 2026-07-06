@@ -1293,6 +1293,31 @@
         "query": "bagaimana cara kerja agentic RAG di plugin ini? apa bedanya dengan traditional RAG?",
         "resultsCount": 1,
         "focused": true
+      },
+      {
+        "query": "planner.ts test coverage planner-critic",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "git.ts git integration tests",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "trace-logger.ts export TraceLogger",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "SWE-bench scenario config import agentic_auto",
+        "resultsCount": 5,
+        "focused": true
+      },
+      {
+        "query": "ContextCompressor export in index.ts",
+        "resultsCount": 5,
+        "focused": true
       }
     ],
     "delegations": [
@@ -1653,5 +1678,5 @@
       }
     ]
   },
-  "updatedAt": "2026-07-04T13:00:49.897Z"
+  "updatedAt": "2026-07-06T14:31:54.652Z"
 }

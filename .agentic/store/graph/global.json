@@ -820,7 +820,79 @@
       "metadata": {
         "timestamp": 1783093890427
       }
+    },
+    {
+      "source": "developer",
+      "target": "t1-trace",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Export TraceLogger class from src/index.ts so TL tests in test/_b_branch.mjs can run. Currently TraceLogger is imported at line 42 and used internally, but not exported. Add `TraceLogger` to the expor",
+        "timestamp": 1783345396738
+      }
+    },
+    {
+      "source": "developer",
+      "target": "t2-planner",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Add branch coverage tests for planner.ts at test/_b_branch.mjs. Current branch coverage is only 24.4%. Key uncovered branches: (1) `selectMacroTemplate` - patternMatch test with RegExp vs string patte",
+        "timestamp": 1783345396740
+      }
+    },
+    {
+      "source": "developer",
+      "target": "t3-git",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Add branch coverage tests for git.ts at test/_b_branch.mjs. Current branch coverage is 58.3%. Key uncovered paths: (1) `isAvailable()` - error path when git not available; (2) `stage()` - error path (",
+        "timestamp": 1783345396740
+      }
+    },
+    {
+      "source": "developer",
+      "target": "t4-sqlite",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Add branch coverage tests for sqlite-persistence.ts at test/_b_branch.mjs. Current func coverage is only 40%. Key uncovered functions: (1) `_initDbSync()` - error path; (2) `_exec()` - error handling;",
+        "timestamp": 1783345436060
+      }
+    },
+    {
+      "source": "developer",
+      "target": "t5-dashboard",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Add branch coverage tests for dashboard.ts at test/_b_branch.mjs. Current func coverage is 60.86%. Key uncovered paths: (1) `constructor` edge cases; (2) `generateReport()` with empty data; (3) anomal",
+        "timestamp": 1783345436061
+      }
+    },
+    {
+      "source": "developer",
+      "target": "t6-secondbrain",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Add branch coverage tests for second-brain.ts uncovered lines (268-320). Those lines relate to memory schema versioning/loading. Key uncovered: (1) `ensureMemoryLoaded()` when memory is already loaded",
+        "timestamp": 1783345436062
+      }
+    },
+    {
+      "source": "developer",
+      "target": "t7-swebench",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Analyze and fix SWE-bench config/import scenario. The SWE-bench mock shows 0/5 for config/import tasks. Read test/swebench-harness.mjs to understand the 7 scenarios. Focus on the 5 config/import scena",
+        "timestamp": 1783345475962
+      }
+    },
+    {
+      "source": "developer",
+      "target": "t8-e2e-fixture",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Fix the E2E fixture auto-setup. Currently test/e2e-scenario.mjs expects CODEBASE at /tmp/e2e-codebase (or E2E_CODEBASE env var). Modify e2e-scenario.mjs to auto-detect and copy the fixture from test/e",
+        "timestamp": 1783345475963
+      }
     }
   ],
-  "updatedAt": "2026-07-03T15:51:30.427Z"
+  "updatedAt": "2026-07-06T13:44:35.963Z"
 }

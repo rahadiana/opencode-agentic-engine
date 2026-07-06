@@ -1908,7 +1908,7 @@ section("CC")
 let cc=0,ccf=0;const cca=(c,m)=>{if(c){cc++;console.log(`  ${G}PASS${RST}: ${m}`)}else{ccf++;console.error(`  ${R}FAIL${RST}: ${m}`)}}
 if (ContextCompressor) {
 {const c=new ContextCompressor();cca(c.compress("p",[],"x",[]).invariants.length===0,"CC-1 no invariant")}
-{const c=new ContextCompressor();cca(c.compress("p",[],"TODO x",[]).openItems.length===1,"CC-2 open item")}
+{const c=new ContextCompressor();cca(c.compress("p",[{role:"user",content:"TODO x"}],[],[]).openItems.length===1,"CC-2 open item")}
 {const c=new ContextCompressor();cca(c["levenshtein"]("a","b")===1,"CC-3 lev 1")}
 {const c=new ContextCompressor();cca(c["levenshtein"]("abc","abc")===0,"CC-4 lev 0")}
 {const c=new ContextCompressor();cca(c["deduplicateFuzzy"](["abc","abd"]).length===2,"CC-5 fuzzy dedup")}

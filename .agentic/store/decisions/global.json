@@ -2,6 +2,15 @@
   "key": "global",
   "data": [
     {
+      "title": "Auto-index webfetch/websearch results ke RAG",
+      "context": "Selama ini hasil webfetch dan websearch hanya disimpan di conversation turn (sessionStore) yang TTL-nya 30 hari. Pengetahuan dari web hilang setelah session expire. Solusi: setiap kali agent panggil webfetch atau websearch, hasilnya harus otomatis di-index ke RAG via agentic_rag store. Key findings bisa di-extract dari snippet (gratis, sudah ada dari websearch) atau dari LLM response (lebih kaya). Untuk implementasi: (1) Behavioral change — agent selalu panggil agentic_rag store setelah webfetch, (2) Ke depannya bisa pakai OpenCode hook untuk auto-index.",
+      "alternatives": "(1) Tidak menyimpan — risiko kehilangan pengetahuan, (2) Simpan full content — boros storage, (3) Simpan snippet + URL — optimal, cukup untuk search + webfetch ulang jika perlu detail.",
+      "consequence": "Pengetahuan dari web tidak ilang setelah session. Bisa di-search lagi kapanpun via agentic_rag atau agentic_episodes. Confidence score 0.7 (web source — bisa diverifikasi ulang).",
+      "sessionId": "ses_0d32386adffer41zEUFxF0e2yi",
+      "id": "dec-1783167059646-v04vax",
+      "timestamp": 1783167059646
+    },
+    {
       "title": "Agentic RAG: Hybrid Proactive-Agentic Architecture",
       "context": "Decided on Hybrid Proactive-Agentic RAG: (1) TF-IDF first, vector optional — zero external deps. (2) Multi-index per category untuk isolation. (3) Confidence-aware scoring (0.0-1.0). (4) Multi-tool retrieval: agent punya 5+ tools. (5) Mandatory research flow jika confidence < 0.6. (6) Proactive auto-injection via system.transform + agentic refinement. Bukan traditional RAG (dense embedding first), bukan pure Agentic RAG (agent initiates everything) — tapi hybrid: system prime dulu, agent refine kemudian.",
       "alternatives": "(1) Pure dense RAG (Pinecone/Chroma) — mahal, dependency berat, kena problem cold-start. (2) Pure Agentic RAG (agent initiate semua) — lambat, tiap LLM call harus nunggu agent decide dulu. (3) Passive RAG — LLM jadi dependen pada retrieval quality tanpa mekanisme koreksi.",
@@ -238,14 +247,12 @@
       "timestamp": 1783052777584
     },
     {
-      "title": "Auto-index webfetch/websearch results ke RAG",
-      "context": "Selama ini hasil webfetch dan websearch hanya disimpan di conversation turn (sessionStore) yang TTL-nya 30 hari. Pengetahuan dari web hilang setelah session expire. Solusi: setiap kali agent panggil webfetch atau websearch, hasilnya harus otomatis di-index ke RAG via agentic_rag store. Key findings bisa di-extract dari snippet (gratis, sudah ada dari websearch) atau dari LLM response (lebih kaya). Untuk implementasi: (1) Behavioral change — agent selalu panggil agentic_rag store setelah webfetch, (2) Ke depannya bisa pakai OpenCode hook untuk auto-index.",
-      "alternatives": "(1) Tidak menyimpan — risiko kehilangan pengetahuan, (2) Simpan full content — boros storage, (3) Simpan snippet + URL — optimal, cukup untuk search + webfetch ulang jika perlu detail.",
-      "consequence": "Pengetahuan dari web tidak ilang setelah session. Bisa di-search lagi kapanpun via agentic_rag atau agentic_episodes. Confidence score 0.7 (web source — bisa diverifikasi ulang).",
-      "sessionId": "ses_0d32386adffer41zEUFxF0e2yi",
-      "id": "dec-1783167059646-v04vax",
-      "timestamp": 1783167059646
+      "title": "Plan: Fix all deep review issues in parallel: export TraceLogger, add planner/git/sqli",
+      "context": "Fix all deep review issues in parallel: export TraceLogger, add planner/git/sqlite/dashboard/second-brain branch tests, fix SWE-bench config/import, setup E2E fixture, improve schemas (8 subtasks)",
+      "sessionId": "ses_0c8ce6abeffeblWXtK77fBytk0",
+      "id": "dec-1783345377223-urp4o3",
+      "timestamp": 1783345377223
     }
   ],
-  "updatedAt": "2026-07-04T12:10:59.646Z"
+  "updatedAt": "2026-07-06T13:42:57.223Z"
 }
