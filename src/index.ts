@@ -310,7 +310,7 @@ const createEngine: Plugin = async (input, _options) => {
   // ALL dynamic instructions (tools, CRITICAL RULES, domain context)
   // are injected per-LLM-call via `experimental.chat.system.transform` hook.
   // This avoids file I/O latency, stale prompts, and corrupt-agent errors.
-  let currentInjectDomain: DomainPack = genericDomain
+  const currentInjectDomain: DomainPack = genericDomain
   const log = createLogger("Agentic")
 
   // Write initial prompt (deferred — after persistence is available for smart cache)
