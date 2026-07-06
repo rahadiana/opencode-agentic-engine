@@ -37,3 +37,11 @@ export function getA2AClient(): A2AClient | null { return _a2aClient }
 
 export function setA2AServer(server: A2AServer | null): void { _a2aServer = server }
 export function getA2AServer(): A2AServer | null { return _a2aServer }
+
+// SchemaValidator and ConsolidationScheduler — shared across extracted tools
+let _schemaValidator: unknown = null
+let _consolidationScheduler: unknown = null
+export function setSchemaValidator(sv: unknown): void { _schemaValidator = sv }
+export function getSchemaValidator(): unknown { return _schemaValidator }
+export function setConsolidationScheduler(cs: unknown): void { _consolidationScheduler = cs }
+export function getConsolidationScheduler(): unknown { return _consolidationScheduler }
