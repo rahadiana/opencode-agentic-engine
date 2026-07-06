@@ -45,3 +45,17 @@ export function setSchemaValidator(sv: unknown): void { _schemaValidator = sv }
 export function getSchemaValidator(): unknown { return _schemaValidator }
 export function setConsolidationScheduler(cs: unknown): void { _consolidationScheduler = cs }
 export function getConsolidationScheduler(): unknown { return _consolidationScheduler }
+
+// DslExecutor, SchemaVersion, BlueprintParser, BlueprintResolver — shared across extracted tools
+let _dslExecutor: unknown = null
+let _schemaVersion: unknown = null
+let _blueprintParser: unknown = null
+let _blueprintResolver: unknown = null
+export function setDslExecutor(de: unknown): void { _dslExecutor = de }
+export function getDslExecutor(): unknown { return _dslExecutor }
+export function setSchemaVersion(sv: unknown): void { _schemaVersion = sv }
+export function getSchemaVersion(): unknown { return _schemaVersion }
+export function setBlueprintParser(bp: unknown): void { _blueprintParser = bp }
+export function getBlueprintParser(): unknown { return _blueprintParser }
+export function setBlueprintResolver(br: unknown): void { _blueprintResolver = br }
+export function getBlueprintResolver(): unknown { return _blueprintResolver }

@@ -6,6 +6,7 @@ import { join } from "node:path"
 import { readFileSync } from "node:fs"
 import { detectTaskType } from "../core/task-classifier.js"
 import { evaluateWorkflowPolicy, formatWorkflowPolicyDecisions, verificationEvidenceFailed } from "../core/workflow-policy.js"
+import { getDslExecutor } from "../core/shared-instances.js"
 
 export function makeExecuteTool(ctx: ToolContext): ToolSpec {
   const {
@@ -432,11 +433,12 @@ export function makeExecuteTool(ctx: ToolContext): ToolSpec {
                 // DSL execution if skill has logic blocks
                 let dslSuccess = false
                 if (skill.definition.logic && skill.definition.logic.instructions.length > 0) {
-                  try {
-                    const dslResult = dslExecutor.execute(
+                   try {
+                    const de = getDslExecutor()
+                    const dslResult = (de && typeof (de as any).execute === "function") ? (de as any).execute(
                       skill.definition.logic.instructions,
                       { stepId: args.stepId, output: args.output, filesModified: args.filesModified ?? [] },
-                    )
+                    ) : { success: false, trace: { steps: [], durationMs: 0 } }
                     dslSuccess = dslResult.success
                     if (dslResult.success) {
                       response += `✅ DSL logic executed (${dslResult.trace.steps.length} instructions, ${dslResult.trace.durationMs}ms)\n`
