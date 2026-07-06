@@ -1526,6 +1526,333 @@ const sbbr_assert = (cond, msg) => { if (cond) { sbbr++ } else { console.error(`
 console.log(`  SB-BR: ${sbbr} passed, ${sbbrf} failed`)
 state.passed += sbbr; state.failed += sbbrf
 
+// SB-FC: SecondBrain — func coverage (handleEvent events + _reflectViaDelegate uncovered lines)
+console.log("\n[SB-FC] SecondBrain — func coverage")
+let sbFC = 0, sbFCf = 0
+const sbFC_assert = (cond, msg) => { if (cond) { sbFC++ } else { console.error(`  ❌ ${msg}`); sbFCf++ } }
+{
+  const fsFC = await import("fs")
+  const { SecondBrain: SBfc, StateStore: SStoreFC } = await import(pluginDist)
+  const { SessionStore: SessStoreFC } = await import(pluginDist)
+  const uid = () => Math.random().toString(36).slice(2, 6)
+
+  // SB-FC-1: handleEvent plan.created with goal → creates ADR
+  {
+    const d = `/tmp/sb-fc1-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC())
+    const before = sb.getDecisions().length
+    sb.handleEvent("plan.created", { goal: "Implement auth system", subtaskCount: 5, sessionID: "fc1" })
+    const after = sb.getDecisions().length
+    sbFC_assert(after === before + 1, "SB-FC-1a plan.created with goal creates ADR")
+    const dec = sb.getDecisions()[sb.getDecisions().length - 1]
+    sbFC_assert(dec.title.includes("Implement auth"), "SB-FC-1b ADR title contains goal")
+  }
+
+  // SB-FC-2: handleEvent step.completed with decision-like output + filesModified → ADR + edges
+  {
+    const d = `/tmp/sb-fc2-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC())
+    const beforeDec = sb.getDecisions().length
+    const beforeEdge = sb.getEdges().length
+    sb.handleEvent("step.completed", {
+      stepId: "step-fc2",
+      output: "We decided to use Redis for caching, implementing now",
+      filesModified: ["cache.ts", "redis.ts"],
+      sessionID: "fc2",
+    })
+    sbFC_assert(sb.getDecisions().length === beforeDec + 1, "SB-FC-2a decision extracted from output")
+    sbFC_assert(sb.getEdges().length >= beforeEdge + 2, "SB-FC-2b edges for each file")
+    sbFC_assert(sb.getEdges().some(e => e.source === "cache.ts" && e.relation === "modified_by"), "SB-FC-2c cache.ts tracked")
+  }
+
+  // SB-FC-3: handleEvent step.failed WITH filesModified → edges per file
+  {
+    const d = `/tmp/sb-fc3-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC())
+    const beforeEdge = sb.getEdges().length
+    sb.handleEvent("step.failed", {
+      stepId: "step-fc3",
+      error: "compile error",
+      errorCategory: "compile",
+      filesModified: ["broken.ts", "utils.ts"],
+      sessionID: "fc3",
+    })
+    sbFC_assert(sb.getEdges().length >= beforeEdge + 3, "SB-FC-3a edges created for files + error category")
+    sbFC_assert(sb.getEdges().some(e => e.relation === "error:compile" && e.source === "broken.ts"), "SB-FC-3b error-edge for broken.ts")
+    sbFC_assert(sb.getEdges().some(e => e.source === "step-fc3" && e.relation === "has_error"), "SB-FC-3c error category edge")
+  }
+
+  // SB-FC-4: handleEvent file.written with sourceStepId → edge
+  {
+    const d = `/tmp/sb-fc4-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC())
+    sb.handleEvent("file.written", {
+      filePath: "newfile.ts",
+      sourceStepId: "step-fc4",
+      bytesWritten: 256,
+      sessionID: "fc4",
+    })
+    sbFC_assert(sb.getEdges().some(e => e.source === "step-fc4" && e.target === "newfile.ts" && e.relation === "wrote"), "SB-FC-4 file.written creates wrote edge")
+  }
+
+  // SB-FC-5: handleEvent guard.check.completed with passed=false + rate>0.3 → edge + TODO
+  {
+    const d = `/tmp/sb-fc5-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC())
+    const beforeTodos = sb.getTodos().length
+    const beforeEdge = sb.getEdges().length
+    sb.handleEvent("guard.check.completed", {
+      stepId: "step-fc5",
+      passed: false,
+      hallucinationRate: 0.5,
+      sessionID: "fc5",
+    })
+    sbFC_assert(sb.getTodos().length > beforeTodos, "SB-FC-5a hallucination creates TODO")
+    sbFC_assert(sb.getEdges().length > beforeEdge, "SB-FC-5b hallucination creates edge")
+    sbFC_assert(sb.getEdges().some(e => e.relation === "guard_failed"), "SB-FC-5c guard_failed edge")
+  }
+
+  // SB-FC-6: handleEvent feedback.recorded positive → no TODO, edge created
+  {
+    const d = `/tmp/sb-fc6-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC())
+    const beforeTodos = sb.getTodos().length
+    const beforeEdge = sb.getEdges().length
+    sb.handleEvent("feedback.recorded", {
+      stepId: "step-fc6",
+      feedback: "positive",
+      model: "gpt-4o",
+      taskType: "code",
+      sessionID: "fc6",
+    })
+    sbFC_assert(sb.getTodos().length === beforeTodos, "SB-FC-6a positive feedback creates no TODO")
+    sbFC_assert(sb.getEdges().length > beforeEdge, "SB-FC-6b positive feedback creates edge")
+    sbFC_assert(sb.getEdges().some(e => e.relation === "user_positive"), "SB-FC-6c user_positive edge")
+  }
+
+  // SB-FC-7: handleEvent feedback.recorded negative with errorCategory
+  {
+    const d = `/tmp/sb-fc7-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC())
+    const beforeTodos = sb.getTodos().length
+    sb.handleEvent("feedback.recorded", {
+      stepId: "step-fc7",
+      feedback: "negative",
+      model: "deepseek-chat",
+      taskType: "code",
+      errorCategory: "compile",
+      sessionID: "fc7",
+    })
+    sbFC_assert(sb.getTodos().length > beforeTodos, "SB-FC-7a negative feedback creates TODO")
+    const hasErrCat = sb.getTodos().some(t => t.text.includes("compile"))
+    sbFC_assert(hasErrCat, "SB-FC-7b TODO includes errorCategory")
+    sbFC_assert(sb.getEdges().some(e => e.relation === "user_negative"), "SB-FC-7c user_negative edge")
+  }
+
+  // SB-FC-8: handleEvent plan.completed with allPassed=false + goal → TODO
+  {
+    const d = `/tmp/sb-fc8-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC())
+    const before = sb.getTodos().length
+    sb.handleEvent("plan.completed", { allPassed: false, goal: "Refactor database layer", sessionID: "fc8" })
+    sbFC_assert(sb.getTodos().length > before, "SB-FC-8 plan.completed failed creates TODO")
+    sbFC_assert(sb.getTodos()[sb.getTodos().length - 1].text.includes("Refactor database"), "SB-FC-8b TODO references goal")
+  }
+
+  // SB-FC-9: handleEvent budget.limit.exceeded → TODO
+  {
+    const d = `/tmp/sb-fc9-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC())
+    const before = sb.getTodos().length
+    sb.handleEvent("budget.limit.exceeded", { metric: "tokens", current: 5000, limit: 4000, sessionID: "fc9" })
+    sbFC_assert(sb.getTodos().length > before, "SB-FC-9 budget exceeded creates TODO")
+    sbFC_assert(sb.getTodos()[sb.getTodos().length - 1].text.includes("tokens"), "SB-FC-9b TODO mentions metric")
+  }
+
+  // SB-FC-10: handleEvent budget.threshold.warning → TODO
+  {
+    const d = `/tmp/sb-fc10-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC())
+    const before = sb.getTodos().length
+    sb.handleEvent("budget.threshold.warning", { metric: "time", usagePercent: 84, sessionID: "fc10" })
+    sbFC_assert(sb.getTodos().length > before, "SB-FC-10 budget warning creates TODO")
+    sbFC_assert(sb.getTodos()[sb.getTodos().length - 1].text.includes("84%"), "SB-FC-10b TODO mentions percent")
+  }
+
+  // SB-FC-11: handleEvent task.delegated → edge
+  {
+    const d = `/tmp/sb-fc11-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC())
+    sb.handleEvent("task.delegated", {
+      role: "developer",
+      taskId: "task-fc11",
+      description: "Implement auth",
+      sessionID: "fc11",
+    })
+    sbFC_assert(sb.getEdges().some(e => e.source === "developer" && e.relation === "assigned"), "SB-FC-11 task.delegated edge")
+  }
+
+  // SB-FC-12: handleEvent memory.skill.extracted → edge
+  {
+    const d = `/tmp/sb-fc12-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC())
+    sb.handleEvent("memory.skill.extracted", {
+      skillId: "skill-fc12",
+      sourceStepId: "step-fc12",
+      name: "fast-sort",
+      sessionID: "fc12",
+    })
+    sbFC_assert(sb.getEdges().some(e => e.source === "skill-fc12" && e.relation === "extracted_from"), "SB-FC-12 skill.extracted edge")
+  }
+
+  // SB-FC-13: handleEvent memory.episode.recorded → edge
+  {
+    const d = `/tmp/sb-fc13-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC())
+    sb.handleEvent("memory.episode.recorded", {
+      episodeId: "ep-fc13",
+      outcome: "success",
+      sessionID: "fc13",
+    })
+    sbFC_assert(sb.getEdges().some(e => e.source === "episode" && e.relation === "recorded"), "SB-FC-13 episode.recorded edge")
+  }
+
+  // SB-FC-14: _reflectViaDelegate with pendingTodos > 0 (covers lines 373-374)
+  {
+    const d = `/tmp/sb-fc14-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC(), undefined, {
+      call: async () => ({ content: "[NO_LLM] Chat mode" }),
+    }, {
+      execute: async () => ({
+        success: true,
+        output: JSON.stringify({
+          summary: "Analysis with pending todos",
+          conflicts: [],
+          planUpdates: [],
+          newInfo: [],
+          actionItems: ["Review pending items"],
+          triggers: ["refinement"],
+        }),
+      }),
+    })
+    // Add BOTH decisions AND pending TODOs to trigger both contextParts branches
+    sb.addDecision({ title: "Decision FC14", context: "Use SQLite", sessionId: "fc14" })
+    sb.addTodo({ text: "FC14 pending task", priority: "high", category: "test" })
+    const ref = await sb.reflect("fc14")
+    sbFC_assert(ref.summary.includes("pending"), "SB-FC-14a _reflectViaDelegate covers pendingTodos branch (lines 373-374)")
+    sbFC_assert(ref.triggers.includes("refinement"), "SB-FC-14b triggers from delegate with TODOs")
+    sbFC_assert(ref.actionItems.length > 0, "SB-FC-14c action items from delegate with TODOs")
+  }
+
+  // SB-FC-15: _reflectViaDelegate catch block (covers lines 406-407) — execute throws
+  {
+    const d = `/tmp/sb-fc15-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC(), undefined, {
+      call: async () => ({ content: "[NO_LLM] Chat mode" }),
+    }, {
+      execute: async () => { throw new Error("runtime crash") },
+    })
+    sb.addDecision({ title: "Decision FC15", context: "Test", sessionId: "fc15" })
+    sb.addTodo({ text: "FC15 todo", priority: "low" })
+    const ref = await sb.reflect("fc15")
+    sbFC_assert(ref.summary.length > 0, "SB-FC-15a reflect handles _reflectViaDelegate throw (lines 406-407)")
+    sbFC_assert(ref.conflicts.length === 0, "SB-FC-15b no conflicts on throw path")
+  }
+
+  // SB-FC-16: _reflectViaDelegate with decisions only, no pending TODOs (pendingTodos branch false)
+  {
+    const d = `/tmp/sb-fc16-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC(), undefined, {
+      call: async () => ({ content: "[NO_LLM] Chat mode" }),
+    }, {
+      execute: async () => ({
+        success: true,
+        output: JSON.stringify({
+          summary: "Decisions-only analysis",
+          conflicts: [],
+          planUpdates: [],
+          newInfo: ["Found pattern"],
+          actionItems: [],
+          triggers: [],
+        }),
+      }),
+    })
+    // Only decisions, no TODOs → pendingTodos.length === 0
+    sb.addDecision({ title: "Decision FC16", context: "Use Redis", sessionId: "fc16" })
+    const ref = await sb.reflect("fc16")
+    sbFC_assert(ref.newInfo.length > 0, "SB-FC-16a no pendingTodos branch works")
+    sbFC_assert(ref.summary.includes("Decisions-only"), "SB-FC-16b decisions-only delegate summary")
+  }
+
+  // SB-FC-17: formatKnowledgeSnapshot with decisions section (covers lines 477-480)
+  {
+    const d = `/tmp/sb-fc17-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC())
+    sb.addDecision({ title: "Use Postgres", context: "Better reliability", consequence: "Migration needed", sessionId: "fc17" })
+    const snap = sb.formatKnowledgeSnapshot(1, 0)
+    sbFC_assert(snap.includes("Architecture Decisions"), "SB-FC-17a decisions section in snapshot")
+    sbFC_assert(snap.includes("Use Postgres"), "SB-FC-17b decision title in snapshot")
+    sbFC_assert(snap.includes("Migration needed"), "SB-FC-17c consequence in snapshot")
+  }
+
+  // SB-FC-18: formatKnowledgeSnapshot with todos section (covers lines 484-487)
+  {
+    const d = `/tmp/sb-fc18-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC())
+    sb.addTodo({ text: "Refactor auth module", priority: "high", category: "security", sessionId: "fc18" })
+    const snap = sb.formatKnowledgeSnapshot(0, 1)
+    sbFC_assert(snap.includes("Pending Tasks"), "SB-FC-18a todos section in snapshot")
+    sbFC_assert(snap.includes("Refactor auth"), "SB-FC-18b todo text in snapshot")
+    sbFC_assert(snap.includes("security"), "SB-FC-18c todo category in snapshot")
+  }
+
+  // SB-FC-19: formatKnowledgeSnapshot with graph section (covers lines 502-503)
+  {
+    const d = `/tmp/sb-fc19-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC())
+    sb.addEdge({ source: "auth.ts", target: "user.ts", relation: "depends_on" })
+    sb.addDecision({ title: "FC19 decision", context: "test", sessionId: "fc19" })
+    sb.addTodo({ text: "FC19 todo", priority: "low", sessionId: "fc19" })
+    const snap = sb.formatKnowledgeSnapshot(1, 1)
+    sbFC_assert(snap.includes("Entity Relations"), "SB-FC-19a graph section in snapshot")
+    sbFC_assert(snap.includes("auth.ts --[depends_on]--> user.ts"), "SB-FC-19b edge in snapshot")
+    sbFC_assert(snap.includes("second-brain"), "SB-FC-19c wrapped in second-brain tag")
+  }
+
+  // SB-FC-20: addDecision with memoryOrchestrator (covers lines 177-184)
+  {
+    const d = `/tmp/sb-fc20-${Date.now()}-${uid()}`
+    fsFC.mkdirSync(d, { recursive: true })
+    let stored = false
+    const mockOrch = { store: (level, data) => { stored = true } }
+    const sb = new SBfc(new SStoreFC({ worktree: d }), new SessStoreFC(), mockOrch)
+    sb.addDecision({ title: "Use Kafka", context: "Event streaming", sessionId: "fc20" })
+    sbFC_assert(stored, "SB-FC-20a addDecision stores in memoryOrchestrator")
+  }
+}
+
+console.log(`  SB-FC: ${sbFC} passed, ${sbFCf} failed`)
+state.passed += sbFC; state.failed += sbFCf
+
 // SB-GAP: uncovered branch paths in second-brain.ts
 console.log("[SB-GAP] SecondBrain — uncovered branch coverage")
 let sbgap = 0, sbgapf = 0
@@ -2801,6 +3128,99 @@ const tlbr_assert = (cond, msg) => { if (cond) { tlbr++ } else { console.error(`
 console.log(`  TL-BR: ${tlbr} passed, ${tlbrf} failed`)
 state.passed += tlbr; state.failed += tlbrf
 
+// ── TL-FC: TraceLogger — final uncovered paths (init error, flush writeFile fallback, dispose pendingFlush) ──
+console.log("\n[TL-FC] TraceLogger — final uncovered paths")
+let tlfc = 0, tlff = 0
+const tlfc_assert = (cond, msg) => { if (cond) { tlfc++ } else { console.error(`  ❌ ${msg}`); tlff++ } }
+
+{
+  const { TraceLogger: TL } = await import(pluginDist)
+  const { mkdirSync, chmodSync, rmSync } = await import("fs")
+
+  // TL-FC-1: init() catch → throws AgenticError when mkdir fails (lines 141-142)
+  {
+    const parent = `/tmp/tlfc1-${Date.now()}`
+    mkdirSync(parent, { recursive: true })
+    chmodSync(parent, 0o444)
+    try {
+      const t = new TL(parent + "/sub")
+      await t.init()
+      tlfc_assert(false, "TL-FC-1 should have thrown AgenticError")
+    } catch (e) {
+      const isAe = e.constructor && e.constructor.name === "AgenticError" && e.message.includes("TraceLogger.init")
+      tlfc_assert(isAe, "TL-FC-1 init throws AgenticError on mkdir failure")
+    } finally {
+      chmodSync(parent, 0o755)
+      try { rmSync(parent, { recursive: true, force: true }) } catch {}
+    }
+  }
+
+  // TL-FC-2: flush() inner catch — both appendFile and writeFile fail (lines 204-209)
+  {
+    const tmp2 = `/tmp/tlfc2-${Date.now()}`
+    mkdirSync(tmp2, { recursive: true })
+    const agenticDir = join(tmp2, ".agentic")
+    mkdirSync(agenticDir, { recursive: true })
+    mkdirSync(join(agenticDir, "trace.jsonl")) // directory → EISDIR on appendFile+writeFile
+    const t = new TL(tmp2, { batchSize: 1 })
+    await t.init()
+    t.log({ step: "fc2", toolUsed: "x", input: "y", level: "error" })
+    await new Promise(r => setTimeout(r, 50))
+    tlfc_assert(t.buffer.length > 0, "TL-FC-2 buffer preserved after both appendFile and writeFile fail")
+    await t.dispose()
+    try { rmSync(tmp2, { recursive: true, force: true }) } catch {}
+  }
+
+  // TL-FC-3: dispose() with pendingFlush await (lines 224-225)
+  {
+    const tmp3 = `/tmp/tlfc3-${Date.now()}`
+    mkdirSync(tmp3, { recursive: true })
+    const t = new TL(tmp3, { batchSize: 1 })
+    await t.init()
+    t.log({ step: "fc3", toolUsed: "x", input: "y", level: "error" })
+    await t.dispose()
+    tlfc_assert(true, "TL-FC-3 dispose with pendingFlush await completes")
+    try { rmSync(tmp3, { recursive: true, force: true }) } catch {}
+  }
+}
+
+console.log(`  TL-FC: ${tlfc} passed, ${tlff} failed`)
+state.passed += tlfc; state.failed += tlff
+
+// ── CC-FC: ContextCompressor — final uncovered paths (LLM fallback, decision regex) ──
+console.log("\n[CC-FC] ContextCompressor — final uncovered paths")
+let ccfc = 0, ccff = 0
+const ccfc_assert = (cond, msg) => { if (cond) { ccfc++ } else { console.error(`  ❌ ${msg}`); ccff++ } }
+
+{
+  const { ContextCompressor: CC } = await import(pluginDist)
+
+  // CC-FC-1: compressWithLLM() catch → fallback to compress() when LLM throws (lines 64-65)
+  {
+    const mockLLM = {
+      summarizeContext: async () => { throw new Error("Mock LLM failure") }
+    }
+    const c = new CC()
+    c.setLLM(mockLLM)
+    const result = await c.compressWithLLM("test goal", [{role:"user", content:"hello"}], ["dec1"], ["f1.ts"])
+    ccfc_assert(result.planSummary.startsWith("Goal:"), "CC-FC-1 compressWithLLM fallback to compress")
+    ccfc_assert(typeof result.estimatedTokens === "number", "CC-FC-1b estimatedTokens present")
+  }
+
+  // CC-FC-2: extractKeyInfo() decisionMatches regex (line 128)
+  {
+    const c = new CC()
+    const result = c.compress("build frontend", [
+      {role:"user", content:"We decided to use React for the frontend. We chose TypeScript for type safety."},
+      {role:"assistant", content:"We opted for Vite as build tool. Using functional components."},
+    ], [], [])
+    ccfc_assert(result.decisions.length >= 1, "CC-FC-2 decisions extracted from regex")
+  }
+}
+
+console.log(`  CC-FC: ${ccfc} passed, ${ccff} failed`)
+state.passed += ccfc; state.failed += ccff
+
 // ── PL-BR-13: Planner microSteps > 5 warning branch (lines 462-463) ──
 {
   const { Planner } = await import(pluginDist)
@@ -2917,6 +3337,165 @@ console.log(`  PL-BR-13: passed`)
 // ── HELLO World Function Tests (HELLO) ──
 let helloPassed = 0, helloFailed = 0
 function hello_assert(cond, msg) { if (cond) { helloPassed++ } else { console.error(`  ❌ ${msg}`); helloFailed++ } }
+// ── DB-FC: Dashboard Func Coverage (uncovered lines: 378-382, + edge cases) ──
+console.log("\n[DB-FC] Dashboard — func coverage (recentMatureSummary + edge cases)")
+let dbfc = 0, dbfcf = 0
+const dbfc_assert = (cond, msg) => { if (cond) { dbfc++ } else { console.error(`  ❌ ${msg}`); dbfcf++ } }
+
+{
+  const { Dashboard: Dash } = await import(pluginDist)
+
+  const emptyStats = () => ({ totalCalls: 0, successRate: 0, averageLatency: 0, toolsUsed: {}, peakConcurrency: 0 })
+  const emptyLifecycle = () => ({ raw: 0, validated: 0, compiled: 0, evolved: 0 })
+  const emptyBreakdown = () => ({ file_safety: 0, budget: 0, resource: 0, circuit_breaker: 0, invariant: 0, dependency: 0, other: 0 })
+
+  // DB-FC-1: formatForDisplay with populated recentMatureSummary (lines 377-382)
+  {
+    const dash = new Dash()
+    const data = {
+      timeline: [],
+      statistics: emptyStats(),
+      anomalies: [],
+      evolutionMetrics: {
+        totalSkills: 3, lifecycleDistribution: emptyLifecycle(), averageSuccessRate: 0.8,
+        totalMatureEvents: 10, recentMatureSummary: { "week-1": 5, "week-2": 3, "cycle-3": 1 },
+        totalMatureCalls: 10, evolutionTriggerCount: 2, totalSkillUsageCount: 8,
+      },
+    }
+    const fmt = dash.formatForDisplay(data)
+    dbfc_assert(fmt.includes("Recent Maturation"), "DB-FC-1a 'Recent Maturation' header shown")
+    dbfc_assert(fmt.includes("week-1: 5 skills"), "DB-FC-1b week-1 entry")
+    dbfc_assert(fmt.includes("week-2: 3 skills"), "DB-FC-1c week-2 entry")
+  }
+
+  // DB-FC-2: formatForDisplay evolutionMetrics undefined
+  {
+    const dash = new Dash()
+    const data = { timeline: [], statistics: emptyStats(), anomalies: [] }
+    const fmt = dash.formatForDisplay(data)
+    dbfc_assert(!fmt.includes("Evolution Metrics"), "DB-FC-2 no evolution section when undefined")
+  }
+
+  // DB-FC-3: formatForDisplay constraint all zero
+  {
+    const dash = new Dash()
+    const data = {
+      timeline: [], statistics: emptyStats(), anomalies: [],
+      constraintMetrics: {
+        totalViolations: 0, totalChecks: 5, categoryBreakdown: emptyBreakdown(),
+        activeModifications: 0, blockedActions: 0, circuitBreakerTripped: false,
+      },
+    }
+    const fmt = dash.formatForDisplay(data)
+    dbfc_assert(fmt.includes("_(none)_"), "DB-FC-3a all-zero shows '(none)'")
+    dbfc_assert(fmt.includes("✅ No"), "DB-FC-3b circuit breaker 'No' shown")
+  }
+
+  // DB-FC-4: formatForDisplay constraint with violations
+  {
+    const dash = new Dash()
+    const data = {
+      timeline: [], statistics: emptyStats(), anomalies: [],
+      constraintMetrics: {
+        totalViolations: 7, totalChecks: 20,
+        categoryBreakdown: { file_safety: 1, budget: 2, resource: 1, circuit_breaker: 1, invariant: 1, dependency: 1, other: 0 },
+        activeModifications: 3, blockedActions: 4, circuitBreakerTripped: true,
+      },
+    }
+    const fmt = dash.formatForDisplay(data)
+    dbfc_assert(fmt.includes("⚠️ Yes"), "DB-FC-4a circuit breaker tripped")
+    dbfc_assert(fmt.includes("File safety"), "DB-FC-4b file_safety category")
+  }
+
+  // DB-FC-5: formatForDisplay with performance metrics
+  {
+    const dash = new Dash()
+    const data = {
+      timeline: [], statistics: emptyStats(), anomalies: [],
+      performanceMetrics: {
+        semanticCacheHitRate: 0.75, semanticCacheSize: 100,
+        topSlowestTools: [{ tool: "agentic_delegate", calls: 3, avgLatencyMs: 4500, maxLatencyMs: 8000 }],
+        toolLatencyStats: [{ tool: "agentic_delegate", calls: 3, avgLatencyMs: 4500, maxLatencyMs: 8000 }],
+        modelCount: 2, totalModelCalls: 170, averageModelLatencyMs: 0,
+      },
+    }
+    const fmt = dash.formatForDisplay(data)
+    dbfc_assert(fmt.includes("Top Slowest Tools"), "DB-FC-5a top slowest header")
+    dbfc_assert(fmt.includes("agentic_delegate"), "DB-FC-5b delegate in top slowest")
+  }
+
+  // DB-FC-6: formatForDisplay empty topSlowestTools
+  {
+    const dash = new Dash()
+    const data = {
+      timeline: [], statistics: emptyStats(), anomalies: [],
+      performanceMetrics: {
+        semanticCacheHitRate: 0, semanticCacheSize: 0, topSlowestTools: [],
+        toolLatencyStats: [{ tool: "fast", calls: 1, avgLatencyMs: 10, maxLatencyMs: 10 }],
+        modelCount: 0, totalModelCalls: 0, averageModelLatencyMs: 0,
+      },
+    }
+    const fmt = dash.formatForDisplay(data)
+    dbfc_assert(fmt.includes("Performance Metrics"), "DB-FC-6a perf section present")
+    dbfc_assert(!fmt.includes("Top Slowest Tools"), "DB-FC-6b no top slowest when empty")
+  }
+
+  // DB-FC-7: no anomalies
+  {
+    const dash = new Dash()
+    const data = { timeline: [], statistics: emptyStats(), anomalies: [] }
+    const fmt = dash.formatForDisplay(data)
+    dbfc_assert(fmt.includes("No anomalies detected"), "DB-FC-7a no anomalies")
+  }
+
+  // DB-FC-8: with anomalies
+  {
+    const dash = new Dash()
+    const data = {
+      timeline: [], statistics: emptyStats(), anomalies: [
+        { type: "timeout", description: "took 35s", detectedAt: "", tool: "exec", severity: "warning" },
+      ],
+    }
+    const fmt = dash.formatForDisplay(data)
+    dbfc_assert(fmt.includes("Anomalies Detected"), "DB-FC-8a anomalies header")
+    dbfc_assert(fmt.includes("timeout [warning]"), "DB-FC-8b timeout with severity")
+  }
+
+  // DB-FC-9: no constraint metrics
+  {
+    const dash = new Dash()
+    const data = { timeline: [], statistics: emptyStats(), anomalies: [] }
+    const fmt = dash.formatForDisplay(data)
+    dbfc_assert(!fmt.includes("Constraint Safety"), "DB-FC-9 no constraint section")
+  }
+
+  // DB-FC-10: no perf metrics
+  {
+    const dash = new Dash()
+    const data = { timeline: [], statistics: emptyStats(), anomalies: [] }
+    const fmt = dash.formatForDisplay(data)
+    dbfc_assert(!fmt.includes("Performance Metrics"), "DB-FC-10 no perf section")
+  }
+
+  // DB-FC-11: formatForDisplay with limit override
+  {
+    const dash = new Dash()
+    const now = Date.now()
+    const timeline = Array.from({ length: 20 }, (_, i) => ({
+      time: new Date(now + i * 1000).toISOString(), tool: `t${i}`, step: `s${i}`,
+      success: i % 2 === 0, durationMs: i * 100,
+    }))
+    const data = { timeline, statistics: { totalCalls: 20, successRate: 0.5, averageLatency: 500, toolsUsed: {}, peakConcurrency: 3 }, anomalies: [] }
+    const fmt2 = dash.formatForDisplay(data, 2)
+    const tlLines = fmt2.split("\n").filter(l => (l.includes("[OK]") || l.includes("[FAIL]")) && l.includes("|"))
+    dbfc_assert(tlLines.length === 2, "DB-FC-11a limit=2 shows 2 entries")
+  }
+}
+
+console.log(`  DB-FC: ${dbfc} passed, ${dbfcf} failed`)
+state.passed += dbfc; state.failed += dbfcf
+
+
 console.log("\n[HELLO] hello world function")
 try {
   const { hello } = await import(pluginDist)

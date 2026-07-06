@@ -6549,18 +6549,20 @@ const confidenceStore = new ConfidenceStore()
           // ═══════════════════════════════════════════════
           const fileContents: Record<string, string> = {}
           for (const f of relevantFiles) {
-            try { fileContents[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 150) } catch { /* skip */ }
+            try { fileContents[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 1000) } catch { /* skip */ }
           }
 
           const filesBlock = Object.entries(fileContents)
-            .map(([p, c]) => `${p}:\n${c.slice(0, 100)}`).join("\n---\n")
+            .map(([p, c]) => `${p}:\n${c.slice(0, 600)}`).join("\n---\n")
           const pipelineId = orchestrator.getSuggestedPipeline(args.goal)
           const pipeline = orchestrator.getPipeline(pipelineId)
           // Hanya aktifkan pipeline untuk task yang benar-benar butuh multi-agent.
           // Pipeline = 4-5 LLM calls sequential — overkill untuk task sederhana.
           const hasComplexKeywords = /\b(feature|module|endpoint|api|pipeline|architecture|database|schema|multi[\s-]?step|complex)\b/i.test(args.goal)
           const hasSimpleKeywords = /\b(fix|typo|comment|rename|change|update|bump|remove|delete|add\s+\w+\s+to)\b/i.test(args.goal)
-          const isSimpleOrTrivial = (args.goal.length < 100 && hasSimpleKeywords) || (!hasComplexKeywords && args.goal.length < 60) || activeSteps.length <= 1
+          // Don't treat as simple if we found relevant files (config/import tasks need file reading)
+          const hasRelevantFiles = relevantFiles.length > 0 && relevantFiles.some(f => f.startsWith("src/") || f.endsWith(".json") || f.endsWith(".ts") || f.endsWith(".js"))
+          const isSimpleOrTrivial = hasRelevantFiles ? false : ((args.goal.length < 100 && hasSimpleKeywords) || (!hasComplexKeywords && args.goal.length < 60) || activeSteps.length <= 1)
           const usePipeline = thorough && !isSimpleOrTrivial && pipeline && pipeline.stages.length >= 2 && activeSteps.length >= 2
           const useAgentLoop = thorough && !usePipeline && !isSimpleOrTrivial && activeSteps.length >= 2
 
@@ -6630,10 +6632,10 @@ const confidenceStore = new ConfidenceStore()
 
               const fileContentsForSubtask: Record<string, string> = {}
               for (const f of relevantFiles) {
-                try { fileContentsForSubtask[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 150) } catch { /* skip */ }
+                try { fileContentsForSubtask[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 1000) } catch { /* skip */ }
               }
               const filesBlockForSubtask = Object.entries(fileContentsForSubtask)
-                .map(([p, c]) => `${p}:\n${c.slice(0, 100)}`).join("\n---\n")
+                .map(([p, c]) => `${p}:\n${c.slice(0, 600)}`).join("\n---\n")
 
               const userPrompt = `${subtaskGoal}\n${codebaseSummary.slice(0, 100)}\n\n${filesBlockForSubtask || "(new)"}`
               const llmResult = await llmEngine.call({
