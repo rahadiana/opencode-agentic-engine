@@ -59,8 +59,8 @@ export function makeStatusTool(ctx: ToolContext): ToolSpec {
         try {
           const content = readFileSync(tracePath, "utf-8")
           traces = content.trim().split("\n").filter(Boolean).map((l) => JSON.parse(l))
-        } catch {
-          log.warn("Silent catch: no traces yet")
+        } catch (e) {
+          log.warn("Silent catch: no traces yet", { error: String(e) })
         }
 
         if (traces.length > 0) {
@@ -126,8 +126,8 @@ export function makeStatusTool(ctx: ToolContext): ToolSpec {
               output += `- **${provider}**: ${models.join(", ")}\n`
             }
           }
-        } catch {
-          log.warn("Silent catch: silent")
+        } catch (e) {
+          log.warn("Silent catch: silent", { error: String(e) })
         }
 
         const allEpisodes = episodicStore.getRecent(200)

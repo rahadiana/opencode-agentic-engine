@@ -1081,20 +1081,12 @@ export class LLMEngine {
     }
 
     try {
-      const result = await Promise.race([
-        client.session.prompt({
-          body,
-          path: { id: sessionId },
-        }),
-        new Promise<never>((_, reject) => {
-          controller.signal.addEventListener('abort', () => {
-            const reason = externalSignal?.aborted
-              ? 'LLM call cancelled (parent timeout/abort)'
-              : `OpenCode call timed out after ${timeoutMs}ms`
-            reject(new Error(reason))
-          })
-        }),
-      ])
+      type PromptOpts = Parameters<typeof client.session.prompt>[0] & { signal?: AbortSignal }
+      const result = await (client.session.prompt as (opts: PromptOpts) => ReturnType<typeof client.session.prompt>)({
+        body,
+        path: { id: sessionId },
+        signal: controller.signal,
+      })
       return this._extractResponse(result)
     } finally {
       clearTimeout(timeoutId)
@@ -1167,26 +1159,9 @@ export class LLMEngine {
     }
     startPolling()
 
-    // Inner abort handler — untuk logging + reject reason
-    const rejectPromise = new Promise<never>((_, reject) => {
-      const onAbort = () => {
-        const idleSec = Math.round((Date.now() - lastActivity) / 1000)
-        const reason = externalSignal?.aborted
-          ? 'LLM call cancelled (parent abort)'
-          : idleSec > Math.round(stallLimitMs / 1000)
-            ? `LLM call stalled: no activity for ${idleSec}s (session ${sessionId.slice(0, 12)}...)`
-            : `LLM call timed out after ${Math.round((Date.now() - (Date.now() - lastActivity)) / 1000)}s`
-        log.warn(`[Progress] ${reason}`)
-        reject(new Error(reason))
-      }
-      controller.signal.addEventListener('abort', onAbort, { once: true })
-    })
-
     try {
-      const result = await Promise.race([
-        client.session.prompt({ body, path: { id: sessionId } }),
-        rejectPromise,
-      ])
+      type PromptOpts = Parameters<typeof client.session.prompt>[0] & { signal?: AbortSignal }
+      const result = await (client.session.prompt as (opts: PromptOpts) => ReturnType<typeof client.session.prompt>)({ body, path: { id: sessionId }, signal: controller.signal })
       return this._extractResponse(result)
     } finally {
       if (pollTimer) clearInterval(pollTimer)
@@ -1267,7 +1242,7 @@ export class LLMEngine {
       logParseError('callOpenCode chat mode', error)
     } finally {
       if (sessionId) {
-        try { await client.session.delete({ path: { id: sessionId } }) } catch { log.warn("Silent catch: ignore") }
+        try { await client.session.delete({ path: { id: sessionId } }) } catch (e) { log.warn("Silent catch: ignore", { error: String(e) }) }
       }
     }
 
@@ -1279,7 +1254,7 @@ export class LLMEngine {
     if (!this._tempSessionId) return
     const client = this._getClient()
     if (client) {
-      try { await client.session.delete({ path: { id: this._tempSessionId } }) } catch { log.warn("Silent catch: ignore") }
+      try { await client.session.delete({ path: { id: this._tempSessionId } }) } catch (e) { log.warn("Silent catch: ignore", { error: String(e) }) }
     }
     this._tempSessionId = null
   }

@@ -17,7 +17,7 @@ import { resolve } from "node:path"
  *
  * @example
  *   // Before:
- *   try { if (existsSync(resolve(projectDir, "package.json"))) score += 0.2 } catch { console.warn("catch: skip") }
+ *   try { if (existsSync(resolve(projectDir, "package.json"))) score += 0.2 } catch (e) { console.warn("catch: skip", { error: String(e) }) }
  *   // After:
  *   if (checkProjectFile(projectDir, "package.json")) score += 0.2
  */
@@ -38,7 +38,7 @@ export function checkProjectFile(projectDir: string, ...files: string[]): boolea
  * @example
  *   // Before:
  *   const projectFiles = ["package.json", "tsconfig.json"]
- *   for (const f of projectFiles) { try { if (existsSync(resolve(projectDir, f))) score += 0.2 } catch { console.warn("catch: skip") } }
+ *   for (const f of projectFiles) { try { if (existsSync(resolve(projectDir, f))) score += 0.2 } catch (e) { console.warn("catch: skip", { error: String(e) }) } }
  *   // After:
  *   score += scoreProjectFiles(projectDir, 0.2, "package.json", "tsconfig.json")
  */

@@ -344,7 +344,7 @@ function writeCache(projectDir: string, ctx: ProjectContext): void {
   for (const fp of getConfigFiles(projectDir)) {
     try {
       configSnapshots[path.basename(fp)] = fs.statSync(fp).mtimeMs
-    } catch { log.warn("Silent catch: file may not exist") }
+    } catch (e) { log.warn("Silent catch: file may not exist", { error: String(e) }) }
   }
   const { cachedAt: _ca, ...contextRest } = ctx
   const entry: CacheEntry = {

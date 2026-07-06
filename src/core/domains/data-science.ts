@@ -49,7 +49,7 @@ const dsDetect = (input: string): number => {
         }
       }
     }
-  } catch { console.warn("catch: skip") }
+  } catch (e) { console.warn("catch: skip", { error: String(e) }) }
   return Math.min(score, 1.0)
 }
 

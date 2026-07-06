@@ -73,7 +73,7 @@ const devopsVerifiers: VerifierStrategy[] = [
           const result = safeExec("hadolint", [absPath], { cwd: context.projectDir, timeout: 15000 })
           if (result.output.trim()) issues.push(`hadolint(${df}): ${result.output.slice(0, 300)}`)
         }
-      } catch { console.warn("catch: hadolint not available") }
+      } catch (e) { console.warn("catch: hadolint not available", { error: String(e) }) }
 
       return issuesResult(issues, "Dockerfile checks passed")
     },
@@ -94,7 +94,7 @@ const devopsVerifiers: VerifierStrategy[] = [
         try {
           JSON.parse(content)
           issues.push(`${file}: Looks like JSON, not YAML — use .json extension`)
-        } catch { console.warn("catch: not JSON, good") }
+        } catch (e) { console.warn("catch: not JSON, good", { error: String(e) }) }
         if (content.includes("\t") && (content.includes(":\n") || content.includes("-\n"))) {
           const lines = content.split("\n")
           for (let i = 0; i < lines.length; i++) {

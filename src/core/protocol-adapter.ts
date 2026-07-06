@@ -16,6 +16,7 @@ import { type A2AClient, type DiscoveredAgent, type TaskSendResult } from "../ag
 import type { AgentCard } from "../agents/a2a-types.js"
 import type { A2AServerConfig, A2AServerStatus } from "../agents/a2a-server.js"
 import { AgenticError, NotFoundError, ValidationError } from "./errors.js"
+import { getA2AClient, getA2AServer, setA2AServer } from "./shared-instances.js"
 
 // ── Types ────────────────────────────────────────────
 
@@ -69,8 +70,7 @@ export interface ProtocolAdapterStats {
  * instances and provides unified search, routing, discovery, and statistics.
  *
  * Designed as a thin "view" layer — all state is owned by the underlying clients.
- * A2A instances are obtained from globalThis (where agentic_a2a tool stores them
- * via lazy-init pattern).
+ * A2A instances are injected via setters (no globalThis dependency).
  */
 export class ProtocolAdapter {
   private mcpClient: MCPClient
@@ -79,17 +79,11 @@ export class ProtocolAdapter {
     this.mcpClient = mcpClient
   }
 
-  /** Get A2A client from globalThis (lazy-init by agentic_a2a tool), or null if not initialized */
-  private get a2aClient(): A2AClient | null {
-    const g = globalThis as { __opencode_a2aClient?: A2AClient }
-    return g.__opencode_a2aClient ?? null
-  }
+  /** Get A2A client from shared-instances (set by agentic_a2a tool handler) */
+  private get a2aClient(): A2AClient | null { return getA2AClient() }
 
-  /** Get A2A server from globalThis (lazy-init by agentic_a2a tool) */
-  private get a2aServer(): import("../agents/a2a-server.js").A2AServer | null {
-    const g = globalThis as { __opencode_a2aServer?: import("../agents/a2a-server.js").A2AServer }
-    return g.__opencode_a2aServer ?? null
-  }
+  /** Get A2A server from shared-instances (set by agentic_a2a tool handler) */
+  private get a2aServer(): import("../agents/a2a-server.js").A2AServer | null { return getA2AServer() }
 
   // ── MCP Operations ────────────────────────────────
 
@@ -177,41 +171,39 @@ export class ProtocolAdapter {
 
   /** Start an A2A server to serve this agent */
   async serveA2A(config: A2AServerConfig): Promise<void> {
-    const g = globalThis as { __opencode_a2aServer?: import("../agents/a2a-server.js").A2AServer }
-    if (g.__opencode_a2aServer) {
-      await g.__opencode_a2aServer.stop()
+    const existing = getA2AServer()
+    if (existing) {
+      await existing.stop()
     }
     // Import dynamically to avoid circular dependency at module level
     const { A2AServer: A2AServerClass } = await import("../agents/a2a-server.js")
-    g.__opencode_a2aServer = new A2AServerClass(config)
-    await g.__opencode_a2aServer.start()
+    const server = new A2AServerClass(config)
+    setA2AServer(server)
+    await server.start()
   }
 
   /** Stop the A2A server */
   async stopA2A(): Promise<void> {
-    const g = globalThis as { __opencode_a2aServer?: import("../agents/a2a-server.js").A2AServer }
-    if (g.__opencode_a2aServer) {
-      await g.__opencode_a2aServer.stop()
-      g.__opencode_a2aServer = undefined
+    const srv = getA2AServer()
+    if (srv) {
+      await srv.stop()
+      setA2AServer(null)
     }
   }
 
   /** Get A2A server status */
   getA2AStatus(): A2AServerStatus | null {
-    const g = globalThis as { __opencode_a2aServer?: import("../agents/a2a-server.js").A2AServer }
-    return g.__opencode_a2aServer?.getStatus() ?? null
+    return getA2AServer()?.getStatus() ?? null
   }
 
   /** Update the A2A server's Agent Card */
   updateA2ACard(card: AgentCard): void {
-    const g = globalThis as { __opencode_a2aServer?: import("../agents/a2a-server.js").A2AServer }
-    g.__opencode_a2aServer?.updateCard(card)
+    getA2AServer()?.updateCard(card)
   }
 
   /** Get the A2A server's Agent Card */
   getA2ACard(): AgentCard | undefined {
-    const g = globalThis as { __opencode_a2aServer?: import("../agents/a2a-server.js").A2AServer }
-    return g.__opencode_a2aServer?.getCard()
+    return getA2AServer()?.getCard()
   }
 
   // ── UNIFIED Operations ────────────────────────────

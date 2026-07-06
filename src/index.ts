@@ -89,6 +89,7 @@ import { ToolUsageTracker } from "./core/tool-usage-tracker.js"
 import { BlueprintParser, BlueprintResolver, type ModelSpecMap } from "./core/agent-blueprint.js"
 import { autoUpdatePlugin } from "./core/plugin-updater.js"
 import { evaluateWorkflowPolicy, formatWorkflowPolicyDecisions, verificationEvidenceFailed } from "./core/workflow-policy.js"
+import { setSkillStore, setEpisodicStore, setAgenticKnowledge, setConfigLoader, getSkillStore, getEpisodicStore, getConfigLoader, getA2AClient, setA2AClient, getA2AServer, setA2AServer } from "./core/shared-instances.js"
 import { makeStatusTool } from "./tools/status.js"
 import { makeCleanTool } from "./tools/clean.js"
 import { makeSnapshotTool } from "./tools/snapshot.js"
@@ -212,11 +213,12 @@ const createEngine: Plugin = async (input, _options) => {
       const timestamp = new Date().toISOString()
       const entry = `[${timestamp}] [${toolName}] ${message}${stack ? `\n${stack.split("\n").slice(0, 4).join("\n")}` : ""}\n`
       appendFileSync(errorLogPath, entry, "utf-8")
-    } catch { log.warn("Silent catch: non-fatal: if file write fails, nothing we can do") }
+    } catch (e) { log.warn("Silent catch: non-fatal: if file write fails, nothing we can do", { error: String(e) }) }
   }
 
   // ── Config (load first, everything else depends on it) ──
   const configLoader = new ConfigLoader(worktree)
+  setConfigLoader(configLoader)
   const config = configLoader.load()
   configLoader.startWatch()
 
@@ -413,19 +415,19 @@ const createEngine: Plugin = async (input, _options) => {
             if (entry.isDirectory() && !["node_modules", ".git", "dist", ".agentic"].includes(entry.name))
               walkDir(full, depth + 1)
             else if (entry.isFile() && /\.(ts|tsx|js|jsx|mjs)$/.test(entry.name) && Object.keys(scanBatch).length < 100)
-              try { scanBatch[full] = readFileSync(full, "utf-8") } catch { log.warn("Silent catch: non-fatal") }
+              try { scanBatch[full] = readFileSync(full, "utf-8") } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
           }
-        } catch { log.warn("Silent catch: non-fatal") }
+        } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
       }
       walkDir(sourceDir)
       depTracker.scanFiles(scanBatch, worktree)
     }
-  } catch { log.warn("Silent catch: non-fatal") }
+  } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
   const contextCompressor = new ContextCompressor()
   const git = new GitIntegration(worktree)
   const debtScorer = new TechDebtScorer()
   const skillStore = new SkillStore()
-  ;(globalThis as unknown as { __opencode_skillStore: import("./memory/skill-store.js").SkillStore }).__opencode_skillStore = skillStore
+  setSkillStore(skillStore)
   const curator = new SkillCurator(
     config.curator ?? {},
     () => skillStore.getAll(),
@@ -436,7 +438,7 @@ const createEngine: Plugin = async (input, _options) => {
     orchestrator.definePipeline(pipeline)
   }
   const episodicStore = new EpisodicStore()
-  ;(globalThis as unknown as { __opencode_episodicStore: import("./memory/episodic-store.js").EpisodicStore }).__opencode_episodicStore = episodicStore
+  setEpisodicStore(episodicStore)
   const checkpoints = new CheckpointSystem()
   const hallucinationGuard = new HallucinationGuard(worktree)
   const parallelExec = new ParallelExecutor()
@@ -568,7 +570,7 @@ const confidenceStore = new ConfidenceStore()
         }
         blueprintResolver.setModelsDb(modelsDb)
       }
-    } catch { log.warn("Silent catch: Silent — models.json cache gak wajib ada") }
+    } catch (e) { log.warn("Silent catch: Silent — models.json cache gak wajib ada", { error: String(e) }) }
   })()
 
   llmEngine.setMemoryStores({
@@ -626,7 +628,7 @@ const confidenceStore = new ConfidenceStore()
   const secondBrain = initSecondBrain(stateStore, sessionStore, memoryOrchestrator, llmEngine, agentRuntime)
   // Wire event-driven memory: auto-save on key events
   eventBus.onAny((event: { type: string; payload: Record<string, unknown> }) => {
-    try { secondBrain.handleEvent(event.type, event.payload, event.payload?.sessionID as string | undefined) } catch { log.warn("Silent catch: non-fatal") }
+    try { secondBrain.handleEvent(event.type, event.payload, event.payload?.sessionID as string | undefined) } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
   })
   // Build RAG config from config file
   const ragConfig: import("./memory/multi-index-rag.js").RAGConfig = {
@@ -748,9 +750,9 @@ const confidenceStore = new ConfidenceStore()
     if (knowledge?.sessions?.length > 0) {
       log.debug(`[init] Loaded ${knowledge.sessions.length} prior session(s) from knowledge.json`)
     }
-    // Store in a global for tool access
-    ;(globalThis as { __agenticKnowledge?: typeof knowledge }).__agenticKnowledge = knowledge
-  } catch { log.warn("Silent catch: knowledge.json may not exist yet — first session") }
+    // Store for tool access via shared-instances
+    setAgenticKnowledge(knowledge)
+  } catch (e) { log.warn("Silent catch: knowledge.json may not exist yet — first session", { error: String(e) }) }
 
   // Restore persisted prompt states (Stage IV: versioned prompt history) — global
   const savedPrompts = stateStore.getAll<Array<{ role: string; history: PromptEntry[] }>>("prompts")
@@ -778,7 +780,7 @@ const confidenceStore = new ConfidenceStore()
     }
   }
 
-  try { await traceLogger.init() } catch { log.warn("Silent catch: non-fatal: cannot create trace dir") }
+  try { await traceLogger.init() } catch (e) { log.warn("Silent catch: non-fatal: cannot create trace dir", { error: String(e) }) }
 
   // ── Auto-update: fire-and-forget version check + download ──
   if (typeof __VERSION__ !== "undefined") autoUpdatePlugin(__VERSION__, import.meta.url)
@@ -841,7 +843,7 @@ const confidenceStore = new ConfidenceStore()
         const parsed = JSON.parse(line)
         traces.push({ toolUsed: parsed.toolUsed ?? "unknown", success: parsed.success ?? true, step: parsed.step ?? "" })
       }
-    } catch { log.warn("Silent catch: no traces yet") }
+    } catch (e) { log.warn("Silent catch: no traces yet", { error: String(e) }) }
     selfEvolver.feedSkills(allSkills)
     selfEvolver.feedEpisodes(allEpisodes)
     selfEvolver.feedTasks(allTasks)
@@ -876,9 +878,9 @@ const confidenceStore = new ConfidenceStore()
             keywords: [tool, step, ...String(input).toLowerCase().split(/\W+/).filter(Boolean).slice(0, 10)],
             metadata: { type: "trace", tool, success: parsed.success, timestamp: parsed.timestamp },
           })
-        } catch { log.warn("Silent catch: skip corrupted line") }
+        } catch (e) { log.warn("Silent catch: skip corrupted line", { error: String(e) }) }
       }
-    } catch { log.warn("Silent catch: no trace file yet") }
+    } catch (e) { log.warn("Silent catch: no trace file yet", { error: String(e) }) }
 
     const report = selfEvolver.evolve()
 
@@ -893,7 +895,7 @@ const confidenceStore = new ConfidenceStore()
           prompt: `You are ${role.name}. ${role.reason}\n\nTrigger: ${role.triggerPattern}`,
         })
         appliedRoles.push(role.name)
-      } catch { log.warn("Silent catch: non-fatal") }
+      } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
     }
 
     // Auto-apply skill patches
@@ -947,7 +949,7 @@ const confidenceStore = new ConfidenceStore()
           stateStore.set("prompts", "state", roleRegistry.getAllPromptStates())
           appliedPatches.push(`${patch.role}: "${patch.instruction.slice(0, 60)}..."`)
         }
-      } catch { log.warn("Silent catch: non-fatal") }
+      } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
     }
 
     let result = `### 🔮 Auto-Evolution Complete\n`
@@ -993,7 +995,7 @@ const confidenceStore = new ConfidenceStore()
           })
         }).catch((err) => log.warn(`[auto-evolve] Fire-and-forget evolution error: ${(err as Error).message}`))
       }
-    } catch { log.warn("Silent catch: Non-fatal — don't let evolution errors affect step execution") }
+    } catch (e) { log.warn("Silent catch: Non-fatal — don't let evolution errors affect step execution", { error: String(e) }) }
   }
 
   eventBus.on("step.completed", (ev) => {
@@ -1278,12 +1280,12 @@ const confidenceStore = new ConfidenceStore()
               const scanDir = context.directory || context.worktree || worktree
               try {
                 await navigator.scan(scanDir)
-              } catch { log.warn("Silent catch: non-fatal") }
+              } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
               const codebaseSummary = navigator.getSummary()
               try {
                 const llmIntent = await planner.decomposeWithLLM(llmEngine, args.goal, codebaseSummary)
                 subtasks = llmIntent.subtasks
-              } catch { log.warn("Silent catch: Fall through to template-based") }
+              } catch (e) { log.warn("Silent catch: Fall through to template-based", { error: String(e) }) }
             }
           }
           }
@@ -1293,7 +1295,7 @@ const confidenceStore = new ConfidenceStore()
             try {
               const scanDir = context.directory || context.worktree || worktree
               let codebaseSummary = ""
-              try { await navigator.scan(scanDir); codebaseSummary = navigator.getSummary() } catch { log.warn("Silent catch: non-fatal") }
+              try { await navigator.scan(scanDir); codebaseSummary = navigator.getSummary() } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
               const criticResult = await planner.decomposeWithCritic(args.goal, codebaseSummary)
               if (criticResult.accepted && criticResult.plan.subtasks.length > 0) {
                 subtasks = criticResult.plan.subtasks.map(s => ({
@@ -1303,7 +1305,7 @@ const confidenceStore = new ConfidenceStore()
                   verificationCriteria: s.verificationCriteria ?? [],
                 }))
               }
-            } catch { log.warn("Silent catch: non-fatal — fall through to existing plan") }
+            } catch (e) { log.warn("Silent catch: non-fatal — fall through to existing plan", { error: String(e) }) }
           }
 
           const intent: TaskIntent = {
@@ -1355,7 +1357,7 @@ const confidenceStore = new ConfidenceStore()
                 plan.intent.context.relevantFiles = codeIntentMap.files.map(f => f.relativePath)
               }
             }
-          } catch { log.warn("Silent catch: Non-fatal — plan works without intent analysis") }
+          } catch (e) { log.warn("Silent catch: Non-fatal — plan works without intent analysis", { error: String(e) }) }
 
           traceLogger.log({
             step: "plan",
@@ -1444,7 +1446,7 @@ const confidenceStore = new ConfidenceStore()
                   }
                 }
               }
-            } catch { log.warn("Silent catch: Non-fatal — simulation is advisory") }
+            } catch (e) { log.warn("Silent catch: Non-fatal — simulation is advisory", { error: String(e) }) }
           }
 
           return {
@@ -1595,7 +1597,7 @@ const confidenceStore = new ConfidenceStore()
               try {
                 const content = readFileSync(absPath, "utf-8")
                 depTracker.updateFile(absPath, content, projectDir)
-              } catch { log.warn("Silent catch: non-fatal: file may have been deleted") }
+              } catch (e) { log.warn("Silent catch: non-fatal: file may have been deleted", { error: String(e) }) }
             }
           }
 
@@ -1895,7 +1897,7 @@ const confidenceStore = new ConfidenceStore()
                       } else {
                         response += `✅ Input schema validated\n`
                       }
-                    } catch { log.warn("Silent catch: non-fatal") }
+                    } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
                   }
 
                   // DSL execution if skill has logic blocks
@@ -1939,7 +1941,7 @@ const confidenceStore = new ConfidenceStore()
                       } else {
                         response += `✅ Output schema validated\n`
                       }
-                    } catch { log.warn("Silent catch: non-fatal — output may not be JSON") }
+                    } catch (e) { log.warn("Silent catch: non-fatal — output may not be JSON", { error: String(e) }) }
                   }
 
                   // Reinforce skill: call reinforce() on successful execution with DSL
@@ -1951,7 +1953,7 @@ const confidenceStore = new ConfidenceStore()
                     skillStore.reinforce(skillId, true)
                   }
                 }
-              } catch { log.warn("Silent catch: non-fatal") }
+              } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
             }
           }
 
@@ -2141,7 +2143,7 @@ const confidenceStore = new ConfidenceStore()
                   response += `Checked ${lifecycleReport.checked} skills: ${lifecycleReport.markedStale} marked stale, ${lifecycleReport.archived} archived, ${lifecycleReport.reactivated} reactivated.\n`
                 }
               }
-            } catch { log.warn("Silent catch: curator lifecycle is best-effort") }
+            } catch (e) { log.warn("Silent catch: curator lifecycle is best-effort", { error: String(e) }) }
           }
 
           return { output: response, metadata: { progress, nextStep: nextStep?.id, verifyResult } }
@@ -2580,7 +2582,7 @@ const confidenceStore = new ConfidenceStore()
                 llmUsed = true
               }
             }
-          } catch { log.warn("Silent catch: non-fatal — fall back to template") }
+          } catch (e) { log.warn("Silent catch: non-fatal — fall back to template", { error: String(e) }) }
 
           let output = `## 📋 PR Description${llmUsed ? " (LLM-enhanced)" : ""}\n\n`
           output += `---\ntitle: ${pr.title}\n---\n\n`
@@ -2663,7 +2665,7 @@ const confidenceStore = new ConfidenceStore()
           for (const file of files) {
             try {
               contents.set(file, readFileSync(file, "utf-8"))
-            } catch { log.warn("Silent catch: unable to read file")
+            } catch (_e) { log.warn("Silent catch: unable to read file")
               contents.set(file, `[Unable to read ${file}]`)
             }
           }
@@ -3207,7 +3209,7 @@ const confidenceStore = new ConfidenceStore()
               if (existsSync(modelsPath)) {
                 return JSON.parse(readFileSync(modelsPath, "utf-8"))
               }
-            } catch { log.warn("Silent catch: corrupt or missing") }
+            } catch (e) { log.warn("Silent catch: corrupt or missing", { error: String(e) }) }
             return {}
           }
 
@@ -3250,7 +3252,7 @@ const confidenceStore = new ConfidenceStore()
               const dir = dirname(modelsPath)
               mkdirSync(dir, { recursive: true })
               writeFileSync(modelsPath, JSON.stringify(prefs, null, 2), "utf-8")
-            } catch { log.warn("Silent catch: non-fatal") }
+            } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
           }
 
           // On first access, load: plugin defaults → project overrides
@@ -3329,7 +3331,7 @@ const confidenceStore = new ConfidenceStore()
                 }
                 output += `\nUse \`action:"set"\` to assign any of these to a role, tool, or category.`
               }
-            } catch { log.warn("Silent catch: silent") }
+            } catch (e) { log.warn("Silent catch: silent", { error: String(e) }) }
 
             return { output }
           }
@@ -3597,7 +3599,7 @@ const confidenceStore = new ConfidenceStore()
                   }
                 }
               }
-            } catch { log.warn("Silent catch: non-fatal — search tetap jalan dari local") }
+            } catch (e) { log.warn("Silent catch: non-fatal — search tetap jalan dari local", { error: String(e) }) }
 
             // Index all episodes into TF-IDF vector store
             for (const ep of allEpisodes) {
@@ -4046,7 +4048,7 @@ const confidenceStore = new ConfidenceStore()
                     prompt: `You are ${role.name}. ${role.reason}\n\nTrigger: ${role.triggerPattern}`,
                   })
                   appliedRoles.push(role.name)
-                } catch { log.warn("Silent catch: non-fatal") }
+                } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
               }
 
               // Auto-apply skill patches
@@ -4115,7 +4117,7 @@ const confidenceStore = new ConfidenceStore()
                     stateStore.set("prompts", "state", roleRegistry.getAllPromptStates())
                     appliedPatches.push(`${patch.role}: "${patch.instruction.slice(0, 60)}..."`)
                   }
-                } catch { log.warn("Silent catch: non-fatal") }
+                } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
               }
 
               if (patchedSkills.length > 0) {
@@ -4379,7 +4381,7 @@ const confidenceStore = new ConfidenceStore()
               domainRegistry.getCurrentDomain() ?? undefined,
               projectId,
             )
-          } catch { log.warn("Silent catch: non-fatal") }
+          } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
 
           // Try to extract skill if debate was successful
           if (result.approved) {
@@ -4388,7 +4390,7 @@ const confidenceStore = new ConfidenceStore()
                 role: "tool",
                 content: `✅ Debate completed: ${args.task}\nRounds: ${result.totalRounds}\nFinal output:\n${result.finalOutput.slice(0, 500)}`,
               }, [args.task])
-            } catch { log.warn("Silent catch: non-fatal") }
+            } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
           }
 
           traceLogger.log({
@@ -4899,7 +4901,7 @@ const confidenceStore = new ConfidenceStore()
 
               let headers: Record<string, string> | undefined
               if (args.headers) {
-                try { headers = JSON.parse(args.headers) } catch { log.warn("Silent catch: invalid headers JSON"); headers = undefined }
+                try { headers = JSON.parse(args.headers) } catch (_e) { log.warn("Silent catch: invalid headers JSON"); headers = undefined }
               }
 
               const conn = await mcpClient.connect({
@@ -4946,7 +4948,7 @@ const confidenceStore = new ConfidenceStore()
 
               let params: Record<string, unknown> = {}
               if (args.params) {
-                try { params = JSON.parse(args.params) } catch { log.warn("Silent catch: invalid params JSON"); params = {} }
+                try { params = JSON.parse(args.params) } catch (_e) { log.warn("Silent catch: invalid params JSON"); params = {} }
               }
 
               const result = await mcpClient.callTool(args.server, args.tool, params)
@@ -5034,17 +5036,12 @@ const confidenceStore = new ConfidenceStore()
         },
         async execute(args: Record<string, unknown>, _context: Record<string, unknown>) {
           const action = (args.action as string) || "status"
-          const g = globalThis as {
-            __opencode_a2aClient?: import("./agents/a2a-client.js").A2AClient
-            __opencode_a2aServer?: import("./agents/a2a-server.js").A2AServer
+          const { A2AClient: A2AClientClass } = await import("./agents/a2a-client.js")
+          let a2aClient = getA2AClient()
+          if (!a2aClient) {
+            a2aClient = new A2AClientClass()
+            setA2AClient(a2aClient)
           }
-
-          // Lazy-init A2A client (shared across calls)
-          if (!g.__opencode_a2aClient) {
-            const { A2AClient } = await import("./agents/a2a-client.js")
-            g.__opencode_a2aClient = new A2AClient()
-          }
-          const a2aClient: import("./agents/a2a-client.js").A2AClient = g.__opencode_a2aClient
 
           switch (action) {
             case "serve": {
@@ -5082,8 +5079,9 @@ const confidenceStore = new ConfidenceStore()
               }
 
               // Stop existing server if running
-              if (g.__opencode_a2aServer) {
-                try { await g.__opencode_a2aServer.stop() } catch { log.warn("Silent catch: ignore") }
+              const existingServer = getA2AServer()
+              if (existingServer) {
+                try { await existingServer.stop() } catch (e) { log.warn("Silent catch: ignore", { error: String(e) }) }
               }
 
               const { A2AServer } = await import("./agents/a2a-server.js")
@@ -5093,7 +5091,7 @@ const confidenceStore = new ConfidenceStore()
                 agentCard,
               })
               await server.start()
-              g.__opencode_a2aServer = server
+              setA2AServer(server)
 
               const actualPort = server.port
               return {
@@ -5114,12 +5112,13 @@ const confidenceStore = new ConfidenceStore()
             }
 
             case "stop": {
-              if (!g.__opencode_a2aServer) {
+              const stopSrv = getA2AServer()
+              if (!stopSrv) {
                 return { output: "⚠️ No A2A server running" }
               }
-              const status = g.__opencode_a2aServer.getStatus()
-              await g.__opencode_a2aServer.stop()
-              g.__opencode_a2aServer = undefined
+              const status = stopSrv.getStatus()
+              await stopSrv.stop()
+              setA2AServer(null)
               return {
                 output: [
                   `## 🛑 A2A Server Stopped`,
@@ -5244,8 +5243,9 @@ const confidenceStore = new ConfidenceStore()
                 ``,
               ]
 
-              if (g.__opencode_a2aServer) {
-                const srv = g.__opencode_a2aServer.getStatus()
+              const statsSrv = getA2AServer()
+              if (statsSrv) {
+                const srv = statsSrv.getStatus()
                 lines.push(
                   `### Server`,
                   `| Metric | Value |`,
@@ -5315,7 +5315,7 @@ const confidenceStore = new ConfidenceStore()
 
               let params: Record<string, unknown> = {}
               if (args.params) {
-                try { params = JSON.parse(args.params) } catch { log.warn("Silent catch: invalid params JSON"); params = {} }
+                try { params = JSON.parse(args.params) } catch (_e) { log.warn("Silent catch: invalid params JSON"); params = {} }
               }
 
               const result = await protocolAdapter.call({
@@ -5412,13 +5412,12 @@ const confidenceStore = new ConfidenceStore()
           const jobId = args.jobId as string | undefined
 
           // Session state for skill store and episodic store
-          const g = globalThis as { __opencode_skillStore?: import("./memory/skill-store.js").SkillStore; __opencode_episodicStore?: import("./memory/episodic-store.js").EpisodicStore }
-          const skillStore = g.__opencode_skillStore
-          const episodicStore = g.__opencode_episodicStore
+          const skillStore = getSkillStore()
+          const episodicStore = getEpisodicStore()
 
           // Helper: read fine-tuning config from configLoader
           const getFtConfig = () => {
-            const cl = (globalThis as { __opencode_configLoader?: { get?: () => { fineTuning?: Record<string, unknown> } } }).__opencode_configLoader
+            const cl = getConfigLoader()
             return (cl?.get?.()?.fineTuning ?? {}) as Record<string, unknown>
           }
 
@@ -5950,7 +5949,7 @@ const confidenceStore = new ConfidenceStore()
                 log.info(`[agentic_auto] ${check.warning}`)
               }
             }
-          } catch { log.warn("Silent catch: non-fatal") }
+          } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
 
           // ═══════════════════════════════════════════════
           // PHASE 1: Knowledge — scan + memory + skills
@@ -5978,7 +5977,7 @@ const confidenceStore = new ConfidenceStore()
                 skillContexts.push(`${d.meta?.name || "skill"} (${(sk.successRate * 100).toFixed(0)}% success) — ${steps.slice(0, 2).map((w: { description?: string; action?: string }) => w.description || w.action || "").join("; ")}`)
               }
             }
-          } catch { log.warn("Silent catch: non-fatal") }
+          } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
           // Record research artifact for WorkflowPolicy
           sessionStore.getOrCreate(context.sessionID).artifacts.set("workflow:researched", String(Date.now()))
 
@@ -6011,7 +6010,7 @@ const confidenceStore = new ConfidenceStore()
             try {
               const llmIntent = await planner.decomposeWithLLM(llmEngine, args.goal, codebaseSummary.slice(0, 1000))
               if (llmIntent.subtasks.length > 0) subtasks = llmIntent.subtasks
-            } catch { log.warn("Silent catch: fallback") }
+            } catch (e) { log.warn("Silent catch: fallback", { error: String(e) }) }
           }
           if (subtasks.length === 0) {
             subtasks = [{ id: "step-1", description: args.goal || "Execute task", dependsOn: [], verificationCriteria: [] }]
@@ -6039,7 +6038,7 @@ const confidenceStore = new ConfidenceStore()
           // ═══════════════════════════════════════════════
           const fileContents: Record<string, string> = {}
           for (const f of relevantFiles) {
-            try { fileContents[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 1000) } catch { log.warn("Silent catch: skip") }
+            try { fileContents[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 1000) } catch (e) { log.warn("Silent catch: skip", { error: String(e) }) }
           }
 
           const filesBlock = Object.entries(fileContents)
@@ -6122,7 +6121,7 @@ const confidenceStore = new ConfidenceStore()
 
               const fileContentsForSubtask: Record<string, string> = {}
               for (const f of relevantFiles) {
-                try { fileContentsForSubtask[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 1000) } catch { log.warn("Silent catch: skip") }
+                try { fileContentsForSubtask[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 1000) } catch (e) { log.warn("Silent catch: skip", { error: String(e) }) }
               }
               const filesBlockForSubtask = Object.entries(fileContentsForSubtask)
                 .map(([p, c]) => `${p}:\n${c.slice(0, 600)}`).join("\n---\n")
@@ -6192,7 +6191,7 @@ const confidenceStore = new ConfidenceStore()
                   const writtenPaths = writeFilesHelper(filesToWrite, projectDir, context.sessionID, eventBus)
                   allModified.push(...writtenPaths)
                   return writtenPaths.length > 0
-                } catch { log.warn("Silent catch: writeFiles helper failed"); return false }
+                } catch (_e) { log.warn("Silent catch: writeFiles helper failed"); return false }
               },
             )
             verifyPassed = loopResult.success
@@ -6227,7 +6226,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                 preChangeCommit = stashResult || execFileSync("git", ["rev-parse", "HEAD"], { cwd: projectDir, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }).trim()
                 hasGitRollback = true
               }
-            } catch { log.warn("Silent catch: non-fatal — rollback not available") }
+            } catch (e) { log.warn("Silent catch: non-fatal — rollback not available", { error: String(e) }) }
 
             // ── Adaptive retry loop ──
             const autoRetry = new AutoRetryManager({ maxRetries: 3 })
@@ -6291,7 +6290,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                     }
                     allModified.length = 0
                     allModified.push(...keptFiles)
-                  } catch { log.warn("Silent catch: rollback best-effort") }
+                  } catch (e) { log.warn("Silent catch: rollback best-effort", { error: String(e) }) }
                 }
 
                 // Record retry attempt
@@ -6306,7 +6305,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                 )
 
                 firstAttempt = false
-              } catch { log.warn("Silent catch: verify error in auto loop")
+              } catch (_e) { log.warn("Silent catch: verify error in auto loop")
                 verifyNote = "⚠️ Verify error"
                 break
               }
@@ -6318,7 +6317,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                 execFileSync("git", ["checkout", "--", ...allModified.map(f => join(projectDir, f))],
                   { cwd: projectDir, stdio: "pipe", timeout: 15000 })
                 verifyNote += ` 🔄 Full rollback to pre-change state`
-              } catch { log.warn("Silent catch: git rollback failed")
+              } catch (_e) { log.warn("Silent catch: git rollback failed")
                 verifyNote += ` ⚠️ Rollback attempted but may be incomplete`
               }
               allModified.length = 0
@@ -6381,20 +6380,20 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                   const conf = guardResult.overallConfidence !== undefined ? ` (conf: ${guardResult.overallConfidence.toFixed(2)})` : ''
                   verifyNote += (failedClaims.length > 0 ? ` ⚠️ Guard:${failedClaims.length} issues` : " ✅ Guard") + conf
                 }
-              } catch { log.warn("Silent catch: non-fatal") }
+              } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
 
               // Save episode
               try {
                 episodicStore.record(context.sessionID, args.goal, verifyPassed ? "success" : "partial",
                   [`Auto via agentic_auto`, `Verify: ${verifyPassed}`, `Files: ${allModified.length}`], allModified,
                   domainRegistry.getCurrentDomain() ?? undefined, projectId)
-              } catch { log.warn("Silent catch: non-fatal") }
+              } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
 
               // Extract skill (async)
               try {
                 const skillOutput = `Goal: ${args.goal}\nFiles: ${allModified.join(", ")}\nVerify: ${verifyPassed ? "passed" : "failed"}\nSteps: ${activeSteps.map(s => s.description).join("; ")}`
                 await skillStore.extract({ role: "auto", content: skillOutput }, [args.goal])
-              } catch { log.warn("Silent catch: non-fatal") }
+              } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
 
               // Tech debt score
               try {
@@ -6402,10 +6401,10 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                 const absFiles = allModified.map(f => join(projectDir, f))
                 const contents = new Map<string, string>()
                 for (const f of absFiles) {
-                  try { contents.set(f, readFileSync(f, "utf-8")) } catch { log.warn("Silent catch: skip") }
+                  try { contents.set(f, readFileSync(f, "utf-8")) } catch (e) { log.warn("Silent catch: skip", { error: String(e) }) }
                 }
                 scorer.score(args.goal, absFiles, contents)
-              } catch { log.warn("Silent catch: non-fatal") }
+              } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
 
               // Memory consolidation — archive working → episodic + pattern extraction
               try {
@@ -6413,7 +6412,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                 if (report.workingArchived > 0 || report.patternsExtracted > 0) {
                   consolidationScheduler.onSessionEnd()
                 }
-              } catch { log.warn("Silent catch: non-fatal") }
+              } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
 
               // Phase 4B: Auto-evolution — check if evolution should be triggered
               try {
@@ -6421,7 +6420,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                 if (evoTrigger) {
                   runAutoEvolve().catch(() => { /* non-fatal */ })
                 }
-              } catch { log.warn("Silent catch: non-fatal") }
+              } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
 
               // Phase 4A: Auto-mature skills that meet next-stage criteria
               try {
@@ -6434,7 +6433,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
                     log.debug(`[auto] Auto-matured ${totalMatured} skills: ${JSON.stringify(matureSummary)}`)
                   }
                 }
-              } catch { log.warn("Silent catch: non-fatal") }
+              } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
             })().catch((err) => log.warn(`[agentic_auto] thorough post-processing error:`, err))
           }
 
@@ -6592,7 +6591,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
           const startTime = Date.now()
           
           // Validate URL
-          try { new URL(url) } catch { log.warn("Silent catch: invalid URL in agentic_fetch"); 
+          try { new URL(url) } catch (_e) { log.warn("Silent catch: invalid URL in agentic_fetch"); 
             return { output: `❌ URL tidak valid: ${url}`, metadata: { error: true, url, latency: Date.now() - startTime } }
           }
           
@@ -6664,7 +6663,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
           }
           
           // Track that research was done (for WorkflowPolicy Gate)
-          try { sessionStore.getOrCreate(context.sessionID).artifacts.set("workflow:researched", String(Date.now())) } catch { log.warn("Silent catch: silent: session may not be ready") }
+          try { sessionStore.getOrCreate(context.sessionID).artifacts.set("workflow:researched", String(Date.now())) } catch (e) { log.warn("Silent catch: silent: session may not be ready", { error: String(e) }) }
           
           return {
             output: outputText.slice(0, 50000),
@@ -6759,7 +6758,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
             llmEngine.setCurrentModel(modelStr)
           }
         }
-      } catch { log.warn("Silent catch: silent — non-critical") }
+      } catch (e) { log.warn("Silent catch: silent — non-critical", { error: String(e) }) }
 
       try {
         const systemText = output.system.join("\n")
@@ -6869,7 +6868,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
                 })
               }
             }
-          } catch { log.warn("Silent catch: non-fatal") }
+          } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
 
           // ── Tool recommendation: keep ALL tools visible, add ranked hints only ──
           const recommendedTools = toolRouter.selectTools({
@@ -6905,7 +6904,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
                 }
               }
             }
-          } catch { log.warn("Silent catch: non-fatal") }
+          } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
 
           // ── Mandatory research flow ──
           if (!hasHighConfidenceKnowledge) {
@@ -6948,7 +6947,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
           diag.lastError = "transform completed but injection may be incomplete"
         }
         diagnosticStore.set(sid, diag)
-      } catch { log.warn("Silent catch: non-critical") }
+      } catch (e) { log.warn("Silent catch: non-critical", { error: String(e) }) }
     },
 
     // ── Model detection via chat.params — source of truth dari OpenCode SDK ──
@@ -6971,7 +6970,7 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
             // This hook fires during params, not after completion.
           }
         }
-      } catch { log.warn("Silent catch: silent — non-critical") }
+      } catch (e) { log.warn("Silent catch: silent — non-critical", { error: String(e) }) }
     },
 
     "tool.execute.after": async (toolInput: { tool: string; args: Record<string, unknown>; sessionID: string; callID: string }, _output: { title: string; output: string; metadata: unknown }) => {
@@ -7083,18 +7082,18 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
             break
           }
         }
-      } catch { log.warn("Silent catch: non-fatal") }
+      } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
     },
 
     dispose: async () => {
-      try { configLoader.stopWatch() } catch { log.warn("Silent catch: non-fatal") }
-      try { stateStore.set("models", "registry", modelRegistry.toJSON()) } catch { log.warn("Silent catch: non-fatal") }
-      try { stateStore.set("prompts", "state", roleRegistry.getAllPromptStates()) } catch { log.warn("Silent catch: non-fatal") }
-      try { stateStore.set("evolution", "trend", continuousEvolution.toJSON(), projectId) } catch { log.warn("Silent catch: non-fatal") }
-      try { stateStore.set("evaluation", "live", liveEvaluator.toJSON(), projectId) } catch { log.warn("Silent catch: non-fatal") }
-      try { stateStore.flushSync() } catch { log.warn("Silent catch: non-fatal") } // ponytail: flush write-behind queue before shutdown
-      try { await traceLogger.dispose() } catch { log.warn("Silent catch: non-fatal") }
-      try { eventBus.clear() } catch { log.warn("Silent catch: non-fatal") } // ponytail: prevent subscriber leak across plugin reloads
+      try { configLoader.stopWatch() } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
+      try { stateStore.set("models", "registry", modelRegistry.toJSON()) } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
+      try { stateStore.set("prompts", "state", roleRegistry.getAllPromptStates()) } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
+      try { stateStore.set("evolution", "trend", continuousEvolution.toJSON(), projectId) } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
+      try { stateStore.set("evaluation", "live", liveEvaluator.toJSON(), projectId) } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
+      try { stateStore.flushSync() } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) } // ponytail: flush write-behind queue before shutdown
+      try { await traceLogger.dispose() } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
+      try { eventBus.clear() } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) } // ponytail: prevent subscriber leak across plugin reloads
     },
   }
 }

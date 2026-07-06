@@ -344,7 +344,7 @@ ${modifiedFiles.map(f => `- ${f}`).join("\n")}`,
               affectedFiles: modifiedFiles,
               severity: ["low", "medium", "high", "critical"].includes(parsed.severity) ? parsed.severity : "medium",
             }
-          } catch { console.warn("catch: ignore") }
+          } catch (e) { console.warn("catch: ignore", { error: String(e) }) }
         }
       }
     } catch {

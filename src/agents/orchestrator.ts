@@ -344,7 +344,7 @@ export class Orchestrator {
       try {
         const data: WorkflowPipeline[] = JSON.parse(fs.readFileSync(filePath, "utf-8"))
         for (const p of data) this.pipelines.set(p.id, p)
-      } catch { log.warn(`[Orchestrator] Failed to load pipelines from ${filePath}`) }
+      } catch (e) { log.warn(`[Orchestrator] Failed to load pipelines from ${filePath}`, { error: String(e) }) }
     }
   }
 
@@ -352,7 +352,7 @@ export class Orchestrator {
     if (!this.persistencePath) return
     try {
       fs.writeFileSync(this.persistencePath, JSON.stringify([...this.pipelines.values()], null, 2))
-    } catch { log.warn("Silent catch: non-fatal") }
+    } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
   }
 
   definePipeline(pipeline: WorkflowPipeline): void {
@@ -424,7 +424,7 @@ export class Orchestrator {
     let parsed: Record<string, unknown> | null = null
     try {
       parsed = JSON.parse(output)
-    } catch { log.warn("Silent catch: not JSON") }
+    } catch (e) { log.warn("Silent catch: not JSON", { error: String(e) }) }
     for (const field of schema) {
       const name = field.name.toLowerCase()
       let found = false
@@ -605,8 +605,8 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
             }
           }
         }
-      } catch {
-        log.warn(`[Orchestrator] LLM cross-validation failed for stage ${targetRole}`)
+      } catch (e) {
+        log.warn(`[Orchestrator] LLM cross-validation failed for stage ${targetRole}`, { error: String(e) })
       }
     }
     return issues
@@ -835,18 +835,14 @@ Return JSON: {"passed":boolean,"issues":[{severity,description,source}],"summary
       const attemptTimeoutId = setTimeout(() => attemptController.abort(), 120_000)
 
       try {
-        const llmOut = await Promise.race([
-          this.llmEngine!.call({
-            systemPrompt: sp, userPrompt: up,
-            temperature: 0.2, maxTokens: 2048, jsonMode: true,
-            sourceTaskId: stageTaskId,
-            sourcePipelineRunId: runId,
-            ...(attempt.model ? { model: attempt.model } : {}),
-          }),
-          new Promise<never>((_, reject) => {
-            attemptController.signal.addEventListener("abort", () => reject(new Error(`LLM timeout after 120s for stage ${stage.role}`)))
-          }),
-        ])
+        const llmOut = await this.llmEngine!.call({
+          systemPrompt: sp, userPrompt: up,
+          temperature: 0.2, maxTokens: 2048, jsonMode: true,
+          sourceTaskId: stageTaskId,
+          sourcePipelineRunId: runId,
+          signal: attemptController.signal,
+          ...(attempt.model ? { model: attempt.model } : {}),
+        })
         clearTimeout(attemptTimeoutId)
         raw = llmOut.content || ""
         lastErr = null

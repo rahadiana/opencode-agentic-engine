@@ -4,27 +4,29 @@
 
 Plugin OpenCode yang mengimplementasikan agentic software engineering workflow berdasarkan paper "The End of Software Engineering" (arXiv:2606.05608).
 
-## Status: All Gaps Covered ✅
+## Status: All 12 Gaps Covered ✅
 
-Semua 9 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimplementasi. Prinsip **LLM boleh bodoh, harness harus pintar** sudah di-enforce di runtime:
+Semua 12 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimplementasi. Prinsip **LLM boleh bodoh, harness harus pintar** sudah di-enforce di runtime:
 
 1. ✅ **WorkflowPolicy Gate** — runtime enforcement, bukan prompt (P0)
 2. ✅ **Schema-First Boundaries** — LLM output divalidasi sebelum dipakai (P1)
 3. ✅ **Dumb Model Mode** — strict mode untuk model lemah (P2)
- 4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
- 5. ✅ **Test Coverage** — **2789 tests**, c8 **87.94% stmts / 67.09% branch / 70.27% func** + CI coverage gate (P4)
+4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
+5. ✅ **Test Coverage** — **3101 tests**, c8 **87.94% stmts / 67.09% branch / 70.27% func** + CI coverage gate (P4)
 6. ✅ **Typed Errors** — 49/49 throw sites migrated, 0 `as any` remaining
 7. ✅ **SemanticCache** — TF-IDF + cosine, benchmarked at 0.78 threshold
 8. ✅ **HallucinationGuard** — confidence-aware claims (0-1)
 9. ✅ **MetaReasoner** — strategy adaptation with agent-loop feedback
 10. ✅ **ContinuousEvolution** — degradation detection + callback
+11. ✅ **AlignmentGate** — goal drift detection via TF-IDF similarity (Gap #10)
+12. ✅ **EconomicModel** — cost-aware orchestration + ROI tracking (Gap #11)
 
 ## Commands
 
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
                     # postbuild: auto-copy ke ~/.cache/opencode/packages/ (jika ada)
-node test/run.mjs       # 2789+ unit tests (mock, no LLM needed)
+node test/run.mjs       # 3101+ unit tests (mock, no LLM needed)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
 node test/e2e-scenario.mjs # EvoClaw: 50-file codebase, 5 iterations
@@ -41,10 +43,11 @@ src/
 ├── index.ts                   # Plugin entry: registers 32 tools + 5 hooks
 ├── README.md                  # → Dokumentasi fungsi per folder untuk AI context
 │
-├── core/                      # Inti engine: planning, execution, verification (63 file + 6 domain)
+├── core/                      # Inti engine: planning, execution, verification (78 file + 6 domain)
 │   ├── README.md              # Dokumentasi fungsi per folder untuk AI context
 │   ├── agent-loop.ts          # Autonomous loop: plan → execute → verify → retry
 │   ├── agent-blueprint.ts     # Blueprint parser/resolver (A2A Agent Card)
+│   ├── alignment-gate.ts      # Gap #10: Goal drift detection
 │   ├── auto-retry.ts          # Exponential backoff + jitter retry logic
 │   ├── bootstrap-knowledge.ts # Seeds RAG with high-confidence plugin docs
 │   ├── budget-tracker.ts      # Token/steps/time/cost budget enforcement
@@ -56,7 +59,9 @@ src/
 │   ├── data-cleaner.ts        # Strip debate artifacts, format output
 │   ├── debate-loop.ts         # Executor ↔ Critic AI debate for analysis
 │   ├── domain-registry.ts     # Domain-specific code generation (code/data/devops/...)
+│   ├── economic-model.ts      # Gap #11: Cost-aware orchestration + ROI tracking
 │   ├── error-analyzer.ts      # Categorizes errors (import/type/compile/test/runtime)
+│   ├── error-recovery.ts      # Gap #5: Error recovery strategies
 │   ├── errors.ts              # Custom error classes (TimeoutError, LLMError, etc.)
 │   ├── event-bus.ts           # Pub/sub event bus for tool hooks
 │   ├── event-taxonomy.ts      # Event type taxonomy schema (18 event types)
@@ -95,11 +100,31 @@ src/
 │   ├── verifier.ts            # Compile + test + Gap #4: multi-dimensional verification (security, perf, architecture, deps) with 3-tier system (fast/standard/deep)
 │   ├── workflow-engine.ts     # Chained step execution
 │   ├── world-model.ts         # World model for semantic understanding
+│   ├── dsl-executor.ts        # DSL instruction execution
+│   ├── dsl-validator.ts       # DSL validation
+│   ├── plugin-updater.ts      # Auto-update plugin
+│   ├── rate-limit.ts          # Rate limiting
+│   ├── session-reader.ts      # Session state reader
+│   ├── tool-catalog.ts        # Central tool registry
+│   ├── tool-guardrails.ts     # Tool usage guardrails
+│   ├── tool-usage-tracker.ts  # Per-tool usage tracking
 │   └── domains/               # Domain-specific generators
 │       ├── code.ts, data-science.ts, devops.ts
 │       ├── generic.ts, mobile.ts, security.ts
 │
-├── agents/                    # Multi-agent coordination
+├── tools/                     # Extracted tool definitions (6 file)
+│   ├── budget.ts              # agentic_budget tool
+│   ├── clean.ts               # agentic_clean tool
+│   ├── snapshot.ts            # agentic_snapshot tool
+│   ├── status.ts              # agentic_status tool
+│   ├── tool-context.ts        # Shared tool context interface
+│   └── types.ts               # Shared tool types
+│
+├── curation/                  # Skill curation (2 file)
+│   ├── index.ts
+│   └── skill-curator.ts       # Skill quality curation
+│
+├── agents/                    # Multi-agent coordination (9 file)
 │   ├── README.md              # Dokumentasi 7 file
 │   ├── agent-runtime.ts       # Agent sub-process spawner
 │   ├── a2a-client.ts          # A2A protocol client
@@ -109,7 +134,7 @@ src/
 │   ├── orchestrator.ts        # Multi-agent workflow pipelines + cross-validation
 │   └── role-registry.ts       # Built-in + custom agent definitions (extensible)
 │
-├── drift/                     # Error detection & recovery
+├── drift/                     # Error detection & recovery (7 file)
 │   ├── README.md              # Dokumentasi 5 file
 │   ├── checkpoints.ts         # Risk evaluation: BLOCK/REVIEW/WARNING
 │   ├── context-compressor.ts  # Sliding window + key info extraction
@@ -117,10 +142,11 @@ src/
 │   ├── hallucination-guard.ts # File/func/import claim verification
 │   └── pattern-discovery.ts   # Error pattern discovery
 │
-├── memory/                    # Cross-session & in-session memory
-│   ├── README.md              # Dokumentasi 18 file
+├── memory/                    # Cross-session & in-session memory (22 file)
+│   ├── README.md              # Dokumentasi 22 file
 │   ├── episodic-store.ts      # Cross-session memory with versioned schema
 │   ├── local-embedder.ts      # Local text embedding (API-based)
+│   ├── memory-provider.ts     # Pluggable memory backend interface
 │   ├── multi-index-rag.ts     # Multi-index RAG with category segregation
 │   ├── persistence.ts         # File-based JSON persistence
 │   ├── schema-version.ts      # Memory schema envelope + migration system
@@ -139,16 +165,16 @@ src/
 │   ├── sqlite-persistence.ts  # SQLite storage backend
 │   └── importance-index.ts    # Memory importance scoring
 │
-├── evaluation/
+├── evaluation/                # Live evaluation (3 file)
 │   ├── README.md              # Dokumentasi 1 file
 │   └── live-evaluator.ts      # 5-dimensi real-time scoring dari tool hooks
 │
-├── evolution/                 # Self-evolution system (Stage IV)
+├── evolution/                 # Self-evolution system — Stage IV (4 file)
 │   ├── README.md              # Dokumentasi 2 file
-│   ├── continuous-evolution.ts # Continuous evolution loop
+│   ├── continuous-evolution.ts # Continuous evolution loop + Gap #12
 │   └── self-evolver.ts        # Agent prompt evolution
 │
-└── observability/
+└── observability/             # Observability (5 file)
     ├── README.md              # Dokumentasi 3 file
     ├── logger.ts              # Structured logger (debug/info/warn/error)
     ├── dashboard.ts           # Timeline + stats + anomaly detection + model reliability
@@ -216,7 +242,7 @@ Konfigurasi plugin disimpan di `.agentic/config.json` (per project). Auto-create
 
 ## Tools Detail
 
-### Agentic Tools (31)
+### Agentic Tools (32)
 
 Semua tool menggunakan prefix `agentic_`. Dikelompokkan berdasarkan Stage:
 
@@ -255,14 +281,14 @@ Semua tool menggunakan prefix `agentic_`. Dikelompokkan berdasarkan Stage:
 | `agentic_skill` | `action` (extract/find/list), `query` | `{ skills }` | Reusable skills: extract dari task sukses, search, list. Self-describing format. |
 | `agentic_episodes` | `action` (search/recent/stats), `query` | `{ episodes }` | Cross-session memory search. Cari task serupa dari session sebelumnya. |
 | `agentic_guard` | `stepId` | `{ claims, verified }` | Re-check hallucination untuk file/fungsi/import claims. Auto-run di execute. |
-| `agentic_finetune` | `action` (prepare/upload/create-job/status) | `{ job, status }` | Fine-tuning pipeline: convert skills → training data → upload OpenAI → monitor job. |
+| `agentic_finetune` | `action` (prepare/save/upload/create-job/status/list/cancel/full-pipeline) | `{ job, status }` | Fine-tuning pipeline: convert skills → training data → upload OpenAI → create/monitor job. |
 | `agentic_tools` | `action` (search/call/list/stats) | `{ output }` | Unified tool discovery across MCP + A2A protocols. Search, call, and list tools from all connected backends. |
 
 #### Stage IV — Evolution
 
 | Tool | Input | Output | Description |
 |------|-------|--------|-------------|
-| `agentic_evolve` | `action` (inspect/register-role/export-skill/evolve) | `{ system }` | Self-evolution: inspect system, custom roles, manage prompts, export training data. |
+| `agentic_evolve` | `action` (inspect/register-role/export-skill/evolve/read-prompt/edit-prompt/prompt-history/rollback-prompt/export-training-data) | `{ system }` | Self-evolution: inspect system, custom roles, manage prompts, export training data. |
 
 #### Stage V — Autonomous
 

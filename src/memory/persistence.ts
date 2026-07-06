@@ -86,9 +86,9 @@ export class PersistenceLayer {
     const ns = this.scoped(namespace, scope)
     let found = false
     const globalPath = resolve(this.globalDir, ns, `${key}.json`)
-    if (existsSync(globalPath)) { try { unlinkSync(globalPath); found = true } catch { log.warn("Silent catch: non-fatal") } }
+    if (existsSync(globalPath)) { try { unlinkSync(globalPath); found = true } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) } }
     const localPath = resolve(this.localDir, ns, `${key}.json`)
-    if (existsSync(localPath)) { try { unlinkSync(localPath); found = true } catch { log.warn("Silent catch: non-fatal") } }
+    if (existsSync(localPath)) { try { unlinkSync(localPath); found = true } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) } }
     return found
   }
 
@@ -156,7 +156,7 @@ export class PersistenceLayer {
         try {
           const state = JSON.parse(readFileSync(resolve(dir, entry.name), "utf-8")) as PersistentState<T>
           results.push(state)
-        } catch { log.warn("Silent catch: skip corrupted") }
+        } catch (e) { log.warn("Silent catch: skip corrupted", { error: String(e) }) }
       }
     }
     return results

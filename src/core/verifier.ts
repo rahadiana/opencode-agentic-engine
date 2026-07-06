@@ -144,7 +144,7 @@ export class Verifier {
     const fileContents: Record<string, string> = {}
     for (const f of changedFiles) {
       const absPath = resolve(projectDir, f)
-      try { fileContents[f] = await readFile(absPath, "utf-8") } catch { log.warn("Silent catch: skip") }
+      try { fileContents[f] = await readFile(absPath, "utf-8") } catch (e) { log.warn("Silent catch: skip", { error: String(e) }) }
     }
     return fileContents
   }
@@ -637,8 +637,8 @@ export class Verifier {
             testCmd: () => ({ bin: testBin, args: testArgs, timeout: 60000 }),
           }
         }
-      } catch {
-        log.warn(`Failed to parse package.json in ${projectDir}, using default test config`)
+      } catch (e) {
+        log.warn(`Failed to parse package.json in ${projectDir}, using default test config`, { error: String(e) })
       }
     }
 

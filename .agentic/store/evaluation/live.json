@@ -1318,6 +1318,16 @@
         "query": "ContextCompressor export in index.ts",
         "resultsCount": 5,
         "focused": true
+      },
+      {
+        "query": "full project structure and architecture",
+        "resultsCount": 11,
+        "focused": false
+      },
+      {
+        "query": "function patterns, code organization, architecture",
+        "resultsCount": 10,
+        "focused": true
       }
     ],
     "delegations": [
@@ -1678,5 +1688,5 @@
       }
     ]
   },
-  "updatedAt": "2026-07-06T14:55:42.405Z"
+  "updatedAt": "2026-07-06T17:44:29.179Z"
 }

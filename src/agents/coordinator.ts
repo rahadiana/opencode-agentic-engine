@@ -401,8 +401,8 @@ export class AgentCoordinator {
         if (llmRole && ["architect", "developer", "qa", "coordinator", "pm"].includes(llmRole)) {
           return llmRole as AgentRole
         }
-      } catch {
-        log.warn(`[Coordinator] LLM suggestRole failed for "${description.slice(0, 60)}", falling back to keyword matching`)
+      } catch (e) {
+        log.warn(`[Coordinator] LLM suggestRole failed for "${description.slice(0, 60)}", falling back to keyword matching`, { error: String(e) })
       }
     }
 

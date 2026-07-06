@@ -1,6 +1,5 @@
 import type { LLMEngine } from "./llm.js"
 import type { DebateRound } from "./debate-loop.js"
-import { TimeoutError } from "./errors.js"
 import { SchemaValidator, type SchemaField } from "./skill-schema.js"
 
 export interface CleanConfig {
@@ -109,19 +108,13 @@ export class DataCleaner {
         // 30s timeout untuk LLM call (STEM Agent §timeout)
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), 30_000)
-        const resp = await Promise.race([
-          this.llmEngine.call({
-            systemPrompt,
-            userPrompt: `Format: ${format}\n\nRaw text:\n\n${cleaned.slice(0, maxOutput * 2)}\n\nClean this into ${format} format.${schema ? ` Follow this schema: ${schema}` : ""}`,
-            temperature: 0.1,
-            maxTokens: maxOutput,
-          }),
-          new Promise<never>((_, reject) => {
-            controller.signal.addEventListener("abort", () => {
-              reject(new TimeoutError("Cleaner LLM", 30000))
-            })
-          }),
-        ])
+        const resp = await this.llmEngine.call({
+          systemPrompt,
+          userPrompt: `Format: ${format}\n\nRaw text:\n\n${cleaned.slice(0, maxOutput * 2)}\n\nClean this into ${format} format.${schema ? ` Follow this schema: ${schema}` : ""}`,
+          temperature: 0.1,
+          maxTokens: maxOutput,
+          signal: controller.signal,
+        })
         clearTimeout(timeoutId)
 
         cleaned = resp.content.trim()

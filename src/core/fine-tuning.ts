@@ -183,15 +183,21 @@ export class FineTuningClient {
       const statusPromise = this.getJobStatus(jobId)
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 30_000)
-      const job = await Promise.race([
-        statusPromise,
-        new Promise<never>((_, reject) => {
-          controller.signal.addEventListener("abort", () => {
-            reject(new Error(`getJobStatus timed out for job ${jobId}`))
-          })
-        }),
-      ])
-      clearTimeout(timeoutId)
+      let job: FineTuningJob
+      try {
+        job = await Promise.race([
+          statusPromise,
+          new Promise<never>((_, reject) => {
+            controller.signal.addEventListener("abort", () => {
+              reject(new Error(`getJobStatus timed out for job ${jobId}`))
+            })
+          }),
+        ])
+        clearTimeout(timeoutId)
+      } catch (err) {
+        clearTimeout(timeoutId)
+        throw err
+      }
 
       if (job.status === "succeeded" || job.status === "failed" || job.status === "cancelled") {
         return job

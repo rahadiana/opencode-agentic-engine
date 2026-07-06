@@ -1,8 +1,8 @@
-# OpenCode Agentic Engine — 31 Tools Reference
+# OpenCode Agentic Engine — 32 Tools Reference
 
 > **Plugin**: opencode-agentic-engine  
-> **Version**: 0.5.13-dev  
-> **Total Tools**: 31 (Stage I–V + Blueprint)
+> **Version**: 0.5.17-dev  
+> **Total Tools**: 32 (Stage I–V + Blueprint)
 
 ---
 

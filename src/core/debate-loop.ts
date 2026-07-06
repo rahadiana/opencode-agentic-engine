@@ -1,6 +1,5 @@
 import type { LLMEngine } from "./llm.js"
 import type { AgentRuntime, AgentContext } from "../agents/agent-runtime.js"
-import { TimeoutError } from "./errors.js"
 import { createLogger } from "../observability/logger.js"
 import { combinedAbort } from "./dag-helpers.js"
 
@@ -268,21 +267,15 @@ export class DebateLoop {
       try {
         const cleanController = new AbortController()
         const cleanTimeoutId = setTimeout(() => cleanController.abort(), 30_000)
-        const cleanResp = await Promise.race([
-          this.llmEngine.call({
-            systemPrompt: CLEANER_PROMPT,
-            userPrompt: `Format: ${format}\n\nTask: ${config.task}\n\nFinal analysis to clean:\n\n${currentDraft}\n\nOutput the cleaned version in ${format} format.`,
-            temperature: 0.1,
-            maxTokens: 4096,
-            model: config.cleanerModel,
-            toolName: 'debate-cleaner',
-          }),
-          new Promise<never>((_, reject) => {
-            cleanController.signal.addEventListener("abort", () => {
-              reject(new TimeoutError("Cleaner LLM call", 30000))
-            })
-          }),
-        ])
+        const cleanResp = await this.llmEngine.call({
+          systemPrompt: CLEANER_PROMPT,
+          userPrompt: `Format: ${format}\n\nTask: ${config.task}\n\nFinal analysis to clean:\n\n${currentDraft}\n\nOutput the cleaned version in ${format} format.`,
+          temperature: 0.1,
+          maxTokens: 4096,
+          model: config.cleanerModel,
+          toolName: 'debate-cleaner',
+          signal: cleanController.signal,
+        })
         clearTimeout(cleanTimeoutId)
         finalOutput = cleanResp.content
       } catch (error) {
@@ -402,24 +395,17 @@ export class DebateLoop {
     try {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), perCallTimeout)
-      const resp = await Promise.race([
-        this.llmEngine.call({
-          systemPrompt: EXECUTOR_PROMPT,
-          userPrompt: input,
-          temperature: 0.2,
-          maxTokens: 4096,
-          bypassCache: round > 1,
-          model: config.executorModel,
-          toolName: 'debate-executor',
-          signal,
-          timeoutMs: perCallTimeout,
-        }),
-        new Promise<never>((_, reject) => {
-          controller.signal.addEventListener("abort", () => {
-            reject(new TimeoutError("LLM call", perCallTimeout))
-          })
-        }),
-      ])
+      const resp = await this.llmEngine.call({
+        systemPrompt: EXECUTOR_PROMPT,
+        userPrompt: input,
+        temperature: 0.2,
+        maxTokens: 4096,
+        bypassCache: round > 1,
+        model: config.executorModel,
+        toolName: 'debate-executor',
+        signal,
+        timeoutMs: perCallTimeout,
+      })
       clearTimeout(timeoutId)
       if (isNoLlm(resp.content)) {
         return { output: '', error: NO_LLM_RESPONSE }
@@ -503,24 +489,17 @@ export class DebateLoop {
     try {
       const criticController = new AbortController()
       const criticTimeoutId = setTimeout(() => criticController.abort(), perCallTimeout)
-      const resp = await Promise.race([
-        this.llmEngine.call({
-          systemPrompt: CRITIC_PROMPT,
-          userPrompt: criticInput,
-          temperature: 0.2,
-          maxTokens: 2048,
-          bypassCache: round > 1,
-          model: config.criticModel,
-          toolName: 'debate-critic',
-          signal,
-          timeoutMs: perCallTimeout,
-        }),
-        new Promise<never>((_, reject) => {
-          criticController.signal.addEventListener("abort", () => {
-            reject(new TimeoutError("Critic LLM call", perCallTimeout))
-          })
-        }),
-      ])
+      const resp = await this.llmEngine.call({
+        systemPrompt: CRITIC_PROMPT,
+        userPrompt: criticInput,
+        temperature: 0.2,
+        maxTokens: 2048,
+        bypassCache: round > 1,
+        model: config.criticModel,
+        toolName: 'debate-critic',
+        signal,
+        timeoutMs: perCallTimeout,
+      })
       clearTimeout(criticTimeoutId)
       if (isNoLlm(resp.content)) {
         return { output: '', error: NO_LLM_RESPONSE }

@@ -1,9 +1,7 @@
 import { LLMEngine } from "../core/llm.js"
-import type { LLMResponse } from "../core/llm-types.js"
 import type { ModelRegistry } from "../core/model-registry.js"
 import type { AgentRole } from "./coordinator.js"
 import { RoleRegistry } from "./role-registry.js"
-import { TimeoutError } from "../core/errors.js"
 
 export interface AgentContext {
   systemPrompt: string
@@ -99,7 +97,7 @@ export class AgentRuntime {
       try {
         const client = this.opencodeClient as { session: { delete: (opts: { path: { id: string } }) => Promise<unknown> } }
         client.session.delete({ path: { id: this._sharedSessionId } }).catch(() => {})
-      } catch { console.warn("catch: ignore") }
+      } catch (e) { console.warn("catch: ignore", { error: String(e) }) }
     }
     this._sharedSessionId = null
     this._sharedSessionCount = 0
@@ -119,7 +117,7 @@ export class AgentRuntime {
       try {
         const client = this.opencodeClient as { session: { delete: (opts: { path: { id: string } }) => Promise<unknown> } }
         client.session.delete({ path: { id: this._sharedSessionId } }).catch(() => {})
-      } catch { console.warn("catch: ignore") }
+      } catch (e) { console.warn("catch: ignore", { error: String(e) }) }
     }
     Promise.all(engines.map(([, e]) => e.disposeTempSession().catch(() => {})))
   }
@@ -241,23 +239,16 @@ export class AgentRuntime {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
-      const resp = await Promise.race([
-        engine.call({
-          systemPrompt: fullPrompt,
-          userPrompt: `Complete the task described in the system prompt.`, // ringkas, gak duplikasi
-          temperature: 0.3,
-          maxTokens: 4096,
-          model: modelOverride, // ← dikirim ke SDK langsung, bukan via config
-          signal: controller.signal, // ← forward AbortSignal ke bawah
-          timeoutMs, // ← pass dynamic timeout so llm.ts inner timeout scales with prompt size too
-          ...(ctx.reasoningEffort ? { reasoningEffort: ctx.reasoningEffort } : {}),
-        }),
-        new Promise<LLMResponse>((_, reject) => {
-          controller.signal.addEventListener("abort", () => {
-            reject(new TimeoutError("LLM call", timeoutMs))
-          })
-        }),
-      ])
+      const resp = await engine.call({
+        systemPrompt: fullPrompt,
+        userPrompt: `Complete the task described in the system prompt.`, // ringkas, gak duplikasi
+        temperature: 0.3,
+        maxTokens: 4096,
+        model: modelOverride, // ← dikirim ke SDK langsung, bukan via config
+        signal: controller.signal, // ← forward AbortSignal ke bawah
+        timeoutMs, // ← pass dynamic timeout so llm.ts inner timeout scales with prompt size too
+        ...(ctx.reasoningEffort ? { reasoningEffort: ctx.reasoningEffort } : {}),
+      })
       clearTimeout(timeoutId)
       const output = resp.content
       if (output.startsWith("LLM error") || output.startsWith("[NO_LLM]")) {

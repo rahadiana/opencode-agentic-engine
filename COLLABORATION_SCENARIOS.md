@@ -1,7 +1,7 @@
 # 🤝 Collaboration Scenarios — OpenCode Agentic Engine
 
 > Panduan lengkap tool chaining patterns, multi-agent workflows, dan collaboration scenarios
-> untuk 33 agentic_* tools. Referensi utama untuk autonomous software engineering.
+> untuk 32 agentic_* tools. Referensi utama untuk autonomous software engineering.
 
 ---
 

@@ -70,7 +70,7 @@ export function makeSnapshotTool(ctx: ToolContext): ToolSpec {
         let snapshot: { plan?: unknown; completedSteps?: string[]; filesModified?: string[]; [key: string]: unknown }
         try {
           snapshot = JSON.parse(raw) as typeof snapshot
-        } catch { log.warn("Silent catch: snapshot corrupted")
+        } catch (_e) { log.warn("Silent catch: snapshot corrupted")
           return { output: `Snapshot "${args.label}" is corrupted and cannot be restored.` }
         }
 
@@ -126,7 +126,7 @@ export function makeSnapshotTool(ctx: ToolContext): ToolSpec {
           try {
             const s = JSON.parse(raw)
             lines.push(`- \`${label}\` — ${s.planGoal ?? "N/A"} (${s.completedSteps?.length ?? 0}/${s.totalSteps ?? 0} steps, ${new Date(s.timestamp).toLocaleDateString()})`)
-          } catch { log.warn("Silent catch: snapshot listing corrupted")
+          } catch (_e) { log.warn("Silent catch: snapshot listing corrupted")
             lines.push(`- \`${label}\` (corrupted)`)
           }
         } else {
