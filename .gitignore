@@ -1,8 +1,10 @@
-node_modules/
-dist/
-logs/
+.agentic/*.jsonl
+.agentic/errors.log
 .env
 .omo/
+coverage/
+dist/
+logs/
+node_modules/
 scripts/telegram.sh
 tsconfig.tsbuildinfo
-coverage/
