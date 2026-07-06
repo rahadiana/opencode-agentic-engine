@@ -168,6 +168,7 @@ export interface ToolContext {
 
   // ── Data ──
   dataCleaner: DataCleaner
+  configLoader: ConfigLoader
 
   // ── Helpers ──
   logErrorToFile: (toolName: string, message: string, stack?: string) => void
