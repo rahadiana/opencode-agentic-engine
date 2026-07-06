@@ -1,7 +1,8 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs"
+import { readdirSync } from "node:fs"
 import { resolve } from "node:path"
 import type { DomainPack, VerifierStrategy, ErrorMatcher } from "../domain-registry.js"
 import { createGenericContract } from "../formal-model.js"
+import { scoreProjectFiles, tryReadFile, issuesResult } from "../domain-helpers.js"
 
 // ─── Keywords ──────────────────────────────────────────────────────────
 
@@ -33,22 +34,20 @@ const dsDetect = (input: string): number => {
   const dsFiles = ["requirements.txt", "environment.yml", "Pipfile",
     "setup.py", "pyproject.toml",
   ]
-  for (const f of dsFiles) {
-    try { if (existsSync(resolve(projectDir, f))) score += 0.1 } catch { console.warn("catch: skip") }
-  }
+  score += scoreProjectFiles(projectDir, 0.1, ...dsFiles)
   try {
     const files = readdirSync(projectDir).slice(0, 200)
     const notebooks = files.filter(f => f.endsWith(".ipynb"))
     score += Math.min(notebooks.length, 3) * 0.2
     const pyFiles = files.filter(f => f.endsWith(".py")).slice(0, 10)
     for (const pf of pyFiles) {
-      try {
-        const content = readFileSync(resolve(projectDir, pf), "utf-8")
+      const content = tryReadFile(resolve(projectDir, pf))
+      if (content) {
         const dsImports = ["pandas", "numpy", "sklearn", "tensorflow", "torch", "matplotlib", "seaborn"]
         for (const imp of dsImports) {
           if (content.includes(imp)) { score += 0.1; break }
         }
-      } catch { console.warn("catch: skip") }
+      }
     }
   } catch { console.warn("catch: skip") }
   return Math.min(score, 1.0)
@@ -63,34 +62,29 @@ const dsVerifiers: VerifierStrategy[] = [
       const issues: string[] = []
       for (const file of context.filesModified) {
         if (!file.endsWith(".ipynb")) continue
-        try {
-          const absPath = resolve(context.projectDir, file)
-          if (!existsSync(absPath)) continue
-          const content = readFileSync(absPath, "utf-8")
-          const nb = JSON.parse(content)
+        const absPath = resolve(context.projectDir, file)
+        const content = tryReadFile(absPath)
+        if (!content) continue
+        const nb = JSON.parse(content)
 
-          // Check notebook structure
-          if (!nb.cells || !Array.isArray(nb.cells)) {
-            issues.push(`${file}: Invalid notebook structure`)
-            continue
-          }
-          if (nb.nbformat !== 4) issues.push(`${file}: Non-standard nbformat (expected 4)`)
+        // Check notebook structure
+        if (!nb.cells || !Array.isArray(nb.cells)) {
+          issues.push(`${file}: Invalid notebook structure`)
+          continue
+        }
+        if (nb.nbformat !== 4) issues.push(`${file}: Non-standard nbformat (expected 4)`)
 
-          // Check for execution count issues
-          let emptyOutputs = 0
-          for (let i = 0; i < nb.cells.length; i++) {
-            const cell = nb.cells[i]
-            if (cell.cell_type === "code" && cell.execution_count === null) {
-              emptyOutputs++
-            }
+        // Check for execution count issues
+        let emptyOutputs = 0
+        for (let i = 0; i < nb.cells.length; i++) {
+          const cell = nb.cells[i]
+          if (cell.cell_type === "code" && cell.execution_count === null) {
+            emptyOutputs++
           }
-          if (emptyOutputs > 3) issues.push(`${file}: ${emptyOutputs} cells never executed`)
-        } catch { console.warn("catch: skip") }
+        }
+        if (emptyOutputs > 3) issues.push(`${file}: ${emptyOutputs} cells never executed`)
       }
-      if (issues.length > 0) {
-        return { passed: false, output: `Notebook issues:\n${issues.join("\n")}` }
-      }
-      return { passed: true, output: "Notebook valid" }
+      return issuesResult(issues, "Notebook valid")
     },
   },
   {
@@ -99,29 +93,24 @@ const dsVerifiers: VerifierStrategy[] = [
       const issues: string[] = []
       for (const file of context.filesModified) {
         if (!file.endsWith(".py")) continue
-        try {
-          const absPath = resolve(context.projectDir, file)
-          if (!existsSync(absPath)) continue
-          const content = readFileSync(absPath, "utf-8")
-          const lines = content.split("\n")
+        const absPath = resolve(context.projectDir, file)
+        const content = tryReadFile(absPath)
+        if (!content) continue
+        const lines = content.split("\n")
 
-          for (let i = 0; i < lines.length; i++) {
-            const line = lines[i]
-            // Check for wildcard imports
-            if (line.match(/^\s*from\s+\S+\s+import\s+\*/)) {
-              issues.push(`${file}:${i + 1}: Wildcard import — import specific names instead`)
-            }
-            // Check for bare except:
-            if (line.match(/^\s*except\s*:/)) {
-              issues.push(`${file}:${i + 1}: Bare except — catch specific exceptions`)
-            }
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i]
+          // Check for wildcard imports
+          if (line.match(/^\s*from\s+\S+\s+import\s+\*/)) {
+            issues.push(`${file}:${i + 1}: Wildcard import — import specific names instead`)
           }
-        } catch { console.warn("catch: skip") }
+          // Check for bare except:
+          if (line.match(/^\s*except\s*:/)) {
+            issues.push(`${file}:${i + 1}: Bare except — catch specific exceptions`)
+          }
+        }
       }
-      if (issues.length > 0) {
-        return { passed: false, output: `Python code issues:\n${issues.join("\n")}` }
-      }
-      return { passed: true, output: "Python imports OK" }
+      return issuesResult(issues, "Python imports OK")
     },
   },
 ]

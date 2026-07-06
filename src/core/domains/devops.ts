@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process"
-import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import type { DomainPack, VerifierStrategy, ErrorMatcher } from "../domain-registry.js"
 import { createGenericContract } from "../formal-model.js"
+import { scoreProjectFiles, tryReadFile, safeExec, issuesResult } from "../domain-helpers.js"
 
 // ─── Keywords ──────────────────────────────────────────────────────────
 
@@ -28,15 +28,13 @@ const devopsDetect = (input: string): number => {
   for (const kw of devopsKeywords) {
     if (lower.includes(kw)) score += 0.05
   }
-  // Check for devops config files
+  const projectDir = process.cwd()
   const devopsFiles = ["Dockerfile", "docker-compose.yml", "docker-compose.yaml",
     ".github/workflows", ".gitlab-ci.yml", "Jenkinsfile",
     "terraform.tf", "main.tf", "playbook.yml", "values.yaml",
     "Chart.yaml", "k8s", "kubernetes",
   ]
-  for (const f of devopsFiles) {
-    try { if (existsSync(f)) score += 0.25 } catch { console.warn("catch: skip") }
-  }
+  score += scoreProjectFiles(projectDir, 0.25, ...devopsFiles)
   return Math.min(score, 1.0)
 }
 
@@ -50,21 +48,20 @@ const devopsVerifiers: VerifierStrategy[] = [
 
       for (const file of context.filesModified) {
         if (!file.endsWith("Dockerfile") && !file.endsWith(".dockerfile")) continue
-        try {
-          const absPath = resolve(context.projectDir, file)
-          const content = readFileSync(absPath, "utf-8")
+        const absPath = resolve(context.projectDir, file)
+        const content = tryReadFile(absPath)
+        if (!content) continue
 
-          // Check common Dockerfile issues
-          if (!content.includes("FROM ")) issues.push(`${file}: Missing FROM instruction`)
-          if (content.includes(":latest")) issues.push(`${file}: Avoid 'latest' tag — use specific version`)
-          if (!content.includes("WORKDIR") && !content.includes("COPY")) {
-            // Small project, ok
-          }
-          if ((content.match(/RUN /g) || []).length > 10) issues.push(`${file}: Too many RUN layers — consider chaining with &&`)
-          if (content.includes("apt-get upgrade") && !content.includes("--no-install-recommends")) {
-            issues.push(`${file}: Add --no-install-recommends to apt-get`)
-          }
-        } catch { console.warn("catch: skip") }
+        // Check common Dockerfile issues
+        if (!content.includes("FROM ")) issues.push(`${file}: Missing FROM instruction`)
+        if (content.includes(":latest")) issues.push(`${file}: Avoid 'latest' tag — use specific version`)
+        if (!content.includes("WORKDIR") && !content.includes("COPY")) {
+          // Small project, ok
+        }
+        if ((content.match(/RUN /g) || []).length > 10) issues.push(`${file}: Too many RUN layers — consider chaining with &&`)
+        if (content.includes("apt-get upgrade") && !content.includes("--no-install-recommends")) {
+          issues.push(`${file}: Add --no-install-recommends to apt-get`)
+        }
       }
 
       // Try hadolint if available
@@ -72,23 +69,13 @@ const devopsVerifiers: VerifierStrategy[] = [
         execFileSync("which", ["hadolint"], { stdio: "pipe" })
         const dockerFiles = context.filesModified.filter(f => f.endsWith("Dockerfile") || f.endsWith(".dockerfile"))
         for (const df of dockerFiles) {
-          try {
-            const output = execFileSync("hadolint", [resolve(context.projectDir, df)], {
-              timeout: 15000, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"],
-            })
-            if (output.trim()) issues.push(`hadolint(${df}): ${output.slice(0, 300)}`)
-          } catch (e: unknown) {
-            const err = e as { stdout?: string; stderr?: string }
-            const out = err.stdout || err.stderr || ""
-            if (out.trim()) issues.push(`hadolint(${df}): ${out.slice(0, 300)}`)
-          }
+          const absPath = resolve(context.projectDir, df)
+          const result = safeExec("hadolint", [absPath], { cwd: context.projectDir, timeout: 15000 })
+          if (result.output.trim()) issues.push(`hadolint(${df}): ${result.output.slice(0, 300)}`)
         }
       } catch { console.warn("catch: hadolint not available") }
 
-      if (issues.length > 0) {
-        return { passed: false, output: `Dockerfile issues:\n${issues.join("\n")}` }
-      }
-      return { passed: true, output: "Dockerfile checks passed" }
+      return issuesResult(issues, "Dockerfile checks passed")
     },
   },
   {
@@ -97,32 +84,28 @@ const devopsVerifiers: VerifierStrategy[] = [
       const issues: string[] = []
       for (const file of context.filesModified) {
         if (!file.endsWith(".yml") && !file.endsWith(".yaml")) continue
+        const absPath = resolve(context.projectDir, file)
+        const content = tryReadFile(absPath)
+        if (!content) continue
+        if (!content.trim()) {
+          issues.push(`${file}: Empty YAML file`)
+          continue
+        }
         try {
-          const absPath = resolve(context.projectDir, file)
-          const content = readFileSync(absPath, "utf-8")
-          if (!content.trim()) {
-            issues.push(`${file}: Empty YAML file`)
-            continue
-          }
-          try {
-            JSON.parse(content)
-            issues.push(`${file}: Looks like JSON, not YAML — use .json extension`)
-          } catch { console.warn("catch: not JSON, good") }
-          if (content.includes("\t") && (content.includes(":\n") || content.includes("-\n"))) {
-            const lines = content.split("\n")
-            for (let i = 0; i < lines.length; i++) {
-              if (lines[i].startsWith("\t")) {
-                issues.push(`${file}: Line ${i + 1} uses tab indentation — YAML requires spaces`)
-                break
-              }
+          JSON.parse(content)
+          issues.push(`${file}: Looks like JSON, not YAML — use .json extension`)
+        } catch { console.warn("catch: not JSON, good") }
+        if (content.includes("\t") && (content.includes(":\n") || content.includes("-\n"))) {
+          const lines = content.split("\n")
+          for (let i = 0; i < lines.length; i++) {
+            if (lines[i].startsWith("\t")) {
+              issues.push(`${file}: Line ${i + 1} uses tab indentation — YAML requires spaces`)
+              break
             }
           }
-        } catch { console.warn("catch: skip unreadable") }
+        }
       }
-      if (issues.length > 0) {
-        return { passed: false, output: `YAML issues:\n${issues.join("\n")}` }
-      }
-      return { passed: true, output: "YAML validation passed" }
+      return issuesResult(issues, "YAML validation passed")
     },
   },
 ]

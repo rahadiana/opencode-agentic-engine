@@ -1,8 +1,8 @@
-import { execFileSync } from "node:child_process"
 import { existsSync } from "node:fs"
 import { resolve } from "node:path"
 import type { DomainPack, VerifierStrategy, ErrorMatcher } from "../domain-registry.js"
 import { createCodeContract } from "../formal-model.js"
+import { safeExec, scoreProjectFiles } from "../domain-helpers.js"
 
 const codeKeywords = [
   "code", "app", "api", "function", "bug", "feature", "refactor",
@@ -20,10 +20,8 @@ const codeDetect = (input: string): number => {
     if (lower.includes(kw)) score += 0.05
   }
   const projectDir = process.cwd()
-  const projectFiles = ["package.json", "Cargo.toml", "go.mod", "pyproject.toml", "setup.py", "tsconfig.json"]
-  for (const f of projectFiles) {
-    try { if (existsSync(resolve(projectDir, f))) score += 0.2 } catch { console.warn("catch: skip") }
-  }
+  score += scoreProjectFiles(projectDir, 0.2,
+    "package.json", "Cargo.toml", "go.mod", "pyproject.toml", "setup.py", "tsconfig.json")
   return Math.min(score, 1.0)
 }
 
@@ -57,13 +55,7 @@ const codeVerifiers: VerifierStrategy[] = [
       }
       const cmd = compileCmds[lang]
       if (!cmd) return { passed: true, output: `No compiler configured for ${lang}` }
-      try {
-        const output = execFileSync(cmd.bin, cmd.args, { cwd: context.projectDir, timeout: 30000, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] })
-        return { passed: true, output: output || "Compilation successful" }
-      } catch (e: unknown) {
-        const err = e as { stdout?: string; stderr?: string; message?: string }
-        return { passed: false, output: err.stderr || err.stdout || err.message || "Compilation failed" }
-      }
+      return safeExec(cmd.bin, cmd.args, { cwd: context.projectDir, timeout: 30000 }, "Compilation successful")
     },
   },
   {
@@ -78,13 +70,7 @@ const codeVerifiers: VerifierStrategy[] = [
       }
       const cmd = lintCmds[lang]
       if (!cmd) return { passed: true, output: `No linter configured for ${lang}` }
-      try {
-        const output = execFileSync(cmd.bin, cmd.args, { cwd: context.projectDir, timeout: 60000, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] })
-        return { passed: true, output: output || "Lint passed" }
-      } catch (e: unknown) {
-        const err = e as { stdout?: string; stderr?: string; message?: string }
-        return { passed: false, output: err.stdout || err.stderr || err.message || "Lint failed" }
-      }
+      return safeExec(cmd.bin, cmd.args, { cwd: context.projectDir, timeout: 60000 }, "Lint passed")
     },
   },
   {
@@ -100,13 +86,7 @@ const codeVerifiers: VerifierStrategy[] = [
       }
       const cmd = testCmds[lang]
       if (!cmd) return { passed: true, output: `No test runner configured for ${lang}` }
-      try {
-        const output = execFileSync(cmd.bin, cmd.args, { cwd: context.projectDir, timeout: 60000, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] })
-        return { passed: true, output: output || "Tests passed" }
-      } catch (e: unknown) {
-        const err = e as { stdout?: string; stderr?: string; message?: string }
-        return { passed: false, output: err.stdout || err.stderr || err.message || "Tests failed" }
-      }
+      return safeExec(cmd.bin, cmd.args, { cwd: context.projectDir, timeout: 60000 }, "Tests passed")
     },
   },
 ]

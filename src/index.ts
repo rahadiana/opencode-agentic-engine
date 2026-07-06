@@ -39,7 +39,7 @@ import { createLogger, setGlobalLogClient, type LogClient } from "./observabilit
 import { CheckpointSystem } from "./drift/checkpoints.js"
 import { SessionStore } from "./memory/session-store.js"
 import { TOOL_COMPLEXITY } from "./core/llm-types.js"
-import { TraceLogger, type TraceEntry } from "./observability/trace-logger.js"
+import { TraceLogger } from "./observability/trace-logger.js"
 import { RoleRegistry, type PromptEntry } from "./agents/role-registry.js"
 
 import { MemorySchemaVersion, createMemoryEnvelope } from "./memory/schema-version.js"
@@ -89,6 +89,10 @@ import { ToolUsageTracker } from "./core/tool-usage-tracker.js"
 import { BlueprintParser, BlueprintResolver, type ModelSpecMap } from "./core/agent-blueprint.js"
 import { autoUpdatePlugin } from "./core/plugin-updater.js"
 import { evaluateWorkflowPolicy, formatWorkflowPolicyDecisions, verificationEvidenceFailed } from "./core/workflow-policy.js"
+import { makeStatusTool } from "./tools/status.js"
+import { makeCleanTool } from "./tools/clean.js"
+import { makeSnapshotTool } from "./tools/snapshot.js"
+import { makeBudgetTool } from "./tools/budget.js"
 
 // ── Build-time version injected by esbuild define ──
 declare const __VERSION__: string
@@ -1149,6 +1153,79 @@ const confidenceStore = new ConfidenceStore()
     traceLogger.log({ step: "delegate:batch", input: `${allResults.length} tasks`, output: `${passed}/${allResults.length} passed`, toolUsed: "agentic_delegate", success: passed === allResults.length, durationMs: allResults.reduce((s, r) => s + r.durationMs, 0) / allResults.length })
     return { output }
   }
+
+  // ── Tool context: shared state injected into every extracted tool file ──
+  // Cast via double-unknown because TypeScript can't structurally match 50+ properties
+  const ctx = {
+    sessionStore,
+    domainRegistry,
+    worktree,
+    projectId,
+    config,
+    log,
+    projectContext,
+    TOOL_REGISTRY,
+    currentInjectDomain,
+    planner,
+    plannerCritic,
+    executor,
+    intentParser,
+    agentLoop,
+    verifier,
+    errorAnalyzer,
+    errorRecovery,
+    alignmentGate,
+    economicModel,
+    confidenceScorer,
+    confidenceStore,
+    techDebtScorer: debtScorer,
+    constraintManifold,
+    navigator,
+    toolRouter,
+    routerAgent,
+    skillStore,
+    skillCurator: curator,
+    episodicStore,
+    memoryOrchestrator,
+    secondBrain,
+    rag: multiIndexRAG,
+    coordinator,
+    orchestrator,
+    roleRegistry,
+    agentRuntime,
+    debateLoop,
+    dashboard,
+    traceLogger,
+    liveEvaluator,
+    patternDiscovery,
+    toolUsageTracker,
+    workflowEngine,
+    llmEngine,
+    modelRegistry,
+    hallucinationGuard,
+    checkpoints,
+    stateStore,
+    budgetTracker,
+    eventBus,
+    parallelExec,
+    dependencyTracker: depTracker,
+    contextCompressor,
+    git,
+    selfEvolver,
+    continuousEvolution,
+    metaReasoner,
+    mcpServer,
+    mcpClient,
+    protocolAdapter,
+    dynamicToolRegistry,
+    worldModel,
+    simulationEngine,
+    dataCleaner,
+    logErrorToFile,
+    detectSubAgentRole,
+    buildSubAgentInjection,
+    ctxDir,
+  } as unknown as import("./tools/tool-context.js").ToolContext
 
   return {
     tool: {
@@ -2221,314 +2298,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_status: registryTool("agentic_status", {
-        description: "Show execution dashboard: progress bar, health, blocked steps, dependency graph, retry history, file change summary. Use detail='full' for comprehensive observability (timeline, anomalies, model reliability, cross-session patterns).",
-        args: {
-          detail: tool.schema.enum(["basic", "full"]).optional().describe("'basic' (default) shows execution status; 'full' includes comprehensive observability dashboard with trace timeline, anomalies, cross-session patterns, gap analysis"),
-        },
-        async execute(args, context) {
-          // ── If detail='full', run comprehensive dashboard (merged from agentic_dashboard) ──
-          if (args.detail === "full") {
-            const modelReliability = modelRegistry.getSummary()
-            let traceSection = ""
-
-            await traceLogger.flush()
-            const tracePath = `${worktree}/.agentic/trace.jsonl`
-            let traces: Record<string, unknown>[] = []
-            try {
-              const content = readFileSync(tracePath, "utf-8")
-              traces = content.trim().split("\n").filter(Boolean).map(l => JSON.parse(l))
-            } catch { log.warn("Silent catch: no traces yet") }
-
-            if (traces.length > 0) {
-              const data = dashboard.generate(traces as unknown as TraceEntry[], Date.now(), {
-                skillStore: {
-                  getAll: () => skillStore.getAll(),
-                  getLifecycleStats: () => skillStore.getLifecycleStats(),
-                  get size() { return skillStore.size },
-                },
-                constraintManifold: {
-                  snapshot: () => constraintManifold.snapshot(),
-                  getActiveModifications: () => constraintManifold.getActiveModifications(),
-                  getRecentViolations: () => constraintManifold.getRecentViolations(),
-                },
-                semanticCacheStats: llmEngine.getSemanticCacheStats(),
-                modelRegistry: {
-                  getAllScores: () => modelRegistry.getAllScores(),
-                },
-              })
-              traceSection = dashboard.formatForDisplay(data)
-            }
-
-            let output = traceSection || "### 📊 Execution Overview\n\nNo trace data available yet. Execute some steps first.\n"
-
-            // EventBus observability stats
-            const eventHistory = eventBus.getHistory()
-            const eventTypes = new Map<string, number>()
-            for (const ev of eventHistory) {
-              eventTypes.set(ev.type, (eventTypes.get(ev.type) ?? 0) + 1)
-            }
-            if (eventTypes.size > 0) {
-              output += `\n### 🔌 Event Bus (${eventHistory.length} events, ${eventTypes.size} types)\n`
-              const sorted = [...eventTypes.entries()].sort((a, b) => b[1] - a[1])
-              for (const [type, count] of sorted.slice(0, 10)) {
-                output += `- \`${type}\`: ${count}x\n`
-              }
-              output += `**Subscribers:** ${eventBus.subscriberCount}\n`
-            }
-
-            // WorkflowEngine stats
-            const weStatus = workflowEngine.getStatus()
-            output += `\n### 🔗 Workflow Engine\n`
-            output += `**Retry entries:** ${weStatus.retryEntries}\n`
-
-            output += `\n### 🤖 Model Reliability\n${modelReliability}\n`
-
-            try {
-              const ocModels = await llmEngine.listOpenCodeModels()
-              if (ocModels.length > 0) {
-                output += `\n### 🧠 Available Models (from OpenCode)\n`
-                const byProvider = new Map<string, string[]>()
-                for (const m of ocModels) {
-                  const list = byProvider.get(m.providerName) ?? []
-                  list.push(`\`${m.id}\``)
-                  byProvider.set(m.providerName, list)
-                }
-                for (const [provider, models] of byProvider) {
-                  output += `- **${provider}**: ${models.join(", ")}\n`
-                }
-              }
-            } catch { log.warn("Silent catch: silent") }
-
-            const allEpisodes = episodicStore.getRecent(200)
-            if (allEpisodes.length >= 3) {
-              const allSkills = skillStore.getAll().map(s => ({
-                name: s.definition.meta.name,
-                successRate: s.successRate,
-                usageCount: s.usageCount,
-              }))
-              const report = patternDiscovery.analyze(allEpisodes, [], allSkills)
-              if (report.errorPatterns.length > 0 || report.recommendations.length > 0) {
-                output += `\n### 🔍 Cross-Session Patterns (${report.totalSessions} sessions)\n`
-                if (report.errorPatterns.length > 0) {
-                  output += `\n**Recurring Errors:**\n`
-                  for (const ep of report.errorPatterns.slice(0, 3)) {
-                    output += `- \`${ep.category}\`: ${ep.sessionCount}/${report.totalSessions} sessions (${(ep.sessionAffinity * 100).toFixed(0)}%)\n`
-                  }
-                }
-                if (report.filePatterns.some(f => f.isHotSpot)) {
-                  output += `\n**Hot Spot Files:**\n`
-                  for (const fp of report.filePatterns.filter(f => f.isHotSpot).slice(0, 3)) {
-                    output += `- \`${fp.filePath}\`: modified in ${fp.sessionCount} sessions`
-                    if (fp.coChangedFiles.length > 0) {
-                      output += ` (co-changes: ${fp.coChangedFiles.slice(0, 2).map(c => `\`${c.filePath}\``).join(", ")})`
-                    }
-                    output += "\n"
-                  }
-                }
-                if (report.recommendations.length > 0) {
-                  const highRecs = report.recommendations.filter(r => r.priority === "high")
-                  if (highRecs.length > 0) {
-                    output += `\n**⚠️ High Priority Recommendations:**\n`
-                    for (const rec of highRecs.slice(0, 3)) {
-                      output += `- ${rec.description}\n`
-                    }
-                  }
-                }
-              }
-            }
-
-            const liveScore = liveEvaluator.computeScore()
-            if (liveScore.totalSteps > 0 || liveScore.totalDelegations > 0) {
-              output += `\n### 📊 Live Evaluation Score\n`
-              output += liveEvaluator.formatReport(false)
-            }
-
-            output += `\n### 🩺 Error Recovery (Gap #5)\n`
-            output += `${errorRecovery.getSummary()}\n`
-            output += `\n### 🎯 Alignment (Gap #10)\n`
-            output += `${alignmentGate.getSummary()}\n`
-            output += `\n### 💰 Economics (Gap #11)\n`
-            output += `${economicModel.getSummary()}\n`
-
-            // ── Tool usage stats ──
-            const toolStats = toolUsageTracker.getStats()
-            if (toolStats.length > 0) {
-              output += `\n### 🛠️ Tool Effectiveness\n`
-              output += `| Tool | Calls | Success | Rate | Avg (ms) |\n`
-              output += `|------|-------|---------|------|----------|\n`
-              for (const s of toolStats.slice(0, 10)) {
-                output += `| ${s.toolName} | ${s.totalCalls} | ${s.successCount} | ${(s.successRate * 100).toFixed(0)}% | ${s.avgDurationMs} |\n`
-              }
-            }
-
-            return { output }
-          }
-
-          // ── Default: basic execution status (original agentic_status behavior) ──
-          const progress = executor.getProgress(context.sessionID)
-          const nextStep = executor.getNextStep(context.sessionID)
-          const blockedSteps = executor.getBlockedSteps(context.sessionID)
-          const isComplete = executor.isComplete(context.sessionID)
-          const isHealthy = executor.isHealthy(context.sessionID)
-          const allFiles = executor.getAllFilesModified(context.sessionID)
-
-          let output = `## 📊 Execution Dashboard\n\n`
-
-          if (progress.total > 0) {
-            const pct = Math.min(100, Math.round((progress.completed / progress.total) * 100))
-            const barLen = 20
-            const filled = Math.min(barLen, Math.round((pct / 100) * barLen))
-            output += `\`\`\`\n[${"█".repeat(filled)}${"░".repeat(barLen - filled)}] ${pct}%\n\`\`\`\n`
-          }
-
-          output += `**Health:** ${isHealthy ? "✅ All passing" : "⚠️ Errors"}\n`
-          output += `**Status:** ${isComplete ? "🎉 Complete" : "⏳ In progress"}\n\n`
-          output += `| Status | Count |\n|--------|-------|\n`
-          output += `| ✅ Done | ${progress.completed} |\n`
-          output += `| ❌ Failed | ${progress.failed} |\n`
-          output += `| 🔒 Blocked | ${progress.blocked} |\n`
-
-          if (nextStep) {
-            output += `\n### Next Ready\n▶ **${nextStep.id}** — ${nextStep.description}\n`
-          }
-
-          if (blockedSteps.length > 0) {
-            output += `\n### 🔒 Blocked Steps\n`
-            for (const b of blockedSteps) {
-              output += `- **${b.id}** — ${b.description}\n`
-              output += `  Waiting on: ${b.blockedBy.map(d => `\`${d}\``).join(", ")}\n`
-            }
-          }
-
-          if (allFiles.length > 0) {
-            output += `\n### 📁 Files Modified\n`
-            output += allFiles.map(f => `- \`${f}\``).join("\n") + "\n"
-          }
-
-          // ── Delegated task status (batch + single) ──
-          const delegatedTasks = coordinator.getTasks(context.sessionID)
-          if (delegatedTasks.length > 0) {
-            const running = delegatedTasks.filter(t => t.status === "running")
-            const done = delegatedTasks.filter(t => t.status === "done")
-            const failed = delegatedTasks.filter(t => t.status === "failed")
-            const pending = delegatedTasks.filter(t => t.status === "pending" || !t.status)
-            if (running.length > 0 || done.length > 0 || failed.length > 0 || pending.length > 0) {
-              output += `\n### 🤖 Delegated Tasks (${delegatedTasks.length})\n`
-              output += `| Status | Count |\n|--------|-------|\n`
-              output += `| ⏳ Running | ${running.length} |\n`
-              output += `| ✅ Done | ${done.length} |\n`
-              output += `| ❌ Failed | ${failed.length} |\n`
-              output += `| ⏸️ Pending | ${pending.length} |\n\n`
-              for (const t of delegatedTasks.slice(0, 10)) {
-                const icon = t.status === "done" ? "✅" : t.status === "failed" ? "❌" : t.status === "running" ? "⏳" : "⏸️"
-                output += `${icon} **${t.id}** → ${t.assignedTo}: ${t.description.slice(0, 80)}\n`
-              }
-              if (delegatedTasks.length > 10) output += `... and ${delegatedTasks.length - 10} more\n`
-            }
-          }
-
-          output += `\n### 🤖 Model Reliability\n`
-          const modelSummary = modelRegistry.getSummary()
-          output += modelSummary + "\n"
-
-          // Session model preferences (Gap: per-role model selection)
-          const modelPrefs = sessionStore.getAllModelPreferences(context.sessionID)
-          if (modelPrefs.length > 0) {
-            output += `\n### 🎯 Per-Role Model Preferences\n`
-            output += modelPrefs.map(p => `- **${p.role}** → \`${p.model}\``).join("\n") + "\n"
-          }
-
-          // Evolution trend
-          const trend = continuousEvolution.getTrend()
-          if (trend.overall.total > 0) {
-            const dirIcon = trend.rolling.direction === "improving" ? "📈" : trend.rolling.direction === "degrading" ? "📉" : "📊"
-            output += `\n### 🔄 Evolution Trend\n`
-            output += `**Overall:** ${(trend.overall.successRate * 100).toFixed(0)}% (${trend.overall.success}/${trend.overall.total} steps)\n`
-            output += `**Recent (last ${trend.rolling.windowSize}):** ${(trend.rolling.successRate * 100).toFixed(0)}% — ${dirIcon} ${trend.rolling.direction}\n`
-            if (trend.degradationDetected) {
-              output += `⚠️ **Performance degradation detected!** Auto-running self-evolution...\n`
-              try {
-                output += `${(await runAutoEvolve()).replace(/\n/g, "\n")}\n`
-              } catch { log.warn("Silent catch: auto-evolution error")
-                output += `⚠️ Auto-evolution encountered an error.\n`
-              }
-            }
-            // Forecast (Gap #12)
-            if (trend.forecast && trend.forecast.bucketRates.length > 0) {
-              output += `**Forecast next window:** ${(trend.forecast.nextWindowRate * 100).toFixed(0)}%`
-              if (trend.forecast.critical) {
-                output += ` 🔴 **Critical**`
-              }
-              if (trend.forecast.stepsUntilCritical !== null) {
-                output += ` (~${trend.forecast.stepsUntilCritical} steps to 50%)`
-              }
-              output += `\n`
-              output += `**Trend buckets:** ${trend.forecast.bucketRates.map(r => `${(r * 100).toFixed(0)}%`).join(" → ")}\n`
-            }
-            if (trend.recommendations.length > 0) {
-              output += `**Tips:**\n`
-              output += trend.recommendations.map(r => `- ${r}`).join("\n") + "\n"
-            }
-          }
-
-          // Live evaluation score
-          const liveScore = liveEvaluator.computeScore()
-          if (liveScore.totalSteps > 0 || liveScore.totalDelegations > 0) {
-            output += `\n### 📊 Live Evaluation Score\n`
-            const bar = "█".repeat(Math.round(liveScore.overall / 5))
-            output += `**Overall:** ${liveScore.overall}/100 ${bar.padEnd(20, "░")}\n`
-            for (const [name, dim] of Object.entries(liveScore.dimensions)) {
-              if (dim.weight > 0) {
-                output += `- **${name}:** ${(dim.score * 100).toFixed(0)}% (target ${(dim.target * 100).toFixed(0)}%)\n`
-              }
-            }
-            output += `\n`
-          }
-
-          // Confidence Score per Step (Gap #2)
-          const confRecords = confidenceStore.getAll()
-          if (confRecords.length > 0) {
-            output += `\n### 📊 Confidence per Step (Gap #2)\n`
-            const avg = confidenceStore.getAverage()
-            output += `**Average:** ${(avg * 100).toFixed(0)}% | **Steps scored:** ${confRecords.length}\n\n`
-            for (const rec of confRecords) {
-              const emoji = rec.passed ? "✅" : "⚠️"
-              const bar = "█".repeat(Math.round(rec.score * 10))
-              const empty = "░".repeat(10 - Math.round(rec.score * 10))
-              output += `- **${rec.stepId}** ${emoji} ${bar}${empty} ${(rec.score * 100).toFixed(0)}%\n`
-            }
-            const lowConf = confidenceStore.getLowConfidence()
-            if (lowConf.length > 0) {
-              output += `\n⚠️ **${lowConf.length} step(s) below threshold** — review recommended\n`
-            }
-            output += "\n"
-          }
-
-          // World Model Beliefs (Comparison 19)
-          const wmStats = worldModel.getStats()
-          if (wmStats.beliefs > 0) {
-            output += `\n### 🧠 World Model Beliefs\n`
-            output += `**Entities:** ${wmStats.entities} | **Relations:** ${wmStats.relations} | **Beliefs:** ${wmStats.beliefs} | **Cycles:** ${wmStats.cycles}\n`
-            const uncertain = worldModel.getUncertainBeliefs()
-            if (uncertain.length > 0) {
-              output += `⚠️ **${uncertain.length} low-confidence belief(s)** — may be stale\n`
-            }
-            const topBeliefs = worldModel.getAllBeliefs()
-              .sort((a, b) => b.confidence - a.confidence)
-              .slice(0, 5)
-            if (topBeliefs.length > 0) {
-              output += `\n**Top beliefs:**\n`
-              for (const b of topBeliefs) {
-                output += `- \`${b.key}\`: ${(b.confidence * 100).toFixed(0)}% — ${b.fact.slice(0, 80)} (${b.category})\n`
-              }
-            }
-            output += "\n"
-          }
-
-          return { output, metadata: { progress, nextStep: nextStep?.id, blockedSteps, isComplete, isHealthy } }
-        },
-      }),
+      agentic_status: registryTool("agentic_status", makeStatusTool(ctx)),
 
       agentic_context: registryTool("agentic_context", {
         description: "View and compress the execution context. When approaching context limits, this tool summarizes the conversation history into a compact form preserving key decisions, file changes, and invariants.",
@@ -2593,131 +2363,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_snapshot: registryTool("agentic_snapshot", {
-        description: "Save, restore, or list execution snapshots. Use 'save' to checkpoint state (plan progress, file changes, decisions). Use 'restore' to reload a previous checkpoint and reset execution state. Use 'list' to see all snapshots.",
-        args: {
-          action: tool.schema.enum(["save", "list", "restore"]).describe("'save' creates a checkpoint; 'restore' reloads a checkpoint; 'list' shows all saved snapshots"),
-          label: tool.schema.string().optional().describe("Snapshot label to restore (required for 'restore', optional for 'save')"),
-        },
-        async execute(args, context) {
-          if (args.action === "save") {
-            const progress = executor.getProgress(context.sessionID)
-            const allFiles = executor.getAllFilesModified(context.sessionID)
-            const session = sessionStore.getOrCreate(context.sessionID)
-            const planGoal = session.plan?.intent.goal ?? "N/A"
-
-            const completedSteps = session.plan?.intent.subtasks.filter(s =>
-              executor.getCompletedSteps(context.sessionID).includes(s.id)
-            ).map(s => s.id) ?? []
-
-            const snapshot = {
-              label: args.label ?? `snap-${Date.now()}`,
-              timestamp: new Date().toISOString(),
-              planGoal,
-              progress,
-              filesModified: allFiles,
-              completedSteps,
-              totalSteps: session.plan?.intent.subtasks.length ?? 0,
-              plan: session.plan ?? null,
-            }
-
-            session.artifacts.set(`snapshot:${snapshot.label}`, JSON.stringify(snapshot))
-
-            traceLogger.log({
-              step: "snapshot:save",
-              input: snapshot.label,
-              output: `${allFiles.length} files, ${progress.completed}/${progress.total} steps`,
-              toolUsed: "agentic_snapshot",
-              success: true,
-              durationMs: 0,
-            })
-
-            return {
-              output: `## 📸 Snapshot Saved\n\n**Label:** \`${snapshot.label}\`\n**Progress:** ${progress.completed}/${progress.total}\n**Files:** ${allFiles.length}\n**Timestamp:** ${snapshot.timestamp}`,
-            }
-          }
-
-          if (args.action === "restore") {
-            if (!args.label) {
-              return { output: "Provide a `label` of the snapshot to restore. Use `action: \"list\"` to see available snapshots." }
-            }
-
-            const session = sessionStore.getOrCreate(context.sessionID)
-            const raw = session.artifacts.get(`snapshot:${args.label}`)
-            if (!raw) {
-              return { output: `Snapshot "${args.label}" not found. Use \`action: "list"\` to see available snapshots.` }
-            }
-
-            let snapshot: { plan?: unknown; completedSteps?: string[]; filesModified?: string[]; [key: string]: unknown }
-            try {
-              snapshot = JSON.parse(raw) as typeof snapshot
-            } catch { log.warn("Silent catch: snapshot corrupted")
-              return { output: `Snapshot "${args.label}" is corrupted and cannot be restored.` }
-            }
-
-            // Re-init execution with the same plan but mark completed steps from snapshot
-            if (snapshot.plan) {
-              executor.initExecution(context.sessionID, snapshot.plan as Parameters<typeof executor.initExecution>[1])
-              // Re-mark completed steps
-              for (const stepId of snapshot.completedSteps ?? []) {
-                executor.recordResult(context.sessionID, {
-                  stepId,
-                  success: true,
-                  output: `Restored from snapshot "${args.label}"`,
-                  filesModified: snapshot.filesModified ?? [],
-                })
-              }
-              // Update session plan
-              session.plan = snapshot.plan as Parameters<typeof executor.initExecution>[1]
-            }
-
-            traceLogger.log({
-              step: "snapshot:restore",
-              input: args.label,
-              output: `Restored ${snapshot.completedSteps?.length ?? 0}/${snapshot.totalSteps ?? 0} steps`,
-              toolUsed: "agentic_snapshot",
-              success: true,
-              durationMs: 0,
-            })
-
-            const stepList = (snapshot.completedSteps ?? []).map((s: string) => `  - ✅ \`${s}\``).join("\n")
-            return {
-              output: `## ♻️ Snapshot Restored\n\n**Label:** \`${args.label}\`\n**Timestamp:** ${snapshot.timestamp}\n**Goal:** ${snapshot.planGoal}\n**Progress Restored:** ${snapshot.completedSteps?.length ?? 0}/${snapshot.totalSteps ?? 0} steps\n\n### Completed Steps\n${stepList || "  (none)"}\n\n### Files Modified (${snapshot.filesModified?.length ?? 0})\n${(snapshot.filesModified ?? []).map((f: string) => `  - \`${f}\``).join("\n") || "  (none)"}\n\nRun \`agentic_status\` to see current progress.`,
-            }
-          }
-
-          // List snapshots
-          const session = sessionStore.getOrCreate(context.sessionID)
-          const snapshots: string[] = []
-          for (const [key] of session.artifacts) {
-            if (key.startsWith("snapshot:")) {
-              snapshots.push(key.replace("snapshot:", ""))
-            }
-          }
-
-          if (snapshots.length === 0) {
-            return { output: "No snapshots saved yet. Use `action: \"save\"` to create one." }
-          }
-
-          // Show details for each snapshot
-          const lines: string[] = []
-          for (const label of snapshots) {
-            const raw = session.artifacts.get(`snapshot:${label}`)
-            if (raw) {
-              try {
-                const s = JSON.parse(raw)
-                lines.push(`- \`${label}\` — ${s.planGoal ?? "N/A"} (${s.completedSteps?.length ?? 0}/${s.totalSteps ?? 0} steps, ${new Date(s.timestamp).toLocaleDateString()})`)
-              } catch { log.warn("Silent catch: snapshot listing corrupted")
-                lines.push(`- \`${label}\` (corrupted)`)
-              }
-            } else {
-              lines.push(`- \`${label}\``)
-            }
-          }
-
-          return { output: `## 📸 Snapshots (${snapshots.length})\n\n${lines.join("\n")}\n\nUse \`agentic_snapshot\` with \`action: "restore"\` and the \`label\` to reload a checkpoint.` }
-        },
-      }),
+      agentic_snapshot: registryTool("agentic_snapshot", makeSnapshotTool(ctx)),
 
       agentic_pipeline: registryTool("agentic_pipeline", {
         description: "Define and run multi-agent workflow pipelines. Chain PM → Architect → Developer → QA for complete feature development. Includes cross-validation between stages.",
@@ -3880,112 +3526,7 @@ const confidenceStore = new ConfidenceStore()
         },
       }),
 
-      agentic_budget: registryTool("agentic_budget", {
-        description: "Set, view, or reset resource budget limits. Prevents runaway loops by capping tokens, steps, time, or cost. Acts as circuit breaker for autonomous execution. Use 'set' to define limits, 'status' to view usage, 'reset' to clear counters.",
-        args: {
-          action: tool.schema.enum(["set", "get", "status", "reset"]).describe("'set' defines limits; 'get' shows current limits; 'status' shows usage; 'reset' clears counters"),
-          scope: tool.schema.enum(["session", "task"]).optional().describe("Scope: 'session' (default) or 'task'"),
-          maxTokens: tool.schema.number().optional().describe("Maximum total tokens (input+output+cache+reasoning)"),
-          maxSteps: tool.schema.number().optional().describe("Maximum subtask steps"),
-          maxTimeMs: tool.schema.number().optional().describe("Maximum wall-clock time in milliseconds"),
-          maxCostUsd: tool.schema.number().optional().describe("Maximum cost in USD"),
-          onExceeded: tool.schema.enum(["hard-stop", "request-approval", "warn"]).optional().describe("Behavior when limit exceeded (default: hard-stop)"),
-          modelPrices: tool.schema.record(tool.schema.string(), tool.schema.object({
-            input: tool.schema.number(),
-            output: tool.schema.number(),
-            cacheRead: tool.schema.number().optional(),
-            cacheWrite: tool.schema.number().optional(),
-          })).optional().describe("Optional per-model price overrides (USD per 1K tokens)"),
-        },
-        async execute(args, _context) {
-          const scope = args.scope ?? "session"
-
-          switch (args.action) {
-            case "set": {
-              const limits: Partial<import("./core/budget-tracker.js").BudgetLimits> = {}
-              if (args.maxTokens !== undefined) limits.maxTokens = args.maxTokens
-              if (args.maxSteps !== undefined) limits.maxSteps = args.maxSteps
-              if (args.maxTimeMs !== undefined) limits.maxTimeMs = args.maxTimeMs
-              if (args.maxCostUsd !== undefined) limits.maxCostUsd = args.maxCostUsd
-              const behavior = args.onExceeded ?? "hard-stop"
-
-              if (Object.keys(limits).length === 0) {
-                return { output: "Provide at least one limit (maxTokens, maxSteps, maxTimeMs, or maxCostUsd)." }
-              }
-
-              budgetTracker.setLimits(scope, limits, behavior)
-
-              // Override model prices jika dikirim
-              if (args.modelPrices) {
-                const prices = args.modelPrices as Record<string, import("./core/budget-tracker.js").ModelPriceEntry>
-                const normalized: Record<string, import("./core/budget-tracker.js").ModelPriceEntry> = {}
-                for (const [modelId, price] of Object.entries(prices)) {
-                  normalized[modelId] = {
-                    input: price.input,
-                    output: price.output,
-                    cacheRead: price.cacheRead ?? 0,
-                    cacheWrite: price.cacheWrite ?? 0,
-                  }
-                }
-                budgetTracker.setModelPrices(normalized)
-              }
-
-              const limitStr = Object.entries(limits)
-                .map(([k, v]) => `${k}: ${v === Infinity ? "∞" : v}`)
-                .join(", ")
-              return { output: `✅ Budget limits set for scope="${scope}": ${limitStr} (behavior: ${behavior})` }
-            }
-
-            case "get": {
-              const limits = budgetTracker.getLimits(scope)
-              const behavior = args.onExceeded ?? "hard-stop"
-              const limitStr = Object.entries(limits)
-                .map(([k, v]) => `${k}: ${v === Infinity ? "∞" : v}`)
-                .join(", ")
-              return { output: `📊 Budget limits for scope="${scope}": ${limitStr} (behavior: ${behavior})` }
-            }
-
-            case "status": {
-              const states = budgetTracker.getState([scope])
-              const state = states[0]
-              const usage = state.usage
-              let output = `## 💰 Budget Status (${scope})\n\n`
-
-              output += `| Metric | Usage | Limit |\n|---|---|---|\n`
-              output += `| Tokens | ${usage.totalTokens.toLocaleString()} | ${state.limits.maxTokens === Infinity ? "∞" : state.limits.maxTokens.toLocaleString()} |\n`
-              output += `| Steps | ${usage.totalSteps} | ${state.limits.maxSteps === Infinity ? "∞" : state.limits.maxSteps} |\n`
-              output += `| Time | ${(usage.elapsedMs / 1000).toFixed(1)}s | ${state.limits.maxTimeMs === Infinity ? "∞" : (state.limits.maxTimeMs / 1000).toFixed(1) + "s"} |\n`
-              output += `| Cost | $${usage.totalCostUsd.toFixed(4)} | ${state.limits.maxCostUsd === Infinity ? "∞" : "$" + state.limits.maxCostUsd.toFixed(2)} |\n`
-
-              if (usage.byModel.length > 0) {
-                output += `\n### Per-Model Breakdown\n\n`
-                output += `| Model | In | Out | Reason | Cache R | Cache W | Cost |\n|---|---|---|---|---|---|---|\n`
-                for (const m of usage.byModel) {
-                  output += `| ${m.modelId} | ${m.inputTokens.toLocaleString()} | ${m.outputTokens.toLocaleString()} | ${m.reasoningTokens.toLocaleString()} | ${m.cacheReadTokens.toLocaleString()} | ${m.cacheWriteTokens.toLocaleString()} | $${m.cost.toFixed(4)} |\n`
-                }
-              }
-
-              if (usage.waitingForApprovalMs > 0) {
-                output += `\n⏳ Waiting for approval: ${(usage.waitingForApprovalMs / 1000).toFixed(1)}s\n`
-              }
-
-              if (state.exceeded) {
-                output += `\n⚠️ **BUDGET EXCEEDED** — ${state.exceeded.metric} (${state.exceeded.current} / ${state.exceeded.limit})\n`
-              }
-
-              return { output }
-            }
-
-            case "reset": {
-              budgetTracker.reset(scope)
-              return { output: `🔄 Budget counters reset for scope="${scope}". Limits preserved.` }
-            }
-
-            default:
-              return { output: "Unknown action. Use 'set', 'get', 'status', or 'reset'." }
-          }
-        },
-      }),
+      agentic_budget: registryTool("agentic_budget", makeBudgetTool(ctx)),
 
       agentic_episodes: registryTool("agentic_episodes", {
         description: "Browse cross-session memory. Search past tasks, patterns, and knowledge across all 4 memory levels (working/episodic/semantic/procedural). Use before planning similar tasks to avoid repeating mistakes.",
@@ -4927,39 +4468,7 @@ const confidenceStore = new ConfidenceStore()
       }),
 
       // ── Layer 3: Data Cleaner — strip artifacts, validate structure ──
-      agentic_clean: registryTool("agentic_clean", {
-        description: "Clean raw text by stripping debate artifacts, reformatting to markdown/json, and optionally validating against a schema. Use after debate or any multi-step analysis to get clean output.",
-        args: {
-          text: tool.schema.string().describe("Raw text to clean"),
-          format: tool.schema.enum(["markdown", "json", "text"]).optional().default("json").describe("Output format"),
-          schema: tool.schema.string().optional().describe("Expected JSON schema description (e.g., 'array of {name, description}')"),
-          stripDebate: tool.schema.boolean().optional().default(true).describe("Strip debate/review artifacts"),
-        },
-        async execute(args, _context) {
-          const startTime = Date.now()
-
-          const result = await dataCleaner.clean({
-            text: args.text,
-            format: args.format ?? "json",
-            schema: args.schema,
-            stripDebateArtifacts: args.stripDebate ?? true,
-          })
-
-          traceLogger.log({
-            step: "execute",
-            input: `Clean: ${args.text.slice(0, 80)}...`,
-            output: `cleaned (${result.stats.removedLines} lines removed)`,
-            toolUsed: "agentic_clean",
-            success: true,
-            durationMs: Date.now() - startTime,
-          })
-
-          return {
-            output: `## 🧹 Data Cleaned\n\n**Original:** ${result.stats.originalLength} chars → **Cleaned:** ${result.stats.cleanedLength} chars (${result.stats.removedLines} lines removed)\n${result.validJson ? "✅ Valid JSON" : "ℹ️ Text output"}\n\n### Result\n\`\`\`${args.format === "json" ? "json" : args.format === "markdown" ? "markdown" : ""}\n${result.cleaned.slice(0, 2000)}\n\`\`\``,
-            metadata: { cleanResult: result },
-          }
-        },
-      }),
+      agentic_clean: registryTool("agentic_clean", makeCleanTool(ctx)),
 
       // ── Layer 4: Multi-Index RAG — category-segregated memory ──
       agentic_rag: registryTool("agentic_rag", {
@@ -7271,6 +6780,11 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
           let knowledgeEntries: KnowledgeEntry[] = []
           let queryForRag = ""
 
+          // ── RAG cache: avoid redundant TF-IDF queries for similar inputs ──
+          // Simple TTL cache (60s) with exact-match + prefix-match for dedup.
+          const _ragCache = new Map<string, { entries: KnowledgeEntry[]; hasHigh: boolean; expiry: number }>()
+          const RAG_CACHE_TTL = 60_000
+
           try {
             const sessionId = _input.sessionID
             if (sessionId) {
@@ -7285,12 +6799,37 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
               queryForRag = systemText.slice(-2000)
             }
 
-            const { keywords, category } = routerAgent.extractKeywords(queryForRag)
-            if (keywords.length > 0) {
-              const memResult = await memoryOrchestrator.queryWithKnowledge(keywords.join(" "), category, 5)
-              if (memResult.knowledge && memResult.knowledge.length > 0) {
-                knowledgeEntries = memResult.knowledge
-                hasHighConfidenceKnowledge = memResult.hasHighConfidence ?? false
+            // Check RAG cache first
+            const now = Date.now()
+            const cacheKey = queryForRag.slice(0, 200) // limit key length
+            // Also try prefix match: if current query starts with a cached query, reuse
+            let cachedHit: { entries: KnowledgeEntry[]; hasHigh: boolean } | null = null
+            for (const [key, val] of _ragCache) {
+              if (val.expiry > now && (cacheKey === key || cacheKey.startsWith(key) || key.startsWith(cacheKey))) {
+                cachedHit = { entries: val.entries, hasHigh: val.hasHigh }
+                break
+              }
+            }
+
+            if (cachedHit) {
+              knowledgeEntries = cachedHit.entries
+              hasHighConfidenceKnowledge = cachedHit.hasHigh
+            } else {
+              const { keywords, category } = routerAgent.extractKeywords(queryForRag)
+              if (keywords.length > 0) {
+                const memResult = await memoryOrchestrator.queryWithKnowledge(keywords.join(" "), category, 5)
+                if (memResult.knowledge && memResult.knowledge.length > 0) {
+                  knowledgeEntries = memResult.knowledge
+                  hasHighConfidenceKnowledge = memResult.hasHighConfidence ?? false
+                }
+              }
+              // Populate cache (even if empty — prevents repeated empty queries)
+              _ragCache.set(cacheKey, { entries: knowledgeEntries, hasHigh: hasHighConfidenceKnowledge, expiry: now + RAG_CACHE_TTL })
+              // Evict stale entries if cache grows too large
+              if (_ragCache.size > 50) {
+                for (const [k, v] of _ragCache) {
+                  if (v.expiry < now) _ragCache.delete(k)
+                }
               }
             }
           } catch (e) {

@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process"
-import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import type { DomainPack, VerifierStrategy, ErrorMatcher } from "../domain-registry.js"
 import { createGenericContract } from "../formal-model.js"
+import { scoreProjectFiles, tryReadFile, issuesResult } from "../domain-helpers.js"
 
 // ─── Keywords ──────────────────────────────────────────────────────────
 
@@ -27,23 +27,22 @@ const securityDetect = (input: string): number => {
     if (lower.includes(kw)) score += 0.06
   }
   const projectDir = process.cwd()
-  const securityFiles = [".sast.config", "security.txt", "csp.json", "owasp.json"]
-  for (const f of securityFiles) {
+  score += scoreProjectFiles(projectDir, 0.3, ".sast.config", "security.txt", "csp.json", "owasp.json")
+
+  // Check package.json for security dependencies
+  const pkgContent = tryReadFile(resolve(projectDir, "package.json"))
+  if (pkgContent) {
     try {
-      const fullPath = resolve(projectDir, f)
-      if (existsSync(fullPath)) score += 0.3
-    } catch { console.warn("catch: skip") }
-  }
-  try {
-    const pkgPath = resolve(projectDir, "package.json")
-    if (!existsSync(pkgPath)) return Math.min(score, 1.0)
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"))
-    const secDeps = ["helmet", "cors", "bcrypt", "jsonwebtoken", "csurf", "express-rate-limit", "sanitize-html", "dompurify"]
-    const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) }
-    for (const dep of Object.keys(allDeps)) {
-      if (secDeps.includes(dep)) score += 0.15
+      const pkg = JSON.parse(pkgContent)
+      const secDeps = ["helmet", "cors", "bcrypt", "jsonwebtoken", "csurf", "express-rate-limit", "sanitize-html", "dompurify"]
+      const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) }
+      for (const dep of Object.keys(allDeps)) {
+        if (secDeps.includes(dep)) score += 0.15
+      }
+    } catch {
+      // Non-fatal: parse error
     }
-  } catch { console.warn("catch: no package.json or parse error") }
+  }
   return Math.min(score, 1.0)
 }
 
@@ -55,27 +54,24 @@ const securityVerifiers: VerifierStrategy[] = [
     async verify(context) {
       const issues: string[] = []
       for (const file of context.filesModified) {
-        try {
-          const absPath = resolve(context.projectDir, file)
-          if (!existsSync(absPath)) continue
-          const content = readFileSync(absPath, "utf-8")
+        const content = tryReadFile(resolve(context.projectDir, file))
+        if (!content) continue
 
-          // Check for hardcoded secrets patterns
-          const secretPatterns = [
-            { pattern: /(?:api[_-]?key|apikey|secret|password|passwd|pwd|token|auth)[\s]*[:=][\s]*['"][A-Za-z0-9_\-/=+]{16,}['"]/i, name: "Hardcoded API key/secret" },
-            { pattern: /-----BEGIN (RSA |EC |DSA )?PRIVATE KEY-----/, name: "Private key embedded in code" },
-            { pattern: /(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}/, name: "GitHub token" },
-            { pattern: /sk-[A-Za-z0-9]{32,}/, name: "OpenAI API key" },
-            { pattern: /AKIA[0-9A-Z]{16}/, name: "AWS access key" },
-          ]
+        // Check for hardcoded secrets patterns
+        const secretPatterns = [
+          { pattern: /(?:api[_-]?key|apikey|secret|password|passwd|pwd|token|auth)[\s]*[:=][\s]*['"][A-Za-z0-9_\-/=+]{16,}['"]/i, name: "Hardcoded API key/secret" },
+          { pattern: /-----BEGIN (RSA |EC |DSA )?PRIVATE KEY-----/, name: "Private key embedded in code" },
+          { pattern: /(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}/, name: "GitHub token" },
+          { pattern: /sk-[A-Za-z0-9]{32,}/, name: "OpenAI API key" },
+          { pattern: /AKIA[0-9A-Z]{16}/, name: "AWS access key" },
+        ]
 
-          const isExampleOrTest = /example|test|mock|dummy|placeholder|your-/i.test(content.slice(0, 200))
-          for (const { pattern, name } of secretPatterns) {
-            if (pattern.test(content) && !isExampleOrTest) {
-              issues.push(`${file}: ${name}`)
-            }
+        const isExampleOrTest = /example|test|mock|dummy|placeholder|your-/i.test(content.slice(0, 200))
+        for (const { pattern, name } of secretPatterns) {
+          if (pattern.test(content) && !isExampleOrTest) {
+            issues.push(`${file}: ${name}`)
           }
-        } catch { console.warn("catch: skip unreadable") }
+        }
       }
 
       // Also run trivy/grype if available
@@ -85,12 +81,11 @@ const securityVerifiers: VerifierStrategy[] = [
           timeout: 60000, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"],
         })
         if (output.length > 0) issues.push(`Trivy: ${output.slice(0, 500)}`)
-      } catch { console.warn("catch: trivy not available") }
-
-      if (issues.length > 0) {
-        return { passed: false, output: `Security issues found:\n${issues.join("\n")}` }
+      } catch {
+        // Non-fatal: trivy not available
       }
-      return { passed: true, output: "No secrets or vulnerabilities detected" }
+
+      return issuesResult(issues, "No secrets or vulnerabilities detected")
     },
   },
 ]

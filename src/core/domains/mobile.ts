@@ -1,7 +1,7 @@
-import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import type { DomainPack, VerifierStrategy, ErrorMatcher } from "../domain-registry.js"
 import { createGenericContract } from "../formal-model.js"
+import { scoreProjectFiles, tryReadFile, issuesResult } from "../domain-helpers.js"
 
 // ─── Keywords ──────────────────────────────────────────────────────────
 
@@ -34,12 +34,7 @@ const mobileDetect = (input: string): number => {
     "pubspec.yaml", "app.json", "expo.json",
     "Info.plist", ".entitlements",
   ]
-  for (const f of mobileFiles) {
-    try {
-      const fullPath = resolve(projectDir, f)
-      if (existsSync(fullPath)) score += 0.25
-    } catch { console.warn("catch: skip") }
-  }
+  score += scoreProjectFiles(projectDir, 0.25, ...mobileFiles)
   return Math.min(score, 1.0)
 }
 
@@ -52,36 +47,32 @@ const mobileVerifiers: VerifierStrategy[] = [
       const issues: string[] = []
       for (const file of context.filesModified) {
         if (!file.includes("AndroidManifest.xml")) continue
-        try {
-          const absPath = resolve(context.projectDir, file)
-          const content = readFileSync(absPath, "utf-8")
+        const absPath = resolve(context.projectDir, file)
+        const content = tryReadFile(absPath)
+        if (!content) continue
 
-          // Check for common manifest issues
-          if (!content.includes("xmlns:android")) {
-            issues.push(`${file}: Missing android namespace`)
+        // Check for common manifest issues
+        if (!content.includes("xmlns:android")) {
+          issues.push(`${file}: Missing android namespace`)
+        }
+        if (!content.includes("<application")) {
+          issues.push(`${file}: Missing <application> block`)
+        }
+        // Check for debuggable in release
+        if (content.includes("android:debuggable=\"true\"")) {
+          issues.push(`${file}: android:debuggable set to true — remove for release builds`)
+        }
+        // Check for exported activities without intent filter
+        const actRegex = /<activity[\s\S]*?<\/activity>/g
+        let actMatch: RegExpExecArray | null
+        while ((actMatch = actRegex.exec(content)) !== null) {
+          const actBlock = actMatch[0]
+          if (actBlock.includes("android:exported=\"true\"") && !actBlock.includes("<intent-filter>")) {
+            issues.push(`${file}: Activity with exported=true but no intent-filter`)
           }
-          if (!content.includes("<application")) {
-            issues.push(`${file}: Missing <application> block`)
-          }
-          // Check for debuggable in release
-          if (content.includes("android:debuggable=\"true\"")) {
-            issues.push(`${file}: android:debuggable set to true — remove for release builds`)
-          }
-          // Check for exported activities without intent filter
-          const actRegex = /<activity[\s\S]*?<\/activity>/g
-          let actMatch: RegExpExecArray | null
-          while ((actMatch = actRegex.exec(content)) !== null) {
-            const actBlock = actMatch[0]
-            if (actBlock.includes("android:exported=\"true\"") && !actBlock.includes("<intent-filter>")) {
-              issues.push(`${file}: Activity with exported=true but no intent-filter`)
-            }
-          }
-        } catch { console.warn("catch: skip") }
+        }
       }
-      if (issues.length > 0) {
-        return { passed: false, output: `Android manifest issues:\n${issues.join("\n")}` }
-      }
-      return { passed: true, output: "Manifest checks passed" }
+      return issuesResult(issues, "Manifest checks passed")
     },
   },
   {
@@ -90,26 +81,22 @@ const mobileVerifiers: VerifierStrategy[] = [
       const issues: string[] = []
       for (const file of context.filesModified) {
         if (!file.endsWith("Info.plist")) continue
-        try {
-          const absPath = resolve(context.projectDir, file)
-          const content = readFileSync(absPath, "utf-8")
+        const absPath = resolve(context.projectDir, file)
+        const content = tryReadFile(absPath)
+        if (!content) continue
 
-          // Check for common plist issues (XML plist format)
-          if (!content.includes("<!DOCTYPE plist") && !content.includes("<plist")) {
-            issues.push(`${file}: Invalid plist format`)
+        // Check for common plist issues (XML plist format)
+        if (!content.includes("<!DOCTYPE plist") && !content.includes("<plist")) {
+          issues.push(`${file}: Invalid plist format`)
+        }
+        // Check for NSAppTransportSecurity for network apps
+        if (content.includes("NSAppTransportSecurity")) {
+          if (content.includes("NSAllowsArbitraryLoads") && content.includes("<true/>")) {
+            issues.push(`${file}: ATS disabled — consider specific exceptions instead`)
           }
-          // Check for NSAppTransportSecurity for network apps
-          if (content.includes("NSAppTransportSecurity")) {
-            if (content.includes("NSAllowsArbitraryLoads") && content.includes("<true/>")) {
-              issues.push(`${file}: ATS disabled — consider specific exceptions instead`)
-            }
-          }
-        } catch { console.warn("catch: skip") }
+        }
       }
-      if (issues.length > 0) {
-        return { passed: false, output: `iOS plist issues:\n${issues.join("\n")}` }
-      }
-      return { passed: true, output: "Plist checks passed" }
+      return issuesResult(issues, "Plist checks passed")
     },
   },
 ]
