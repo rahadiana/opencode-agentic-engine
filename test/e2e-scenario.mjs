@@ -15,7 +15,8 @@ import { sdkMockClient } from "./mock-sdk-client.mjs"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PLUGIN_DIST = resolve(__dirname, "..", "dist", "index.js")
-const CODEBASE = process.env.E2E_CODEBASE || "/tmp/e2e-codebase"
+const E2E_FIXTURE = resolve(__dirname, "e2e-codebase-fixture")
+const CODEBASE = process.env.E2E_CODEBASE || (existsSync(E2E_FIXTURE) ? E2E_FIXTURE : "/tmp/e2e-codebase")
 const WORKTREE = "/tmp/e2e-worktree"
 
 // ── LLM Detection ──

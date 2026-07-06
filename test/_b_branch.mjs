@@ -1247,6 +1247,280 @@ const sbbr_assert = (cond, msg) => { if (cond) { sbbr++ } else { console.error(`
   // Already covered by SB-BR-9. Just verify the line 534 coverage by ensuring
   // the decision test creates a scenario where todos.length === 0 but decisions.length > 0
   sbbr_assert(true, "SB-BR-13 ensureMemoryLoaded todos else path (covered by SB-BR-9)")
+
+  // ── Additional SB-BR tests for uncovered paths ──
+
+  const _uid = () => Math.random().toString(36).slice(2, 6)
+
+  // SB-BR-14: ensureMemoryLoaded without sessionStore (line 521 early return)
+  {
+    const s14 = new SStore({ worktree: `/tmp/sb-br14-${Date.now()}-${_uid()}` })
+    const sb14 = new SB(s14)
+    sbbr_assert(sb14.ensureMemoryLoaded("any").loaded === true, "SB-BR-14 ensureMemoryLoaded without sessionStore returns loaded=true")
+  }
+
+  // SB-BR-15: handleEvent step.retrying (lines 651-661)
+  {
+    const s15 = new SStore({ worktree: `/tmp/sb-br15-${Date.now()}-${_uid()}` })
+    const sb15 = new SB(s15, new SessStore())
+    const before = sb15.getEdges().length
+    sb15.handleEvent("step.retrying", { stepId: "retry-step", attempt: 3, sessionID: "br15" })
+    sbbr_assert(sb15.getEdges().length > before, "SB-BR-15 step.retrying creates edge")
+    sbbr_assert(sb15.getEdges().some(e => e.source === "retry-step" && e.relation === "retried"), "SB-BR-15b retry edge correct")
+  }
+
+  // SB-BR-16: handleEvent llm.response — no cost (line 802 else branch)
+  {
+    const s16 = new SStore({ worktree: `/tmp/sb-br16-${Date.now()}-${_uid()}` })
+    const sb16 = new SB(s16, new SessStore())
+    const before = sb16.getEdges().length
+    sb16.handleEvent("llm.response", { model: "gpt-4o", sessionID: "br16" })
+    sbbr_assert(sb16.getEdges().length === before, "SB-BR-16 llm.response without cost → no edge")
+  }
+
+  // SB-BR-17: handleEvent llm.response — with cost (line 796-802 then branch)
+  {
+    const s17 = new SStore({ worktree: `/tmp/sb-br17-${Date.now()}-${_uid()}` })
+    const sb17 = new SB(s17, new SessStore())
+    sb17.handleEvent("llm.response", { model: "claude-sonnet", costUsd: 0.05, sessionID: "br17" })
+    sbbr_assert(sb17.getEdges().some(e => e.source === "llm" && e.target === "claude-sonnet" && e.relation === "cost"), "SB-BR-17 llm.response with cost creates edge")
+  }
+
+  // SB-BR-18: handleEvent step.failed without files (line 630 else, still creates error edge)
+  {
+    const s18 = new SStore({ worktree: `/tmp/sb-br18-${Date.now()}-${_uid()}` })
+    const sb18 = new SB(s18, new SessStore())
+    const before = sb18.getEdges().length
+    sb18.handleEvent("step.failed", { stepId: "no-files", error: "compile error", errorCategory: "compile", sessionID: "br18" })
+    sbbr_assert(sb18.getEdges().length > before, "SB-BR-18 step.failed without files still creates edge")
+    sbbr_assert(sb18.getEdges().some(e => e.source === "no-files" && e.relation === "has_error"), "SB-BR-18b has_error edge created")
+  }
+
+  // SB-BR-19: handleEvent task.completed success (line 772-778 — completed_by, no TODO)
+  {
+    const s19 = new SStore({ worktree: `/tmp/sb-br19-${Date.now()}-${_uid()}` })
+    const sb19 = new SB(s19, new SessStore())
+    const beforeTodos = sb19.getTodos().length
+    sb19.handleEvent("task.completed", { taskId: "good-task", role: "developer", success: true, sessionID: "br19" })
+    sbbr_assert(sb19.getTodos().length === beforeTodos, "SB-BR-19a successful task creates no TODO")
+    sbbr_assert(sb19.getEdges().some(e => e.source === "good-task" && e.relation === "completed_by"), "SB-BR-19b completed_by edge tracked")
+  }
+
+  // SB-BR-20: handleEvent guard.check.completed passed=true (line 743 false — no action)
+  {
+    const s20 = new SStore({ worktree: `/tmp/sb-br20-${Date.now()}-${_uid()}` })
+    const sb20 = new SB(s20, new SessStore())
+    const beforeEdges = sb20.getEdges().length
+    sb20.handleEvent("guard.check.completed", { stepId: "ok-step", passed: true, hallucinationRate: 0.1, sessionID: "br20" })
+    sbbr_assert(sb20.getEdges().length === beforeEdges, "SB-BR-20 guard passed=true creates no edge")
+  }
+
+  // SB-BR-21: formatKnowledgeSnapshot empty → "" (line 506-508)
+  {
+    const s21 = new SStore({ worktree: `/tmp/sb-br21-${Date.now()}-${_uid()}` })
+    const sb21 = new SB(s21, new SessStore())
+    sbbr_assert(sb21.formatKnowledgeSnapshot() === "", "SB-BR-21 formatKnowledgeSnapshot empty returns ''")
+  }
+
+  // SB-BR-22: addEdge duplicate detection (lines 428-434)
+  {
+    const s22 = new SStore({ worktree: `/tmp/sb-br22-${Date.now()}-${_uid()}` })
+    const sb22 = new SB(s22, new SessStore())
+    sb22.addEdge({ source: "src", target: "tgt", relation: "rel" })
+    const afterFirst = sb22.getEdges().length
+    sb22.addEdge({ source: "src", target: "tgt", relation: "rel" })
+    sbbr_assert(sb22.getEdges().length === afterFirst, "SB-BR-22 duplicate addEdge not added")
+  }
+
+  // SB-BR-23: handleEvent step.failed without errorCategory (line 625-626 → "unknown")
+  {
+    const s23 = new SStore({ worktree: `/tmp/sb-br23-${Date.now()}-${_uid()}` })
+    const sb23 = new SB(s23, new SessStore())
+    sb23.handleEvent("step.failed", { stepId: "no-cat", error: "err", sessionID: "br23" })
+    sbbr_assert(sb23.getEdges().some(e => e.source === "no-cat" && e.relation === "has_error"), "SB-BR-23 step.failed fallback errorCategory 'unknown'")
+  }
+
+  // SB-BR-24: handleEvent catch block with decision keyword + files
+  {
+    const s24 = new SStore({ worktree: `/tmp/sb-br24-${Date.now()}-${_uid()}` })
+    const throwing = new Proxy(s24, {
+      get(t, p, r) {
+        if (p === "set") return (...a) => { throw new Error("forced-set") }
+        return Reflect.get(t, p, r)
+      },
+    })
+    const sb24 = new SB(throwing, new SessStore())
+    let caught = false
+    try {
+      sb24.handleEvent("step.completed", {
+        stepId: "catch-24", output: "We decided to use Postgres for persistence",
+        filesModified: ["db.ts"], sessionID: "br24",
+      })
+      caught = true
+    } catch { caught = false }
+    sbbr_assert(caught, "SB-BR-24 handleEvent catch catches addDecision/addEdge throw")
+  }
+
+  // SB-BR-25: reflect with LLM returning valid JSON
+  {
+    const s25 = new SStore({ worktree: `/tmp/sb-br25-${Date.now()}-${_uid()}` })
+    const sb25 = new SB(s25, new SessStore(), undefined, {
+      call: async () => ({
+        content: JSON.stringify({
+          summary: "Found conflict between A and B",
+          conflicts: ["Decision A conflicts with B"],
+          planUpdates: ["Re-evaluate A"],
+          newInfo: ["New requirement"],
+          actionItems: ["Schedule review"],
+          triggers: ["gap", "contradiction"],
+        }),
+      }),
+    })
+    sb25.addDecision({ title: "Decision A", context: "Use SQLite", sessionId: "br25" })
+    sb25.addDecision({ title: "Decision B", context: "Use Postgres", sessionId: "br25" })
+    const ref = await sb25.reflect("br25")
+    sbbr_assert(ref.summary.includes("conflict"), "SB-BR-25a reflect summary from LLM")
+    sbbr_assert(ref.conflicts.length > 0, "SB-BR-25b conflicts detected")
+    sbbr_assert(ref.triggers.length > 0, "SB-BR-25c triggers from LLM")
+    sbbr_assert(ref.actionItems.length > 0, "SB-BR-25d action items created")
+  }
+
+  // SB-BR-26: reflect with LLM returning invalid JSON
+  {
+    const s26 = new SStore({ worktree: `/tmp/sb-br26-${Date.now()}-${_uid()}` })
+    const sb26 = new SB(s26, new SessStore(), undefined, {
+      call: async () => ({ content: "This is not valid JSON at all" }),
+    })
+    sb26.addDecision({ title: "Test", context: "Testing invalid JSON", sessionId: "br26" })
+    const ref = await sb26.reflect("br26")
+    sbbr_assert(ref.summary.startsWith("Reflection:"), "SB-BR-26a invalid JSON → fallback summary")
+    sbbr_assert(ref.conflicts.length === 0, "SB-BR-26b no conflicts from invalid JSON")
+  }
+
+  // SB-BR-27: reflect with LLM that throws
+  {
+    const s27 = new SStore({ worktree: `/tmp/sb-br27-${Date.now()}-${_uid()}` })
+    const sb27 = new SB(s27, new SessStore(), undefined, {
+      call: async () => { throw new Error("LLM off") },
+    })
+    sb27.addDecision({ title: "Test", context: "Testing throw", sessionId: "br27" })
+    const ref = await sb27.reflect("br27")
+    sbbr_assert(ref.summary === "Reflection skipped — LLM unavailable", "SB-BR-27a LLM throw fallback")
+    sbbr_assert(ref.actionItems.length === 0, "SB-BR-27b no action items when LLM throws")
+  }
+
+  // SB-BR-28: reflect with [NO_LLM] + agentRuntime delegate
+  {
+    const s28 = new SStore({ worktree: `/tmp/sb-br28-${Date.now()}-${_uid()}` })
+    const sb28 = new SB(s28, new SessStore(), undefined, {
+      call: async () => ({ content: "[NO_LLM] Chat mode" }),
+    }, {
+      execute: async () => ({
+        success: true,
+        output: JSON.stringify({
+          summary: "Delegate analysis complete",
+          conflicts: ["X vs Y"],
+          planUpdates: ["Update plan"],
+          newInfo: ["Found issue"],
+          actionItems: ["Fix conflict"],
+          triggers: ["contradiction"],
+        }),
+      }),
+    })
+    sb28.addDecision({ title: "Decision X", context: "Use MySQL", sessionId: "br28" })
+    const ref = await sb28.reflect("br28")
+    sbbr_assert(ref.summary.includes("Delegate"), "SB-BR-28a delegate reflection summary")
+    sbbr_assert(ref.triggers.includes("contradiction"), "SB-BR-28b triggers from delegate")
+    sbbr_assert(ref.actionItems.length > 0, "SB-BR-28c action items from delegate")
+  }
+
+  // SB-BR-29: reflect via delegate where agentRuntime fails
+  {
+    const s29 = new SStore({ worktree: `/tmp/sb-br29-${Date.now()}-${_uid()}` })
+    const sb29 = new SB(s29, new SessStore(), undefined, {
+      call: async () => ({ content: "[NO_LLM] Chat mode" }),
+    }, {
+      execute: async () => ({ success: false, output: "" }),
+    })
+    sb29.addDecision({ title: "Failing", context: "Test failure path", sessionId: "br29" })
+    const ref = await sb29.reflect("br29")
+    sbbr_assert(ref.summary.length > 0, "SB-BR-29 delegate failure → still returns reflection")
+  }
+
+  // SB-BR-30: reflect via delegate with invalid JSON output
+  {
+    const s30 = new SStore({ worktree: `/tmp/sb-br30-${Date.now()}-${_uid()}` })
+    const sb30 = new SB(s30, new SessStore(), undefined, {
+      call: async () => ({ content: "[NO_LLM] Chat mode" }),
+    }, {
+      execute: async () => ({ success: true, output: "not json at all" }),
+    })
+    sb30.addDecision({ title: "Bad JSON", context: "Test invalid JSON from delegate", sessionId: "br30" })
+    const ref = await sb30.reflect("br30")
+    sbbr_assert(ref.summary.startsWith("Delegated reflection:"), "SB-BR-30a delegate invalid JSON uses fallback summary")
+    sbbr_assert(ref.triggers.length === 0, "SB-BR-30b no triggers from invalid JSON")
+  }
+
+  // SB-BR-31: reflect with llmEngine but empty contextParts
+  {
+    const s31 = new SStore({ worktree: `/tmp/sb-br31-${Date.now()}-${_uid()}` })
+    const sb31 = new SB(s31, new SessStore(), undefined, {
+      call: async () => ({ content: "should not be called" }),
+    })
+    const ref = await sb31.reflect("br31")
+    sbbr_assert(ref.summary === "No significant findings", "SB-BR-31a empty context → 'No significant findings'")
+    sbbr_assert(ref.conflicts.length === 0, "SB-BR-31b no conflicts from empty context")
+  }
+
+  // SB-BR-32: handleEvent feedback.recorded without errorCategory
+  {
+    const s32 = new SStore({ worktree: `/tmp/sb-br32-${Date.now()}-${_uid()}` })
+    const sb32 = new SB(s32, new SessStore())
+    const beforeTodos = sb32.getTodos().length
+    sb32.handleEvent("feedback.recorded", {
+      stepId: "fb-no-cat", feedback: "negative", model: "gpt-4o",
+      taskType: "code", sessionID: "br32",
+    })
+    sbbr_assert(sb32.getTodos().length > beforeTodos, "SB-BR-32a negative feedback creates TODO even without errorCategory")
+    const fbTodos = sb32.getTodos().filter(t => t.text.includes("fb-no-cat"))
+    sbbr_assert(fbTodos.length >= 1, "SB-BR-32b TODO references step")
+  }
+
+  // SB-BR-33: plan.completed with allPassed=true → no TODO
+  {
+    const s33 = new SStore({ worktree: `/tmp/sb-br33-${Date.now()}-${_uid()}` })
+    const sb33 = new SB(s33, new SessStore())
+    const before = sb33.getTodos().length
+    sb33.handleEvent("plan.completed", { allPassed: true, goal: "successful plan", sessionID: "br33" })
+    sbbr_assert(sb33.getTodos().length === before, "SB-BR-33 plan.completed passed=true → no TODO")
+  }
+
+  // SB-BR-34: plan.completed without goal → no TODO
+  {
+    const s34 = new SStore({ worktree: `/tmp/sb-br34-${Date.now()}-${_uid()}` })
+    const sb34 = new SB(s34, new SessStore())
+    const before = sb34.getTodos().length
+    sb34.handleEvent("plan.completed", { allPassed: false, sessionID: "br34" })
+    sbbr_assert(sb34.getTodos().length === before, "SB-BR-34 plan.completed without goal → no TODO")
+  }
+
+  // SB-BR-35: plan.created without goal → no ADR
+  {
+    const s35 = new SStore({ worktree: `/tmp/sb-br35-${Date.now()}-${_uid()}` })
+    const sb35 = new SB(s35, new SessStore())
+    const before = sb35.getDecisions().length
+    sb35.handleEvent("plan.created", { subtaskCount: 3, sessionID: "br35" })
+    sbbr_assert(sb35.getDecisions().length === before, "SB-BR-35 plan.created without goal → no ADR")
+  }
+
+  // SB-BR-36: file.written without sourceStepId → no edge
+  {
+    const s36 = new SStore({ worktree: `/tmp/sb-br36-${Date.now()}-${_uid()}` })
+    const sb36 = new SB(s36, new SessStore())
+    const before = sb36.getEdges().length
+    sb36.handleEvent("file.written", { filePath: "orphan.txt", sessionID: "br36" })
+    sbbr_assert(sb36.getEdges().length === before, "SB-BR-36 file.written without sourceStepId → no edge")
+  }
 }
 
 console.log(`  SB-BR: ${sbbr} passed, ${sbbrf} failed`)
@@ -1716,6 +1990,751 @@ function we_assert(cond, msg) { if (cond) { we++ } else { console.error(`  ❌ $
 }
 console.log(`  WE: ${we} passed, ${wef} failed`)
 state.passed += we; state.failed += wef
+
+// ── PL-BR: Planner Branch Coverage ──
+console.log("\n[PL-BR] Planner — Branch Coverage")
+let plnr = 0, plnrf = 0
+const plnr_assert = (cond, msg) => { if (cond) { plnr++ } else { console.error(`  ❌ ${msg}`); plnrf++ } }
+
+// PL-BR-1: selectMacroTemplate via decomposeMacro — RegExp pattern match (line 233-234)
+{
+  const { Planner } = await import(pluginDist)
+  const p = new Planner()
+  const plan = p.decomposeMacro("create a new API endpoint")
+  plnr_assert(plan.phases.length >= 3, "PL-BR-1a RegExp pattern match: at least 3 phases")
+  plnr_assert(plan.phases[0].id === "phase-design", "PL-BR-1b first phase from create template")
+  plnr_assert(plan.micro.has("phase-design"), "PL-BR-1c micro expanded for design phase")
+  plnr_assert(plan.phaseOrder.length >= 3, "PL-BR-1d topological order computed")
+}
+
+// PL-BR-2: selectMacroTemplate — keyword-only match (patternMatch=false, keywordMatch=true) (line 235-236)
+{
+  const { Planner } = await import(pluginDist)
+  const p = new Planner()
+  const plan = p.decomposeMacro("need the module component")
+  plnr_assert(plan.phases.length >= 3, "PL-BR-2a keyword-only match: at least 3 phases")
+  plnr_assert(plan.micro.has("phase-impl"), "PL-BR-2b micro expanded from keyword-matched template")
+}
+
+// PL-BR-3: selectMacroTemplate — no match at all → return null → fallback 3-phase plan (line 244, 257-263)
+{
+  const { Planner } = await import(pluginDist)
+  const p = new Planner()
+  const plan = p.decomposeMacro("xyzzy completely unmatched goal")
+  plnr_assert(plan.phases.length === 3, "PL-BR-3a fallback: 3 phases")
+  plnr_assert(plan.phases[0].id === "phase-plan", "PL-BR-3b fallback phase-plan")
+  plnr_assert(plan.phases[1].id === "phase-execute", "PL-BR-3c fallback phase-execute")
+  plnr_assert(plan.phases[2].id === "phase-verify", "PL-BR-3d fallback phase-verify")
+  plnr_assert(plan.micro.has("phase-plan"), "PL-BR-3e micro expanded for fallback plan phase")
+}
+
+// PL-BR-4: expandPhase — without template → fallback 2-step generic micro (line 286-289)
+{
+  const { Planner } = await import(pluginDist)
+  const p = new Planner()
+  const steps = p.expandPhase(
+    { id: "phase-x", name: "Custom", description: "Custom phase", goal: "test", dependsOn: [], outcome: "Done" },
+    "test goal",
+    null,
+  )
+  plnr_assert(steps.length === 2, "PL-BR-4a fallback expand: 2 steps")
+  plnr_assert(steps[0].id === "phase-x-1", "PL-BR-4b first step = phase-x-1")
+  plnr_assert(steps[0].dependsOn.length === 0, "PL-BR-4c first step no deps")
+  plnr_assert(steps[1].id === "phase-x-2", "PL-BR-4d second step = phase-x-2")
+  plnr_assert(steps[1].dependsOn[0] === "phase-x-1", "PL-BR-4e second step depends on first")
+}
+
+// PL-BR-5: expandPhase — with template → template.expand() (line 283-285)
+{
+  const { Planner } = await import(pluginDist)
+  const p = new Planner()
+  const steps = p.expandPhase(
+    { id: "phase-abc", name: "TestPhase", description: "Test", goal: "test", dependsOn: [], outcome: "OK" },
+    "test goal",
+    {
+      pattern: /test/i,
+      keywords: [],
+      phases: () => [],
+      expand: (phase) => [
+        { id: `${phase.id}-custom-1`, phaseId: phase.id, description: "Custom step 1", dependsOn: [], verificationCriteria: ["OK"] },
+        { id: `${phase.id}-custom-2`, phaseId: phase.id, description: "Custom step 2", dependsOn: [`${phase.id}-custom-1`], verificationCriteria: ["OK"] },
+      ],
+    },
+  )
+  plnr_assert(steps.length === 2, "PL-BR-5a template expand: 2 custom steps")
+  plnr_assert(steps[0].id === "phase-abc-custom-1", "PL-BR-5b custom step id")
+  plnr_assert(steps[0].description === "Custom step 1", "PL-BR-5c custom description preserved")
+  plnr_assert(steps[1].dependsOn[0] === "phase-abc-custom-1", "PL-BR-5d dep chain from template")
+}
+
+// PL-BR-6: flattenHierarchical — inter-phase dependency linking via lastPrevStep (line 315-327)
+{
+  const { Planner } = await import(pluginDist)
+  const p = new Planner()
+  const plan = {
+    goal: "inter-phase",
+    phases: [
+      { id: "phase-1", name: "First", description: "First phase", goal: "test", dependsOn: [], outcome: "Done" },
+      { id: "phase-2", name: "Second", description: "Second phase", goal: "test", dependsOn: ["phase-1"], outcome: "Done" },
+    ],
+    micro: new Map([
+      ["phase-1", [
+        { id: "p1-s1", phaseId: "phase-1", description: "Step 1", dependsOn: [], verificationCriteria: [] },
+        { id: "p1-s2", phaseId: "phase-1", description: "Step 2", dependsOn: ["p1-s1"], verificationCriteria: [] },
+      ]],
+      ["phase-2", [
+        { id: "p2-s1", phaseId: "phase-2", description: "Step 3", dependsOn: [], verificationCriteria: [] },
+      ]],
+    ]),
+    phaseOrder: ["phase-1", "phase-2"],
+  }
+  const subtasks = p.flattenHierarchical(plan)
+  plnr_assert(subtasks.length === 3, "PL-BR-6a flatten: 3 subtasks")
+  const s3 = subtasks.find(s => s.id === "p2-s1")
+  plnr_assert(s3 !== undefined, "PL-BR-6b p2-s1 exists")
+  plnr_assert(s3.dependsOn.includes("p1-s2"), "PL-BR-6c inter-phase link to lastPrevStep (p1-s2)")
+  const s1 = subtasks.find(s => s.id === "p1-s1")
+  plnr_assert(s1.dependsOn.length === 0, "PL-BR-6d p1-s1 no cross-phase deps")
+}
+
+// PL-BR-7: flattenHierarchical — first phase (no depPhaseId) → no lastPrevStep (line 314)
+{
+  const { Planner } = await import(pluginDist)
+  const p = new Planner()
+  const plan = {
+    goal: "single",
+    phases: [
+      { id: "phase-only", name: "Only", description: "Only phase", goal: "single", dependsOn: [], outcome: "Done" },
+    ],
+    micro: new Map([
+      ["phase-only", [
+        { id: "s1", phaseId: "phase-only", description: "S1", dependsOn: [], verificationCriteria: [] },
+        { id: "s2", phaseId: "phase-only", description: "S2", dependsOn: ["s1"], verificationCriteria: [] },
+      ]],
+    ]),
+    phaseOrder: ["phase-only"],
+  }
+  const subtasks = p.flattenHierarchical(plan)
+  plnr_assert(subtasks.length === 2, "PL-BR-7a single phase: 2 subtasks")
+  plnr_assert(subtasks[0].dependsOn.length === 0, "PL-BR-7b first step no deps (no depPhaseId)")
+  plnr_assert(subtasks[1].dependsOn.includes("s1"), "PL-BR-7c intra-phase dep preserved")
+  plnr_assert(subtasks[1].dependsOn.length === 1, "PL-BR-7d no cross-phase deps added")
+}
+
+// PL-BR-8: flattenHierarchical — depSteps empty (dep phase missing from micro) → no lastPrevStep (line 316-318)
+{
+  const { Planner } = await import(pluginDist)
+  const p = new Planner()
+  const plan = {
+    goal: "empty-dep",
+    phases: [
+      { id: "phase-a", name: "A", description: "Phase A", goal: "test", dependsOn: [], outcome: "Done" },
+      { id: "phase-b", name: "B", description: "Phase B", goal: "test", dependsOn: ["phase-a"], outcome: "Done" },
+    ],
+    micro: new Map([
+      ["phase-b", [
+        { id: "b1", phaseId: "phase-b", description: "B1", dependsOn: [], verificationCriteria: [] },
+      ]],
+    ]),
+    phaseOrder: ["phase-a", "phase-b"],
+  }
+  const subtasks = p.flattenHierarchical(plan)
+  plnr_assert(subtasks.length === 1, "PL-BR-8a only phase-b steps: 1 subtask")
+  const noExtraDep = subtasks[0].dependsOn.every(d => d.startsWith("b"))
+  plnr_assert(noExtraDep, "PL-BR-8b no cross-phase deps when depSteps empty")
+}
+
+// PL-BR-9: flattenHierarchical — step with explicit deps (deps.length > 0) → no auto-link (line 325)
+{
+  const { Planner } = await import(pluginDist)
+  const p = new Planner()
+  const plan = {
+    goal: "explicit-dep",
+    phases: [
+      { id: "phase-a", name: "A", description: "Phase A", goal: "test", dependsOn: [], outcome: "Done" },
+      { id: "phase-b", name: "B", description: "Phase B", goal: "test", dependsOn: ["phase-a"], outcome: "Done" },
+    ],
+    micro: new Map([
+      ["phase-a", [
+        { id: "a1", phaseId: "phase-a", description: "A1", dependsOn: [], verificationCriteria: [] },
+      ]],
+      ["phase-b", [
+        { id: "b1", phaseId: "phase-b", description: "B1", dependsOn: ["explicit-dep"], verificationCriteria: [] },
+      ]],
+    ]),
+    phaseOrder: ["phase-a", "phase-b"],
+  }
+  const subtasks = p.flattenHierarchical(plan)
+  plnr_assert(subtasks.length === 2, "PL-BR-9a 2 subtasks")
+  const b1 = subtasks.find(s => s.id === "b1")
+  plnr_assert(b1.dependsOn.includes("a1"), "PL-BR-9b auto-linked to lastPrevStep when explicit dep not yet processed")
+  plnr_assert(!b1.dependsOn.includes("explicit-dep"), "PL-BR-9c unprocessed explicit dep filtered out")
+}
+
+// PL-BR-10: expandAll — with template (line 298-299)
+{
+  const { Planner } = await import(pluginDist)
+  const p = new Planner()
+  const plan = {
+    goal: "expand-all-test",
+    phases: [
+      { id: "phase-e", name: "E", description: "Expand test", goal: "test", dependsOn: [], outcome: "Done" },
+    ],
+    micro: new Map(),
+    phaseOrder: ["phase-e"],
+  }
+  const testTemplate = {
+    pattern: /expand/i,
+    keywords: [],
+    phases: () => [],
+    expand: (phase) => [
+      { id: `${phase.id}-t1`, phaseId: phase.id, description: "Template step", dependsOn: [], verificationCriteria: ["OK"] },
+    ],
+  }
+  p.expandAll(plan, testTemplate)
+  plnr_assert(plan.micro.has("phase-e"), "PL-BR-10a expandAll populates micro")
+  const steps = plan.micro.get("phase-e")
+  plnr_assert(steps.length === 1, "PL-BR-10b expandAll with template: 1 step")
+  plnr_assert(steps[0].id === "phase-e-t1", "PL-BR-10c template expand step id")
+  plnr_assert(steps[0].description === "Template step", "PL-BR-10d template expand description")
+}
+
+// PL-BR-11: expandAll — without template (null) → fallback expandPhase (line 298-299, 286-289)
+{
+  const { Planner } = await import(pluginDist)
+  const p = new Planner()
+  const plan = {
+    goal: "expand-all-fallback",
+    phases: [
+      { id: "phase-f", name: "F", description: "Fallback test", goal: "test", dependsOn: [], outcome: "Done" },
+    ],
+    micro: new Map(),
+    phaseOrder: ["phase-f"],
+  }
+  p.expandAll(plan, null)
+  plnr_assert(plan.micro.has("phase-f"), "PL-BR-11a expandAll null populates micro")
+  const steps = plan.micro.get("phase-f")
+  plnr_assert(steps.length === 2, "PL-BR-11b expandAll null: 2 fallback steps")
+  plnr_assert(steps[0].id === "phase-f-1", "PL-BR-11c fallback step = phase-f-1")
+  plnr_assert(steps[1].id === "phase-f-2", "PL-BR-11d fallback step = phase-f-2")
+}
+
+// PL-BR-12: decomposeMacro — multiple matching templates → best score wins (score > bestScore else branch, line 239)
+{
+  const { Planner } = await import(pluginDist)
+  const p = new Planner()
+  const plan = p.decomposeMacro("create a fix")
+  plnr_assert(plan.phases.length >= 3, "PL-BR-12a matched template: at least 3 phases")
+  plnr_assert(plan.phases[0].id === "phase-design", "PL-BR-12b first template (create) wins tie")
+}
+
+console.log(`  PL-BR: ${plnr} passed, ${plnrf} failed`)
+state.passed += plnr; state.failed += plnrf
+
+// ── GT-BR: GitIntegration Branch Coverage ──
+console.log("\n[GT-BR] GitIntegration — branch coverage")
+let gtbr = 0, gtbrf = 0
+const gtbr_assert = (cond, msg) => { if (cond) { gtbr++ } else { console.error(`  ❌ ${msg}`); gtbrf++ } }
+
+{
+  const fsGt = await import("fs")
+  const cpGt = await import("child_process")
+  const { GitIntegration: GI } = await import(pluginDist)
+
+  const tmpGt = `/tmp/gt-br-${Date.now()}`
+  const noGitDir = `${tmpGt}/nogit`
+  const gitDir = `${tmpGt}/gitrepo`
+  fsGt.mkdirSync(noGitDir, { recursive: true })
+  fsGt.mkdirSync(gitDir, { recursive: true })
+  let hasGit = false
+  try {
+    cpGt.execFileSync("git", ["--version"], { stdio: "ignore" })
+    cpGt.execFileSync("git", ["-c", "init.defaultBranch=main", "init"], { cwd: gitDir, stdio: "ignore" })
+    cpGt.execFileSync("git", ["config", "user.email", "t@t.com"], { cwd: gitDir, stdio: "ignore" })
+    cpGt.execFileSync("git", ["config", "user.name", "T"], { cwd: gitDir, stdio: "ignore" })
+    fsGt.writeFileSync(`${gitDir}/f.txt`, "init")
+    cpGt.execFileSync("git", ["add", "."], { cwd: gitDir, stdio: "ignore" })
+    cpGt.execFileSync("git", ["commit", "-m", "init"], { cwd: gitDir, stdio: "ignore" })
+    hasGit = true
+  } catch {}
+
+  // GT-BR-1: Constructor with custom cwd
+  { const gi = new GI(noGitDir); gtbr_assert(gi instanceof GI, "GT-BR-1 constructor with custom cwd") }
+
+  // GT-BR-2: isAvailable() — false path (catch)
+  { const gi = new GI(noGitDir); gtbr_assert(gi.isAvailable() === false, "GT-BR-2 isAvailable returns false in non-git dir") }
+
+  // GT-BR-3: isAvailable() — true path
+  if (hasGit) { const gi = new GI(gitDir); gtbr_assert(gi.isAvailable() === true, "GT-BR-3 isAvailable returns true in git repo") }
+
+  // GT-BR-4: stage() — false when git not available
+  { const gi = new GI(noGitDir); gtbr_assert(gi.stage(["f.txt"]) === false, "GT-BR-4 stage returns false when git unavailable") }
+
+  // GT-BR-5: stage() — catch when file doesn't exist
+  if (hasGit) { const gi = new GI(gitDir); gtbr_assert(gi.stage(["nonexistent"]) === false, "GT-BR-5 stage non-existent file returns false") }
+
+  // GT-BR-6: stage() — happy path
+  if (hasGit) { const gi = new GI(gitDir); fsGt.writeFileSync(`${gitDir}/stage-test.txt`, "staged"); gtbr_assert(gi.stage(["stage-test.txt"]) === true, "GT-BR-6 stage real file returns true") }
+
+  // GT-BR-7: commit() — null when git not available
+  { const gi = new GI(noGitDir); gtbr_assert(gi.commit("msg", []) === null, "GT-BR-7 commit returns null when git unavailable") }
+
+  // GT-BR-8: commit() — catch on empty message
+  if (hasGit) { const gi = new GI(gitDir); gtbr_assert(gi.commit("", []) === null, "GT-BR-8 commit with empty message returns null") }
+
+  // GT-BR-9: commit() — happy path
+  if (hasGit) {
+    const gi = new GI(gitDir)
+    fsGt.writeFileSync(`${gitDir}/commit-test.txt`, "committed")
+    const result = gi.commit("test commit", ["commit-test.txt"])
+    gtbr_assert(result !== null, "GT-BR-9a commit returns CommitInfo")
+    gtbr_assert(result.message === "test commit", "GT-BR-9b commit message matches")
+    gtbr_assert(result.files.includes("commit-test.txt"), "GT-BR-9c commit files includes new file")
+    gtbr_assert(result.hash.length >= 7, "GT-BR-9d commit hash is valid")
+    gtbr_assert(result.timestamp.length > 0, "GT-BR-9e commit timestamp present")
+  }
+
+  // GT-BR-10: getHistory() — [] when git not available
+  { const gi = new GI(noGitDir); const hist = gi.getHistory(5); gtbr_assert(Array.isArray(hist) && hist.length === 0, "GT-BR-10 getHistory returns [] when git unavailable") }
+
+  // GT-BR-11: getHistory(0) — edge
+  if (hasGit) { const gi = new GI(gitDir); const hist0 = gi.getHistory(0); gtbr_assert(Array.isArray(hist0) && hist0.length === 0, "GT-BR-11 getHistory(0) returns []") }
+
+  // GT-BR-12: getHistory() — happy path
+  if (hasGit) {
+    const gi = new GI(gitDir); const hist = gi.getHistory(10)
+    gtbr_assert(Array.isArray(hist) && hist.length >= 1, "GT-BR-12a getHistory returns commits")
+    gtbr_assert(hist[0].message.length > 0, "GT-BR-12b commit message non-empty")
+    gtbr_assert(Array.isArray(hist[0].files), "GT-BR-12c commit files is array")
+    gtbr_assert(hist[0].hash.length >= 7, "GT-BR-12d commit hash present")
+    gtbr_assert(hist[0].timestamp.length > 0, "GT-BR-12e commit timestamp present")
+  }
+
+  // GT-BR-13: getCurrentBranch() — "main" fallback in non-git dir
+  { const gi = new GI(noGitDir); gtbr_assert(gi.getCurrentBranch() === "main", "GT-BR-13 getCurrentBranch fallback returns 'main'") }
+
+  // GT-BR-14: getCurrentBranch() — real branch name
+  if (hasGit) { const gi = new GI(gitDir); gtbr_assert(gi.getCurrentBranch() === "main", "GT-BR-14 getCurrentBranch in git repo returns 'main'") }
+
+  // GT-BR-15: push() — false when git not available
+  { const gi = new GI(noGitDir); gtbr_assert(gi.push() === false, "GT-BR-15 push returns false when git unavailable") }
+
+  // GT-BR-16: push() — catch when no remote
+  if (hasGit) { const gi = new GI(gitDir); gtbr_assert(gi.push() === false, "GT-BR-16 push to repo without remote returns false") }
+
+  // GT-BR-17: push(branch) — with branch name
+  if (hasGit) { const gi = new GI(gitDir); gtbr_assert(gi.push("main") === false, "GT-BR-17 push(branch) without remote returns false") }
+
+  // GT-BR-18: createBranch() — false when git not available
+  { const gi = new GI(noGitDir); gtbr_assert(gi.createBranch("feature/test") === false, "GT-BR-18 createBranch returns false when git unavailable") }
+
+  // GT-BR-19: createBranch() — happy path
+  if (hasGit) { const gi = new GI(gitDir); gtbr_assert(gi.createBranch("gt-test-br") === true, "GT-BR-19 createBranch in git repo returns true") }
+
+  // GT-BR-20: createPR() — null when git not available
+  { const gi = new GI(noGitDir); gtbr_assert(gi.createPR("title", "body") === null, "GT-BR-20 createPR returns null when git unavailable") }
+
+  // GT-BR-21: createPR() — catch block
+  if (hasGit) { const gi = new GI(gitDir); const pr = gi.createPR("Test PR", "Body"); gtbr_assert(pr === null, "GT-BR-21 createPR returns null (gh not available)") }
+
+  // GT-BR-22: getDiff() — '' when git not available
+  { const gi = new GI(noGitDir); gtbr_assert(gi.getDiff() === "", "GT-BR-22 getDiff returns '' when git unavailable") }
+
+  // GT-BR-23: getDiff() — empty diff in clean repo
+  if (hasGit) { const gi = new GI(gitDir); const diff = gi.getDiff("HEAD"); gtbr_assert(diff === "", "GT-BR-23 getDiff(HEAD) returns empty string in clean repo") }
+
+  // GT-BR-24: getDiff() — non-empty diff after modification
+  if (hasGit) {
+    const gi = new GI(gitDir); fsGt.writeFileSync(`${gitDir}/f.txt`, "modified content"); const diff = gi.getDiff("HEAD")
+    gtbr_assert(diff.length > 0, "GT-BR-24 getDiff returns content after file modification")
+    gtbr_assert(diff.includes("modified content"), "GT-BR-24b diff includes modified content")
+  }
+
+  // GT-BR-25: generatePRDescription — allSuccess=true
+  {
+    const gi = new GI(noGitDir)
+    const desc = gi.generatePRDescription("Implement X", [{ id: "s1", description: "Add X", success: true }], ["src/x.ts"])
+    gtbr_assert(desc.title === "Implement X", "GT-BR-25a title matches goal")
+    gtbr_assert(desc.summary.startsWith("Implements"), "GT-BR-25b summary starts with 'Implements'")
+    gtbr_assert(desc.breakingChanges === false, "GT-BR-25c no breaking changes when all pass")
+    gtbr_assert(desc.changes.length === 1, "GT-BR-25d changes has 1 entry")
+    gtbr_assert(desc.testPlan.length > 0, "GT-BR-25e testPlan non-empty")
+  }
+
+  // GT-BR-26: generatePRDescription — with failures
+  {
+    const gi = new GI(noGitDir)
+    const desc = gi.generatePRDescription("Partial X", [
+      { id: "s1", description: "Add X", success: true },
+      { id: "s2", description: "Add Y", success: false },
+    ], ["src/x.ts"])
+    gtbr_assert(desc.summary.startsWith("Partially"), "GT-BR-26a summary starts with 'Partially'")
+    gtbr_assert(desc.breakingChanges === true, "GT-BR-26b breakingChanges=true when failures")
+    gtbr_assert(desc.changes.length === 1, "GT-BR-26c only successful steps in changes")
+  }
+
+  // GT-BR-27: generatePRDescription — long title (>72 chars)
+  {
+    const gi = new GI(noGitDir); const long = "A".repeat(80); const desc = gi.generatePRDescription(long, [], [])
+    gtbr_assert(desc.title.length === 72, "GT-BR-27a long title truncated to 72 chars")
+    gtbr_assert(desc.title.endsWith("..."), "GT-BR-27b truncated title ends with '...'")
+  }
+
+  // GT-BR-28: generatePRDescription — empty changes array
+  { const gi = new GI(noGitDir); const desc = gi.generatePRDescription("No changes", [], []); gtbr_assert(Array.isArray(desc.changes) && desc.changes.length === 0, "GT-BR-28 empty changes array") }
+
+  // GT-BR-29: generatePRDescription — testPlan includes filesChanged
+  {
+    const gi = new GI(noGitDir)
+    const desc = gi.generatePRDescription("Test plan", [{ id: "s1", description: "Step 1", success: true }], ["src/a.ts", "src/b.ts", "src/c.ts"])
+    gtbr_assert(desc.testPlan.includes("src/a.ts"), "GT-BR-29 testPlan includes first 5 files")
+    gtbr_assert(desc.testPlan.includes("src/b.ts"), "GT-BR-29b testPlan includes second file")
+  }
+
+  try { fsGt.rmSync(tmpGt, { recursive: true, force: true }) } catch {}
+}
+
+console.log(`  GT-BR: ${gtbr} passed, ${gtbrf} failed`)
+state.passed += gtbr; state.failed += gtbrf
+
+// ── SQL-BR: SQLitePersistence Branch Coverage ──
+console.log("\n[SQL-BR] SQLitePersistence — Branch Coverage")
+let sqlbr = 0, sqlbrf = 0
+const sqlbr_assert = (cond, msg) => { if (cond) { sqlbr++ } else { console.error(`  ❌ ${msg}`); sqlbrf++ } }
+
+{
+  const { SQLitePersistence } = await import(pluginDist)
+
+  const db = new SQLitePersistence({ dbPath: ':memory:' })
+  sqlbr_assert(typeof db === "object", "SQL-BR-1a constructor with :memory: returns instance")
+  sqlbr_assert(db.driver === "better-sqlite3", `SQL-BR-1b driver is better-sqlite3 (got ${db.driver})`)
+
+  db.save("br-ns", "k1", { hello: "world", num: 42 })
+  const loaded = db.load("br-ns", "k1")
+  sqlbr_assert(loaded !== null, "SQL-BR-2a load returns saved data")
+  sqlbr_assert(loaded.hello === "world", "SQL-BR-2b string value preserved")
+  sqlbr_assert(loaded.num === 42, "SQL-BR-2c numeric value preserved")
+
+  sqlbr_assert(db.load("br-ns", "no-such-key") === null, "SQL-BR-3 load missing key returns null")
+
+  db.save("br-ns", "null-val", null)
+  sqlbr_assert(db.load("br-ns", "null-val") === null, "SQL-BR-4 load null data returns null")
+
+  db.save("br-ns", "overwrite", { version: 1 })
+  db.save("br-ns", "overwrite", { version: 2, updated: true })
+  const ov = db.load("br-ns", "overwrite")
+  sqlbr_assert(ov.version === 2, "SQL-BR-5a overwrite replaces value")
+  sqlbr_assert(ov.updated === true, "SQL-BR-5b new fields present after overwrite")
+
+  db.save("br-ns", "delete-me", { x: 1 })
+  sqlbr_assert(db.delete("br-ns", "delete-me") === true, "SQL-BR-6a delete existing returns true")
+  sqlbr_assert(db.delete("br-ns", "no-such-key") === false, "SQL-BR-6b delete non-existent returns false")
+
+  sqlbr_assert(Array.isArray(db.listKeys("empty-ns")) && db.listKeys("empty-ns").length === 0, "SQL-BR-7a listKeys empty returns []")
+  db.save("br-ns", "a", { i: 1 })
+  db.save("br-ns", "b", { i: 2 })
+  const keys = db.listKeys("br-ns")
+  sqlbr_assert(keys.includes("a") && keys.includes("b"), "SQL-BR-7b listKeys returns saved keys")
+
+  const rows = db.query("SELECT key, data FROM store WHERE namespace = ? ORDER BY key", ["br-ns"])
+  sqlbr_assert(Array.isArray(rows) && rows.length >= 4, "SQL-BR-8a query with params returns rows")
+  const cnt = db.query("SELECT COUNT(*) as cnt FROM store")
+  sqlbr_assert(Array.isArray(cnt) && cnt.length === 1 && cnt[0].cnt > 0, "SQL-BR-8b query without params returns count")
+
+  let threw = false
+  try { db.query("INVALID SQL") } catch { threw = true }
+  sqlbr_assert(threw, "SQL-BR-9 bad SQL throws error")
+
+  const st = db.stats()
+  sqlbr_assert(Array.isArray(st.namespaces), "SQL-BR-10a stats.namespaces is array")
+  sqlbr_assert(st.fileSize === 0, "SQL-BR-10b fileSize is 0 for :memory: db")
+  sqlbr_assert(st.dbPath === ":memory:", "SQL-BR-10c dbPath matches")
+
+  const all = db.loadAll("br-ns")
+  sqlbr_assert(Array.isArray(all) && all.length > 0, "SQL-BR-11a loadAll returns entries")
+  sqlbr_assert(all[0].key !== undefined && all[0].updatedAt !== undefined, "SQL-BR-11b loadAll entries have key and updatedAt")
+
+  db.save("scope-ns", "sk", { scoped: true }, "my-scope")
+  const sc = db.load("scope-ns", "sk", "my-scope")
+  sqlbr_assert(sc !== null && sc.scoped === true, "SQL-BR-12a scoped save/load works")
+  sqlbr_assert(db.load("scope-ns", "sk") === null, "SQL-BR-12b unscoped load does not see scoped data")
+
+  const scopeKeys = db.listKeys("scope-ns", "my-scope")
+  sqlbr_assert(scopeKeys.includes("sk"), "SQL-BR-13 listKeys with scope returns correct keys")
+
+  db.save("clear-ns", "x", { v: 1 })
+  db.save("clear-ns", "y", { v: 2 })
+  sqlbr_assert(db.clearNamespace("clear-ns") === 2, "SQL-BR-14a clearNamespace without scope returns count")
+  sqlbr_assert(db.load("clear-ns", "x") === null, "SQL-BR-14b data gone after clearNamespace")
+
+  db.save("scoped-clear", "a", { v: 1 }, "scope-1")
+  db.save("scoped-clear", "b", { v: 2 }, "scope-1")
+  sqlbr_assert(db.clearNamespace("scoped-clear", "scope-1") === 2, "SQL-BR-15a clearNamespace with scope returns count")
+  sqlbr_assert(db.load("scoped-clear", "a", "scope-1") === null, "SQL-BR-15b scoped data gone after clear")
+
+  const scopes = db.listScopes("scope-ns")
+  sqlbr_assert(Array.isArray(scopes) && scopes.length >= 1, "SQL-BR-16a listScopes returns scopes")
+  sqlbr_assert(scopes.includes("my-scope"), "SQL-BR-16b listScopes includes expected scope")
+
+  const scopedAll = db.loadAll("scope-ns", "my-scope")
+  sqlbr_assert(Array.isArray(scopedAll) && scopedAll.length === 1, "SQL-BR-17a loadAll with scope returns entries")
+  sqlbr_assert(scopedAll[0].key === "sk", "SQL-BR-17b loadAll scoped entry key is correct")
+
+  const db2 = new SQLitePersistence({ dbPath: ':memory:', wal: false, cacheSize: 1000, autoMigrate: false })
+  sqlbr_assert(typeof db2 === "object", "SQL-BR-18a constructor with custom config works")
+  sqlbr_assert(db2.driver === "better-sqlite3", "SQL-BR-18b driver is better-sqlite3 with custom config")
+
+  db.close()
+  db2.close()
+  sqlbr_assert(true, "SQL-BR-19 close succeeds on both instances")
+}
+
+console.log(`  SQL-BR: ${sqlbr} passed, ${sqlbrf} failed`)
+state.passed += sqlbr; state.failed += sqlbrf
+
+// ── DB-BR: Dashboard Branch Coverage ──
+console.log("\n[DB-BR] Dashboard — branch coverage")
+let dbbr = 0, dbbrf = 0
+const dbbr_assert = (cond, msg) => { if (cond) { dbbr++ } else { console.error(`  ❌ ${msg}`); dbbrf++ } }
+
+{
+  const { Dashboard: Dash, StateStore: SStore } = await import(pluginDist)
+
+  const uid = () => Math.random().toString(36).slice(2, 6)
+
+  // DB-BR-1: Constructor with explicit timelineLimit
+  {
+    const dash = new Dash(2000, 3)
+    const traces = []
+    for (let i = 0; i < 10; i++) {
+      traces.push({ timestamp: new Date(Date.now() + i).toISOString(), toolUsed: "t", step: `s${i}`, success: true, durationMs: 10 })
+    }
+    const data = dash.generate(traces, Date.now())
+    const fmt = dash.formatForDisplay(data)
+    // Filter timeline entry lines: contain both [OK]/[FAIL] AND a pipe
+    const tl = fmt.split("\n").filter(l => (l.includes("[OK]") || l.includes("[FAIL]")) && l.includes("|"))
+    dbbr_assert(tl.length === 3, "DB-BR-1 timeline limited to 3 entries (got " + tl.length + ")")
+    dbbr_assert(!fmt.includes("s0"), "DB-BR-1b first entry excluded by limit")
+  }
+
+  // DB-BR-2: generate with data → latencyPercentiles + toolsUsed
+  {
+    const dash = new Dash()
+    const now = Date.now()
+    const traces = [
+      { timestamp: new Date(now - 3000).toISOString(), toolUsed: "nav", step: "research", success: true, durationMs: 500 },
+      { timestamp: new Date(now - 2000).toISOString(), toolUsed: "plan", step: "planning", success: false, durationMs: 100 },
+      { timestamp: new Date(now - 1000).toISOString(), toolUsed: "exec", step: "implement", success: true, durationMs: 2500 },
+    ]
+    const data = dash.generate(traces, now)
+    dbbr_assert(data.statistics.totalCalls === 3, "DB-BR-2a totalCalls = 3")
+    dbbr_assert(data.statistics.successRate === 2 / 3, "DB-BR-2b successRate = 2/3")
+    dbbr_assert(data.statistics.latencyPercentiles !== undefined, "DB-BR-2c latencyPercentiles defined")
+    dbbr_assert(data.statistics.toolsUsed.nav === 1, "DB-BR-2d toolsUsed.nav = 1")
+    const fmt = dash.formatForDisplay(data)
+    dbbr_assert(fmt.includes("Latency p50"), "DB-BR-2e latency percentile in display")
+  }
+
+  // DB-BR-3: computeEvolutionMetrics with empty skillStore
+  {
+    const dash = new Dash()
+    const data = dash.generate([], Date.now(), {
+      skillStore: {
+        getAll: () => [],
+        getLifecycleStats: () => ({ raw: 0, validated: 0, compiled: 0, evolved: 0 }),
+        size: 0,
+      },
+    })
+    dbbr_assert(data.evolutionMetrics !== undefined, "DB-BR-3a evolutionMetrics defined")
+    dbbr_assert(data.evolutionMetrics.averageSuccessRate === 0, "DB-BR-3b avgSuccessRate = 0")
+    dbbr_assert(data.evolutionMetrics.totalSkills === 0, "DB-BR-3c totalSkills = 0")
+  }
+
+  // DB-BR-4: computeEvolutionMetrics with populated skills
+  {
+    const dash = new Dash()
+    const data = dash.generate([], Date.now(), {
+      skillStore: {
+        getAll: () => [
+          { usageCount: 5, successRate: 0.8, definition: { meta: { name: "s1" }, quality: { usageCount: 5, successRate: 0.8 } } },
+          { usageCount: 3, successRate: 0.6, definition: { meta: { name: "s2" }, quality: { usageCount: 3, successRate: 0.6 } } },
+        ],
+        getLifecycleStats: () => ({ raw: 2, validated: 2, compiled: 1, evolved: 1 }),
+        size: 2,
+      },
+      matureCallCount: 15,
+      evolutionTriggerCount: 5,
+    })
+    dbbr_assert(data.evolutionMetrics.totalSkills === 2, "DB-BR-4a totalSkills = 2")
+    dbbr_assert(data.evolutionMetrics.averageSuccessRate === 0.7, "DB-BR-4b avgSuccessRate = 0.7")
+    dbbr_assert(data.evolutionMetrics.totalSkillUsageCount === 8, "DB-BR-4c total usage = 8")
+    dbbr_assert(data.evolutionMetrics.evolutionTriggerCount === 5, "DB-BR-4d triggerCount = 5")
+    dbbr_assert(data.evolutionMetrics.totalMatureCalls === 15, "DB-BR-4e matureCalls = 15")
+  }
+
+  // DB-BR-5: computeConstraintMetrics with violations
+  {
+    const dash = new Dash()
+    const data = dash.generate([], Date.now(), {
+      constraintManifold: {
+        snapshot: () => ({ violationCount: 3, enabledCategories: ["file_safety", "budget"], policy: { blockFileDeletion: true, maxTokensPerAction: 5000, maxFilesPerAction: 10 } }),
+        getActiveModifications: () => ["mod1", "mod2"],
+        getRecentViolations: () => [
+          { category: "file_safety", severity: "error", message: "delete blocked" },
+          { category: "budget", severity: "warning", message: "near limit" },
+          { category: "circuit_breaker", severity: "error", message: "tripped" },
+          { category: "custom_unknown", severity: "info", message: "custom" },
+        ],
+      },
+    })
+    dbbr_assert(data.constraintMetrics !== undefined, "DB-BR-5a constraintMetrics defined")
+    dbbr_assert(data.constraintMetrics.totalViolations === 4, "DB-BR-5b totalViolations = 4")
+    dbbr_assert(data.constraintMetrics.blockedActions === 2, "DB-BR-5c blockedActions = 2")
+    dbbr_assert(data.constraintMetrics.categoryBreakdown.file_safety === 1, "DB-BR-5d file_safety = 1")
+    dbbr_assert(data.constraintMetrics.categoryBreakdown.other === 1, "DB-BR-5e other = 1")
+    dbbr_assert(data.constraintMetrics.activeModifications === 2, "DB-BR-5f activeModifications = 2")
+    dbbr_assert(data.constraintMetrics.circuitBreakerTripped === true, "DB-BR-5g circuitBreakerTripped = true")
+  }
+
+  // DB-BR-6: computePerformanceMetrics with modelRegistry
+  {
+    const dash = new Dash()
+    const data = dash.generate([], Date.now(), {
+      modelRegistry: {
+        getAllScores: () => [
+          { model: "gpt-4o", reliability: 0.85, hallucinationRate: 0.03, totalCalls: 120, status: "active" },
+          { model: "claude-sonnet", reliability: 0.75, hallucinationRate: 0.05, totalCalls: 50, status: "degraded" },
+        ],
+      },
+      semanticCacheStats: { size: 10, hits: 50, misses: 10, hitRate: 0.833 },
+    })
+    dbbr_assert(data.performanceMetrics !== undefined, "DB-BR-6a performanceMetrics defined")
+    dbbr_assert(data.performanceMetrics.modelCount === 2, "DB-BR-6b modelCount = 2")
+    dbbr_assert(data.performanceMetrics.totalModelCalls === 170, "DB-BR-6c totalModelCalls = 170")
+  }
+
+  // DB-BR-7: computePerformanceMetrics — empty model scores
+  {
+    const dash = new Dash()
+    const data = dash.generate([], Date.now(), { modelRegistry: { getAllScores: () => [] }, semanticCacheStats: { size: 0, hits: 0, misses: 0, hitRate: 0 } })
+    dbbr_assert(data.performanceMetrics.modelCount === 0, "DB-BR-7a modelCount = 0")
+    dbbr_assert(data.performanceMetrics.totalModelCalls === 0, "DB-BR-7b totalModelCalls = 0")
+  }
+
+  // DB-BR-8: Anomaly — timeout detection
+  {
+    const dash = new Dash()
+    const data = dash.generate([
+      { timestamp: new Date(1000).toISOString(), toolUsed: "exec", step: "execute:big", success: true, durationMs: 35000 },
+    ], Date.now())
+    const anomaly = data.anomalies.find(a => a.type === "timeout")
+    dbbr_assert(anomaly !== undefined, "DB-BR-8a timeout anomaly detected")
+    dbbr_assert(anomaly.severity === "warning", "DB-BR-8b 35s < 60s → warning")
+  }
+
+  // DB-BR-9: Anomaly — critical timeout
+  {
+    const dash = new Dash()
+    const data = dash.generate([
+      { timestamp: new Date(1000).toISOString(), toolUsed: "exec", step: "execute:crit", success: true, durationMs: 90000 },
+    ], Date.now())
+    const anomaly = data.anomalies.find(a => a.type === "timeout")
+    dbbr_assert(anomaly !== undefined, "DB-BR-9a critical timeout found")
+    dbbr_assert(anomaly.severity === "critical", "DB-BR-9b >60s → critical")
+  }
+
+  // DB-BR-10: Anomaly — retry storm
+  {
+    const dash = new Dash()
+    const traces = []
+    for (let i = 0; i < 5; i++) {
+      traces.push({ timestamp: new Date(1000 + i).toISOString(), toolUsed: "exec", step: "execute:storm", success: false, durationMs: 100 })
+    }
+    const data = dash.generate(traces, Date.now())
+    const anomaly = data.anomalies.find(a => a.type === "retry_storm")
+    dbbr_assert(anomaly !== undefined, "DB-BR-10a retry storm detected")
+    dbbr_assert(anomaly.severity === "critical", "DB-BR-10b 5 retries → critical")
+  }
+
+  // DB-BR-11: Anomaly — loop detection
+  {
+    const dash = new Dash()
+    const traces = []
+    for (let i = 0; i < 6; i++) {
+      traces.push({ timestamp: new Date(1000 + i * 100).toISOString(), toolUsed: "exec", step: "execute:loop_step", success: false, durationMs: 50 })
+    }
+    const data = dash.generate(traces, Date.now())
+    const anomaly = data.anomalies.find(a => a.type === "loop")
+    dbbr_assert(anomaly !== undefined, "DB-BR-11a loop anomaly detected")
+  }
+
+  // DB-BR-12: Anomaly — silent failure
+  {
+    const dash = new Dash()
+    const data = dash.generate([
+      { timestamp: new Date(1000).toISOString(), toolUsed: "verify", step: "verify:m1", success: false, durationMs: 50 },
+      { timestamp: new Date(2000).toISOString(), toolUsed: "exec", step: "execute:m1", success: true, durationMs: 100 },
+    ], Date.now())
+    const anomaly = data.anomalies.find(a => a.type === "silent_failure")
+    dbbr_assert(anomaly !== undefined, "DB-BR-12a silent failure detected")
+    dbbr_assert(anomaly.severity === "critical", "DB-BR-12b silent failure = critical")
+  }
+
+  // DB-BR-13: Anomaly dedup — same key collapsed
+  {
+    const dash = new Dash()
+    const data = dash.generate([
+      { timestamp: new Date(1000).toISOString(), toolUsed: "slow", step: "execute:heavy", success: true, durationMs: 70000 },
+      { timestamp: new Date(2000).toISOString(), toolUsed: "slow", step: "execute:heavy", success: true, durationMs: 90000 },
+    ], Date.now())
+    const timeouts = data.anomalies.filter(a => a.type === "timeout" && a.tool === "slow")
+    dbbr_assert(timeouts.length === 1, "DB-BR-13 duplicate timeout collapsed to 1")
+  }
+
+  // DB-BR-14: computePeakConcurrency with metadata _start/_end
+  {
+    const dash = new Dash()
+    const now = Date.now()
+    const data = dash.generate([
+      { timestamp: new Date(now).toISOString(), toolUsed: "t1", step: "s1", success: true, durationMs: 1000, metadata: { _start: now, _end: now + 1000 } },
+      { timestamp: new Date(now + 100).toISOString(), toolUsed: "t2", step: "s2", success: true, durationMs: 800, metadata: { _start: now + 100, _end: now + 900 } },
+      { timestamp: new Date(now + 1100).toISOString(), toolUsed: "t3", step: "s3", success: true, durationMs: 100, metadata: { _start: now + 1100, _end: now + 1200 } },
+    ], now)
+    dbbr_assert(data.statistics.peakConcurrency === 2, "DB-BR-14 peak concurrency = 2")
+  }
+
+  // DB-BR-15: computePerformanceMetrics — durationMs <= 0 skip
+  {
+    const dash = new Dash()
+    const data = dash.generate([
+      { timestamp: new Date(1000).toISOString(), toolUsed: "fast", step: "s1", success: true, durationMs: 0 },
+      { timestamp: new Date(2000).toISOString(), toolUsed: "norm", step: "s3", success: true, durationMs: 100 },
+    ], Date.now())
+    dbbr_assert(data.performanceMetrics.toolLatencyStats.length === 1, "DB-BR-15 only 1 tool with positive duration")
+    dbbr_assert(data.performanceMetrics.toolLatencyStats[0].tool === "norm", "DB-BR-15b only 'norm' has stats")
+  }
+
+  // DB-BR-16: computePerformanceMetrics → undefined (no traces, no cache)
+  {
+    const dash = new Dash()
+    const data = dash.generate([], Date.now())
+    dbbr_assert(data.performanceMetrics === undefined, "DB-BR-16 perfMetrics = undefined (no traces)")
+  }
+
+  // DB-BR-17: computePerformanceMetrics with cache stats but no traces
+  {
+    const dash = new Dash()
+    const data = dash.generate([], Date.now(), {
+      semanticCacheStats: { size: 10, hits: 50, misses: 10, hitRate: 0.833 },
+    })
+    dbbr_assert(data.performanceMetrics !== undefined, "DB-BR-17a perfMetrics defined via cacheStats")
+    dbbr_assert(data.performanceMetrics.semanticCacheHitRate === 0.833, "DB-BR-17b cache hit rate = 0.833")
+    dbbr_assert(data.performanceMetrics.semanticCacheSize === 10, "DB-BR-17c cache size = 10")
+  }
+}
+
+console.log(`  DB-BR: ${dbbr} passed, ${dbbrf} failed`)
+state.passed += dbbr; state.failed += dbbrf
 
 // ── HELLO World Function Tests (HELLO) ──
 let helloPassed = 0, helloFailed = 0

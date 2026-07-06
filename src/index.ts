@@ -7172,7 +7172,7 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
           }
           
           // Track that research was done (for WorkflowPolicy Gate)
-          try { sessionStore.getOrCreate(context.sessionID).artifacts.set("workflow:researched", String(Date.now())) } catch {}
+          try { sessionStore.getOrCreate(context.sessionID).artifacts.set("workflow:researched", String(Date.now())) } catch { /* silent: session may not be ready */ }
           
           return {
             output: outputText.slice(0, 50000),
@@ -7693,5 +7693,7 @@ export { evaluateWorkflowPolicy, formatWorkflowPolicyDecisions, verificationEvid
 export { MultiIndexRAG, enrichWithVectors, type IndexData, type IndexSearchResult, type IndexEntry, type RAGConfig, type RAGStats, type SearchWithConfidenceResult } from "./memory/multi-index-rag.js"
 export { LocalEmbedder, type EmbedderConfig, type EmbeddingResult } from "./memory/local-embedder.js"
 export { SkillExtractor, normalize } from "./memory/skill-extractor.js"
+export { TraceLogger } from "./observability/trace-logger.js"
+export { SQLitePersistence } from "./memory/sqlite-persistence.js"
 export { hello } from "./hello.js"
 export { debounce, throttle, type DebounceOptions, type ThrottleOptions } from "./core/rate-limit.js"

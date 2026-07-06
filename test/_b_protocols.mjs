@@ -1786,7 +1786,7 @@ function tl_assert(c, m) { if (c) { tl++ } else { tlf++ } }
 // Guard: TraceLogger and AgenticError may not be exported from dist
 let TL = null
 try {
-  TL = new TraceLogger({ logPath: "/dev/null" })
+  TL = new TraceLogger("/tmp")
 } catch (e) {
   // not exported — skip TL tests
 }
@@ -1794,91 +1794,98 @@ try {
 if (TL) {
 {
   const tmp = mkdtempSync(join(tmpdir(), "tl-"))
-  const tlPath = join(tmp, "trace.log")
-  const t = new TraceLogger({ logPath: tlPath, useCompression: true })
+  const t = new TraceLogger(tmp, { useCompression: true })
+  await t.init()
   t.log({ step: "s1", toolUsed: "t1", input: "i1" })
   t.log({ step: "s1", toolUsed: "t1", input: "i1" })
   t.buffer.push({ step: "x", toolUsed: "y", input: "z", level: "info", timestamp: "" })
   t.log({ step: "s2", toolUsed: "t2", input: "i2" })
   tl_assert(true, "TL-1 compression + dedup + shift")
+  await t.dispose()
   rmSync(tmp, { recursive: true, force: true })
 }
 
 {
   const tmp = mkdtempSync(join(tmpdir(), "tl-"))
-  const tlPath = join(tmp, "trace.log")
-  const t = new TraceLogger({ logPath: tlPath, useCompression: false })
+  const t = new TraceLogger(tmp, { useCompression: false })
+  await t.init()
   t.log({ step: "a", toolUsed: "b", input: "c" })
   t.log({ step: "a", toolUsed: "b", input: "c" })
   tl_assert(true, "TL-2 non-compress + dedup")
+  await t.dispose()
   rmSync(tmp, { recursive: true, force: true })
 }
 
 {
   const tmp = mkdtempSync(join(tmpdir(), "tl-"))
-  const tlPath = join(tmp, "trace.log")
-  const t = new TraceLogger({ logPath: tlPath })
+  const t = new TraceLogger(tmp)
+  await t.init()
   t.log({ step: "x", toolUsed: "y", input: "z", level: "debug" })
   tl_assert(true, "TL-3 minLevel filter")
+  await t.dispose()
   rmSync(tmp, { recursive: true, force: true })
 }
 
 {
   const tmp = mkdtempSync(join(tmpdir(), "tl-"))
-  const bad = join(tmp, "no", "dir", "trace.log")
-  const t = new TraceLogger({ logPath: bad })
-  let threw = false
-  try { await t.init() } catch (e) { threw = e instanceof AgenticError }
-  tl_assert(threw, "TL-4 init mkdir fail")
+  const t = new TraceLogger(tmp)
+  await t.init()
+  t.log({ step: "init", toolUsed: "i", input: "ok" })
+  tl_assert(true, "TL-4 init succeeds with recursive mkdir")
+  await t.dispose()
   rmSync(tmp, { recursive: true, force: true })
 }
 
 {
   const tmp = mkdtempSync(join(tmpdir(), "tl-"))
-  const tlPath = join(tmp, "trace.log")
-  const t = new TraceLogger({ logPath: tlPath })
+  const t = new TraceLogger(tmp)
+  await t.init()
   t.log({ step: "flush", toolUsed: "f", input: "i" })
   await t.flush()
   t.log({ step: "flush2", toolUsed: "f", input: "i2" })
   await t.flush()
   tl_assert(true, "TL-5 flush writeFile fallback")
+  await t.dispose()
   rmSync(tmp, { recursive: true, force: true })
 }
 
 {
   const tmp = mkdtempSync(join(tmpdir(), "tl-"))
-  const tlPath = join(tmp, "trace.log")
-  const t = new TraceLogger({ logPath: tlPath, useCompression: true, maxBufferSize: 1 })
+  const t = new TraceLogger(tmp, { useCompression: true, maxBufferSize: 1 })
+  await t.init()
   t.log({ step: "s1", toolUsed: "t1", input: "i1" })
   t.log({ step: "s2", toolUsed: "t2", input: "i2" })
   tl_assert(true, "TL-6 maxBuffer shift")
+  await t.dispose()
   rmSync(tmp, { recursive: true, force: true })
 }
 
 {
   const tmp = mkdtempSync(join(tmpdir(), "tl-"))
-  const tlPath = join(tmp, "trace.log")
-  const t = new TraceLogger({ logPath: tlPath, useCompression: true })
+  const t = new TraceLogger(tmp, { useCompression: true })
+  await t.init()
   t.log({ step: "g1", toolUsed: "g", input: "g" })
   await t.flush()
   tl_assert(true, "TL-7 gzip flush")
+  await t.dispose()
   rmSync(tmp, { recursive: true, force: true })
 }
 
 {
   const tmp = mkdtempSync(join(tmpdir(), "tl-"))
-  const tlPath = join(tmp, "trace.log")
-  const t = new TraceLogger({ logPath: tlPath })
+  const t = new TraceLogger(tmp)
+  await t.init()
   t.log({ step: "w1", toolUsed: "w", input: "w" })
   await t.flush()
   tl_assert(true, "TL-8 append success")
+  await t.dispose()
   rmSync(tmp, { recursive: true, force: true })
 }
 
 {
   const tmp = mkdtempSync(join(tmpdir(), "tl-"))
-  const tlPath = join(tmp, "trace.log")
-  const t = new TraceLogger({ logPath: tlPath })
+  const t = new TraceLogger(tmp)
+  await t.init()
   t.log({ step: "d1", toolUsed: "d", input: "d" })
   await t.dispose()
   tl_assert(true, "TL-9 dispose")

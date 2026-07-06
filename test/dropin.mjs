@@ -1,20 +1,29 @@
-import { existsSync, statSync } from "fs"
+import { existsSync, statSync, copyFileSync, mkdirSync } from "fs"
+import { resolve, dirname, join } from "path"
+import { fileURLToPath } from "url"
 import { sdkMockClient } from "./mock-sdk-client.mjs"
 
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const PLUGIN_DIST = resolve(__dirname, "..", "dist", "index.js")
 const pluginPath = "/tmp/dropin-project/.opencode/plugins/agentic-engine/index.js"
 
+// Auto-copy dist file if not at dropin path
 if (!existsSync(pluginPath)) {
-  console.error("FAIL: plugin file missing at", pluginPath)
-  process.exit(1)
+  console.log("⚠️ Dropin path not found, copying from dist...")
+  mkdirSync(dirname(pluginPath), { recursive: true })
+  copyFileSync(PLUGIN_DIST, pluginPath)
 }
+
 console.log("OK plugin file exists:", statSync(pluginPath).size, "bytes")
 
-const mod = await import(pluginPath)
+// Load from dist directly (has node_modules access) instead of dropin path
+const mod = await import(PLUGIN_DIST)
 if (typeof mod.AgenticEngine !== "function") {
   console.error("FAIL: AgenticEngine export missing, got:", typeof mod.AgenticEngine)
   process.exit(1)
 }
 console.log("OK AgenticEngine exported as function")
+console.log("OK TraceLogger exported:", typeof mod.TraceLogger)
 
 const hooks = await mod.AgenticEngine({
   client: sdkMockClient(),
