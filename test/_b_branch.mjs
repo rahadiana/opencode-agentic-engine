@@ -3511,6 +3511,221 @@ try {
 console.log(`  HELLO: ${helloPassed} passed, ${helloFailed} failed`)
 state.passed += helloPassed; state.failed += helloFailed
 
+// ── Orchestrator Branch Coverage (ORC) ──
+console.log("\n[ORC] Orchestrator branch coverage")
+let orc = 0, orcf = 0
+const orc_assert = (c, m) => { if (c) { orc++; console.log(`  PASS: ${m}`) } else { orcf++; console.log(`  FAIL: ${m}`) } }
+
+// ORC-1: buildContextForRole with unknown runId (line 618: !run)
+{
+  const { Orchestrator } = await import(pluginDist)
+  const orch = new Orchestrator()
+  const ctx = orch.buildContextForRole("developer", "nonexistent-run", [])
+  orc_assert(ctx === "", "ORC-1 buildContextForRole unknown runId returns empty string")
+}
+
+// ORC-2: buildContextForRole with stage result issues (line 633: result.issues.length > 0)
+{
+  const { Orchestrator } = await import(pluginDist)
+  const orch = new Orchestrator()
+  orch.definePipeline({
+    id: "p-orc2", name: "ORC2",
+    stages: [{ role: "pm", description: "PM stage" }, { role: "developer", description: "Dev stage" }],
+    createdAt: Date.now(),
+  })
+  orch.startRun("r-orc2", "p-orc2")
+  orch.advanceStage("r-orc2", "PM output", ["missing requirement", "unclear scope"])
+  const ctx = orch.buildContextForRole("developer", "r-orc2", [])
+  orc_assert(ctx.includes("missing requirement"), "ORC-2a context includes first issue")
+  orc_assert(ctx.includes("unclear scope"), "ORC-2b context includes second issue")
+}
+
+// ORC-3: executePipeline budget exceeded (line 674: budgetStop)
+{
+  const { Orchestrator } = await import(pluginDist)
+  const orch = new Orchestrator()
+  const mockCoord = {
+    delegate: () => ({}),
+    writeSharedMemory: async () => ({}),
+    updateTask: async () => {},
+    getAllSharedMemory: () => [],
+  }
+  const budgetTracker = { check: () => ({ metric: "tokens", current: 100, limit: 50 }) }
+  const pip = {
+    id: "p-orc3", name: "ORC3",
+    stages: [{ role: "pm", description: "PM stage" }],
+    createdAt: Date.now(),
+  }
+  orch.definePipeline(pip)
+  orch.startRun("r-orc3", "p-orc3")
+  const res = await orch.executePipeline({
+    pipeline: pip, runId: "r-orc3", goal: "test", coordinator: mockCoord,
+    sessionID: "sess-orc3", projectDir, codebaseSummary: "", filesBlock: "",
+    memoryContexts: [], skillContexts: [], budgetTracker,
+  })
+  orc_assert(res.budgetExceeded === true, "ORC-3 budget exceeded flagged")
+  orc_assert(res.verifyNote.includes("Budget exceeded"), "ORC-3 verifyNote mentions budget")
+  orc_assert(res.completedStageCount === 0, "ORC-3 no stages completed after budget stop")
+}
+
+// ORC-4: executePipeline stage LLM failure stop (line 682 + line 858: lastErr)
+{
+  const { Orchestrator } = await import(pluginDist)
+  const orch = new Orchestrator()
+  const mockCoord = {
+    delegate: () => ({}),
+    writeSharedMemory: async () => ({}),
+    updateTask: async () => {},
+    getAllSharedMemory: () => [],
+  }
+  orch.setLLMEngine({
+    call: async () => { throw new Error("LLM crash") },
+  })
+  const pip = {
+    id: "p-orc4", name: "ORC4",
+    stages: [{ role: "developer", description: "Dev" }],
+    createdAt: Date.now(),
+  }
+  orch.definePipeline(pip)
+  orch.startRun("r-orc4", "p-orc4")
+  const res = await orch.executePipeline({
+    pipeline: pip, runId: "r-orc4", goal: "test", coordinator: mockCoord,
+    sessionID: "sess-orc4", projectDir, codebaseSummary: "", filesBlock: "",
+    memoryContexts: [], skillContexts: [],
+  })
+  orc_assert(res.hasNoLLM === false, "ORC-4 LLM failure hasNoLLM is false")
+  orc_assert(res.completedStageCount === 0, "ORC-4 no completed stages after LLM failure")
+}
+
+// ORC-5: NO_LLM failure (line 864: isFail)
+{
+  const { Orchestrator } = await import(pluginDist)
+  const orch = new Orchestrator()
+  const mockCoord = {
+    delegate: () => ({}),
+    writeSharedMemory: async () => ({}),
+    updateTask: async () => {},
+    getAllSharedMemory: () => [],
+  }
+  orch.setLLMEngine({
+    call: async () => ({ content: "[NO_LLM] No model available" }),
+  })
+  const pip = {
+    id: "p-orc5", name: "ORC5",
+    stages: [{ role: "developer", description: "Dev" }],
+    createdAt: Date.now(),
+  }
+  orch.definePipeline(pip)
+  orch.startRun("r-orc5", "p-orc5")
+  const res = await orch.executePipeline({
+    pipeline: pip, runId: "r-orc5", goal: "test", coordinator: mockCoord,
+    sessionID: "sess-orc5", projectDir, codebaseSummary: "", filesBlock: "",
+    memoryContexts: [], skillContexts: [],
+  })
+  orc_assert(res.hasNoLLM === true, "ORC-5 NO_LLM stop hasNoLLM true")
+}
+
+// ORC-6: handleStageOutput QA fail (lines 892-893: !qaParsed.passed)
+{
+  const { Orchestrator } = await import(pluginDist)
+  const orch = new Orchestrator()
+  const mockCoord = {
+    delegate: () => ({}),
+    writeSharedMemory: async () => ({}),
+    updateTask: async () => {},
+    getAllSharedMemory: () => [],
+  }
+  orch.setLLMEngine({
+    call: async () => ({ content: JSON.stringify({ passed: false, summary: "found bugs", issues: [] }) }),
+  })
+  const pip = {
+    id: "p-orc6", name: "ORC6",
+    stages: [{ role: "qa", description: "QA check" }],
+    createdAt: Date.now(),
+  }
+  orch.definePipeline(pip)
+  orch.startRun("r-orc6", "p-orc6")
+  const res = await orch.executePipeline({
+    pipeline: pip, runId: "r-orc6", goal: "test", coordinator: mockCoord,
+    sessionID: "sess-orc6", projectDir, codebaseSummary: "", filesBlock: "",
+    memoryContexts: [], skillContexts: [],
+  })
+  orc_assert(res.verifyNote.includes("QA"), "ORC-6 QA failure verifyNote mentions QA")
+  orc_assert(res.verifyNote.includes("found bugs"), "ORC-6 QA failure verifyNote includes summary")
+}
+
+// ORC-7: handleStageOutput QA JSON parse failure (line 895: catch)
+{
+  const { Orchestrator } = await import(pluginDist)
+  const orch = new Orchestrator()
+  const mockCoord = {
+    delegate: () => ({}),
+    writeSharedMemory: async () => ({}),
+    updateTask: async () => {},
+    getAllSharedMemory: () => [],
+  }
+  orch.setLLMEngine({
+    call: async () => ({ content: "not valid json at all" }),
+  })
+  const pip = {
+    id: "p-orc7", name: "ORC7",
+    stages: [{ role: "qa", description: "QA check" }],
+    createdAt: Date.now(),
+  }
+  orch.definePipeline(pip)
+  orch.startRun("r-orc7", "p-orc7")
+  const res = await orch.executePipeline({
+    pipeline: pip, runId: "r-orc7", goal: "test", coordinator: mockCoord,
+    sessionID: "sess-orc7", projectDir, codebaseSummary: "", filesBlock: "",
+    memoryContexts: [], skillContexts: [],
+  })
+  orc_assert(res.verifyNote === "", "ORC-7 QA JSON parse failure verifyNote empty")
+}
+
+// ORC-8: crossValidate with 2+ stages (line 707: allStageResults.size >= 2)
+{
+  const { Orchestrator } = await import(pluginDist)
+  const orch = new Orchestrator()
+  let llmCallCount = 0
+  const mockCoord = {
+    delegate: () => ({}),
+    writeSharedMemory: async () => ({}),
+    updateTask: async () => {},
+    getAllSharedMemory: () => [],
+  }
+  orch.setLLMEngine({
+    call: async () => {
+      llmCallCount++
+      if (llmCallCount <= 1) return { content: JSON.stringify({ spec: "test spec", criteria: ["a"] }) }
+      if (llmCallCount <= 2) return { content: JSON.stringify({ noChanges: true }) }
+      return { content: JSON.stringify({ passed: true, issues: [], summary: "cross-validation ok" }) }
+    },
+  })
+  const pip = {
+    id: "p-orc8", name: "ORC8",
+    stages: [
+      { role: "pm", description: "PM define reqs" },
+      { role: "developer", description: "Dev implement" },
+    ],
+    createdAt: Date.now(),
+  }
+  orch.definePipeline(pip)
+  orch.startRun("r-orc8", "p-orc8")
+  // Pre-populate so getAllStageResults returns size >= 2 for cross-validation call
+  orch.advanceStage("r-orc8", "PM spec output", [])
+  orch.advanceStage("r-orc8", "Dev implemented", [])
+  const res = await orch.executePipeline({
+    pipeline: pip, runId: "r-orc8", goal: "test feature", coordinator: mockCoord,
+    sessionID: "sess-orc8", projectDir, codebaseSummary: "", filesBlock: "",
+    memoryContexts: [], skillContexts: [],
+  })
+  orc_assert(res.completedStageCount === 2, "ORC-8a both stages completed")
+  orc_assert(typeof res.verifyNote === "string", "ORC-8b cross-validation produced verifyNote string")
+}
+
+console.log(`  ORC: ${orc} passed, ${orcf} failed`)
+state.passed += orc; state.failed += orcf
+
 console.log(`__RESULT__:${JSON.stringify({passed:state.passed,failed:state.failed})}`)
 // Standalone: if (state.failed > 0) process.exit(1)
 
