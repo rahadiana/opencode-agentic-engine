@@ -90,8 +90,8 @@ export class AgentRuntime {
           if (this.opencodeClient) {
             try {
               (this.opencodeClient as { session: { delete: (opts: { path: { id: string } }) => Promise<unknown> } })
-                .session.delete({ path: { id: this._sharedSessionId } }).catch(() => {})
-            } catch {}
+                .session.delete({ path: { id: this._sharedSessionId } }).catch(() => {/* non-fatal */})
+            } catch {/* non-fatal */}
           }
           this._sharedSessionId = newSession
           this._sharedSessionCount = 0
