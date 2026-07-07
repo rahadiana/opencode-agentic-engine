@@ -1,6 +1,7 @@
 import { tool } from "@opencode-ai/plugin"
 import type { ToolSpec } from "./types.js"
 import type { ToolContext } from "./tool-context.js"
+import { readFileSync } from "node:fs"
 
 export function makeScoreTool(ctx: ToolContext): ToolSpec {
   const {

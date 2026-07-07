@@ -4,23 +4,7 @@ import type { ToolContext } from "./tool-context.js"
 
 export function makeToolsTool(ctx: ToolContext): ToolSpec {
   const {
-    sessionStore, domainRegistry, worktree, projectId, config,
-    log, projectContext, TOOL_REGISTRY, currentInjectDomain,
-    planner, plannerCritic, executor, intentParser, agentLoop,
-    verifier, errorAnalyzer, errorRecovery, alignmentGate,
-    economicModel, confidenceScorer, confidenceStore, techDebtScorer,
-    constraintManifold, navigator, toolRouter, routerAgent,
-    skillStore, skillCurator, episodicStore, memoryOrchestrator,
-    secondBrain, rag: multiIndexRAG, coordinator, orchestrator,
-    roleRegistry, agentRuntime, debateLoop, dashboard, traceLogger,
-    liveEvaluator, patternDiscovery, toolUsageTracker, workflowEngine,
-    llmEngine, modelRegistry, hallucinationGuard, checkpoints,
-    stateStore, budgetTracker, eventBus, parallelExec,
-    dependencyTracker: depTracker, contextCompressor, git,
-    selfEvolver, continuousEvolution, metaReasoner,
-    mcpServer, mcpClient, protocolAdapter, dynamicToolRegistry,
-    worldModel, simulationEngine, dataCleaner, configLoader,
-    logErrorToFile, detectSubAgentRole, buildSubAgentInjection, ctxDir,
+    protocolAdapter, log,
   } = ctx
   return {
       description: "Unified tool discovery and calling across MCP + A2A protocols. Search for tools, auto-route calls to the right backend, list all connections, and view combined stats.",

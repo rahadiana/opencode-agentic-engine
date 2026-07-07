@@ -4,6 +4,8 @@ import type { ToolContext } from "./tool-context.js"
 import { join } from "node:path"
 import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "node:fs"
 import { createHash } from "node:crypto"
+import { createMemoryEnvelope } from "../memory/schema-version.js"
+import type { Episode } from "../memory/episodic-store.js"
 
 export function makeRagTool(ctx: ToolContext): ToolSpec {
   const {

@@ -81,7 +81,7 @@ export function makeSkillTool(ctx: ToolContext): ToolSpec {
             if (s.definition.logic) line += `\n  DSL: ${s.definition.logic.instructions.length} instructions`
             if (s.definition.input_schema) line += `\n  Input: ${Object.keys(s.definition.input_schema).length} fields`
             // Show curator lifecycle
-            line += `\n  Lifecycle: ${curator.getLifecycle(s)}`
+            line += `\n  Lifecycle: ${skillCurator.getLifecycle(s)}`
             return line
           }).join("\n")
           output += `\n\n> 💡 Skills shown from all past sessions. Auto-inject (top-3 most relevant) happens automatically in your prompt.\n> Use \`agentic_skill action=capability query="...exact..."\` for exact-match lookup.`

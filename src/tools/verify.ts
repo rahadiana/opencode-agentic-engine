@@ -4,23 +4,7 @@ import type { ToolContext } from "./tool-context.js"
 
 export function makeVerifyTool(ctx: ToolContext): ToolSpec {
   const {
-    sessionStore, domainRegistry, worktree, projectId, config,
-    log, projectContext, TOOL_REGISTRY, currentInjectDomain,
-    planner, plannerCritic, executor, intentParser, agentLoop,
-    verifier, errorAnalyzer, errorRecovery, alignmentGate,
-    economicModel, confidenceScorer, confidenceStore, techDebtScorer,
-    constraintManifold, navigator, toolRouter, routerAgent,
-    skillStore, skillCurator, episodicStore, memoryOrchestrator,
-    secondBrain, rag: multiIndexRAG, coordinator, orchestrator,
-    roleRegistry, agentRuntime, debateLoop, dashboard, traceLogger,
-    liveEvaluator, patternDiscovery, toolUsageTracker, workflowEngine,
-    llmEngine, modelRegistry, hallucinationGuard, checkpoints,
-    stateStore, budgetTracker, eventBus, parallelExec,
-    dependencyTracker: depTracker, contextCompressor, git,
-    selfEvolver, continuousEvolution, metaReasoner,
-    mcpServer, mcpClient, protocolAdapter, dynamicToolRegistry,
-    worldModel, simulationEngine, dataCleaner, configLoader,
-    logErrorToFile, detectSubAgentRole, buildSubAgentInjection, ctxDir,
+    sessionStore, verifier, errorAnalyzer, traceLogger, eventBus, ctxDir,
   } = ctx
   return {
       description: "Run deep verification: compile + lint + test + semantic + security + performance + architecture + dependency audit. Gap #4 multi-dimensional.",
