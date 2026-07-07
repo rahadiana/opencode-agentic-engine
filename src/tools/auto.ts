@@ -11,13 +11,14 @@ import { evaluateWorkflowPolicy, formatWorkflowPolicyDecisions } from "../core/w
 import { runAutoEvolve } from "../evolution/auto-evolve.js"
 import { TechDebtScorer } from "../core/tech-debt-scorer.js"
 import { AutoRetryManager } from "../core/auto-retry.js"
+import type { TaskIntent, Subtask } from "../core/intent-parser.js"
 
 export function makeAutoTool(ctx: ToolContext): ToolSpec {
   const {
     sessionStore, domainRegistry, worktree, projectId, config,
     log, projectContext, TOOL_REGISTRY, currentInjectDomain,
     planner, plannerCritic, executor, intentParser, agentLoop,
-    verifier, errorAnalyzer, _errorRecovery, alignmentGate,
+    verifier, errorAnalyzer, errorRecovery, alignmentGate,
     economicModel, confidenceScorer, confidenceStore, techDebtScorer,
     constraintManifold, navigator, toolRouter, routerAgent,
     skillStore, skillCurator, episodicStore, memoryOrchestrator,
@@ -201,7 +202,7 @@ export function makeAutoTool(ctx: ToolContext): ToolSpec {
             hallucinationGuard,
             skillStore,
             configLoader,
-            schemaValidator: getSchemaValidator(),
+            schemaValidator: getSchemaValidator() as import("../core/skill-schema.js").SchemaValidator | undefined,
           })
 
           hasNoLLM = piperesult.hasNoLLM
@@ -487,9 +488,8 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
           ;(async () => {
             // Guard — verifikasi file claims (sync, fast)
             try {
-              const guard = new HallucinationGuard(projectDir)
               const checkOutput = `Created files: ${allModified.join(", ")}, wrote implementations for ${activeSteps.map(s => s.description).join(", ")}`
-              const guardResult = guard.check(checkOutput, allModified)
+              const guardResult = hallucinationGuard.check(checkOutput, allModified)
               if (guardResult?.claims) {
                 const failedClaims = guardResult.claims.filter((c: { verified: boolean }) => !c.verified)
                 const conf = guardResult.overallConfidence !== undefined ? ` (conf: ${guardResult.overallConfidence.toFixed(2)})` : ''

@@ -1,6 +1,21 @@
 import { tool } from "@opencode-ai/plugin"
 import type { ToolSpec } from "./types.js"
 import type { ToolContext } from "./tool-context.js"
+import { SQLitePersistence } from "../memory/sqlite-persistence.js"
+
+// Module-level SQLite singleton (lazy init)
+let _sqliteDB: SQLitePersistence | null = null
+function getSQLiteDB(): SQLitePersistence {
+  if (!_sqliteDB) {
+    try {
+      _sqliteDB = new SQLitePersistence()
+    } catch (e) {
+      throw new Error(`SQLite not available: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  return _sqliteDB
+}
+const sqliteDB = getSQLiteDB()
 
 export function makeDbTool(ctx: ToolContext): ToolSpec {
   const {
@@ -156,7 +171,7 @@ export function makeDbTool(ctx: ToolContext): ToolSpec {
                 ``,
                 `| Namespace | Scopes | Keys |`,
                 `|-----------|--------|------|`,
-                ...stats.namespaces.map((n: string) =>
+                ...stats.namespaces.map((n) =>
                   `| \`${n.namespace}\` | ${n.scopes} | ${n.keys} |`
                 ),
               ].join("\n"),
