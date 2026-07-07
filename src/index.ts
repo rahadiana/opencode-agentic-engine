@@ -1637,6 +1637,11 @@ export { debounce, throttle, type DebounceOptions, type ThrottleOptions } from "
 import { buildAllTools } from "./tools/definitions.js"
 import { runAutoEvolve as _runAutoEvolve, gatherEvolutionData } from "./evolution/auto-evolve.js"
 
+/** Simple smoke-test function — verifies the plugin builds and exports correctly */
+export function hello(name?: string): string {
+  return `Hello, ${name ?? "World"}!`
+}
+
 // Deferred reference to ctx (set after ctx is initialized)
 let _ctxRef: import("./tools/tool-context.js").ToolContext | null = null
 function runAutoEvolve() {
