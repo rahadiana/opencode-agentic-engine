@@ -3511,6 +3511,356 @@ try {
 console.log(`  HELLO: ${helloPassed} passed, ${helloFailed} failed`)
 state.passed += helloPassed; state.failed += helloFailed
 
+// ── AE-BR: auto-evolve.ts Branch Coverage ──
+console.log("\n[AE-BR] auto-evolve.ts — branch coverage")
+let aebr = 0, aebrf = 0
+const aebr_assert = (c, m) => { if (c) { aebr++; console.log(`  PASS: ${m}`) } else { aebrf++; console.error(`  ❌ ${m}`) } }
+
+// AE-BR-1: gatherEvolutionData — trace entries with null/undefined fields (L48 ?? operators)
+{
+  const { gatherEvolutionData } = await import(pluginDist)
+  const ctx = {
+    traceLogger: { flush: async () => {} },
+    skillStore: { getAll: () => [] },
+    episodicStore: { getRecent: () => [] },
+    coordinator: { getTasks: () => [] },
+    sessionStore: { getOrCreate: () => ({ plan: null }) },
+    executor: { getStepState: () => null },
+    worktree: projectDir,
+    log: { warn: (...args) => {} },
+    selfEvolver: { feedSkills: () => {}, feedEpisodes: () => {}, feedTasks: () => {}, feedStepStates: () => {}, feedTraces: () => {} },
+  }
+  // Create trace file with null/undefined fields to exercise ?? operators
+  writeFileSync(join(projectDir, ".agentic", "trace.jsonl"),
+    JSON.stringify({}) + "\n" +
+    JSON.stringify({ toolUsed: null, success: null }) + "\n"
+  )
+  const result = await gatherEvolutionData(ctx)
+  aebr_assert(Array.isArray(result.traces), "AE-BR-1a traces is array")
+  aebr_assert(result.traces.length === 2, `AE-BR-1b traces length 2 (got ${result.traces.length})`)
+  // First entry: all fields default from ??
+  aebr_assert(result.traces[0].toolUsed === "unknown", "AE-BR-1c trace[0] toolUsed defaults to unknown")
+  aebr_assert(result.traces[0].success === true, "AE-BR-1d trace[0] success defaults to true")
+  aebr_assert(result.traces[0].step === "", "AE-BR-1e trace[0] step defaults to empty string")
+  aebr_assert(result.traces[1].toolUsed === "unknown", "AE-BR-1f trace[1] null toolUsed defaults to unknown")
+  aebr_assert(result.traces[1].success === true, "AE-BR-1g trace[1] null success defaults to true")
+}
+
+// AE-BR-2: gatherEvolutionData — no trace file (L50 catch)
+{
+  const { gatherEvolutionData } = await import(pluginDist)
+  // Ensure no trace file exists
+  const tracePath = join(projectDir, ".agentic", "trace.jsonl")
+  try { rmSync(tracePath, { force: true }) } catch {}
+  const ctx = {
+    traceLogger: { flush: async () => {} },
+    skillStore: { getAll: () => [] },
+    episodicStore: { getRecent: () => [] },
+    coordinator: { getTasks: () => [] },
+    sessionStore: { getOrCreate: () => ({ plan: null }) },
+    executor: { getStepState: () => null },
+    worktree: projectDir,
+    log: { warn: (...args) => {} },
+    selfEvolver: { feedSkills: () => {}, feedEpisodes: () => {}, feedTasks: () => {}, feedStepStates: () => {}, feedTraces: (traces) => {
+      aebr_assert(Array.isArray(traces) && traces.length === 0, "AE-BR-2a no traces fed when file missing")
+    } },
+  }
+  const result = await gatherEvolutionData(ctx)
+  aebr_assert(result.traces.length === 0, "AE-BR-2b empty traces when no trace file")
+}
+
+// AE-BR-3: runAutoEvolve — trace entries with null/undefined fields (L79-84 ?? operators)
+{
+  const { runAutoEvolveInternal } = await import(pluginDist)
+  const tracePath = join(projectDir, ".agentic", "trace.jsonl")
+  writeFileSync(tracePath,
+    JSON.stringify({}) + "\n" +
+    JSON.stringify({ toolUsed: null, input: null, output: null, step: null, timestamp: null }) + "\n" +
+    JSON.stringify({ toolUsed: "test-tool", input: "in", output: "out", step: "s1", timestamp: 1000 }) + "\n"
+  )
+  let innerCatchHit = false
+  const ctx = {
+    traceLogger: { flush: async () => {} },
+    skillStore: { getAll: () => [], getById: () => null },
+    episodicStore: { getRecent: () => [] },
+    coordinator: {
+      getTasks: () => [],
+      registerCustomRole: () => {},
+    },
+    sessionStore: { getOrCreate: () => ({ plan: null }) },
+    executor: { getStepState: () => null },
+    worktree: projectDir,
+    log: { warn: (...args) => {} },
+    selfEvolver: {
+      feedSkills: () => {}, feedEpisodes: () => {}, feedTasks: () => {},
+      feedStepStates: () => {}, feedTraces: () => {},
+      evolve: () => ({
+        metrics: { totalSessions: 0, totalSteps: 0, successRate: 0, retryRate: 0, avgRetriesPerFailure: 0, topErrorCategories: [], skillEffectiveness: [], toolUsage: [], recommendations: [] },
+        skillPatches: [], roleSuggestions: [], promptPatches: [], improvementScore: 0,
+      }),
+    },
+    rag: { vectorStore: { index: () => { innerCatchHit = true } } },
+    stateStore: { set: () => {} },
+    roleRegistry: {
+      getPrompt: () => null,
+      updatePrompt: () => true,
+      getAllPromptStates: () => ({}),
+    },
+  }
+  const result = await runAutoEvolveInternal(ctx)
+  aebr_assert(typeof result === "string", "AE-BR-3a result is string")
+  aebr_assert(result.includes("Auto-Evolution"), "AE-BR-3b result contains Auto-Evolution")
+  aebr_assert(innerCatchHit, "AE-BR-3c vectorStore.index was called (no ??)")
+}
+
+// AE-BR-4: runAutoEvolve — corrupted trace line (L91 inner catch)
+{
+  const { runAutoEvolveInternal } = await import(pluginDist)
+  const tracePath = join(projectDir, ".agentic", "trace.jsonl")
+  writeFileSync(tracePath,
+    JSON.stringify({ toolUsed: "ok" }).trim() + "\n" +
+    "NOT_JSON\n" +
+    JSON.stringify({ toolUsed: "after-bad" }).trim() + "\n"
+  )
+  const ctx = {
+    traceLogger: { flush: async () => {} },
+    skillStore: { getAll: () => [], getById: () => null },
+    episodicStore: { getRecent: () => [] },
+    coordinator: { getTasks: () => [], registerCustomRole: () => {} },
+    sessionStore: { getOrCreate: () => ({ plan: null }) },
+    executor: { getStepState: () => null },
+    worktree: projectDir,
+    log: { warn: (...args) => {} },
+    selfEvolver: {
+      feedSkills: () => {}, feedEpisodes: () => {}, feedTasks: () => {},
+      feedStepStates: () => {}, feedTraces: () => {},
+      evolve: () => ({
+        metrics: { totalSessions: 0, totalSteps: 0, successRate: 0, retryRate: 0, avgRetriesPerFailure: 0, topErrorCategories: [], skillEffectiveness: [], toolUsage: [], recommendations: [] },
+        skillPatches: [], roleSuggestions: [], promptPatches: [], improvementScore: 0,
+      }),
+    },
+    rag: { vectorStore: { index: () => {} } },
+    stateStore: { set: () => {} },
+    roleRegistry: { getPrompt: () => null, updatePrompt: () => true, getAllPromptStates: () => ({}) },
+  }
+  const result = await runAutoEvolveInternal(ctx)
+  aebr_assert(typeof result === "string", "AE-BR-4a result is string")
+  aebr_assert(result.includes("No changes"), "AE-BR-4b result says no changes")
+}
+
+// AE-BR-5: runAutoEvolve — no trace file (L93 outer catch)
+{
+  const { runAutoEvolveInternal } = await import(pluginDist)
+  const tracePath = join(projectDir, ".agentic", "trace.jsonl")
+  try { rmSync(tracePath, { force: true }) } catch {}
+  const ctx = {
+    traceLogger: { flush: async () => {} },
+    skillStore: { getAll: () => [], getById: () => null },
+    episodicStore: { getRecent: () => [] },
+    coordinator: { getTasks: () => [], registerCustomRole: () => {} },
+    sessionStore: { getOrCreate: () => ({ plan: null }) },
+    executor: { getStepState: () => null },
+    worktree: projectDir,
+    log: { warn: (...args) => {} },
+    selfEvolver: {
+      feedSkills: () => {}, feedEpisodes: () => {}, feedTasks: () => {},
+      feedStepStates: () => {}, feedTraces: () => {},
+      evolve: () => ({
+        metrics: { totalSessions: 0, totalSteps: 0, successRate: 0, retryRate: 0, avgRetriesPerFailure: 0, topErrorCategories: [], skillEffectiveness: [], toolUsage: [], recommendations: [] },
+        skillPatches: [], roleSuggestions: [], promptPatches: [], improvementScore: 0,
+      }),
+    },
+    rag: { vectorStore: { index: () => {} } },
+    stateStore: { set: () => {} },
+    roleRegistry: { getPrompt: () => null, updatePrompt: () => true, getAllPromptStates: () => ({}) },
+  }
+  const result = await runAutoEvolveInternal(ctx)
+  aebr_assert(typeof result === "string", "AE-BR-5a result is string")
+  aebr_assert(result.includes("No changes"), "AE-BR-5b result says no changes when no trace")
+}
+
+// AE-BR-6: runAutoEvolve — selfEvolver returns non-empty reports (L100, L113, L155, L169-171, L173 branches)
+{
+  const { runAutoEvolveInternal } = await import(pluginDist)
+  const tracePath = join(projectDir, ".agentic", "trace.jsonl")
+  writeFileSync(tracePath,
+    JSON.stringify({ toolUsed: "test", input: "x", output: "y", step: "s1", timestamp: Date.now(), success: true }) + "\n"
+  )
+  // Register custom role should succeed — we'll make coordinator.registerCustomRole succeed
+  let roleRegistered = false
+  let skillPatched = false
+  let promptPatched = false
+
+  const ctx = {
+    traceLogger: { flush: async () => {} },
+    skillStore: {
+      getAll: () => [],
+      getById: (id) => {
+        if (id === "s1") {
+          return {
+            definition: {
+              meta: { id: "s1", name: "test-skill", version: 1, format: "agentic-skill/v1", author: "agent" },
+              workflow: { steps: [{ order: 1, action: "bash", description: "step1", expectedOutput: "ok" }], estimatedDuration: "2m", parallelizable: false },
+              quality: { successRate: 1, usageCount: 5, failureScenarios: [] },
+              audit: { createdAt: "", lastUsed: "", lastModified: "", modifiedBy: "" },
+              trigger: { pattern: "test", keywords: ["test"], context: [] },
+            },
+            usageCount: 5, successRate: 0.5,
+            successWindow: [], lastUsed: "",
+          }
+        }
+        return null
+      },
+    },
+    episodicStore: { getRecent: () => [] },
+    coordinator: {
+      getTasks: () => [],
+      registerCustomRole: (role) => { roleRegistered = true; aebr_assert(role.name === "SecTest", "AE-BR-6a registerCustomRole called with SecTest") },
+    },
+    sessionStore: { getOrCreate: () => ({ plan: null }) },
+    executor: { getStepState: () => null },
+    worktree: projectDir,
+    log: { warn: (...args) => {} },
+    selfEvolver: {
+      feedSkills: () => {}, feedEpisodes: () => {}, feedTasks: () => {},
+      feedStepStates: () => {}, feedTraces: () => {},
+      evolve: () => ({
+        metrics: {
+          totalSessions: 5, totalSteps: 20, successRate: 0.5, retryRate: 0.2,
+          avgRetriesPerFailure: 1.5,
+          topErrorCategories: [{ category: "compile", count: 3 }],
+          skillEffectiveness: [], toolUsage: [],
+          recommendations: ["Test recommendation"],
+        },
+        skillPatches: [{
+          skillId: "s1", skillName: "test-skill", failures: 3,
+          suggestedChanges: [{ type: "add_rollback", description: "Add rollback", detail: "Each step needs undo" }],
+        }],
+        roleSuggestions: [{
+          name: "SecTest", triggerPattern: "security", suggestedTools: ["agentic_nav"], reason: "Test reason",
+        }],
+        promptPatches: [{
+          role: "developer", errorCategory: "compile", instruction: "Always run tsc --noEmit", priority: "high", occurrences: 3,
+        }],
+        improvementScore: 50,
+      }),
+    },
+    rag: { vectorStore: { index: () => {} } },
+    stateStore: {
+      set: (scope, key, val) => {
+        if (key === "s1") skillPatched = true
+        if (key === "state") promptPatched = true
+      },
+    },
+    roleRegistry: {
+      getPrompt: (role) => "existing prompt",
+      updatePrompt: (role, newPrompt, source, desc) => {
+        aebr_assert(role === "developer", "AE-BR-6b updatePrompt called for developer")
+        aebr_assert(newPrompt.includes("tsc"), "AE-BR-6c newPrompt includes tsc instruction")
+        return true
+      },
+      getAllPromptStates: () => ({}),
+    },
+  }
+  const result = await runAutoEvolveInternal(ctx)
+  aebr_assert(typeof result === "string", "AE-BR-6e result is string")
+  aebr_assert(roleRegistered, "AE-BR-6f role was registered from roleSuggestions")
+  aebr_assert(skillPatched, "AE-BR-6g skill was patched from skillPatches")
+  aebr_assert(promptPatched, "AE-BR-6h prompt was patched from promptPatches")
+  aebr_assert(result.includes("Roles Registered"), "AE-BR-6i result lists registered roles")
+  aebr_assert(result.includes("Skills Patched"), "AE-BR-6j result lists patched skills")
+  aebr_assert(result.includes("Prompts Patched"), "AE-BR-6k result lists patched prompts")
+  aebr_assert(!result.includes("No changes needed"), "AE-BR-6l result does NOT say no changes")
+}
+
+// AE-BR-7: runAutoEvolve — error/edge paths (L108 catch, L115 not found, L129 add_step, L163 catch)
+{
+  const { runAutoEvolveInternal } = await import(pluginDist)
+  const tracePath = join(projectDir, ".agentic", "trace.jsonl")
+  writeFileSync(tracePath, JSON.stringify({ toolUsed: "test", input: "x", output: "y", step: "s1", timestamp: Date.now(), success: true }) + "\n")
+
+  const ctx = {
+    traceLogger: { flush: async () => {} },
+    skillStore: {
+      getAll: () => [],
+      getById: (id) => {
+        // Return null for "s-bad" to exercise L115 continue branch
+        if (id === "s-bad") return null
+        return {
+          definition: {
+            meta: { id: "s-edge", name: "edge-skill", version: 1, format: "agentic-skill/v1", author: "agent" },
+            workflow: { steps: [{ order: 1, action: "bash", description: "step1", expectedOutput: "ok" }], estimatedDuration: "2m", parallelizable: false },
+            quality: { successRate: 1, usageCount: 5, failureScenarios: [] },
+            audit: { createdAt: "", lastUsed: "", lastModified: "", modifiedBy: "" },
+            trigger: { pattern: "test", keywords: ["test"], context: [] },
+          },
+          usageCount: 5, successRate: 0.5,
+          successWindow: [], lastUsed: "",
+        }
+      },
+    },
+    episodicStore: { getRecent: () => [] },
+    coordinator: {
+      getTasks: () => [],
+      registerCustomRole: () => { throw new Error("coordination failure") },
+    },
+    sessionStore: { getOrCreate: () => ({ plan: null }) },
+    executor: { getStepState: () => null },
+    worktree: projectDir,
+    log: { warn: (...args) => {} },
+    selfEvolver: {
+      feedSkills: () => {}, feedEpisodes: () => {}, feedTasks: () => {},
+      feedStepStates: () => {}, feedTraces: () => {},
+      evolve: () => ({
+        metrics: {
+          totalSessions: 3, totalSteps: 10, successRate: 0.6, retryRate: 0.1,
+          avgRetriesPerFailure: 2,
+          topErrorCategories: [{ category: "type", count: 4 }],
+          skillEffectiveness: [], toolUsage: [],
+          recommendations: ["Use granular decomposition"],
+        },
+        skillPatches: [
+          {
+            skillId: "s-bad", skillName: "not-found-skill", failures: 2,
+            suggestedChanges: [{ type: "add_step", description: "Add verify", detail: "Add verification step" }],
+          },
+          {
+            skillId: "s-edge", skillName: "edge-skill", failures: 3,
+            suggestedChanges: [
+              { type: "add_rollback", description: "Add rollback", detail: "Each step needs undo" },
+              { type: "add_step", description: "Add verify", detail: "Add verification step" },
+            ],
+          },
+        ],
+        roleSuggestions: [
+          { name: "FailRole", triggerPattern: "security", suggestedTools: ["agentic_nav"], reason: "Role that will fail register" },
+        ],
+        promptPatches: [{
+          role: "developer", errorCategory: "type", instruction: "Add type annotations", priority: "high", occurrences: 4,
+        }],
+        improvementScore: 30,
+      }),
+    },
+    rag: { vectorStore: { index: () => {} } },
+    stateStore: {
+      set: (scope, key, val) => {
+        // Just record it was called
+      },
+    },
+    roleRegistry: {
+      getPrompt: () => "existing prompt",
+      updatePrompt: () => { throw new Error("registry error") },
+      getAllPromptStates: () => ({}),
+    },
+  }
+  const result = await runAutoEvolveInternal(ctx)
+  aebr_assert(typeof result === "string", "AE-BR-7a result is string")
+  aebr_assert(!result.includes("No changes needed"), "AE-BR-7b result says changes were made")
+}
+
+console.log(`  AE-BR: ${aebr} passed, ${aebrf} failed`)
+state.passed += aebr; state.failed += aebrf
+
 // ── Orchestrator Branch Coverage (ORC) ──
 console.log("\n[ORC] Orchestrator branch coverage")
 let orc = 0, orcf = 0

@@ -1,5 +1,7 @@
 .agentic/*.jsonl
 .agentic/errors.log
+.agentic/debug.log
+.agentic/store/
 .env
 .omo/
 coverage/

@@ -12,7 +12,7 @@ Semua 12 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diim
 2. ✅ **Schema-First Boundaries** — LLM output divalidasi sebelum dipakai (P1)
 3. ✅ **Dumb Model Mode** — strict mode untuk model lemah (P2)
 4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
-5. ✅ **Test Coverage** — **3099+ tests** in parallel (~35s), c8 **87.94% stmts / 67.09% branch / 70.27% func** + CI coverage gate (P4)
+5. ✅ **Test Coverage** — **3099+ tests** in parallel (~35s), c8 **89.72% stmts / 69.08% branch / 76.6% func** + CI coverage gate (P4)
 6. ✅ **Typed Errors** — 49/49 throw sites migrated, 0 `as any` remaining
 7. ✅ **SemanticCache** — TF-IDF + cosine, benchmarked at 0.78 threshold
 8. ✅ **HallucinationGuard** — confidence-aware claims (0-1)
@@ -26,7 +26,7 @@ Semua 12 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diim
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
                     # postbuild: auto-copy ke ~/.cache/opencode/packages/ (jika ada)
-npm test            # 3099+ unit tests in parallel (~35s vs 90s serial)
+npm test            # 3099+ unit tests in parallel (~35s), 0 TS errors, 0 lint errors
 npm run test:serial # Same tests serial (~84s, for debugging)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
@@ -765,6 +765,17 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 - **Reliability findings**: 31/31 tools at HIGH reliability (≥95% success rate). Avg latency 35ms across all tools. `agentic_delegate` has 34.3% error rate from trace logs (timeout issues) — priority for next hardening.
 - **Drift sync**: Updated AGENTS.md, PLAN.md, package.json to actual state (2756 tests, 87.68%/68.37%/75.28% coverage).
 - **2756 unit tests** (was 2727), **0 lint warnings**, **build OK**.
+
+### v0.5.19-dev — CI Hardening: Zero TS/Lint Errors + Audit + .gitignore (2026-07-07)
+
+- **CI fix batch 1 (PR #198)**: Fixed 10 TS errors in a2a.ts (missing getA2AClient/setA2AServer) + index.ts (dead exports, runAutoEvolve args)
+- **CI fix batch 2 (PR #199 Lint)**: Fixed 10 TS errors in auto.ts (_errorRecovery, TaskIntent, Subtask, HallucinationGuard) + db.ts (sqliteDB singleton)
+- **CI fix batch 3 (cascade)**: Fixed 126 TS errors across 12 tool files — missing imports, wrong types, broken helper functions
+- **HELLO test fix**: Added `hello()` export — 6 pre-existing test failures now pass
+- **Lint fix**: 1 error (empty catch in agent-runtime.ts) → 0
+- **.gitignore**: Added `debug.log` + `.agentic/store/` entries
+- **Docs sync**: AGENTS.md coverage metrics updated (89.72% stmts, 69.08% branch, 76.6% func)
+- **Total: 3099 tests, 0 TS errors, 0 lint errors, CI all green**
 
 ### v0.5.18-dev — Parallel Test Runner Optimization (2026-07-07)
 

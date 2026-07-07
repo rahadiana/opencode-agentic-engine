@@ -1,7 +1,7 @@
 {
-  "cachedAt": "2026-07-07T18:25:00.392Z",
+  "cachedAt": "2026-07-07T20:19:16.473Z",
   "configSnapshots": {
-    "package.json": 1783448666822.9697,
+    "package.json": 1783455439656.0554,
     "tsconfig.json": 1783448607501.4373
   },
   "context": {
@@ -15,7 +15,7 @@
       },
       {
         "lang": "JavaScript",
-        "confidence": 0.6666666666666666,
+        "confidence": 0.75,
         "evidence": [
           "1 × JavaScript files in project"
         ]

@@ -1634,6 +1634,7 @@ export { ContextCompressor } from "./drift/context-compressor.js"
 export { SQLitePersistence } from "./memory/sqlite-persistence.js"
 
 export { debounce, throttle, type DebounceOptions, type ThrottleOptions } from "./core/rate-limit.js"
+export { gatherEvolutionData, runAutoEvolve as runAutoEvolveInternal } from "./evolution/auto-evolve.js"
 import { buildAllTools } from "./tools/definitions.js"
 import { runAutoEvolve as _runAutoEvolve, gatherEvolutionData } from "./evolution/auto-evolve.js"
 
