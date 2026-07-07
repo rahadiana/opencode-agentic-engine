@@ -1,6 +1,7 @@
 import { tool } from "@opencode-ai/plugin"
 import type { ToolSpec } from "./types.js"
 import type { ToolContext } from "./tool-context.js"
+import type { WorkflowPipeline } from "../agents/orchestrator.js"
 import { getSchemaValidator } from "../core/shared-instances.js"
 
 export function makePipelineTool(ctx: ToolContext): ToolSpec {
@@ -117,7 +118,7 @@ export function makePipelineTool(ctx: ToolContext): ToolSpec {
               hallucinationGuard,
               skillStore,
               configLoader,
-              schemaValidator: getSchemaValidator(),
+              schemaValidator: getSchemaValidator() as import("../core/skill-schema.js").SchemaValidator | undefined,
             })
 
             if (piperesult.hasNoLLM) {

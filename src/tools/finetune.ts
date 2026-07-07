@@ -8,7 +8,7 @@ export function makeFinetuneTool(ctx: ToolContext): ToolSpec {
     sessionStore, domainRegistry, worktree, projectId, config,
     log, projectContext, TOOL_REGISTRY, currentInjectDomain,
     planner, plannerCritic, executor, intentParser, agentLoop,
-    verifier, errorAnalyzer, _errorRecovery, alignmentGate,
+    verifier, errorAnalyzer, errorRecovery, alignmentGate,
     economicModel, confidenceScorer, confidenceStore, techDebtScorer,
     constraintManifold, navigator, toolRouter, routerAgent,
     skillStore, skillCurator, episodicStore, memoryOrchestrator,

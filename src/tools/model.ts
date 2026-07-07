@@ -1,15 +1,16 @@
 import { tool } from "@opencode-ai/plugin"
 import type { ToolSpec } from "./types.js"
 import type { ToolContext } from "./tool-context.js"
-import { readFileSync, writeFileSync, existsSync } from "node:fs"
-import { join } from "node:path"
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs"
+import { join, dirname } from "node:path"
+import { TOOL_COMPLEXITY } from "../core/llm-types.js"
 
 export function makeModelTool(ctx: ToolContext): ToolSpec {
   const {
     sessionStore, domainRegistry, worktree, projectId, config,
     log, projectContext, TOOL_REGISTRY, currentInjectDomain,
     planner, plannerCritic, executor, intentParser, agentLoop,
-    verifier, errorAnalyzer, _errorRecovery, alignmentGate,
+    verifier, errorAnalyzer, errorRecovery, alignmentGate,
     economicModel, confidenceScorer, confidenceStore, techDebtScorer,
     constraintManifold, navigator, toolRouter, routerAgent,
     skillStore, skillCurator, episodicStore, memoryOrchestrator,

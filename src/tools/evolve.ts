@@ -15,7 +15,7 @@ export function makeEvolveTool(ctx: ToolContext): ToolSpec {
     sessionStore, domainRegistry, worktree, projectId, config,
     log, projectContext, TOOL_REGISTRY, currentInjectDomain,
     planner, plannerCritic, executor, intentParser, agentLoop,
-    verifier, errorAnalyzer, _errorRecovery, alignmentGate,
+    verifier, errorAnalyzer, errorRecovery, alignmentGate,
     economicModel, confidenceScorer, confidenceStore, techDebtScorer,
     constraintManifold, navigator, toolRouter, routerAgent,
     skillStore, skillCurator, episodicStore, memoryOrchestrator,
@@ -79,12 +79,12 @@ return {
           // Blueprint mode: spec YAML/JSON → parse + register
           if (args.spec) {
             try {
-              const blueprint = blueprintParser.parse(args.spec)
+              const blueprint = (getBlueprintParser() as any).parse(args.spec)
               const roleId = blueprint.metadata.name.toLowerCase().replace(/\s+/g, "-")
 
               // Resolve model tiers → actual model recommendations
               const allModels = modelRegistry.getAllScores().map(s => s.model)
-              const resolvedTiers = blueprintResolver.resolveBlueprint(blueprint, allModels.length > 0 ? allModels : ["default"])
+              const resolvedTiers = (getBlueprintResolver() as any).resolveBlueprint(blueprint, allModels.length > 0 ? allModels : ["default"])
 
               const tierInfo = Object.entries(resolvedTiers)
                 .map(([tier, model]) => `  - **${tier}** → \`${model}\``)

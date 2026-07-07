@@ -6,14 +6,16 @@ import { join } from "node:path"
 import { readFileSync } from "node:fs"
 import { detectTaskType } from "../core/task-classifier.js"
 import { evaluateWorkflowPolicy, formatWorkflowPolicyDecisions, verificationEvidenceFailed } from "../core/workflow-policy.js"
-import { getDslExecutor } from "../core/shared-instances.js"
+import { getDslExecutor, getSchemaValidator } from "../core/shared-instances.js"
+import type { HallucinationCheck, ClaimResult } from "../drift/hallucination-guard.js"
+import { runAutoEvolve } from "../evolution/auto-evolve.js"
 
 export function makeExecuteTool(ctx: ToolContext): ToolSpec {
   const {
     sessionStore, domainRegistry, worktree, projectId, config,
     log, projectContext, TOOL_REGISTRY, currentInjectDomain,
     planner, plannerCritic, executor, intentParser, agentLoop,
-    verifier, errorAnalyzer, _errorRecovery, alignmentGate,
+    verifier, errorAnalyzer, errorRecovery, alignmentGate,
     economicModel, confidenceScorer, confidenceStore, techDebtScorer,
     constraintManifold, navigator, toolRouter, routerAgent,
     skillStore, skillCurator, episodicStore, memoryOrchestrator,
@@ -415,7 +417,7 @@ export function makeExecuteTool(ctx: ToolContext): ToolSpec {
                 if (skill.definition.input_schema) {
                   try {
                     const parsedInput = args.filesModified ? { stepId: args.stepId, filesModified: args.filesModified, ...(args.error ? { error: args.error } : {}) } : {}
-                    const svResult = schemaValidator.validate(
+                    const svResult = (getSchemaValidator() as any).validate(
                       skill.definition.input_schema,
                       parsedInput,
                     )
@@ -460,7 +462,7 @@ export function makeExecuteTool(ctx: ToolContext): ToolSpec {
                 if (skill.definition.output_schema) {
                   try {
                     const parsedOutput = JSON.parse(args.output)
-                    const svResult = schemaValidator.validate(
+                    const svResult = (getSchemaValidator() as any).validate(
                       skill.definition.output_schema,
                       parsedOutput,
                     )

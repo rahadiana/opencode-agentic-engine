@@ -1,6 +1,7 @@
 import { tool } from "@opencode-ai/plugin"
 import type { ToolSpec } from "./types.js"
 import type { ToolContext } from "./tool-context.js"
+import { getSecondBrain } from "../memory/second-brain.js"
 
 export function makeMemoTool(ctx: ToolContext): ToolSpec {
   const {

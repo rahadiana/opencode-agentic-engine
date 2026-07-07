@@ -1,6 +1,8 @@
 import { tool } from "@opencode-ai/plugin"
 import type { ToolSpec } from "./types.js"
 import type { ToolContext } from "./tool-context.js"
+import { parseLLMStepImplementation } from "../core/parallel.js"
+import { writeFiles as writeFilesHelper } from "../core/execution-helpers.js"
 
 export function makeParallelTool(ctx: ToolContext): ToolSpec {
   const {

@@ -6,13 +6,14 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } fr
 import { createHash } from "node:crypto"
 import { createMemoryEnvelope } from "../memory/schema-version.js"
 import type { Episode } from "../memory/episodic-store.js"
+import { createSkillDefinition } from "../memory/skill-format.js"
 
 export function makeRagTool(ctx: ToolContext): ToolSpec {
   const {
     sessionStore, domainRegistry, worktree, projectId, config,
     log, projectContext, TOOL_REGISTRY, currentInjectDomain,
     planner, plannerCritic, executor, intentParser, agentLoop,
-    verifier, errorAnalyzer, _errorRecovery, alignmentGate,
+    verifier, errorAnalyzer, errorRecovery, alignmentGate,
     economicModel, confidenceScorer, confidenceStore, techDebtScorer,
     constraintManifold, navigator, toolRouter, routerAgent,
     skillStore, skillCurator, episodicStore, memoryOrchestrator,

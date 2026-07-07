@@ -1,6 +1,9 @@
 import { tool } from "@opencode-ai/plugin"
 import type { ToolSpec } from "./types.js"
 import type { ToolContext } from "./tool-context.js"
+import type { TaskIntent } from "../core/intent-parser.js"
+import { codeIntentAnalyzer } from "../core/code-intent-analyzer.js"
+import type { SimulatedStep } from "../core/simulation-engine.js"
 
 export function makePlanTool(ctx: ToolContext): ToolSpec {
   const {

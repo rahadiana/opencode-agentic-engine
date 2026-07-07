@@ -66,7 +66,8 @@ import type { HallucinationCheck, ClaimResult } from "../drift/hallucination-gua
 import type { WorkflowPipeline } from "../agents/orchestrator.js"
 import { parseLLMStepImplementation } from "../core/parallel.js"
 
-export function buildAllTools(ctx: ToolContext): Record<string, ToolSpec> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function buildAllTools(ctx: ToolContext): Record<string, any> {
   const {
     sessionStore, domainRegistry, worktree, projectId, config,
     log, projectContext, TOOL_REGISTRY, currentInjectDomain,
@@ -92,7 +93,8 @@ export function buildAllTools(ctx: ToolContext): Record<string, ToolSpec> {
   setSchemaValidator(schemaValidator)
   setConsolidationScheduler(consolidationScheduler)
   // Registry tool wrapper: registers with dynamicToolRegistry (for MCP) + wraps execute with error handling
-  const registryTool = (name: string, def: { description: string; args: Record<string, unknown>; execute: (...args: unknown[]) => unknown }, registryMeta?: { version?: string; category?: string; keywords?: string[] }) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const registryTool = (name: string, def: any, registryMeta?: { version?: string; category?: string; keywords?: string[] }) => {
     const wrappedExecute = async (args: Record<string, unknown>, context: Record<string, unknown>) => {
       if (!context?.sessionID) {
         return { output: '❌ **' + name + '** requires an active session.', metadata: { error: "no-session", tool: name } }
@@ -100,7 +102,7 @@ export function buildAllTools(ctx: ToolContext): Record<string, ToolSpec> {
       try {
         llmEngine.setSessionId(context.sessionID as string)
         llmEngine.setToolContext(name)
-        return await def.execute(args, context)
+        return await (def.execute as (...args: unknown[]) => unknown)(args, context)
       } catch (err: unknown) {
         const errMsg = err instanceof Error ? err.message : String(err)
         const errStack = err instanceof Error ? err.stack : ""
@@ -110,7 +112,7 @@ export function buildAllTools(ctx: ToolContext): Record<string, ToolSpec> {
       }
     }
     try {
-      const zodObj = tool.schema.object(def.args)
+      const zodObj = tool.schema.object(def.args as Record<string, unknown>)
       const jsonSchema = tool.schema.toJSONSchema(zodObj, { target: "draft-7", unrepresentable: "any" })
       dynamicToolRegistry.registerFromTool(name, def.description, jsonSchema as Record<string, unknown>, wrappedExecute as (...args: unknown[]) => Promise<unknown>, registryMeta)
     } catch (e) {

@@ -7,7 +7,7 @@ export function makeDelegateTool(ctx: ToolContext): ToolSpec {
     sessionStore, domainRegistry, worktree, projectId, config,
     log, projectContext, TOOL_REGISTRY, currentInjectDomain,
     planner, plannerCritic, executor, intentParser, agentLoop,
-    verifier, errorAnalyzer, _errorRecovery, alignmentGate,
+    verifier, errorAnalyzer, errorRecovery, alignmentGate,
     economicModel, confidenceScorer, confidenceStore, techDebtScorer,
     constraintManifold, navigator, toolRouter, routerAgent,
     skillStore, skillCurator, episodicStore, memoryOrchestrator,
@@ -242,7 +242,7 @@ export function makeDelegateTool(ctx: ToolContext): ToolSpec {
         }
 
         // Normal delegation flow (LLM-based role suggestion, Gap #6)
-        const role: AgentRole = args.role ?? await coordinator.getSuggestedRole(args.description, llmEngine)
+        const role = args.role ?? await coordinator.getSuggestedRole(args.description, llmEngine)
         const agent = coordinator.getAgent(role)
         if (!agent) {
           return { output: `Unknown role "${role}". Available: architect, developer, qa, coordinator.` }
