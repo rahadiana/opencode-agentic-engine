@@ -1,6 +1,6 @@
 import type { LLMEngine } from "./llm.js"
 import type { AgentRuntime, AgentContext } from "../agents/agent-runtime.js"
-import { createLogger } from "../observability/logger.js"
+import { createLogger, writeDebugLog } from "../observability/logger.js"
 import { combinedAbort } from "./dag-helpers.js"
 
 const log = createLogger("DebateLoop")
@@ -408,11 +408,12 @@ export class DebateLoop {
       })
       clearTimeout(timeoutId)
       if (isNoLlm(resp.content)) {
+        writeDebugLog('DebateLoop', 'Executor direct call returned NO_LLM', { round, inputLen: input.length })
         return { output: '', error: NO_LLM_RESPONSE }
       }
       return { output: resp.content }
     } catch (error) {
-      logParseError("executor direct call", error)
+      writeDebugLog('DebateLoop', 'Executor direct call threw', { error: String(error), round })
       return { output: '', error: `Executor call failed: ${error}` }
     }
   }
@@ -502,11 +503,12 @@ export class DebateLoop {
       })
       clearTimeout(criticTimeoutId)
       if (isNoLlm(resp.content)) {
+        writeDebugLog('DebateLoop', 'Critic direct call returned NO_LLM', { round, inputLen: criticInput.length })
         return { output: '', error: NO_LLM_RESPONSE }
       }
       return { output: resp.content }
     } catch (error) {
-      logParseError("critic direct call", error)
+      writeDebugLog('DebateLoop', 'Critic direct call threw', { error: String(error), round })
       return { output: '', error: `Critic call failed: ${error}` }
     }
   }
