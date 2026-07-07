@@ -15861,6 +15861,26 @@
           "score": 0.5,
           "usageCount": 0,
           "significance": "routine"
+        },
+        {
+          "id": "ses_0c2498767ffeC7KExsheZPr9rF",
+          "sessionId": "ses_0c2498767ffeC7KExsheZPr9rF",
+          "planGoal": "Debate: Mau uang satu miliar, atau ibumu meninggal?",
+          "summary": "Partially completed: Debate: Mau uang satu miliar, atau ibumu meninggal?",
+          "outcome": "partial",
+          "decisions": [
+            "3 rounds",
+            "Approved: false",
+            "3 rounds, 2 issues raised, max rounds reached"
+          ],
+          "filesChanged": [],
+          "timestamp": "2026-07-07T19:22:28.421Z",
+          "tags": [
+            "rounds"
+          ],
+          "score": 0.5,
+          "usageCount": 0,
+          "significance": "routine"
         }
       ],
       "skills": [],
@@ -16529,6 +16549,19 @@
           "metadata": {
             "type": "episode",
             "episodeId": "ses_0c210f939ffeuQDBksP5o0YvVX"
+          }
+        },
+        {
+          "id": "ep-ses_0c2498767ffeC7KExsheZPr9rF",
+          "category": "general",
+          "title": "Debate: Mau uang satu miliar, atau ibumu meninggal?",
+          "content": "Partially completed: Debate: Mau uang satu miliar, atau ibumu meninggal?\n3 rounds\nApproved: false\n3 rounds, 2 issues raised, max rounds reached",
+          "keywords": [
+            "rounds"
+          ],
+          "metadata": {
+            "type": "episode",
+            "episodeId": "ses_0c2498767ffeC7KExsheZPr9rF"
           }
         }
       ]
@@ -17643,5 +17676,5 @@
       ]
     }
   },
-  "updatedAt": "2026-07-07T19:03:53.729Z"
+  "updatedAt": "2026-07-07T19:23:09.193Z"
 }

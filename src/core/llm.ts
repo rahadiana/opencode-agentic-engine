@@ -1217,10 +1217,12 @@ export class LLMEngine {
       })
       sessionId = tempSession.data?.id ?? (tempSession as Record<string, unknown>).id as string ?? null
       if (!sessionId) {
+        writeDebugLog('LLM', 'callOpenCode temp session: create returned null id')
         return this.fallbackResponse(req)
       }
     } catch (error) {
       logParseError('callOpenCode chat mode', error)
+      writeDebugLog('LLM', 'callOpenCode temp session: create threw', { error: String(error) })
       return this.fallbackResponse(req)
     }
 

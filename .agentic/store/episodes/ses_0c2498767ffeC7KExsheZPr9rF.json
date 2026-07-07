@@ -1,0 +1,23 @@
+{
+  "key": "ses_0c2498767ffeC7KExsheZPr9rF",
+  "data": {
+    "id": "ep-1783452236450-bd6i",
+    "sessionId": "ses_0c2498767ffeC7KExsheZPr9rF",
+    "planGoal": "Debate: Mau uang satu miliar, atau ibumu meninggal?",
+    "summary": "Completed: Debate: Mau uang satu miliar, atau ibumu meninggal?",
+    "outcome": "success",
+    "decisions": [
+      "1 rounds",
+      "Approved: true",
+      "Approved in first round — no revisions needed"
+    ],
+    "filesChanged": [],
+    "domain": "generic",
+    "timestamp": "2026-07-07T19:23:56.450Z",
+    "tags": [],
+    "score": 1,
+    "usageCount": 0,
+    "significance": "routine"
+  },
+  "updatedAt": "2026-07-07T19:23:56.450Z"
+}
