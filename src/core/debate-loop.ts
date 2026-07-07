@@ -277,7 +277,12 @@ export class DebateLoop {
           signal: cleanController.signal,
         })
         clearTimeout(cleanTimeoutId)
-        finalOutput = cleanResp.content
+        if (!isNoLlm(cleanResp.content)) {
+          finalOutput = cleanResp.content
+        } else {
+          writeDebugLog('DebateLoop', 'Cleaner returned NO_LLM, using draft as-is', { round: rounds.length })
+        }
+        // If cleaner fails, keep draft as-is
       } catch (error) {
         logParseError("cleaner call", error)
         // Use draft as-is if cleaning fails
