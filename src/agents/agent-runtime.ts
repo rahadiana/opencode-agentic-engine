@@ -238,7 +238,7 @@ export class AgentRuntime {
       return this.execute(ctx)
     }
 
-    // 2. Execute via dedicated session (NOT shared temp session)
+    // 2. Execute via dedicated child session — agent has tool access
     const roleDef = this.roleRegistry.getBuiltIn(ctx.role as AgentRole)
       ?? this.roleRegistry.getCustom(ctx.role)
 
@@ -250,7 +250,7 @@ export class AgentRuntime {
     } else {
       promptParts.push(`You are a ${ctx.role} in a software engineering team.`)
     }
-    promptParts.push(`\n\nCurrent task: ${ctx.taskDescription}`)
+    promptParts.push(`\n\n## Task\n${ctx.taskDescription}`)
     if (ctx.pipelineContext) promptParts.push(`\n\n## Pipeline Context\n${ctx.pipelineContext}`)
     if (ctx.pendingMessages?.length) {
       promptParts.push(`\n\n## Pending Messages\n${ctx.pendingMessages.map(m => `From ${m.from}: ${m.payload}`).join("\n")}`)
@@ -258,6 +258,7 @@ export class AgentRuntime {
     if (ctx.sharedMemory?.length) {
       promptParts.push(`\n\n## Shared Memory\n${ctx.sharedMemory.map(m => `[${m.key}] (by ${m.writtenBy}): ${m.value.slice(0, 200)}`).join("\n")}`)
     }
+    promptParts.push(`\n\n## Available Tools\nYou have access to all agentic tools (agentic_plan, agentic_execute, agentic_verify, agentic_auto, etc.) plus edit/write/read/bash. Use agentic_auto for multi-step tasks — it will plan, implement, and verify automatically. Each tool call you make will be visible as progress in this session.`)
 
     let modelOverride: { providerID: string; modelID: string } | undefined
     if (ctx.modelPreference) {
@@ -286,7 +287,7 @@ export class AgentRuntime {
 
       const resp = await engine.call({
         systemPrompt: fullPrompt,
-        userPrompt: `Complete the task described in the system prompt.`,
+        userPrompt: `Complete the task above. Use agentic_auto for multi-step work — it plans, implements, and verifies automatically. Each tool call shows real-time progress in this session.`,
         temperature: 0.3,
         maxTokens: 4096,
         model: modelOverride,
@@ -299,7 +300,48 @@ export class AgentRuntime {
       if (output.startsWith("LLM error") || output.startsWith("[NO_LLM]")) {
         return { output, success: false, error: output }
       }
-      return { output, success: true, modelUsed: modelOverride ? `${modelOverride.providerID}/${modelOverride.modelID}` : "opencode/default" }
+
+      // 3. Fetch session messages to show what the delegated agent actually did
+      let conversationLog = ""
+      try {
+        const sdk = this.opencodeClient as Record<string, any>
+        if (typeof sdk?.session?.messages === "function") {
+          const messagesResp = await sdk.session.messages({
+            path: { id: childSessionId },
+            query: { limit: 50 },
+          })
+          // Response shape: { data: { 200: [...] } } or { data: [...] } or array directly
+          let rawMessages: Array<Record<string, any>> = []
+          if (Array.isArray(messagesResp?.data?.[200])) rawMessages = messagesResp.data[200]
+          else if (Array.isArray(messagesResp?.data)) rawMessages = messagesResp.data
+          else if (Array.isArray(messagesResp)) rawMessages = messagesResp
+
+          if (rawMessages.length > 0) {
+            const steps: string[] = []
+            for (const msg of rawMessages) {
+              const parts = msg.parts ?? []
+              for (const part of parts) {
+                if (part.type === "tool-call" || part.type === "tool_use") {
+                  const name = part.name ?? part.tool_name ?? "unknown"
+                  const args = part.arguments ?? part.input ?? {}
+                  const argStr = typeof args === "object" ? Object.keys(args).slice(0, 3).map(k => `${k}=${String(args[k]).slice(0, 60)}`).join(", ") : String(args).slice(0, 80)
+                  steps.push(`🔧 ${name}(${argStr})`)
+                } else if (part.type === "text" && part.text?.length > 10) {
+                  const prev = steps[steps.length - 1] ?? ""
+                  if (!prev.startsWith("💬")) steps.push(`💬 ${part.text.slice(0, 120).replace(/\n/g, " ")}`)
+                }
+              }
+            }
+            if (steps.length > 0) {
+              conversationLog = "\n\n### 📋 Delegation Log\n" + steps.join("\n")
+            }
+          }
+        }
+      } catch (_e) {
+        // Session messages not available — non-critical
+      }
+
+      return { output: output + conversationLog, success: true, modelUsed: modelOverride ? `${modelOverride.providerID}/${modelOverride.modelID}` : "opencode/default" }
     } catch (e) {
       const err = e as Error
       const msg = err.message

@@ -892,7 +892,67 @@
         "description": "Fix the E2E fixture auto-setup. Currently test/e2e-scenario.mjs expects CODEBASE at /tmp/e2e-codebase (or E2E_CODEBASE env var). Modify e2e-scenario.mjs to auto-detect and copy the fixture from test/e",
         "timestamp": 1783345475963
       }
+    },
+    {
+      "source": "developer",
+      "target": "test-delegate-1",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Write a simple hello() function in src/hello.ts that returns \"Hello from delegated agent!\" and export it.",
+        "timestamp": 1783448770090
+      }
+    },
+    {
+      "source": "test-delegate-1",
+      "target": "developer",
+      "relation": "completed_by",
+      "metadata": {
+        "timestamp": 1783448800301
+      }
+    },
+    {
+      "source": "developer",
+      "target": "test-delegate-2",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Write a simple greet() function in src/greet.ts that takes a name parameter and returns \"Hello, {name}!\". Export it.",
+        "timestamp": 1783449085216
+      }
+    },
+    {
+      "source": "developer",
+      "target": "test-delegate-3",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Write a simple greet() function in src/greet.ts that takes a name parameter and returns \"Hello, {name}!\". Export it.",
+        "timestamp": 1783449112325
+      }
+    },
+    {
+      "source": "test-delegate-3",
+      "target": "developer",
+      "relation": "completed_by",
+      "metadata": {
+        "timestamp": 1783449131632
+      }
+    },
+    {
+      "source": "developer",
+      "target": "test-delegate-4",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Write a function multiply(a,b) in src/multiply.ts that returns a * b. Export it.",
+        "timestamp": 1783449538120
+      }
+    },
+    {
+      "source": "test-delegate-4",
+      "target": "developer",
+      "relation": "completed_by",
+      "metadata": {
+        "timestamp": 1783449599992
+      }
     }
   ],
-  "updatedAt": "2026-07-06T13:44:35.963Z"
+  "updatedAt": "2026-07-07T18:39:59.992Z"
 }
