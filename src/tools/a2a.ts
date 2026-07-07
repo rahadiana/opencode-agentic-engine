@@ -1,6 +1,17 @@
 import { tool } from "@opencode-ai/plugin"
 import type { ToolSpec } from "./types.js"
 import type { ToolContext } from "./tool-context.js"
+import type { A2AClient } from "../agents/a2a-client.js"
+import type { A2AServer } from "../agents/a2a-server.js"
+
+// Module-level state for A2A client/server singletons
+let _a2aClient: A2AClient | null = null
+let _a2aServer: A2AServer | null = null
+
+function getA2AClient(): A2AClient | null { return _a2aClient }
+function setA2AClient(c: A2AClient | null): void { _a2aClient = c }
+function getA2AServer(): A2AServer | null { return _a2aServer }
+function setA2AServer(s: A2AServer | null): void { _a2aServer = s }
 
 export function makeA2aTool(ctx: ToolContext): ToolSpec {
   const {

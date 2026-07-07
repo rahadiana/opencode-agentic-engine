@@ -833,7 +833,7 @@ const confidenceStore = new ConfidenceStore()
       const trigger = continuousEvolution.shouldEvolve(sessionId)
       if (trigger) {
         log.debug(`[auto-evolve] Triggered: ${trigger.reason}`)
-        runAutoEvolve(ctx).then((result) => {
+        runAutoEvolve().then((result) => {
           // Tampilkan hasil evolusi ke user via trace
           log.info(`[auto-evolve] ${result.replace(/\n/g, " | ")}`)
           traceLogger.log({
@@ -1633,10 +1633,7 @@ export { TraceLogger } from "./observability/trace-logger.js"
 export { ContextCompressor } from "./drift/context-compressor.js"
 export { SQLitePersistence } from "./memory/sqlite-persistence.js"
 
-export { capitalize } from "./utils/format.js"
 export { debounce, throttle, type DebounceOptions, type ThrottleOptions } from "./core/rate-limit.js"
-export { ping } from "./ping.js"
-export { b } from "./b.js"
 import { buildAllTools } from "./tools/definitions.js"
 import { runAutoEvolve as _runAutoEvolve, gatherEvolutionData } from "./evolution/auto-evolve.js"
 
