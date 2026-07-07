@@ -66,6 +66,24 @@ function formatEntry(entry: LogEntry, jsonMode: boolean): string {
  * Set AGENTIC_LOG_JSON=1 for JSON output.
  * Set AGENTIC_LOG_LEVEL=debug/info/warn/error to filter.
  */
+/**
+ * Write a debug log entry to .agentic/debug.log file.
+ * Used to capture LLM errors and other diagnostics that
+ * would otherwise be lost in stdout.
+ */
+export async function writeDebugLog(source: string, message: string, meta?: Record<string, unknown>): Promise<void> {
+  try {
+    const fs = await import("node:fs")
+    const path = await import("node:path")
+    const dir = path.join(process.cwd(), ".agentic")
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    const entry = JSON.stringify({ timestamp: new Date().toISOString(), source, message, ...meta }) + "\n"
+    fs.appendFileSync(path.join(dir, "debug.log"), entry)
+  } catch {
+    // silent — debug log is non-critical
+  }
+}
+
 export function createLogger(source: string): Logger {
   const jsonMode = process.env.AGENTIC_LOG_JSON === "1"
   const level = (process.env.AGENTIC_LOG_LEVEL ?? "warn") as LogSeverity

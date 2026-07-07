@@ -5,7 +5,7 @@ import type { BudgetTracker } from "./budget-tracker.js"
 import { SessionReader } from "./session-reader.js"
 import { SemanticCache } from "./semantic-cache.js"
 import type { MemoryOrchestrator } from "../memory/memory-orchestrator.js"
-import { createLogger } from "../observability/logger.js"
+import { createLogger, writeDebugLog } from "../observability/logger.js"
 import { getSecondBrain } from "../memory/second-brain.js"
 
 const log = createLogger("LLM")
@@ -1162,13 +1162,13 @@ export class LLMEngine {
 
   private async callOpenCode(req: LLMRequest): Promise<LLMResponse> {
     if (!this.opencodeClient || !this.pluginSessionId) {
-      log.warn('[LLM] callOpenCode: no client or session', { hasClient: !!this.opencodeClient, hasSession: !!this.pluginSessionId });
+      writeDebugLog('LLM', 'callOpenCode: no client or session', { hasClient: !!this.opencodeClient, hasSession: !!this.pluginSessionId })
       return this.fallbackResponse(req)
     }
 
     const client = this._getClient()
     if (!client) {
-      log.warn('[LLM] callOpenCode: _getClient returned null');
+      writeDebugLog('LLM', 'callOpenCode: _getClient returned null')
       return this.fallbackResponse(req)
     }
 
@@ -1188,7 +1188,7 @@ export class LLMEngine {
       }
     } catch (error) {
       logParseError('callOpenCode', error);
-      log.warn('[LLM] callOpenCode failed', { error: String(error), sessionId: this.pluginSessionId?.slice(0, 16) });
+      writeDebugLog('LLM', 'callOpenCode failed', { error: String(error), sessionId: this.pluginSessionId?.slice(0, 16) })
     }
 
     return this.fallbackResponse(req)

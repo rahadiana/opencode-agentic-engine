@@ -255,7 +255,8 @@ export class AgentRuntime {
         createdAt: Date.now(),
       })
     } catch (e) {
-      console.warn("[AgentRuntime] Failed to create visible delegation session, falling back:", String(e))
+      const { writeDebugLog } = await import("../observability/logger.js")
+      writeDebugLog('AgentRuntime', 'Failed to create visible delegation session, falling back', { error: String(e) })
       return this.execute(ctx)
     }
 
@@ -319,7 +320,8 @@ export class AgentRuntime {
       clearTimeout(timeoutId)
       const output = resp.content
       if (output.startsWith("LLM error") || output.startsWith("[NO_LLM]")) {
-        console.warn(`[AgentRuntime] Child session LLM failed (${output.slice(0, 50)}), falling back to execute().`, { childSessionId: childSessionId?.slice(0, 12) })
+        const { writeDebugLog } = await import("../observability/logger.js")
+        writeDebugLog('AgentRuntime', 'Child session LLM failed, falling back to execute()', { outputPreview: output.slice(0, 50), childSessionId: childSessionId?.slice(0, 12) })
         return this.execute(ctx)
       }
 

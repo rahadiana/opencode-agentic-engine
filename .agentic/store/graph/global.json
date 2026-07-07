@@ -1233,7 +1233,24 @@
         "description": "Create src/c.ts with function c(): number that returns 3",
         "timestamp": 1783450833644
       }
+    },
+    {
+      "source": "developer",
+      "target": "test-log-1",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/foo.ts with function foo(): string that returns \"bar\". Export it.",
+        "timestamp": 1783451210688
+      }
+    },
+    {
+      "source": "test-log-1",
+      "target": "developer",
+      "relation": "completed_by",
+      "metadata": {
+        "timestamp": 1783451247491
+      }
     }
   ],
-  "updatedAt": "2026-07-07T19:00:33.644Z"
+  "updatedAt": "2026-07-07T19:07:27.492Z"
 }
