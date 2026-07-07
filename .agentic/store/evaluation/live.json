@@ -1333,6 +1333,11 @@
         "query": "definitions.ts tool definitions size structure",
         "resultsCount": 5,
         "focused": true
+      },
+      {
+        "query": "stress scenarios S2 S3 S4 S5 S6 S7 S8 S9 S10 test",
+        "resultsCount": 10,
+        "focused": true
       }
     ],
     "delegations": [
@@ -1693,5 +1698,5 @@
       }
     ]
   },
-  "updatedAt": "2026-07-06T20:02:56.061Z"
+  "updatedAt": "2026-07-07T18:01:01.674Z"
 }

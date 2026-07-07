@@ -472,7 +472,18 @@
       "actionItems": [],
       "triggers": [],
       "sessionId": "ses_0d7d33112ffeIOr2tLcLxmPg9U"
+    },
+    {
+      "id": "refl-1783446882119",
+      "timestamp": 1783446882119,
+      "summary": "Reflection: Here is the complete reflection analysis:\n\n---\n\n## 🔍 Reflection Analysis\n\n### 1. Conflicting Decisions\n\n| # | Conflict | Details |\n|---|----------|---------|\n| 🔴 | **Repeated multi-agent reliability fixes haven't worked** | 4 separate plans (each claiming to fix 63%→90%) — but multi-agent is still",
+      "conflicts": [],
+      "planUpdates": [],
+      "newInfo": [],
+      "actionItems": [],
+      "triggers": [],
+      "sessionId": "ses_0c2498767ffeC7KExsheZPr9rF"
     }
   ],
-  "updatedAt": "2026-07-03T13:40:59.890Z"
+  "updatedAt": "2026-07-07T17:54:42.119Z"
 }

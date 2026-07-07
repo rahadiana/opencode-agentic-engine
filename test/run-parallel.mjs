@@ -1,13 +1,12 @@
 // test/run-parallel.mjs — Parallel test runner (true multi-process parallelism)
 //
 // Runs each test file in a separate Node.js child process for REAL parallelism.
-// 16 workers total: 9 Part A + 7 Part B, all concurrent.
+// 22 workers total: 13 Part A + 9 Part B, all concurrent.
+//
+// Each worker gets its own temp directory (TEST_PROJECT_DIR env var) so
+// there are no filesystem conflicts between parallel processes.
 //
 // Usage: node test/run-parallel.mjs
-//
-// NOTE: Intermittent failures (~1 per run) may occur due to shared /tmp/test-project
-// directory being accessed concurrently by multiple child processes. For stable
-// results use: node test/run.mjs
 
 import { execFile } from "child_process"
 import { fileURLToPath } from "url"
@@ -17,11 +16,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const GREEN = "\x1b[32m"
 const RED = "\x1b[31m"
+const YELLOW = "\x1b[33m"
+const BLUE = "\x1b[34m"
+const DIM = "\x1b[2m"
 const RESET = "\x1b[0m"
 
 // All test files to run in parallel
 const FILES = [
-  // Part A (11 sub-files)
+  // Part A (13 sub-files)
   "_runall-core.mjs",
   "_runall-verify.mjs",
   "_runall-adv.mjs",
@@ -51,48 +53,83 @@ async function main() {
   const runStart = Date.now()
 
   // ── Phase 1: Load plugin once (shared module cache seed) ──
-  // We import pluginDist here to warm up the module cache,
-  // then each child process gets a fresh copy via its own import
   const { pluginDist } = await import("./_common.mjs")
   const mod = await import(pluginDist)
   console.log(`Plugin loaded (${Object.keys(mod).length} exports)\n`)
 
-  // ── Phase 2: Run ALL 13 files in parallel as child processes ──
-  const results = await Promise.all(FILES.map(runFile))
+  // ── Phased parallel execution ──
+  // Phase 0: All Part A + Part B files together.
+  // Each worker gets a UNIQUE temp directory via TEST_PROJECT_DIR env var.
+  console.log(`${BLUE}┌─ Running ${FILES.length} workers in parallel ─┐${RESET}`)
+  const results = await Promise.all(FILES.map((file, i) => runFile(file, i)))
 
   // ── Phase 3: Aggregate results ──
   let totalPassed = 0
   let totalFailed = 0
   const failedFiles = []
+  const timedOutFiles = []
 
   for (const r of results) {
     totalPassed += r.passed
     totalFailed += r.failed
     if (r.failed > 0) failedFiles.push(r.file)
+    if (r.timedOut) timedOutFiles.push(r.file)
   }
 
   const totalMs = Date.now() - runStart
   const totalSec = (totalMs / 1000).toFixed(1)
 
+  // Sort results by elapsed time for nice display
+  const sorted = [...results].sort((a, b) => a.elapsed - b.elapsed)
+
+  console.log(`\n${BLUE}└─ All workers finished ─┘${RESET}`)
+  console.log(`\n${DIM}Sorted by duration:${RESET}`)
+  for (const r of sorted) {
+    const icon = r.timedOut ? "⏰" : r.failed === 0 ? "✅" : "❌"
+    const status = r.failed === 0 ? GREEN : RED
+    const short = r.file.replace(/^_runall-|^_b[-_]?/, "").replace(/\.mjs$/, "")
+    const pct = r.passed + r.failed > 0 ? ` (${((r.passed / (r.passed + r.failed)) * 100).toFixed(0)}%)` : ""
+    console.log(`  ${icon} ${status}${short.padEnd(16)}${RESET} ${r.passed}/${r.passed + r.failed}${pct} ${DIM}${r.elapsed}ms${RESET}`)
+  }
+
   console.log(`\n${"=".repeat(60)}`)
+  if (timedOutFiles.length > 0) {
+    console.log(`${YELLOW}TIMEOUT: ${timedOutFiles.join(", ")}${RESET}`)
+  }
   if (failedFiles.length > 0) {
     console.log(`${RED}FAILED: ${failedFiles.join(", ")}${RESET}`)
   }
-  console.log(`Results: ${GREEN}${totalPassed} passed${RESET}, ${totalFailed > 0 ? RED : GREEN}${totalFailed} failed${RESET} in ${totalSec}s (${FILES.length} workers)`)
+  console.log(`Results: ${GREEN}${totalPassed} passed${RESET}, ${totalFailed > 0 ? RED : GREEN}${totalFailed} failed${RESET} in ${totalSec}s (${FILES.length} parallel workers)`)
+
+  // Print slowest files for optimization reference
+  const slowest = [...results].sort((a, b) => b.elapsed - a.elapsed).slice(0, 3)
+  console.log(`\n${DIM}Slowest workers (optimization targets):${RESET}`)
+  for (const r of slowest) {
+    const fileLabel = r.file.padEnd(28)
+    console.log(`  ${DIM}${fileLabel} ${r.elapsed}ms (${r.passed}/${r.passed + r.failed})${RESET}`)
+  }
+
   console.log(`${totalFailed === 0 ? GREEN : RED}${totalFailed === 0 ? "ALL TESTS PASSED" : "SOME TESTS FAILED"}${RESET}`)
   process.exit(totalFailed > 0 ? 1 : 0)
 }
 
-function runFile(file) {
+function runFile(file, index) {
   return new Promise((resolve) => {
     const start = Date.now()
     const filePath = join(__dirname, file)
+    const uniqueDir = `/tmp/test-project-${index}`
+
     const child = execFile(process.execPath, [filePath], {
       timeout: 300000,
       maxBuffer: 50 * 1024 * 1024,
       encoding: "utf8",
+      env: {
+        ...process.env,
+        TEST_PROJECT_DIR: uniqueDir,
+      },
     }, (error, stdout, stderr) => {
       const ms = Date.now() - start
+      const timedOut = error?.killed || error?.signal === "SIGTERM"
 
       // Parse __RESULT__ line from stdout
       const resultLine = (stdout || "").split("\n").find(l => l.startsWith("__RESULT__:"))
@@ -105,18 +142,20 @@ function runFile(file) {
         } catch {}
       }
 
-
       // Show summary line for this file
-      const status = failed === 0 ? GREEN : RED
+      const status = timedOut ? YELLOW : (failed === 0 ? GREEN : RED)
       const short = file.replace(/^_runall-|^_b[-_]?/, "").replace(/\.mjs$/, "")
-      console.log(`  ${status}${short.padEnd(12)}${RESET} ${passed}/${passed + failed} in ${ms}ms`)
+      const icon = timedOut ? "⏰" : (failed === 0 ? " " : "✗")
+      console.log(`  ${icon} ${status}${short.padEnd(12)}${RESET} ${passed}/${passed + failed} in ${ms}ms${timedOut ? " TIMEOUT" : ""}`)
 
-      if (error && !stdout?.includes("__RESULT__:")) {
+      if (timedOut) {
+        resolve({ file, passed: 0, failed: 1, elapsed: ms, timedOut: true })
+      } else if (error && !stdout?.includes("__RESULT__:")) {
         const errLines = (stderr || "").split("\n").filter(Boolean).slice(-3)
         for (const l of errLines) console.log(`    ${RED}${l}${RESET}`)
-        resolve({ file, passed: 0, failed: 1 })
+        resolve({ file, passed: 0, failed: 1, elapsed: ms, timedOut: false })
       } else {
-        resolve({ file, passed, failed })
+        resolve({ file, passed, failed, elapsed: ms, timedOut: false })
       }
     })
   })

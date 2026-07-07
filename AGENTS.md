@@ -12,7 +12,7 @@ Semua 12 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diim
 2. ✅ **Schema-First Boundaries** — LLM output divalidasi sebelum dipakai (P1)
 3. ✅ **Dumb Model Mode** — strict mode untuk model lemah (P2)
 4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
-5. ✅ **Test Coverage** — **3101 tests**, c8 **87.94% stmts / 67.09% branch / 70.27% func** + CI coverage gate (P4)
+5. ✅ **Test Coverage** — **3099+ tests** in parallel (~35s), c8 **87.94% stmts / 67.09% branch / 70.27% func** + CI coverage gate (P4)
 6. ✅ **Typed Errors** — 49/49 throw sites migrated, 0 `as any` remaining
 7. ✅ **SemanticCache** — TF-IDF + cosine, benchmarked at 0.78 threshold
 8. ✅ **HallucinationGuard** — confidence-aware claims (0-1)
@@ -26,7 +26,8 @@ Semua 12 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diim
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
                     # postbuild: auto-copy ke ~/.cache/opencode/packages/ (jika ada)
-node test/run.mjs       # 3101+ unit tests (mock, no LLM needed)
+npm test            # 3099+ unit tests in parallel (~35s vs 90s serial)
+npm run test:serial # Same tests serial (~84s, for debugging)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
 node test/e2e-scenario.mjs # EvoClaw: 50-file codebase, 5 iterations
@@ -764,6 +765,14 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 - **Reliability findings**: 31/31 tools at HIGH reliability (≥95% success rate). Avg latency 35ms across all tools. `agentic_delegate` has 34.3% error rate from trace logs (timeout issues) — priority for next hardening.
 - **Drift sync**: Updated AGENTS.md, PLAN.md, package.json to actual state (2756 tests, 87.68%/68.37%/75.28% coverage).
 - **2756 unit tests** (was 2727), **0 lint warnings**, **build OK**.
+
+### v0.5.18-dev — Parallel Test Runner Optimization (2026-07-07)
+
+- **Parallel test runner**: Switched `npm test` from serial (`test/run.mjs`, 90s) to parallel (`test/run-parallel.mjs`, 35s) — **2.6× speedup**
+- **Unique temp dirs per worker**: `_common.mjs` now respects `TEST_PROJECT_DIR` env var. `run-parallel.mjs` assigns unique `/tmp/test-project-{index}` per worker — eliminates filesystem race conditions
+- **Hardcoded path cleanup**: Fixed 15 hardcoded `"/tmp/test-project"` references across 9 test files — all now use the `projectDir` import or env-var-aware value
+- **Stability verified**: 3 consecutive parallel runs produce identical 3099/3099 pass results
+- **3099+ unit tests in ~35s** (was 3101 in ~90s serial), **0 lint warnings**, **build OK**
 
 ### v0.5.17-dev — GitIntegration Full Coverage + Stress Test Drift Fix (2026-07-06)
 

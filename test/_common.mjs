@@ -52,8 +52,8 @@ export function mockCtx(sessionID) {
     sessionID,
     messageID: "msg-1",
     agent: "test",
-    directory: "/tmp/test-project",
-    worktree: "/tmp/test-project",
+    directory: projectDir,
+    worktree: projectDir,
     abort: new AbortController().signal,
     metadata: () => {},
     ask: async () => {},
@@ -61,7 +61,8 @@ export function mockCtx(sessionID) {
 }
 
 // ── Project setup ──
-export const projectDir = "/tmp/test-project"
+// Use TEST_PROJECT_DIR env var for parallel runs so each worker gets unique dir
+export const projectDir = process.env.TEST_PROJECT_DIR || "/tmp/test-project"
 try { rmSync(projectDir, { recursive: true, force: true }) } catch { /* volume mount inside */ }
 mkdirSync(projectDir, { recursive: true })
 mkdirSync(join(projectDir, "src"), { recursive: true })

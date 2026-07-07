@@ -98,10 +98,10 @@ assert(true, "Gap #4 deep integration tests passed")
 // ── Standalone execution ──
 const _isMain = typeof process !== "undefined" && process.argv[1] && (process.argv[1] === import.meta.url || process.argv[1].endsWith("/_runall-edge-deep.mjs"))
 if (_isMain) {
-  const { pluginDist: _pd, join: _join, mkdirSync: _mkdir, writeFileSync: _write } = await import("./_common.mjs")
-  _mkdir(_join("/tmp/test-project", ".agentic"), { recursive: true })
+  const { pluginDist: _pd, join: _join, mkdirSync: _mkdir, writeFileSync: _write, projectDir: _projDir } = await import("./_common.mjs")
+  _mkdir(_join(_projDir, ".agentic"), { recursive: true })
   const _dummy = Array.from({length: 14}, (_, i) => JSON.stringify({step:`s${i}`})).join("\n")
-  _write(_join("/tmp/test-project", ".agentic", "trace.jsonl"), _dummy + "\n")
+  _write(_join(_projDir, ".agentic", "trace.jsonl"), _dummy + "\n")
   const _mod = await import(_pd)
   await runEdgeDeepTests(_mod)
   const { state } = await import("./_state.mjs")

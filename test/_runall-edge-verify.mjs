@@ -145,12 +145,12 @@ assert(true, "Gap #4 fix: semantic verification blocking tests passed")
 // ── Standalone execution ──
 const _isMain = typeof process !== "undefined" && process.argv[1] && (process.argv[1] === import.meta.url || process.argv[1].endsWith("/_runall-edge-verify.mjs"))
 if (_isMain) {
-  const { pluginDist: _pd, join: _join, mkdirSync: _mkdir, writeFileSync: _write } = await import("./_common.mjs")
+  const { pluginDist: _pd, join: _join, mkdirSync: _mkdir, writeFileSync: _write, projectDir: _projDir } = await import("./_common.mjs")
   // Seed .agentic dir + trace.jsonl (normally created by Part A's trace logger)
-  _mkdir(_join("/tmp/test-project", ".agentic"), { recursive: true })
+  _mkdir(_join(_projDir, ".agentic"), { recursive: true })
   // Write 14 dummy trace entries so the trace test passes
   const _dummy = Array.from({length: 14}, (_, i) => JSON.stringify({step:`s${i}`})).join("\n")
-  _write(_join("/tmp/test-project", ".agentic", "trace.jsonl"), _dummy + "\n")
+  _write(_join(_projDir, ".agentic", "trace.jsonl"), _dummy + "\n")
   const _mod = await import(_pd)
   await runEdgeVerifyTests(_mod)
   const { state } = await import("./_state.mjs")

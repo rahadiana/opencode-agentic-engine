@@ -544,8 +544,8 @@ function dtr_assert(cond, msg) { if (cond) { dtr++ } else { console.error(`  ❌
     sessionID: "dtr13-test",
     messageID: "msg-dtr13",
     agent: "test",
-    directory: "/tmp/test-project",
-    worktree: "/tmp/test-project",
+    directory: projectDir,
+    worktree: projectDir,
     experimental_workspace: { register: () => {} },
     serverUrl: new URL("http://localhost:3000"),
     $: new Proxy({}, {

@@ -44,21 +44,21 @@ function section(name) {
   console.log(`\n${B}${name}${RST}`)
 }
 
+// ── Setup test project ──
+const projectDir = "/tmp/stress-tools-project"
+
 function mockCtx(sessionID) {
   return {
     sessionID,
     messageID: "msg-1",
     agent: "test",
-    directory: "/tmp/test-project",
-    worktree: "/tmp/test-project",
+    directory: projectDir,
+    worktree: projectDir,
     abort: new AbortController().signal,
     metadata: () => {},
     ask: async () => {},
   }
 }
-
-// ── Setup test project ──
-const projectDir = "/tmp/stress-tools-project"
 try { rmSync(projectDir, { recursive: true, force: true }) } catch {}
 mkdirSync(projectDir, { recursive: true })
 mkdirSync(join(projectDir, "src"), { recursive: true })

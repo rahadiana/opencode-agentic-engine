@@ -92,21 +92,21 @@ class ToolReliabilityTracker {
   }
 }
 
+// ── Setup test project ──
+const projectDir = "/tmp/reliability-test-project"
+
 function mockCtx(sessionID) {
   return {
     sessionID,
     messageID: "msg-1",
     agent: "test",
-    directory: "/tmp/test-project",
-    worktree: "/tmp/test-project",
+    directory: projectDir,
+    worktree: projectDir,
     abort: new AbortController().signal,
     metadata: () => {},
     ask: async () => {},
   }
 }
-
-// ── Setup test project ──
-const projectDir = "/tmp/reliability-test-project"
 try { rmSync(projectDir, { recursive: true, force: true }) } catch {}
 mkdirSync(projectDir, { recursive: true })
 mkdirSync(join(projectDir, "src"), { recursive: true })
