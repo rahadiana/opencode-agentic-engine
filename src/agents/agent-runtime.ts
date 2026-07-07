@@ -47,6 +47,8 @@ export class AgentRuntime {
    *  Session is rotated (create new, delete old) after every 2 calls. */
   private _sharedSessionId: string | null = null
   private _sharedSessionCount: number = 0
+  /** Track visible delegation sessions so we can clean up on dispose. */
+  private _visibleSessions: Array<{ sessionId: string; role: string; description: string; createdAt: number }> = []
 
   constructor() {
     this.roleRegistry = new RoleRegistry()
@@ -119,6 +121,16 @@ export class AgentRuntime {
         client.session.delete({ path: { id: this._sharedSessionId } }).catch(() => {})
       } catch (e) { console.warn("catch: ignore", { error: String(e) }) }
     }
+    // Clean up visible delegation sessions
+    for (const vs of this._visibleSessions) {
+      if (this.opencodeClient) {
+        try {
+          const client = this.opencodeClient as { session: { delete: (opts: { path: { id: string } }) => Promise<unknown> } }
+          client.session.delete({ path: { id: vs.sessionId } }).catch(() => {})
+        } catch (e) { console.warn("catch: ignore", { error: String(e) }) }
+      }
+    }
+    this._visibleSessions = []
     Promise.all(engines.map(([, e]) => e.disposeTempSession().catch(() => {})))
   }
 
@@ -175,6 +187,135 @@ export class AgentRuntime {
     if (idx >= 0) this.engineOrder.splice(idx, 1)
     this.engineOrder.push(key)
     return engine
+  }
+
+  /**
+   * Execute delegation with a VISIBLE child session.
+   * Instead of using a shared temp session (invisible to user), this method:
+   * 1. Creates a dedicated child session with a descriptive title (e.g. "👤 Developer: Implement login")
+   * 2. Uses parentID so it appears as a sub-session in the OpenCode UI
+   * 3. Keeps the session alive during delegation — user sees progress in sidebar
+   * 4. Cleans up on AgentRuntime.dispose()
+   */
+  async executeWithVisibleDelegation(ctx: AgentContext): Promise<AgentResult> {
+    if (!this.opencodeClient) {
+      // Fallback: no SDK client, use regular execute
+      return this.execute(ctx)
+    }
+
+    const client = this.opencodeClient as {
+      session: {
+        create: (opts: { body: { title?: string; parentID?: string } }) => Promise<{ data?: { id: string }; id?: string }>
+        delete: (opts: { path: { id: string } }) => Promise<unknown>
+      }
+    }
+
+    // 1. Create child session with descriptive title
+    const taskLabel = ctx.taskDescription.length > 60
+      ? ctx.taskDescription.slice(0, 57) + "..."
+      : ctx.taskDescription
+    const title = `👤 ${ctx.role}: ${taskLabel}`
+    let childSessionId: string | null = null
+
+    try {
+      const resp = await client.session.create({
+        body: { title, parentID: ctx.sessionId },
+      })
+      childSessionId = resp.data?.id ?? (resp as Record<string, unknown>).id as string ?? null
+      if (!childSessionId) {
+        return this.execute(ctx) // fallback
+      }
+
+      // Track for cleanup
+      this._visibleSessions.push({
+        sessionId: childSessionId,
+        role: ctx.role,
+        description: ctx.taskDescription,
+        createdAt: Date.now(),
+      })
+    } catch (e) {
+      console.warn("[AgentRuntime] Failed to create visible delegation session, falling back:", String(e))
+      return this.execute(ctx)
+    }
+
+    // 2. Execute via dedicated session (NOT shared temp session)
+    const roleDef = this.roleRegistry.getBuiltIn(ctx.role as AgentRole)
+      ?? this.roleRegistry.getCustom(ctx.role)
+
+    const promptParts: string[] = []
+    if (ctx.systemPrompt) {
+      promptParts.push(ctx.systemPrompt)
+    } else if (roleDef?.prompt) {
+      promptParts.push(roleDef.prompt)
+    } else {
+      promptParts.push(`You are a ${ctx.role} in a software engineering team.`)
+    }
+    promptParts.push(`\n\nCurrent task: ${ctx.taskDescription}`)
+    if (ctx.pipelineContext) promptParts.push(`\n\n## Pipeline Context\n${ctx.pipelineContext}`)
+    if (ctx.pendingMessages?.length) {
+      promptParts.push(`\n\n## Pending Messages\n${ctx.pendingMessages.map(m => `From ${m.from}: ${m.payload}`).join("\n")}`)
+    }
+    if (ctx.sharedMemory?.length) {
+      promptParts.push(`\n\n## Shared Memory\n${ctx.sharedMemory.map(m => `[${m.key}] (by ${m.writtenBy}): ${m.value.slice(0, 200)}`).join("\n")}`)
+    }
+
+    let modelOverride: { providerID: string; modelID: string } | undefined
+    if (ctx.modelPreference) {
+      const parts = ctx.modelPreference.split("/")
+      modelOverride = parts.length >= 2
+        ? { providerID: parts[0], modelID: parts.slice(1).join("/") }
+        : { providerID: "opencode", modelID: ctx.modelPreference }
+    }
+
+    try {
+      // Use a dedicated engine with the child session
+      const engine = new LLMEngine()
+      engine.setOpencodeClient(this.opencodeClient)
+      engine.setChatMode(false) // use session.prompt() directly on child session
+      engine.setSessionId(childSessionId)
+      if (this.modelRegistry) engine.setModelRegistry(this.modelRegistry)
+
+      const fullPrompt = promptParts.join("\n")
+      const approxTokens = Math.ceil(fullPrompt.length / 4)
+      const noiseFloor = ctx.timeoutMs ?? 30_000
+      const dynamicTimeout = Math.min(Math.max(approxTokens * 300, noiseFloor), 300_000)
+      const timeoutMs = Math.round(dynamicTimeout)
+
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+      const resp = await engine.call({
+        systemPrompt: fullPrompt,
+        userPrompt: `Complete the task described in the system prompt.`,
+        temperature: 0.3,
+        maxTokens: 4096,
+        model: modelOverride,
+        signal: controller.signal,
+        timeoutMs,
+        ...(ctx.reasoningEffort ? { reasoningEffort: ctx.reasoningEffort } : {}),
+      })
+      clearTimeout(timeoutId)
+      const output = resp.content
+      if (output.startsWith("LLM error") || output.startsWith("[NO_LLM]")) {
+        return { output, success: false, error: output }
+      }
+      return { output, success: true, modelUsed: modelOverride ? `${modelOverride.providerID}/${modelOverride.modelID}` : "opencode/default" }
+    } catch (e) {
+      const err = e as Error
+      const msg = err.message
+      if (msg.includes('timeout') || msg.includes('timed out')) {
+        return { output: '', success: false, error: `LLM timeout after ${Math.round((parseInt(msg.match(/\d+/)?.[0] || '0') || 0) / 1000)}s: ${msg}` }
+      }
+      if (msg.includes('rate limit') || msg.includes('rate_limit') || msg.includes('rateLimit')) {
+        return { output: '', success: false, error: `Rate limit exceeded: ${msg}` }
+      }
+      if (msg.includes('abort') || msg.includes('AbortError') || msg.includes('cancelled')) {
+        return { output: '', success: false, error: `LLM call cancelled: ${msg}` }
+      }
+      return { output: "", success: false, error: msg }
+    }
+    // NOTE: childSessionId is intentionally NOT deleted — user sees it in UI
+    // as a completed sub-session. Cleanup happens on dispose().
   }
 
   /**
