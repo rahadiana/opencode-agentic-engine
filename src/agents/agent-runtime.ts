@@ -301,7 +301,7 @@ export class AgentRuntime {
       const fullPrompt = promptParts.join("\n")
       const approxTokens = Math.ceil(fullPrompt.length / 4)
       const noiseFloor = ctx.timeoutMs ?? 30_000
-      const dynamicTimeout = Math.min(Math.max(approxTokens * 300, noiseFloor), 300_000)
+      const dynamicTimeout = Math.min(Math.max(approxTokens * 300, noiseFloor), 600_000)
       const timeoutMs = Math.round(dynamicTimeout)
 
       const controller = new AbortController()
@@ -432,10 +432,10 @@ export class AgentRuntime {
       // Dynamic timeout: estimate ~4 chars per token, noise floor 15s, max 300s
       // Per arXiv:2606.05608 §5.2: timeout should scale with task complexity,
       // not be a fixed constant. Small tasks (~25 tokens) → ~15s (noise floor).
-      // Medium (~250 tokens) → ~75s. Large (~2500 tokens) → capped at 300s.
+      // Medium (~250 tokens) → ~75s. Large (~2500 tokens) → capped at 600s.
       const approxTokens = Math.ceil(fullPrompt.length / 4)
       const noiseFloor = ctx.timeoutMs ?? 15_000
-      const dynamicTimeout = Math.min(Math.max(approxTokens * 300, noiseFloor), 300_000)
+      const dynamicTimeout = Math.min(Math.max(approxTokens * 300, noiseFloor), 600_000)
       const timeoutMs = Math.round(dynamicTimeout)
 
       const controller = new AbortController()
