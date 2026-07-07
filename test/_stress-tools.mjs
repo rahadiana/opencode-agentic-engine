@@ -92,7 +92,7 @@ try {
 }
 
 const toolNames = Object.keys(hooks.tool || {}).filter(t => t.startsWith("agentic_"))
-assert(toolNames.length === 31, `31 agentic tools registered (got ${toolNames.length})`)
+assert(toolNames.length === 32, `32 agentic tools registered (got ${toolNames.length})`)
 
 // ─────────────────────────────────────────────────────────
 // 1. agentic_plan — edge cases
