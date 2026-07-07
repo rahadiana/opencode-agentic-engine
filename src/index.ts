@@ -1632,8 +1632,11 @@ export { SkillExtractor, normalize } from "./memory/skill-extractor.js"
 export { TraceLogger } from "./observability/trace-logger.js"
 export { ContextCompressor } from "./drift/context-compressor.js"
 export { SQLitePersistence } from "./memory/sqlite-persistence.js"
-export { hello } from "./hello.js"
+
+export { capitalize } from "./utils/format.js"
 export { debounce, throttle, type DebounceOptions, type ThrottleOptions } from "./core/rate-limit.js"
+export { ping } from "./ping.js"
+export { b } from "./b.js"
 import { buildAllTools } from "./tools/definitions.js"
 import { runAutoEvolve as _runAutoEvolve, gatherEvolutionData } from "./evolution/auto-evolve.js"
 

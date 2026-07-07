@@ -69,7 +69,57 @@
       "status": "done",
       "createdAt": 1783447065468,
       "updatedAt": 1783447074741
+    },
+    {
+      "text": "[task] Delegated task test-delegate-5 (developer) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0c2498767ffeC7KExsheZPr9rF",
+      "id": "todo-1783449705758-1ola",
+      "status": "pending",
+      "createdAt": 1783449705758,
+      "updatedAt": 1783449705758
+    },
+    {
+      "text": "[task] Delegated task test-delegate-7 (developer) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0c2498767ffeC7KExsheZPr9rF",
+      "id": "todo-1783449911869-9cg0",
+      "status": "pending",
+      "createdAt": 1783449911869,
+      "updatedAt": 1783449911869
+    },
+    {
+      "text": "[task] Delegated task test-delegate-9 (developer) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0c2498767ffeC7KExsheZPr9rF",
+      "id": "todo-1783450076723-t8za",
+      "status": "pending",
+      "createdAt": 1783450076723,
+      "updatedAt": 1783450076723
+    },
+    {
+      "text": "[task] Delegated task test-single-2 (developer) failed",
+      "priority": "medium",
+      "category": "task",
+      "sessionId": "ses_0c2498767ffeC7KExsheZPr9rF",
+      "id": "todo-1783450588990-oq06",
+      "status": "pending",
+      "createdAt": 1783450588990,
+      "updatedAt": 1783450588990
+    },
+    {
+      "text": "[guard] Hallucination check failed (rate: 100%) in step pipeline-qa-1783450582325-24cn",
+      "priority": "medium",
+      "category": "quality",
+      "sessionId": "ses_0c210f939ffeuQDBksP5o0YvVX",
+      "id": "todo-1783450673883-tib8",
+      "status": "pending",
+      "createdAt": 1783450673883,
+      "updatedAt": 1783450673883
     }
   ],
-  "updatedAt": "2026-07-07T17:58:00.000Z"
+  "updatedAt": "2026-07-07T18:57:53.883Z"
 }

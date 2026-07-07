@@ -1343,6 +1343,21 @@
         "query": "agentic_delegate implementation delegasi task",
         "resultsCount": 10,
         "focused": true
+      },
+      {
+        "query": "utility functions in src/",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "src/utils directory structure",
+        "resultsCount": 10,
+        "focused": true
+      },
+      {
+        "query": "utils string reverse function pattern",
+        "resultsCount": 10,
+        "focused": true
       }
     ],
     "delegations": [
@@ -1690,6 +1705,76 @@
         "taskId": "test-delegate-1",
         "role": "developer",
         "success": true
+      },
+      {
+        "taskId": "test-delegate-3",
+        "role": "developer",
+        "success": true
+      },
+      {
+        "taskId": "test-delegate-3",
+        "role": "developer",
+        "success": true
+      },
+      {
+        "taskId": "test-delegate-4",
+        "role": "developer",
+        "success": true
+      },
+      {
+        "taskId": "test-delegate-4",
+        "role": "developer",
+        "success": true
+      },
+      {
+        "taskId": "test-delegate-5",
+        "role": "developer",
+        "success": false
+      },
+      {
+        "taskId": "test-delegate-5",
+        "role": "developer",
+        "success": true
+      },
+      {
+        "taskId": "test-delegate-6",
+        "role": "developer",
+        "success": true
+      },
+      {
+        "taskId": "test-delegate-6",
+        "role": "developer",
+        "success": true
+      },
+      {
+        "taskId": "test-delegate-7",
+        "role": "developer",
+        "success": false
+      },
+      {
+        "taskId": "test-delegate-7",
+        "role": "developer",
+        "success": true
+      },
+      {
+        "taskId": "test-delegate-9",
+        "role": "developer",
+        "success": false
+      },
+      {
+        "taskId": "test-delegate-9",
+        "role": "developer",
+        "success": true
+      },
+      {
+        "taskId": "test-delegate-11",
+        "role": "developer",
+        "success": true
+      },
+      {
+        "taskId": "test-delegate-11",
+        "role": "developer",
+        "success": true
       }
     ],
     "skillLookups": [
@@ -1713,5 +1798,5 @@
       }
     ]
   },
-  "updatedAt": "2026-07-07T18:31:39.765Z"
+  "updatedAt": "2026-07-07T18:54:50.394Z"
 }

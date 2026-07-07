@@ -54,42 +54,56 @@ export class AgentRuntime {
     this.roleRegistry = new RoleRegistry()
   }
 
-  /** Get or rotate shared temp session. Rotates after every 2 calls. */
-  private async _getOrCreateSharedSession(parentSessionId: string): Promise<string | null> {
-    // Rotate session after 2 calls (SDK limits ~2-3 prompts per child session)
-    if (this._sharedSessionId && this._sharedSessionCount >= 2) {
-      this._rotateSharedSession()
-    }
-    
-    if (this._sharedSessionId) return this._sharedSessionId
+  /** Create a child session (retry once on failure). */
+  private async _tryCreateChildSession(parentSessionId: string): Promise<string | null> {
     if (!this.opencodeClient) return null
-
-    // Retry session creation once if it fails (transient SDK issue after rotation)
+    const client = this.opencodeClient as {
+      session: {
+        create: (opts: { body: { title?: string; parentID?: string } }) => Promise<{ data?: { id: string }; id?: string }>
+        delete: (opts: { path: { id: string } }) => Promise<unknown>
+      }
+    }
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const client = this.opencodeClient as {
-          session: {
-            create: (opts: { body: { title?: string; parentID?: string } }) => Promise<{ data?: { id: string }; id?: string }>
-            delete: (opts: { path: { id: string } }) => Promise<unknown>
-          }
-        }
         const resp = await client.session.create({
-          body: {
-            title: `agentic-shared-${Date.now()}`,
-            parentID: parentSessionId,
-          },
+          body: { title: `agentic-shared-${Date.now()}`, parentID: parentSessionId },
         })
-        this._sharedSessionId = resp.data?.id ?? (resp as Record<string, unknown>).id as string ?? null
-        this._sharedSessionCount = 0
-        if (this._sharedSessionId) break
+        const id = resp.data?.id ?? (resp as Record<string, unknown>).id as string ?? null
+        if (id) return id
       } catch {
-        this._sharedSessionId = null
+        // transient failure — retry once
       }
-      if (!this._sharedSessionId && attempt === 0) {
-        // Brief pause before retry — SDK may need time to propagate session deletion
-        await new Promise(r => setTimeout(r, 200))
-      }
+      if (attempt === 0) await new Promise(r => setTimeout(r, 200))
     }
+    return null
+  }
+
+  /** Get or rotate shared temp session. ONLY rotates if new session creation succeeds.
+   *  If rotation fails, keeps the old session — never leaves us without a session. */
+  private async _getOrCreateSharedSession(parentSessionId: string): Promise<string | null> {
+    if (this._sharedSessionId) {
+      if (this._sharedSessionCount >= 2) {
+        // Try to create new session first, swap only if it works
+        const newSession = await this._tryCreateChildSession(parentSessionId)
+        if (newSession) {
+          // New session created — safely delete old one
+          if (this.opencodeClient) {
+            try {
+              (this.opencodeClient as { session: { delete: (opts: { path: { id: string } }) => Promise<unknown> } })
+                .session.delete({ path: { id: this._sharedSessionId } }).catch(() => {})
+            } catch {}
+          }
+          this._sharedSessionId = newSession
+          this._sharedSessionCount = 0
+        }
+        // If creation failed, keep old session (don't rotate)
+      }
+      return this._sharedSessionId
+    }
+
+    // No existing session — create one
+    this._sharedSessionId = await this._tryCreateChildSession(parentSessionId)
+    this._sharedSessionCount = 0
     return this._sharedSessionId
   }
 
@@ -181,6 +195,9 @@ export class AgentRuntime {
     const engine = this.engines.get(key)!
     if (this._sharedSessionId) {
       engine.setSessionId(this._sharedSessionId)
+    } else if (parentSessionId) {
+      // Fallback: use parent session directly (guaranteed to have LLM provider)
+      engine.setSessionId(parentSessionId)
     }
     // Move to most-recently-used position
     const idx = this.engineOrder.indexOf(key)
@@ -225,6 +242,10 @@ export class AgentRuntime {
       if (!childSessionId) {
         return this.execute(ctx) // fallback
       }
+
+      // Also use as shared session for subsequent execute() calls
+      this._sharedSessionId = childSessionId
+      this._sharedSessionCount = 0
 
       // Track for cleanup
       this._visibleSessions.push({
@@ -298,7 +319,8 @@ export class AgentRuntime {
       clearTimeout(timeoutId)
       const output = resp.content
       if (output.startsWith("LLM error") || output.startsWith("[NO_LLM]")) {
-        return { output, success: false, error: output }
+        console.warn(`[AgentRuntime] Child session LLM failed (${output.slice(0, 50)}), falling back to execute().`, { childSessionId: childSessionId?.slice(0, 12) })
+        return this.execute(ctx)
       }
 
       // 3. Fetch session messages to show what the delegated agent actually did
@@ -365,13 +387,8 @@ export class AgentRuntime {
    * The engine is isolated per (session, role) pair.
    */
   async execute(ctx: AgentContext): Promise<AgentResult> {
-    // Ensure shared temp session exists and isn't stale (rotate after 2 calls)
-    if (this._sharedSessionId && this._sharedSessionCount >= 2) {
-      this._rotateSharedSession()
-    }
-    if (!this._sharedSessionId) {
-      await this._getOrCreateSharedSession(ctx.sessionId)
-    }
+    // Ensure shared temp session exists, safely rotate if needed
+    await this._getOrCreateSharedSession(ctx.sessionId)
     const engine = this.getEngine(ctx.sessionId, ctx.role)
 
     const roleDef = this.roleRegistry.getBuiltIn(ctx.role as AgentRole)

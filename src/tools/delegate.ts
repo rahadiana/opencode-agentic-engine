@@ -69,7 +69,7 @@ export function makeDelegateTool(ctx: ToolContext): ToolSpec {
               taskDescription: task.context ?? task.description,
               modelPreference: sessionModelPref || undefined,
             }
-            const resultObj = await agentRuntime.executeWithVisibleDelegation(agentCtx)
+            const resultObj = await agentRuntime.execute(agentCtx)
             const ok = resultObj.success ? resultObj.output : null
             const err = resultObj.success ? null : (resultObj.error ?? 'Agent execution failed')
             if (ok) { await coordinator.updateTask(execCtx.sessionID, taskId, 'done', ok); await coordinator.writeSharedMemory('task:' + taskId, ok.slice(0, 500), task.role) }

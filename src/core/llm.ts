@@ -1162,11 +1162,15 @@ export class LLMEngine {
 
   private async callOpenCode(req: LLMRequest): Promise<LLMResponse> {
     if (!this.opencodeClient || !this.pluginSessionId) {
+      log.warn('[LLM] callOpenCode: no client or session', { hasClient: !!this.opencodeClient, hasSession: !!this.pluginSessionId });
       return this.fallbackResponse(req)
     }
 
     const client = this._getClient()
-    if (!client) return this.fallbackResponse(req)
+    if (!client) {
+      log.warn('[LLM] callOpenCode: _getClient returned null');
+      return this.fallbackResponse(req)
+    }
 
     // In chat mode: sub-engines have synthetic session IDs (e.g. "ses_x-dev")
     // that are NOT valid OpenCode sessions. Create a real temp session.
@@ -1184,6 +1188,7 @@ export class LLMEngine {
       }
     } catch (error) {
       logParseError('callOpenCode', error);
+      log.warn('[LLM] callOpenCode failed', { error: String(error), sessionId: this.pluginSessionId?.slice(0, 16) });
     }
 
     return this.fallbackResponse(req)

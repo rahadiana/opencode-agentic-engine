@@ -55,5 +55,5 @@ export { WorkflowEngine, type WorkflowConfig, type ChainedResult } from "./workf
 export { WorldModel } from "./world-model.js"
 export { debounce, throttle, type DebounceOptions, type ThrottleOptions } from "./rate-limit.js"
 export { evaluateWorkflowPolicy, formatWorkflowPolicyDecisions, verificationEvidenceFailed, type WorkflowPolicyInput, type WorkflowPolicyDecision, type WorkflowPolicyOptions, type WorkflowAction, type WorkflowSeverity } from "./workflow-policy.js"
-export { hello } from "../hello.js"
+
 export { writeFiles, parseFileEntries, recordCompletion, type FileWriteEntry, type CompletionRecord, type CompletionDeps, type CompletionResult } from "./execution-helpers.js"

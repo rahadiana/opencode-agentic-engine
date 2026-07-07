@@ -952,7 +952,288 @@
       "metadata": {
         "timestamp": 1783449599992
       }
+    },
+    {
+      "source": "developer",
+      "target": "test-delegate-5",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create a file called src/sayhi.ts with a function sayHi(name: string): string that returns \"Hi, {name}!\". Export it.",
+        "timestamp": 1783449671236
+      }
+    },
+    {
+      "source": "test-delegate-5",
+      "target": "developer",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783449705757
+      }
+    },
+    {
+      "source": "developer",
+      "target": "test-delegate-6",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/sayhi.ts with a function sayHi(name: string): string that returns \"Hi, {name}!\". Export it.",
+        "timestamp": 1783449800779
+      }
+    },
+    {
+      "source": "test-delegate-6",
+      "target": "developer",
+      "relation": "completed_by",
+      "metadata": {
+        "timestamp": 1783449818355
+      }
+    },
+    {
+      "source": "developer",
+      "target": "test-delegate-7",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/wave.ts with a function wave(name: string): string that returns \"👋 Wave, {name}!\". Export it.",
+        "timestamp": 1783449878251
+      }
+    },
+    {
+      "source": "test-delegate-7",
+      "target": "developer",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783449911869
+      }
+    },
+    {
+      "source": "developer",
+      "target": "test-delegate-8",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/wave.ts with function wave(name: string): string that returns \"👋 Wave, {name}!\". Export it.",
+        "timestamp": 1783450006384
+      }
+    },
+    {
+      "source": "developer",
+      "target": "test-delegate-9",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/wave.ts with function wave(name: string): string that returns \"👋 Wave, {name}!\". Export it.",
+        "timestamp": 1783450043404
+      }
+    },
+    {
+      "source": "test-delegate-9",
+      "target": "developer",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783450076722
+      }
+    },
+    {
+      "source": "developer",
+      "target": "test-delegate-10",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/wave.ts with function wave(name: string): string that returns \"👋 Wave, {name}!\". Export it.",
+        "timestamp": 1783450200525
+      }
+    },
+    {
+      "source": "developer",
+      "target": "test-delegate-11",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/wave.ts with function wave(name: string): string that returns \"👋 Wave, {name}!\". Export it.",
+        "timestamp": 1783450218811
+      }
+    },
+    {
+      "source": "test-delegate-11",
+      "target": "developer",
+      "relation": "completed_by",
+      "metadata": {
+        "timestamp": 1783450233275
+      }
+    },
+    {
+      "source": "developer",
+      "target": "batch-1",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/utils/format.ts with function capitalize(s: string): string that capitalizes the first letter",
+        "timestamp": 1783450260765
+      }
+    },
+    {
+      "source": "developer",
+      "target": "batch-2",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/utils/math.ts with function double(n: number): number that returns n * 2",
+        "timestamp": 1783450260766
+      }
+    },
+    {
+      "source": "developer",
+      "target": "batch-3",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/utils/string.ts with function reverse(s: string): string that reverses the input",
+        "timestamp": 1783450260766
+      }
+    },
+    {
+      "source": "skill-1783450362423-ynh3",
+      "target": "unknown",
+      "relation": "extracted_from",
+      "metadata": {
+        "name": "**File exists** at `src/utils/math",
+        "timestamp": 1783450362423
+      }
+    },
+    {
+      "source": "developer",
+      "target": "batch-4",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/utils/format.ts with function capitalize(s: string): string",
+        "timestamp": 1783450371537
+      }
+    },
+    {
+      "source": "developer",
+      "target": "batch-5",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/utils/math.ts with function double(n: number): number",
+        "timestamp": 1783450371538
+      }
+    },
+    {
+      "source": "developer",
+      "target": "batch-6",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/utils/string.ts with function reverse(s: string): string",
+        "timestamp": 1783450371538
+      }
+    },
+    {
+      "source": "developer",
+      "target": "batch-7",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/utils/format.ts with function capitalize(s: string): string",
+        "timestamp": 1783450405593
+      }
+    },
+    {
+      "source": "developer",
+      "target": "batch-8",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/utils/math.ts with function double(n: number): number",
+        "timestamp": 1783450405595
+      }
+    },
+    {
+      "source": "developer",
+      "target": "batch-9",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/utils/string.ts with function reverse(s: string): string",
+        "timestamp": 1783450405596
+      }
+    },
+    {
+      "source": "developer",
+      "target": "test-single-1",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/ping.ts with function ping(): string that returns \"pong\". Export it.",
+        "timestamp": 1783450486146
+      }
+    },
+    {
+      "source": "developer",
+      "target": "test-single-2",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/ping.ts with function ping(): string that returns \"pong\". Export it.",
+        "timestamp": 1783450502848
+      }
+    },
+    {
+      "source": "skill-1783450582324-cp5g",
+      "target": "unknown",
+      "relation": "extracted_from",
+      "metadata": {
+        "name": "**Done",
+        "timestamp": 1783450582325
+      }
+    },
+    {
+      "source": "test-single-2",
+      "target": "developer",
+      "relation": "failed_by",
+      "metadata": {
+        "timestamp": 1783450588985
+      }
+    },
+    {
+      "source": "pipeline-qa-1783450582325-24cn",
+      "target": "hallucination",
+      "relation": "guard_failed",
+      "metadata": {
+        "rate": 1,
+        "timestamp": 1783450673883
+      }
+    },
+    {
+      "source": "developer",
+      "target": "test-echo-1",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/echo.ts with function echo(msg: string): string that returns the input unchanged. Export it.",
+        "timestamp": 1783450765016
+      }
+    },
+    {
+      "source": "test-echo-1",
+      "target": "developer",
+      "relation": "completed_by",
+      "metadata": {
+        "timestamp": 1783450799739
+      }
+    },
+    {
+      "source": "developer",
+      "target": "batch-a",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/a.ts with function a(): number that returns 1",
+        "timestamp": 1783450805127
+      }
+    },
+    {
+      "source": "developer",
+      "target": "batch-b",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/b.ts with function b(): number that returns 2",
+        "timestamp": 1783450805127
+      }
+    },
+    {
+      "source": "developer",
+      "target": "batch-c",
+      "relation": "assigned",
+      "metadata": {
+        "description": "Create src/c.ts with function c(): number that returns 3",
+        "timestamp": 1783450833644
+      }
     }
   ],
-  "updatedAt": "2026-07-07T18:39:59.992Z"
+  "updatedAt": "2026-07-07T19:00:33.644Z"
 }
