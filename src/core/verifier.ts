@@ -783,4 +783,53 @@ export class Verifier {
       errors,
     }
   }
+
+  /**
+   * Format verification results as an actionable checklist.
+   * Inspired by addyosmani/agent-skills verification sections.
+   * Output is LLM-friendly markdown with [x] checkboxes.
+   */
+  static formatVerificationChecklist(results: {
+    compile?: { passed: boolean }
+    lint?: { passed: boolean }
+    test?: { passed: boolean; total?: number; passedCount?: number }
+    criteria?: Array<{ name: string; passed: boolean }>
+  }): string {
+    const lines: string[] = ["### ✅ Verification Checklist\n"]
+    let allPassed = true
+
+    if (results.compile !== undefined) {
+      const ok = results.compile.passed
+      lines.push(`${ok ? "- [x]" : "- [ ]"} **Compile**: ${ok ? "Passes" : "FAILED — fix compilation errors"}`)
+      if (!ok) allPassed = false
+    }
+
+    if (results.lint !== undefined) {
+      const ok = results.lint.passed
+      lines.push(`${ok ? "- [x]" : "- [ ]"} **Lint**: ${ok ? "No lint errors" : "FAILED — fix lint warnings/errors"}`)
+      if (!ok) allPassed = false
+    }
+
+    if (results.test !== undefined) {
+      const ok = results.test.passed
+      const detail = results.test.total !== undefined
+        ? ` (${results.test.passedCount ?? 0}/${results.test.total} passing)`
+        : ""
+      lines.push(`${ok ? "- [x]" : "- [ ]"} **Tests**: ${ok ? "All passing" : "FAILED — fix failing tests"}${detail}`)
+      if (!ok) allPassed = false
+    }
+
+    if (results.criteria && results.criteria.length > 0) {
+      lines.push("")
+      for (const c of results.criteria) {
+        lines.push(`${c.passed ? "- [x]" : "- [ ]"} **${c.name}**: ${c.passed ? "Passed" : "Failed"}`)
+        if (!c.passed) allPassed = false
+      }
+    }
+
+    lines.push("")
+    lines.push(`**Verdict:** ${allPassed ? "✅ All checks passed — ready for review" : "❌ Some checks failed — issues must be addressed before merge"}`)
+
+    return lines.join("\n")
+  }
 }

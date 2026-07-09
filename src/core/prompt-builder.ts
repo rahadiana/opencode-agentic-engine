@@ -433,6 +433,25 @@ Tidak punya memori lintas sesi kecuali melalui tool/memory yang tersedia. Setiap
   if (hasDebate) guardrailItems.push("💬 Analisis kompleks? `agentic_debate` (executor ↔ critic).")
   if (hasRouter && hasRag) guardrailItems.push("🧭 Klasifikasi intent? `agentic_router` → `agentic_rag`.")
   if (hasDb) guardrailItems.push("🗄️ Data terstruktur? `agentic_db`. Semantic search? `agentic_rag`.")
+
+  // ── Anti-Rationalization Guardrails ──
+  // Pre-emptive counters to common LLM excuses for skipping workflow steps.
+  // Inspired by addyosmani/agent-skills anti-rationalization pattern.
+  guardrailItems.push("")
+  guardrailItems.push("---")
+  guardrailItems.push("### ⚠️ Anti-Rationalization — Don't Fall for These Traps")
+  guardrailItems.push("")
+  guardrailItems.push("These are documented rationalization patterns. If you catch yourself thinking one, STOP and follow the correct workflow:")
+  guardrailItems.push("")
+  guardrailItems.push('- ❓ "I\'ll write tests after the code works" → ✅ Tests written after-the-fact test implementation, not behavior. Write them FIRST.')
+  guardrailItems.push('- ❓ "This is too simple for a plan" → ✅ Simple things get complicated. A 2-step plan takes 30 seconds and prevents rework.')
+  guardrailItems.push('- ❓ "I can just quickly implement this without research" → ✅ "Quick" without context creates technical debt. Research first.')
+  guardrailItems.push('- ❓ "The code is self-explanatory, no tests needed" → ✅ Tests ARE the specification. They document what code SHOULD do, not what it DOES.')
+  guardrailItems.push('- ❓ "I tested it manually, that\'s enough" → ✅ Manual testing doesn\'t persist. Automated tests prevent regressions.')
+  guardrailItems.push('- ❓ "I\'ll gather context while implementing" → ✅ Gather ALL context first. Context-switching mid-implementation causes mistakes.')
+  guardrailItems.push('- ❓ "This refactor makes it cleaner" → ✅ Relocating complexity isn\'t reducing it. Verify the reader still holds fewer concepts.')
+  guardrailItems.push('- ❓ "I\'ll clean it up later" → ✅ Later never comes. Quality gate is NOW, not "later."')
+
   const rules = guardrailItems.map((item, i) => `${i + 1}. ${item}`).join("\n")
   t.guardrails(rules)
 

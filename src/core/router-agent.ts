@@ -325,6 +325,78 @@ export class RouterAgent {
 
 }
 
+// ── Lifecycle Phase Detection (inspired by addyosmani/agent-skills) ──
+
+export type LifecyclePhase = "define" | "plan" | "build" | "verify" | "review" | "ship" | "unknown"
+
+export interface LifecycleMatch {
+  phase: LifecyclePhase
+  confidence: number
+  reason: string
+  /** Recommended first action for this phase */
+  recommendedAction: string
+  /** Relevant specialist roles for this phase */
+  relevantRoles: string[]
+}
+
+const LIFECYCLE_PATTERNS: Array<{ phase: LifecyclePhase; keywords: string[]; action: string; roles: string[] }> = [
+  { phase: "define", keywords: ["spec", "prd", "requirement", "define", "goal", "objective", "ide", "konsep", "rencana", "fitur", "feature", "what", "mau buat", "ingin buat", "bikin", "buat", "new project", "starting"], action: "Write a spec/PRD before writing code", roles: ["pm", "architect"] },
+  { phase: "plan", keywords: ["plan", "breakdown", "task", "subtast", "langkah", "step", "decompose", "bagi", "jadwal", "estimate", "prioritas", "dependency", "ordered", "sequence"], action: "Break spec into small, verifiable tasks with dependencies", roles: ["planner", "architect", "pm"] },
+  { phase: "build", keywords: ["implement", "code", "writ", "buat", "bikin", "create", "add", "feature", "fungsi", "function", "component", "modul", "api", "endpoint", "route", "controller", "service", "logic", "algorithm", "build", "construct", "develop", "program"], action: "Implement one thin vertical slice at a time, test each before expanding", roles: ["developer", "builder"] },
+  { phase: "verify", keywords: ["test", "debug", "fix", "bug", "error", "fail", "broken", "tidak jalan", "salah", "rusak", "verify", "validasi", "check", "periksa", "compile", "build error", "lint", "type error", "runtime error"], action: "Reproduce → localize → fix → guard with tests", roles: ["test-engineer", "qa", "developer"] },
+  { phase: "review", keywords: ["review", "pr", "pull request", "code review", "quality", "audit", "periksa", "evaluasi", "approve", "comment", "feedback", "refactor", "simplify", "complexity", "clean up", "refactoring"], action: "Multi-axis review: correctness, readability, architecture, security, performance", roles: ["code-reviewer", "security-auditor", "web-perf-auditor", "reviewer"] },
+  { phase: "ship", keywords: ["deploy", "ship", "release", "launch", "production", "prod", "go live", "push", "merge", "publish", "publikasi", "rilis", "ci", "cd", "pipeline", "rollback", "migrate", "migration"], action: "Pre-launch checklist → feature flags → staged rollout → monitoring", roles: ["pm", "coordinator", "qa"] },
+]
+
+/**
+ * Detect development lifecycle phase from user input.
+ * Maps user intent to one of 6 phases: DEFINE → PLAN → BUILD → VERIFY → REVIEW → SHIP.
+ * Uses keyword matching with scoring (fast, no LLM needed).
+ */
+export function detectLifecyclePhase(input: string): LifecycleMatch {
+  const normalized = input.toLowerCase()
+
+  let bestPhase: LifecyclePhase = "unknown"
+  let bestScore = 0
+  let bestAction = ""
+  let bestRoles: string[] = []
+
+  for (const pattern of LIFECYCLE_PATTERNS) {
+    let score = 0
+    for (const kw of pattern.keywords) {
+      // Check for word boundary to avoid partial matches
+      const regex = new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i")
+      if (regex.test(normalized)) {
+        score += 2
+      }
+    }
+    // Bonus: shorter keywords array with many matches = stronger signal
+    if (score > 0) {
+      score += Math.round((score / pattern.keywords.length) * 3)
+    }
+    if (score > bestScore) {
+      bestScore = score
+      bestPhase = pattern.phase
+      bestAction = pattern.action
+      bestRoles = pattern.roles
+    }
+  }
+
+  const confidence = bestScore > 0
+    ? Math.min(1.0, bestScore / 15)
+    : 0
+
+  return {
+    phase: bestPhase,
+    confidence: Math.round(confidence * 100) / 100,
+    reason: bestPhase !== "unknown"
+      ? `Detected ${bestPhase.toUpperCase()} phase (score: ${bestScore})`
+      : "Could not determine development phase",
+    recommendedAction: bestAction,
+    relevantRoles: bestRoles,
+  }
+}
+
 /**
  * Create a custom category for routing.
  */

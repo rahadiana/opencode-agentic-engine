@@ -15,6 +15,13 @@ export interface SkillMeta {
   parentId?: string
 }
 
+export interface AntiRationalization {
+  /** Common excuse LLM gives to skip a step */
+  rationalization: string
+  /** Counter-argument showing why the step is necessary */
+  reality: string
+}
+
 export interface SkillDefinition {
   meta: SkillMeta
   trigger: {
@@ -29,6 +36,8 @@ export interface SkillDefinition {
     estimatedDuration: string
     parallelizable: boolean
   }
+  /** Anti-rationalization table: pre-emptive counters to common LLM excuses for skipping steps */
+  antiRationalizations?: AntiRationalization[]
   /** Schema for skill inputs — validated at runtime by SchemaValidator */
   input_schema?: Record<string, SchemaField>
   /** Schema for skill outputs — validated after execution by SchemaValidator */
@@ -73,6 +82,7 @@ export function createSkillDefinition(
     output_schema?: Record<string, SchemaField>
     logic?: { instructions: DslInstruction[]; requires_mcp?: string[] }
     capability?: string
+    antiRationalizations?: AntiRationalization[]
   },
 ): SkillDefinition {
   const now = new Date().toISOString()
@@ -105,6 +115,7 @@ export function createSkillDefinition(
     ...(extras?.input_schema ? { input_schema: extras.input_schema } : {}),
     ...(extras?.output_schema ? { output_schema: extras.output_schema } : {}),
     ...(extras?.logic ? { logic: extras.logic } : {}),
+    ...(extras?.antiRationalizations ? { antiRationalizations: extras.antiRationalizations } : {}),
     quality: {
       successRate: 1.0,
       usageCount: 1,
@@ -172,6 +183,22 @@ function escapeMd(text: string): string {
   return text.replace(/[_*[\]()`~>#+|!]/g, "\\$&")
 }
 
+/** Format anti-rationalizations for prompt injection into system prompts */
+export function formatAntiRationalizations(ars: AntiRationalization[]): string {
+  if (!ars || ars.length === 0) return ""
+  const lines: string[] = ["\n### ⚠️ Common Rationalizations — Do NOT Skip Steps"]
+  lines.push("")
+  lines.push("| Rationalization | Reality |")
+  lines.push("|----------------|---------|")
+  for (const ar of ars) {
+    lines.push(`| *${escapeMd(ar.rationalization)}* | ${escapeMd(ar.reality)} |`)
+  }
+  lines.push("")
+  lines.push("These are not suggestions — they are documented traps. If you find yourself thinking any of these,")
+  lines.push("recognize it as a rationalization and proceed with the correct workflow step anyway.\n")
+  return lines.join("\n")
+}
+
 export function inspectSkill(skill: SkillDefinition): string {
   let out = `## Skill: ${escapeMd(skill.meta.name)}\n\n`
   out += `**Format:** ${skill.meta.format}\n`
@@ -185,6 +212,12 @@ export function inspectSkill(skill: SkillDefinition): string {
     out += `${step.order}. **${escapeMd(step.action)}** — ${escapeMd(step.description)}\n`
     if (step.tool) out += `   Tool: \`${step.tool}\`\n`
     out += `   Expected: ${escapeMd(step.expectedOutput)}\n`
+  }
+  if (skill.antiRationalizations && skill.antiRationalizations.length > 0) {
+    out += `\n### ⚠️ Anti-Rationalizations\n`
+    for (const ar of skill.antiRationalizations) {
+      out += `- ❓ "${escapeMd(ar.rationalization)}"\n  ✅ ${escapeMd(ar.reality)}\n`
+    }
   }
   return out
 }

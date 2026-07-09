@@ -76,6 +76,32 @@ const BOOTSTRAP_NOWLEDGE: BootstrapEntry[] = [
     tags: ["testing", "test", "run.mjs", "e2e", "benchmark"],
     decisions: ["2727+ unit tests across multiple files", "22+ test files total", "Custom assert() framework", "Each tool: 2+ test cases"]
   },
+  // ── Reference Checklists (inspired by addyosmani/agent-skills) ──
+  {
+    goal: "Checklist: Definition of Done — every change must clear this bar",
+    summary: "CORRECTNESS: All acceptance criteria met. Code runs and behaves as intended (verified at runtime). New behavior covered by tests that fail without change and pass with it. Existing tests still pass — no regressions. Edge cases and error paths handled. QUALITY: Code reveals intent through naming and structure — no comments needed to explain WHAT it does. No duplicated business logic. No dead code, debug output, or commented-out blocks. Changes scoped to task — no unrelated refactors. Linting and formatting pass. INTEGRATION: Change works with rest of system. Database migrations, config changes, and feature flags accounted for. Backward compatibility considered for public interfaces. DOCUMENTATION: Public interfaces, APIs, and user-facing behavior documented. Architectural decisions worth preserving recorded as ADRs. SHIP-READINESS: Security implications reviewed for untrusted input, auth, data handling. Observability in place for new critical paths (logs, metrics, traces). Rollback path exists for risky changes. Human has reviewed and approved before merge.",
+    tags: ["checklist", "definition-of-done", "quality", "gate", "reference"],
+    decisions: ["DoD applies to EVERY change", "Not negotiable per deadline", "Acceptance criteria + DoD = done"]
+  },
+  {
+    goal: "Checklist: Security review — OWASP Top 10 prevention",
+    summary: "INPUT VALIDATION: All user input validated and sanitized at system boundaries. SQL queries parameterized (no string concatenation). Output encoded to prevent XSS. AUTHENTICATION & AUTHORIZATION: Auth checked where needed. Secrets kept out of code, logs, and version control. Use environment variables or secrets manager. Least privilege principle applied. DEPENDENCIES: Dependencies from trusted sources with no known vulnerabilities. Run `npm audit` or equivalent. No unnecessary dependencies (every dependency is a liability). DATA PROTECTION: Data from external sources (APIs, logs, user content, config files) treated as untrusted. External data flows validated at system boundaries before use in logic or rendering. No sensitive data in logs, error messages, or URLs. BOUNDARY SECURITY: Three-tier boundary system for untrusted data. CORS configured properly. Rate limiting on public endpoints.",
+    tags: ["checklist", "security", "owasp", "reference", "hardening"],
+    decisions: ["Validate ALL input at boundaries", "Parameterized queries always", "Secrets never in code", "Least privilege"]
+  },
+  {
+    goal: "Checklist: Performance optimization — measure-first approach",
+    summary: "MEASURE BEFORE OPTIMIZING: Establish baseline metrics before any optimization. Profile hot paths — don't guess. Use real data, not synthetic. FRONTEND: Core Web Vitals targets: LCP < 2.5s, FID < 100ms, CLS < 0.1. Bundle size audit — tree-shake unused imports. Lazy load non-critical components. Avoid layout thrashing. Minimize re-renders. BACKEND: No N+1 query patterns. Pagination on ALL list endpoints. Unbounded loops or unconstrained data fetching — flag immediately. Synchronous operations that should be async. Database query optimization — use indexes, avoid full table scans. INFRASTRUCTURE: CDN caching for static assets. Response compression enabled. Connection pooling for databases. Rate limiting to prevent abuse. ANTI-PATTERNS: Premature optimization without measurement. Over-fetching in GraphQL/REST. Missing indexes on queried columns. Blocking the event loop with CPU-intensive sync operations.",
+    tags: ["checklist", "performance", "optimization", "reference", "web-vitals"],
+    decisions: ["Measure first, optimize second", "Core Web Vitals as targets", "No N+1 queries", "Pagination on all lists"]
+  },
+  {
+    goal: "Checklist: Testing patterns — test pyramid & best practices",
+    summary: "TEST PYRAMID: Unit tests (~80%) — pure logic, isolated, milliseconds each. Integration tests (~15%) — component interactions, API boundaries, test DB. E2E tests (~5%) — full user flows, real browser. WRITING GOOD TESTS: Test state (outcome-based assertions), not interactions (method call verification). DAMP over DRY in tests — each test tells a complete story. Prefer real implementations over mocks (real > fake > stub > mock). Arrange-Act-Assert pattern. One assertion per concept. Descriptive test names that read like specification. THE BEYONCE RULE: If you liked it, you should have put a test on it. Infrastructure changes, refactoring, and migrations are not responsible for catching bugs — your tests are. TEST SIZES: Small (single process, no I/O, milliseconds) — pure function tests. Medium (localhost, seconds) — API tests with test DB. Large (external services, minutes) — E2E tests, performance benchmarks. ANTI-PATTERNS: Testing implementation details (tests break on refactor). Flaky tests (timing, order-dependent). Testing framework code. Snapshot abuse. No test isolation. Mocking everything.",
+    tags: ["checklist", "testing", "tdd", "patterns", "reference"],
+    decisions: ["Test pyramid: 80/15/5", "Test outcomes not interactions", "DAMP over DRY in tests", "Beyonce Rule applied"]
+  },
+
   // ── P3 Procedural Checklists ──
   {
     goal: "Checklist: How to add a new agentic_ tool",

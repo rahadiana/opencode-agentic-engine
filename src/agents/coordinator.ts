@@ -5,7 +5,7 @@ import { createLogger } from "../observability/logger.js"
 
 const log = createLogger("Coordinator")
 
-export type AgentRole = "architect" | "developer" | "qa" | "coordinator" | "pm" | "analyst" | "builder" | "reviewer" | "planner"
+export type AgentRole = "architect" | "developer" | "qa" | "coordinator" | "pm" | "analyst" | "builder" | "reviewer" | "planner" | "code-reviewer" | "test-engineer" | "security-auditor" | "web-perf-auditor"
 
 export interface AgentTask {
   id: string
