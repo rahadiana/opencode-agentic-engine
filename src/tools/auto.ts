@@ -14,29 +14,66 @@ import { AutoRetryManager } from "../core/auto-retry.js"
 import type { TaskIntent, Subtask } from "../core/intent-parser.js"
 import { ResearchAgent5W1H, type ResearchReport } from "../core/5w1h-framework.js"
 import { detectLifecyclePhase } from "../core/router-agent.js"
+import { resolveDumbHarness, workflowModeForDumb } from "../core/dumb-model.js"
+import { existsSync } from "node:fs"
+
+/**
+ * Extract explicit file path hints from a goal/description.
+ * SWE-style prompts often name paths (package.json, src/middleware/X.ts).
+ * Prefer these over pure keyword nav scores for file targeting.
+ */
+export function extractPathHints(goal: string): string[] {
+  if (!goal || typeof goal !== "string") return []
+  const found = new Set<string>()
+  // Paths with directories: src/foo/bar.ts, tests/unit/x.test.ts
+  const withDir = /(?:^|[\s`"'(=])((?:[\w@.-]+\/)+[\w.-]+\.[a-zA-Z0-9]+)/g
+  // Bare config/source files: package.json, tsconfig.json, Dockerfile
+  const bare = /(?:^|[\s`"'(=])((?:package|tsconfig|jsconfig|vitest\.config|vite\.config|opencode)\.[a-zA-Z0-9.]+|Dockerfile|Makefile)/gi
+  let m: RegExpExecArray | null
+  while ((m = withDir.exec(goal)) !== null) {
+    const p = m[1].replace(/^[./]+/, "")
+    if (p.length > 3 && !p.includes("://")) found.add(p)
+  }
+  while ((m = bare.exec(goal)) !== null) {
+    found.add(m[1])
+  }
+  return [...found]
+}
+
+/** Merge path hints + navigator results; hints first; dedupe; cap. */
+export function mergeTargetFiles(hints: string[], navFiles: string[], max = 12): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const f of [...hints, ...navFiles]) {
+    const norm = f.replace(/^\.\//, "").replace(/\\/g, "/")
+    if (!norm || seen.has(norm)) continue
+    seen.add(norm)
+    out.push(norm)
+    if (out.length >= max) break
+  }
+  return out
+}
 
 export function makeAutoTool(ctx: ToolContext): ToolSpec {
   const {
-    sessionStore, domainRegistry, worktree, projectId, config,
-    log, projectContext, TOOL_REGISTRY, currentInjectDomain,
-    planner, plannerCritic, executor, intentParser, agentLoop,
-    verifier, errorAnalyzer, errorRecovery, alignmentGate,
-    economicModel, confidenceScorer, confidenceStore, techDebtScorer,
-    constraintManifold, navigator, toolRouter, routerAgent,
-    skillStore, skillCurator, episodicStore, memoryOrchestrator,
-    secondBrain, rag: multiIndexRAG, coordinator, orchestrator,
-    roleRegistry, agentRuntime, debateLoop, dashboard, traceLogger,
-    liveEvaluator, patternDiscovery, toolUsageTracker, workflowEngine,
-    llmEngine, modelRegistry, hallucinationGuard, checkpoints,
-    stateStore, budgetTracker, eventBus, parallelExec,
-    dependencyTracker: depTracker, contextCompressor, git,
-    selfEvolver, continuousEvolution, metaReasoner,
-    mcpServer, mcpClient, protocolAdapter, dynamicToolRegistry,
-    worldModel, simulationEngine, dataCleaner, configLoader,
-    logErrorToFile, detectSubAgentRole, buildSubAgentInjection, ctxDir,
+    sessionStore, domainRegistry, worktree: _worktree, projectId, config: _config,
+    log, projectContext: _projectContext, TOOL_REGISTRY: _TOOL_REGISTRY, currentInjectDomain: _currentInjectDomain,
+    planner, plannerCritic: _plannerCritic, executor, intentParser, agentLoop,
+    verifier, errorAnalyzer, errorRecovery: _errorRecovery, alignmentGate: _alignmentGate,
+    economicModel: _economicModel, confidenceScorer: _confidenceScorer, confidenceStore: _confidenceStore, techDebtScorer: _techDebtScorer,
+    constraintManifold: _constraintManifold, navigator, toolRouter: _toolRouter, routerAgent: _routerAgent,
+    skillStore, skillCurator: _skillCurator, episodicStore, memoryOrchestrator,
+    secondBrain: _secondBrain, rag: multiIndexRAG, coordinator, orchestrator,
+    roleRegistry: _roleRegistry, agentRuntime: _agentRuntime, debateLoop: _debateLoop, dashboard: _dashboard, traceLogger,
+    liveEvaluator: _liveEvaluator, patternDiscovery: _patternDiscovery, toolUsageTracker: _toolUsageTracker, workflowEngine: _workflowEngine,
+    llmEngine, modelRegistry, hallucinationGuard, checkpoints: _checkpoints,
+    stateStore: _stateStore, budgetTracker, eventBus, parallelExec: _parallelExec,
+    dependencyTracker: depTracker, contextCompressor: _contextCompressor, git,
+    selfEvolver: _selfEvolver, continuousEvolution, metaReasoner: _metaReasoner,
+    mcpServer: _mcpServer, mcpClient: _mcpClient, protocolAdapter: _protocolAdapter, dynamicToolRegistry: _dynamicToolRegistry,
+    worldModel: _worldModel, simulationEngine: _simulationEngine, dataCleaner: _dataCleaner, configLoader,
+    logErrorToFile: _logErrorToFile, detectSubAgentRole: _detectSubAgentRole, buildSubAgentInjection: _buildSubAgentInjection, ctxDir,
   } = ctx
-  const _debtScorer = techDebtScorer
-  const _curator = skillCurator
   return {
       description: "Fully autonomous engineering orchestrator. One call handles: memory + skills → architecture → code → guard check → verify → score → learn.",
       args: {
@@ -77,11 +114,26 @@ export function makeAutoTool(ctx: ToolContext): ToolSpec {
         const memoryContexts: string[] = []
         const skillContexts: string[] = []
 
+        // H4: path hints from goal (SWE-style "fix package.json / src/foo.ts")
+        const pathHints = extractPathHints(args.goal)
         try {
           await navigator.scan(projectDir).catch((err) => log.warn(`[agentic_auto] navigator scan failed:`, err))
           codebaseSummary = navigator.getSummary()
-          const found = navigator.findRelevantFiles(args.goal, 8)
-          relevantFiles.push(...found)
+          const found = navigator.findRelevantFiles(args.goal, 10)
+          // Prefer explicit path mentions; keep only existing files when possible
+          const merged = mergeTargetFiles(pathHints, found, 12)
+          for (const f of merged) {
+            if (existsSync(join(projectDir, f)) || pathHints.includes(f)) {
+              relevantFiles.push(f)
+            }
+          }
+          // If hints named files that don't exist yet (create path), still keep them
+          if (relevantFiles.length === 0 && pathHints.length > 0) {
+            relevantFiles.push(...pathHints.slice(0, 6))
+          }
+          if (relevantFiles.length === 0) {
+            relevantFiles.push(...found.slice(0, 8))
+          }
 
           if (thorough) {
             const eps = episodicStore.search(args.goal)
@@ -96,8 +148,14 @@ export function makeAutoTool(ctx: ToolContext): ToolSpec {
             }
           }
         } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
-        // Record research artifact for WorkflowPolicy
+        // Record research artifact for WorkflowPolicy (nav + hints + memory = research evidence)
         sessionStore.getOrCreate(context.sessionID).artifacts.set("workflow:researched", String(Date.now()))
+        if (relevantFiles.length > 0) {
+          sessionStore.getOrCreate(context.sessionID).artifacts.set(
+            "auto:targetFiles",
+            JSON.stringify(relevantFiles),
+          )
+        }
 
         // ═══════════════════════════════════════════════
         // PHASE 1b: 5W1H Research — investigate before planning
@@ -180,7 +238,8 @@ export function makeAutoTool(ctx: ToolContext): ToolSpec {
 
         const intent: TaskIntent = {
           goal: args.goal, constraints: args.constraints ?? [],
-          context: { relevantFiles: [], dependencies: [] },
+          // H4: wire target files into plan context (was always empty)
+          context: { relevantFiles: [...relevantFiles], dependencies: [] },
           subtasks: activeSteps.map(s => ({
             id: s.id, description: s.description,
             dependsOn: s.dependsOn ?? [], verificationCriteria: s.verificationCriteria ?? [],
@@ -196,24 +255,40 @@ export function makeAutoTool(ctx: ToolContext): ToolSpec {
         // ═══════════════════════════════════════════════
         // PHASE 3: Implement — pipeline delegation or fast LLM
         // ═══════════════════════════════════════════════
+        // H4: load more content for primary targets (path hints get priority + larger slice)
         const fileContents: Record<string, string> = {}
+        const primaryTargets = new Set(pathHints.length > 0 ? pathHints : relevantFiles.slice(0, 3))
         for (const f of relevantFiles) {
-          try { fileContents[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 1000) } catch (e) { log.warn("Silent catch: skip", { error: String(e) }) }
+          try {
+            const maxChars = primaryTargets.has(f) ? 4000 : 1200
+            fileContents[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, maxChars)
+          } catch (e) { log.warn("Silent catch: skip", { error: String(e) }) }
         }
 
         const filesBlock = Object.entries(fileContents)
-          .map(([p, c]) => `${p}:\n${c.slice(0, 600)}`).join("\n---\n")
+          .map(([p, c]) => {
+            const tag = primaryTargets.has(p) ? " [PRIMARY TARGET — edit this file]" : ""
+            return `${p}${tag}:\n${c.slice(0, primaryTargets.has(p) ? 3500 : 800)}`
+          }).join("\n---\n")
+        const targetListStr = relevantFiles.length > 0
+          ? `\nTARGET FILES (prefer editing these):\n${relevantFiles.map(f => `- ${f}`).join("\n")}\n`
+          : ""
         const pipelineId = orchestrator.getSuggestedPipeline(args.goal)
         const pipeline = orchestrator.getPipeline(pipelineId)
         // Hanya aktifkan pipeline untuk task yang benar-benar butuh multi-agent.
         // Pipeline = 4-5 LLM calls sequential — overkill untuk task sederhana.
+        // H4: SWE bug-fix / config / import tasks stay on fast path when goal names files
         const hasComplexKeywords = /\b(feature|module|endpoint|api|pipeline|architecture|database|schema|multi[\s-]?step|complex)\b/i.test(args.goal)
-        const hasSimpleKeywords = /\b(fix|typo|comment|rename|change|update|bump|remove|delete|add\s+\w+\s+to)\b/i.test(args.goal)
-        // Don't treat as simple if we found relevant files (config/import tasks need file reading)
+        const hasSimpleKeywords = /\b(fix|typo|comment|rename|change|update|bump|remove|delete|add\s+\w+\s+to|import|script|config|middleware|bug)\b/i.test(args.goal)
+        const hasExplicitTargets = pathHints.length > 0
         const hasRelevantFiles = relevantFiles.length > 0 && relevantFiles.some(f => f.startsWith("src/") || f.endsWith(".json") || f.endsWith(".ts") || f.endsWith(".js"))
-        const isSimpleOrTrivial = hasRelevantFiles ? false : ((args.goal.length < 100 && hasSimpleKeywords) || (!hasComplexKeywords && args.goal.length < 60) || activeSteps.length <= 1)
-        const usePipeline = thorough && !isSimpleOrTrivial && pipeline && pipeline.stages.length >= 2 && activeSteps.length >= 2
-        const useAgentLoop = thorough && !usePipeline && !isSimpleOrTrivial && activeSteps.length >= 2
+        // Explicit path targets → prefer fast path (single LLM with full file context)
+        // unless goal is clearly multi-agent architecture work
+        const isSimpleOrTrivial = hasExplicitTargets
+          ? !hasComplexKeywords
+          : (hasRelevantFiles ? false : ((args.goal.length < 100 && hasSimpleKeywords) || (!hasComplexKeywords && args.goal.length < 60) || activeSteps.length <= 1))
+        const usePipeline = thorough && !isSimpleOrTrivial && !hasExplicitTargets && pipeline && pipeline.stages.length >= 2 && activeSteps.length >= 2
+        const useAgentLoop = thorough && !usePipeline && !isSimpleOrTrivial && !hasExplicitTargets && activeSteps.length >= 2
 
         const allModified: string[] = []
         const completedSteps: string[] = []
@@ -301,16 +376,20 @@ export function makeAutoTool(ctx: ToolContext): ToolSpec {
               : ""
             const llmSystemPrompt = `Return JSON array of {path, content}. Write COMPLETE file contents.
       Rules: ESM imports (.js) · match existing patterns · valid imports
+      Prefer TARGET FILES listed in the user prompt when present.
       {"files":[{"path":"src/x.ts","content":"..."}]} or {"noChanges":true}${lifecycleContext}${researchContextStr}`
 
             const fileContentsForSubtask: Record<string, string> = {}
             for (const f of relevantFiles) {
-              try { fileContentsForSubtask[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, 1000) } catch (e) { log.warn("Silent catch: skip", { error: String(e) }) }
+              try {
+                const maxChars = primaryTargets.has(f) ? 4000 : 1200
+                fileContentsForSubtask[f] = readFileSync(join(projectDir, f), "utf-8").slice(0, maxChars)
+              } catch (e) { log.warn("Silent catch: skip", { error: String(e) }) }
             }
             const filesBlockForSubtask = Object.entries(fileContentsForSubtask)
-              .map(([p, c]) => `${p}:\n${c.slice(0, 600)}`).join("\n---\n")
+              .map(([p, c]) => `${p}${primaryTargets.has(p) ? " [PRIMARY]" : ""}:\n${c.slice(0, primaryTargets.has(p) ? 3500 : 800)}`).join("\n---\n")
 
-            const userPrompt = `${subtaskGoal}\n${codebaseSummary.slice(0, 100)}\n\n${filesBlockForSubtask || "(new)"}`
+            const userPrompt = `${subtaskGoal}${targetListStr}\n${codebaseSummary.slice(0, 100)}\n\n${filesBlockForSubtask || "(new)"}`
             const llmResult = await llmEngine.call({
               systemPrompt: llmSystemPrompt,
               userPrompt,
@@ -345,7 +424,7 @@ export function makeAutoTool(ctx: ToolContext): ToolSpec {
             intent: {
               goal: args.goal, subtasks: planSubtaskList,
               constraints: args.constraints ?? [],
-              context: { relevantFiles: [], dependencies: [] },
+              context: { relevantFiles: [...relevantFiles], dependencies: [] },
             },
             estimatedSteps: planSubtaskList.length,
             complexity: planSubtaskList.length <= 3 ? "low" : planSubtaskList.length <= 8 ? "medium" : "high",
@@ -356,8 +435,8 @@ export function makeAutoTool(ctx: ToolContext): ToolSpec {
           {
             const artifacts = sessionStore.getOrCreate(context.sessionID).artifacts
             agentLoop.setWorkflowState({
-              hasPlan: artifacts.has("workflow:planned"),
-              hasResearch: artifacts.has("workflow:researched"),
+              hasPlan: true, // agentic_auto always creates a plan above
+              hasResearch: artifacts.has("workflow:researched") || relevantFiles.length > 0,
               hasReflection: artifacts.has("workflow:reflected"),
             })
           }
@@ -390,11 +469,15 @@ export function makeAutoTool(ctx: ToolContext): ToolSpec {
             : `⚠️ AgentLoop: ${loopResult.completedSteps.length} ok, ${loopResult.failedSteps.length} failed`
         } else {
           // ── Fast path: monolithic LLM call with adaptive retry loop ──
+          // H4: SWE reliability — target files + full primary content + verify-before-done
           const systemPrompt = `Return JSON array of {path, content}. Write COMPLETE file contents.
-Rules: ESM imports (.js) · match existing patterns · valid imports
+Rules:
+- ESM imports (.js) · match existing patterns · valid imports
+- Prefer TARGET FILES listed below; do not invent unrelated paths
+- For bug-fix: change only what is needed; keep existing exports
 {"files":[{"path":"src/x.ts","content":"..."}]} or {"noChanges":true}`
 
-          const userPrompt = `${args.goal}${args.constraints?.length ? `\nConstraints: ${args.constraints.join(", ")}` : ""}${[...memoryContexts.slice(0, 2), ...skillContexts.slice(0, 1)].join("; ") ? `\nContext: ${[...memoryContexts.slice(0, 2), ...skillContexts.slice(0, 1)].join("; ")}` : ""}\n\n${filesBlock || "(new)"}\n${codebaseSummary.slice(0, 100)}`
+          const userPrompt = `${args.goal}${args.constraints?.length ? `\nConstraints: ${args.constraints.join(", ")}` : ""}${targetListStr}${[...memoryContexts.slice(0, 2), ...skillContexts.slice(0, 1)].join("; ") ? `\nContext: ${[...memoryContexts.slice(0, 2), ...skillContexts.slice(0, 1)].join("; ")}` : ""}\n\n${filesBlock || "(new)"}\n${codebaseSummary.slice(0, 200)}`
 
           const isSimple = args.goal.length < 80 && activeSteps.length < 3
           const maxTokens = isSimple ? 1024 : 2048
@@ -523,13 +606,51 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
         }
 
         // ═══════════════════════════════════════════════
+        // H4: Verify-before-done — always run compile when files changed
+        // ═══════════════════════════════════════════════
+        if (allModified.length > 0 && !hasNoLLM) {
+          try {
+            verifier.detectLanguage(projectDir)
+            const finalCc = verifier.verifyCompile(projectDir)
+            if (finalCc.passed) {
+              verifyPassed = true
+              if (!verifyNote.includes("✅")) verifyNote = "✅ Compile OK (final)"
+              sessionStore.getOrCreate(context.sessionID).artifacts.set("workflow:verified", String(Date.now()))
+            } else {
+              verifyPassed = false
+              verifyNote = `⚠️ Final compile: ${finalCc.output.slice(0, 200)}`
+              // Prefer rolling back bad changes when git available (same as fast-path)
+              if (hasGitRollback && preChangeCommit) {
+                try {
+                  execFileSync("git", ["checkout", "--", ...allModified.map(f => join(projectDir, f))],
+                    { cwd: projectDir, stdio: "pipe", timeout: 15000 })
+                  verifyNote += " 🔄 Rolled back (verify-before-done)"
+                  allModified.length = 0
+                } catch (e) { log.warn("Silent catch: final rollback", { error: String(e) }) }
+              }
+            }
+          } catch (e) {
+            log.warn(`[agentic_auto] final verify failed: ${e}`)
+          }
+        }
+
+        // ═══════════════════════════════════════════════
         // WorkflowPolicy Final Gate (P0)
         // ═══════════════════════════════════════════════
         const autoSession = sessionStore.getOrCreate(context.sessionID)
         const autoAgentCfg = configLoader.get().agent
-        const autoWfMode = autoAgentCfg.dumbModelMode ? "strict" : (autoAgentCfg.workflowPolicyMode ?? "advisory")
+        // H4 fix: dumbModelMode "auto" is truthy string — use resolveDumbHarness, not !!dumbModelMode
+        const autoDumb = resolveDumbHarness({
+          dumbModelMode: autoAgentCfg.dumbModelMode,
+          model: llmEngine.getCurrentModel(),
+          modelRegistry,
+          softBlockReliability: autoAgentCfg.softBlockReliability,
+          minSampleSize: autoAgentCfg.minSampleSize,
+        })
+        const autoWfMode = workflowModeForDumb(autoDumb, autoAgentCfg.workflowPolicyMode)
         // verification evidence from whichever path actually ran
         const autoHasVerify = verifyPassed
+          || autoSession.artifacts.has("workflow:verified")
           || (useAgentLoop && completedSteps.length > 0)
           || (usePipeline && allModified.length > 0 && hasNoLLM === false)
         if (autoHasVerify) {
@@ -539,9 +660,9 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
           action: "finalize",
           stepId: "auto",
           filesModified: allModified,
-          success: !hasNoLLM && allModified.length > 0,
+          success: !hasNoLLM && (allModified.length > 0 || verifyPassed),
           hasPlan: true,
-          hasResearch: true,
+          hasResearch: true, // nav + path hints + optional 5W1H already recorded
           hasVerificationEvidence: autoHasVerify,
         }, { mode: autoWfMode })
         const autoBlocked = autoFinalDecisions.some(d => d.severity === "block")
@@ -630,7 +751,8 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
           })().catch((err) => log.warn(`[agentic_auto] thorough post-processing error:`, err))
         }
 
-        const allSuccess = !hasNoLLM
+        // H4: success requires verify when files were written (verify-before-done)
+        const allSuccess = !hasNoLLM && !autoBlocked && (allModified.length === 0 ? true : verifyPassed)
         const duration = ((Date.now() - startTime) / 1000).toFixed(1)
 
         const result = {
@@ -648,6 +770,9 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
         const fileList = allModified.length > 0
           ? `\n\n### Files Changed\n${allModified.map(f => `- \`${f}\``).join("\n")}`
           : (rolledBack ? "\n\n⚠️ All changes were rolled back due to verification failure." : "")
+        const targetNote = relevantFiles.length > 0
+          ? `\n🎯 Targets: ${relevantFiles.slice(0, 6).map(f => `\`${f}\``).join(", ")}`
+          : ""
         const memNote = memoryContexts.length > 0 ? `\n📚 ${memoryContexts.length} similar past tasks consulted` : ""
         const skillNote = skillContexts.length > 0 ? `\n🎯 ${skillContexts.length} relevant skills applied` : ""
         const researchNote = researchReport
@@ -655,8 +780,19 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
           : ""
 
         return {
-          output: `## 🤖 Auto Complete\n\n**Goal:** ${args.goal}\n**Duration:** ${duration}s\n**Files:** ${allModified.length}\n**Verify:** ${verifyNote}${researchNote}${rolledBack}${memNote}${skillNote}${fileList}`,
-          metadata: { result, success: allSuccess, plan, filesModified: allModified, episodes: memoryContexts.length, skills: skillContexts.length, rolledBack: hasGitRollback && !verifyPassed },
+          output: `## 🤖 Auto Complete\n\n**Goal:** ${args.goal}\n**Duration:** ${duration}s\n**Files:** ${allModified.length}\n**Verify:** ${verifyNote}${targetNote}${researchNote}${rolledBack}${memNote}${skillNote}${fileList}`,
+          metadata: {
+            result,
+            success: allSuccess,
+            plan,
+            filesModified: allModified,
+            targetFiles: relevantFiles,
+            pathHints,
+            episodes: memoryContexts.length,
+            skills: skillContexts.length,
+            rolledBack: hasGitRollback && !verifyPassed,
+            verifyPassed,
+          },
         }
       },
   }
