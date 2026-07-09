@@ -61,7 +61,7 @@ import { WorkflowEngine } from "./core/workflow-engine.js"
 import { PatternDiscovery } from "./drift/pattern-discovery.js"
 import { LiveEvaluator } from "./evaluation/live-evaluator.js"
 import { DebateLoop } from "./core/debate-loop.js"
-import { RouterAgent } from "./core/router-agent.js"
+import { RouterAgent, detectLifecyclePhase } from "./core/router-agent.js"
 import { DataCleaner } from "./core/data-cleaner.js"
 import { MultiIndexRAG } from "./memory/multi-index-rag.js"
 import { MCPClient } from "./core/mcp-client.js"
@@ -1286,11 +1286,18 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
           } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
 
           // ── Tool recommendation: keep ALL tools visible, add ranked hints only ──
+          const lifecyclePhase = (() => {
+            try {
+              const lc = queryForRag ? detectLifecyclePhase(queryForRag) : null
+              return lc && lc.phase !== "unknown" ? lc.phase : undefined
+            } catch { return undefined }
+          })()
           const recommendedTools = toolRouter.selectTools({
             taskInput: queryForRag,
             recentTools: recentToolCalls,
             domain: pack.name,
             isSubAgent: false,
+            lifecyclePhase,
           }, 5).selected
 
           injection = buildAgenticSystemInstructions(pack, TOOL_REGISTRY, {
