@@ -1639,6 +1639,7 @@ export { RAGContextOptimizer, type OptimizedContext, type ContextEntryScore } fr
 export { LocalEmbedder, type EmbedderConfig, type EmbeddingResult } from "./memory/local-embedder.js"
 export { SkillExtractor, normalize } from "./memory/skill-extractor.js"
 export { parseSkillMd, convertSkillMdToDefinition, importSkillMdToStore, type ParsedSkillMd, type SkillMdFrontmatter } from "./memory/skill-md-importer.js"
+export { scanSkillContent, formatSecurityReport, detectProvenance, BehavioralMonitor, DualReviewer, computeNextTrustLevel, type TrustLevel, type ProvenanceInfo, type ScanResult, type ScanWarning, type BehavioralProfile, type ReviewRequest, type ReviewDecision } from "./memory/skill-security.js"
 export { TraceLogger } from "./observability/trace-logger.js"
 export { ContextCompressor } from "./drift/context-compressor.js"
 export { SQLitePersistence } from "./memory/sqlite-persistence.js"

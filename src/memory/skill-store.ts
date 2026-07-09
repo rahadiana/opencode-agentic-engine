@@ -13,6 +13,8 @@ export interface MaturationCriteria {
   minSuccessRate: number
 }
 
+import type { ProvenanceInfo, TrustLevel } from "./skill-security.js"
+
 export interface SkillRecord {
   definition: SkillDefinition
   usageCount: number
@@ -20,6 +22,8 @@ export interface SkillRecord {
   successWindow: boolean[]  // sliding window of last N outcomes (true=success)
   lastUsed: string
   lifecycle?: SkillLifecycleStage
+  /** Provenance & trust information (for imported skills) */
+  provenance?: ProvenanceInfo
 }
 
 /** Sliding window size for success rate calculation */
@@ -236,7 +240,7 @@ export class SkillStore {
     return JSON.stringify(createMemoryEnvelope(record.definition, "skill"), null, 2)
   }
 
-  importFromEnvelope(obj: unknown): boolean {
+  importFromEnvelope(obj: unknown, provenance?: import("./skill-security.js").ProvenanceInfo): boolean {
     const envelope = typeof obj === "string" ? JSON.parse(obj) : obj
     const parsed = parseMemoryEnvelope<SkillDefinition>(envelope)
     if (!parsed || parsed.type !== "skill") return false
@@ -247,6 +251,7 @@ export class SkillStore {
       existing.usageCount = parsed.data.quality.usageCount
       existing.successRate = parsed.data.quality.successRate
       existing.lastUsed = parsed.data.audit.lastUsed
+      if (provenance) existing.provenance = provenance
       return true
     }
 
@@ -263,6 +268,7 @@ export class SkillStore {
       successRate: parsed.data.quality.successRate,
       successWindow,
       lastUsed: parsed.data.audit.lastUsed,
+      ...(provenance ? { provenance } : {}),
     })
     return true
   }

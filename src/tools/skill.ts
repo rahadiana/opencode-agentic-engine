@@ -1,6 +1,10 @@
 import { tool } from "@opencode-ai/plugin"
 import type { ToolSpec } from "./types.js"
 import type { ToolContext } from "./tool-context.js"
+import { scanSkillContent, formatSecurityReport, detectProvenance } from "../memory/skill-security.js"
+import { parseSkillMd, convertSkillMdToDefinition } from "../memory/skill-md-importer.js"
+import { createMemoryEnvelope } from "../memory/schema-version.js"
+import type { ProvenanceInfo, TrustLevel } from "../memory/skill-security.js"
 
 export function makeSkillTool(ctx: ToolContext): ToolSpec {
   const {
@@ -23,10 +27,11 @@ export function makeSkillTool(ctx: ToolContext): ToolSpec {
     logErrorToFile, detectSubAgentRole, buildSubAgentInjection, ctxDir,
   } = ctx
   return {
-      description: "Manage reusable skills extracted from successful task completions. Use 'extract' to create a skill from a completed step. Use 'find' to search existing skills. Use 'capability' for exact-match lookup. Use 'clear' to delete all skills.",
+      description: "Manage reusable skills extracted from successful task completions. Use 'extract' to create a skill from a completed step. Use 'find' to search existing skills. Use 'capability' for exact-match lookup. Use 'import-md' to securely import a SKILL.md from a URL (with security scanning + trust taxonomy). Use 'clear' to delete all skills.",
       args: {
-        action: tool.schema.enum(["extract", "find", "list", "capability", "clear"]).describe("'extract' creates a skill; 'find' searches; 'list' shows all; 'capability' exact-match lookup; 'clear' deletes all skills"),
-        query: tool.schema.string().optional().describe("Search query, extraction target (stepId), or capability string"),
+        action: tool.schema.enum(["extract", "find", "list", "capability", "clear", "import-md"]).describe("'extract' creates a skill; 'find' searches; 'list' shows all; 'capability' exact-match lookup; 'import-md' imports external SKILL.md with security scan; 'clear' deletes all skills"),
+        query: tool.schema.string().optional().describe("Search query, extraction target (stepId), capability string, or URL for import-md"),
+        description: tool.schema.string().optional().describe("Optional description or context"),
       },
       async execute(args, context) {
         if (args.action === "extract") {
@@ -52,6 +57,114 @@ export function makeSkillTool(ctx: ToolContext): ToolSpec {
           if (skill.definition.logic) out += `**DSL Logic:** ${skill.definition.logic.instructions.length} instructions\n`
           out += `\n\`\`\`\n${skill.definition.workflow.steps.map(s => s.description).join("\n")}\n\`\`\``
           return { output: out }
+        }
+
+        if (args.action === "import-md") {
+          const url = args.query || args.description
+          if (!url) return { output: "Provide a url as query to import a SKILL.md from. Example: agentic_skill action=import-md query=https://raw.githubusercontent.com/addyosmani/agent-skills/main/skills/code-review-and-quality/SKILL.md" }
+
+          try {
+            // ── Fetch the SKILL.md content ──
+            let content: string
+            try {
+              const resp = await fetch(url as string)
+              if (!resp.ok) return { output: `Failed to fetch URL: HTTP ${resp.status} ${resp.statusText}` }
+              content = await resp.text()
+              if (!content || content.length < 50) return { output: `Fetched content too short (${content?.length ?? 0} chars) — not a valid SKILL.md` }
+            } catch (fetchErr) {
+              return { output: `Failed to fetch URL: ${(fetchErr as Error).message}. Make sure the URL is a raw GitHub URL pointing to a SKILL.md file.` }
+            }
+
+            // ── Layer 1: Security Scan ──
+            const scanResult = scanSkillContent(content, url as string)
+
+            // ── Parse SKILL.md ──
+            const parsed = parseSkillMd(content)
+
+            // If blocked, show scan result immediately
+            if (!scanResult.safe) {
+              let out = formatSecurityReport(scanResult)
+              out += `\n\n**❌ Import blocked.** This skill contains patterns that are too dangerous to import.\n`
+              out += `If you believe this is a false positive, you can:\n`
+              out += `1. Copy the content manually, review each step\n`
+              out += `2. Create the skill manually via \`agentic_skill action=extract\` from a safe step\n`
+              return { output: out }
+            }
+
+            if (!parsed) {
+              return { output: `Could not parse SKILL.md from "${url}". The file may not be in the correct SKILL.md format (needs YAML frontmatter with name and description).\n\nRaw scan: ${scanResult.summary}` }
+            }
+
+            // ── Convert to SkillDefinition ──
+            const def = convertSkillMdToDefinition(parsed)
+            if (!def) return { output: `Could not convert SKILL.md to internal format. The content appears valid as SKILL.md but conversion failed.` }
+
+            // ── Set Provenance Information ──
+            const provenance = detectProvenance(url as string)
+            const trustLevel: TrustLevel = scanResult.trustLevel
+            const provenanceInfo: ProvenanceInfo = {
+              sourceUrl: url as string,
+              trustLevel,
+              importedAt: new Date().toISOString(),
+              importedBy: "human",
+              knownSources: provenance ? [provenance.name] : [],
+              successCount: 0,
+              securityWarnings: scanResult.warnings.map(w => w.message),
+            }
+
+            // ── Import to SkillStore ──
+            skillStore.importFromEnvelope(
+              createMemoryEnvelope({ ...def }, "skill"),
+              provenanceInfo,
+            )
+
+            // ── Report ──
+            let out = formatSecurityReport(scanResult)
+            out += `\n`
+
+            if (trustLevel === "blocked") {
+              out += `## ❌ Import Blocked\n\nSecurity scan detected critical issues. This skill cannot be imported.`
+              return { output: out }
+            }
+
+            out += `## ✅ Skill Imported: "${parsed.frontmatter.name}"\n\n`
+            out += `**Source:** ${url}\n`
+            out += `**Trust Level:** ${trustLevel.toUpperCase()}\n`
+            out += `**Steps:** ${parsed.steps.length}\n`
+            out += `**Anti-Rationalizations:** ${parsed.antiRationalizations.length}\n`
+            out += `**Red Flags:** ${parsed.redFlags.length}\n`
+            out += `**Verification Criteria:** ${parsed.verificationCriteria.length}\n\n`
+
+            if (trustLevel === "karantina") {
+              out += `⚠️ **This skill is in KARANTINA.** It cannot be used until reviewed and promoted.\n`
+              out += `To promote: \`agentic_skill action=promote-trust query="${def.meta.id}"\`\n\n`
+            } else if (trustLevel === "low") {
+              out += `⚠️ **Low trust level.** Each step will require explicit approval before execution.\n\n`
+            }
+
+            out += `### Workflow\n`
+            out += parsed.steps.map((s, i) => `${i + 1}. **${s.action}** — ${s.description.slice(0, 120)}`).join("\n")
+
+            if (parsed.antiRationalizations.length > 0) {
+              out += `\n\n### Anti-Rationalizations (${parsed.antiRationalizations.length})\n`
+              out += parsed.antiRationalizations.slice(0, 3).map(ar =>
+                `- ❓ "${ar.rationalization}" → ✅ ${ar.reality}`
+              ).join("\n")
+              if (parsed.antiRationalizations.length > 3) out += `\n- ... and ${parsed.antiRationalizations.length - 3} more`
+            }
+
+            if (parsed.verificationCriteria.length > 0) {
+              out += `\n\n### Verification\n`
+              out += parsed.verificationCriteria.map(v => `- [ ] ${v}`).join("\n")
+            }
+
+            // Persist
+            stateStore.set("skills", def.meta.id, { ...def, provenance: provenanceInfo })
+
+            return { output: out }
+          } catch (e) {
+            return { output: `Error importing skill: ${(e as Error).message}` }
+          }
         }
 
         if (args.action === "capability") {
