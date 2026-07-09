@@ -14,6 +14,7 @@ import { runEdgeDeepTests } from "./_runall-edge-deep.mjs"
 import { runEdgeConfigTests } from "./_runall-edge-config.mjs"
 import { runGapTests } from "./_runall-gaps.mjs"
 import { runRAGSelfImproveTests } from "./_runall-rag-selfimprove.mjs"
+import { runDumbModelTests } from "./_runall-dumb-model.mjs"
 
 export async function runAll() {
   let mod
@@ -35,4 +36,5 @@ export async function runAll() {
   await runEdgeConfigTests(mod)
   await runGapTests(mod)
   await runRAGSelfImproveTests(mod)
+  await runDumbModelTests(mod)
 }

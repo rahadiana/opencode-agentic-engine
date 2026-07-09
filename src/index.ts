@@ -610,11 +610,25 @@ const confidenceStore = new ConfidenceStore()
     agentLoop.setGuardrailConfig(config.agent.toolGuardrails)
   }
   // Wire WorkflowPolicy config (P0: enforce gates in autonomous execution)
-  const wfMode = config.agent.dumbModelMode ? "strict" : (config.agent.workflowPolicyMode ?? "advisory")
-  agentLoop.setWorkflowPolicyConfig({
-    mode: wfMode,
-    minConfidence: config.agent.dumbModelMode ? 0.2 : undefined,
+  // Dumb-model harness: true | false | "auto" (weak name + ModelRegistry stats)
+  const { resolveDumbHarness, workflowModeForDumb, formatDumbHarnessNotice } = await import("./core/dumb-model.js")
+  const resolveDumbForEngine = () => resolveDumbHarness({
+    dumbModelMode: configLoader.get().agent.dumbModelMode,
+    model: llmEngine.getCurrentModel(),
+    modelRegistry,
+    softBlockReliability: configLoader.get().agent.softBlockReliability,
+    minSampleSize: configLoader.get().agent.minSampleSize,
   })
+  const applyDumbHarnessToAgentLoop = () => {
+    const dumb = resolveDumbForEngine()
+    const wfMode = workflowModeForDumb(dumb, configLoader.get().agent.workflowPolicyMode)
+    agentLoop.setWorkflowPolicyConfig({
+      mode: wfMode,
+      minConfidence: dumb.active ? 0.2 : undefined,
+    })
+    return dumb
+  }
+  applyDumbHarnessToAgentLoop()
   const stateStore = new StateStore({ worktree })
   // SQLite backend — lebih cepat dari file JSON, support structured queries
   // Graceful fallback: jika better-sqlite3 (Node) atau bun:sqlite (Bun) gak available
@@ -1181,6 +1195,8 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
             // the LLM call completes, so latency=0 and success=true are wrong.
             // Keep setCurrentModel so getCurrentModel() returns accurate model.
             llmEngine.setCurrentModel(modelStr)
+            // Re-apply dumb harness when model identity becomes known (auto mode)
+            try { applyDumbHarnessToAgentLoop() } catch (e) { log.warn("Silent catch: dumb harness", { error: String(e) }) }
           }
         }
       } catch (e) { log.warn("Silent catch: silent — non-critical", { error: String(e) }) }
@@ -1358,6 +1374,13 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
               `Use \`webfetch\` to research before implementing. ` +
               `Cite sources (URLs) for every claim.`
           }
+
+          // ── Dumb-model harness notice (auto / forced) ──
+          try {
+            const dumb = applyDumbHarnessToAgentLoop()
+            const notice = formatDumbHarnessNotice(dumb)
+            if (notice) injection += notice
+          } catch (e) { log.warn("Silent catch: dumb harness notice", { error: String(e) }) }
 
           transformOk = true
         }
@@ -1595,7 +1618,7 @@ export { LiveEvaluator } from "./evaluation/live-evaluator.js"
 export { BudgetTracker } from "./core/budget-tracker.js"
 export { FineTuningClient } from "./core/fine-tuning.js"
 export { episodeToTrainingExample, episodesToTrainingData, prepareFineTuningDataset, saveTrainingDataToFile } from "./memory/skill-training.js"
-export { ConfigLoader, validateConfig } from "./core/config.js"
+export { ConfigLoader, validateConfig, DEFAULT_CONFIG } from "./core/config.js"
 export { PersistenceLayer } from "./memory/persistence.js"
 export { EpisodicStore, Significance } from "./memory/episodic-store.js"
 export { SkillStore, createSkillDefinition, inspectSkill, serializeSkill, deserializeSkill } from "./memory/skill-store.js"
@@ -1675,6 +1698,17 @@ export {
   type SelfImproveKnowledgeEntry,
   type SelfImproveMode,
 } from "./memory/rag-self-improve.js"
+export {
+  resolveDumbHarness,
+  isWeakModelName,
+  isWeakByStats,
+  workflowModeForDumb,
+  formatDumbHarnessNotice,
+  normalizeModelId,
+  type DumbModelModeSetting,
+  type DumbHarnessResult,
+  type ResolveDumbHarnessOptions,
+} from "./core/dumb-model.js"
 export { LocalEmbedder, type EmbedderConfig, type EmbeddingResult } from "./memory/local-embedder.js"
 export { SkillExtractor, normalize } from "./memory/skill-extractor.js"
 export { parseSkillMd, convertSkillMdToDefinition, importSkillMdToStore, type ParsedSkillMd, type SkillMdFrontmatter } from "./memory/skill-md-importer.js"

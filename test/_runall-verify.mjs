@@ -274,7 +274,14 @@ assert(defaultCfg.memory.search.vectorWeight === 0.7, "default vector weight 0.7
 assert(defaultCfg.agent.maxDelegationDepth === 3, "default max delegation depth 3")
 assert(defaultCfg.agent.autoSkillExtract === true, "default autoSkillExtract true")
 assert(defaultCfg.agent.workflowPolicyMode === "advisory", "default workflowPolicyMode advisory")
-assert(defaultCfg.agent.dumbModelMode === undefined || defaultCfg.agent.dumbModelMode === false, "default dumbModelMode off")
+assert(
+  defaultCfg.agent.dumbModelMode === "auto" || defaultCfg.agent.dumbModelMode === true || defaultCfg.agent.dumbModelMode === undefined || defaultCfg.agent.dumbModelMode === false,
+  "default dumbModelMode is auto (or legacy off)",
+)
+// Prefer new default when config was freshly created by plugin
+if (defaultCfg.agent.dumbModelMode !== undefined && defaultCfg.agent.dumbModelMode !== false) {
+  assert(defaultCfg.agent.dumbModelMode === "auto" || defaultCfg.agent.dumbModelMode === true, "default dumbModelMode auto when set")
+}
 assert(defaultCfg.storage.traceRetentionDays === 7, "default trace retention 7 days")
 await cfgHooksA.dispose()
 
@@ -306,16 +313,20 @@ assert(customCfg.storage.traceRetentionDays === 30, "custom trace retention load
 assert(customCfg.storage.skillMaxCount === 999, "custom skill max count loaded")
 await cfgHooksB.dispose()
 
-// Test B2: dumbModelMode config
+// Test B2: dumbModelMode config (boolean | "auto")
 console.log("\n[65c] dumbModelMode config")
 const cfgValidation = mod.validateConfig({
   $schema: "v1", agent: { dumbModelMode: true }
 })
 assert(cfgValidation.config.agent.dumbModelMode === true, "dumbModelMode accepted by validator")
+const cfgValidationAuto = mod.validateConfig({
+  $schema: "v1", agent: { dumbModelMode: "auto" }
+})
+assert(cfgValidationAuto.config.agent.dumbModelMode === "auto", "dumbModelMode=auto accepted")
 const cfgValidation2 = mod.validateConfig({
   $schema: "v1", agent: { dumbModelMode: "yes" }
 })
-assert(cfgValidation2.issues.some(i => i.path === "agent.dumbModelMode"), "dumbModelMode rejects non-boolean")
+assert(cfgValidation2.issues.some(i => i.path === "agent.dumbModelMode"), "dumbModelMode rejects invalid string")
 
 // Test C: config file watch — write a change and verify reload
 const cfgWorktreeC = join(projectDir, "config-test-watch")

@@ -10,6 +10,7 @@ import { getDslExecutor, getSchemaValidator } from "../core/shared-instances.js"
 import type { HallucinationCheck, ClaimResult } from "../drift/hallucination-guard.js"
 import { runAutoEvolve } from "../evolution/auto-evolve.js"
 import { getRAGSelfImprovePipeline } from "../memory/rag-self-improve.js"
+import { resolveDumbHarness, workflowModeForDumb } from "../core/dumb-model.js"
 
 export function makeExecuteTool(ctx: ToolContext): ToolSpec {
   const {
@@ -86,7 +87,17 @@ export function makeExecuteTool(ctx: ToolContext): ToolSpec {
         const session = sessionStore.getOrCreate(context.sessionID)
         session.currentTaskType = taskType
         const agentCfg = configLoader.get().agent
-        const workflowPolicyMode = agentCfg.dumbModelMode ? "strict" : (agentCfg.workflowPolicyMode ?? "advisory")
+        // Dumb-model harness: true | false | "auto" (name + reliability stats)
+        const currentModel = llmEngine.getCurrentModel()
+          ?? (await llmEngine.getOpenCodeModel().catch(() => undefined))
+        const dumbHarness = resolveDumbHarness({
+          dumbModelMode: agentCfg.dumbModelMode,
+          model: currentModel,
+          modelRegistry,
+          softBlockReliability: agentCfg.softBlockReliability,
+          minSampleSize: agentCfg.minSampleSize,
+        })
+        const workflowPolicyMode = workflowModeForDumb(dumbHarness, agentCfg.workflowPolicyMode)
         const priorState = executor.getStepState(context.sessionID, args.stepId)
         const isRetry = !!priorState?.result && !priorState.result.success && args.success
         const prePolicyDecisions = evaluateWorkflowPolicy({
@@ -158,6 +169,10 @@ export function makeExecuteTool(ctx: ToolContext): ToolSpec {
         const newCheckpoints = checkpoints.evaluate(args.stepId, args.output, args.filesModified ?? [])
 
         let response = `## Step ${args.stepId}: ${args.success ? "✅ SUCCESS" : "❌ FAILED"}\n\n${args.output}\n`
+        if (dumbHarness.active) {
+          response += `\n### 🛡️ Dumb-Model Harness\n**ON** (${dumbHarness.source}) — ${dumbHarness.reason}\n`
+          response += `WorkflowPolicy: **${workflowPolicyMode}** · hallucination block: **enabled**\n`
+        }
         const prePolicyText = formatWorkflowPolicyDecisions(prePolicyDecisions)
         if (prePolicyText) response += `\n### WorkflowPolicy\n${prePolicyText}\n`
 
@@ -223,7 +238,16 @@ export function makeExecuteTool(ctx: ToolContext): ToolSpec {
                 modelRegistry.recordHallucination(modelId)
               }
 
-              const dumbMode = configLoader.get().agent.dumbModelMode ?? false
+              // Re-resolve with latest model id (may have been recorded mid-step)
+              const modelForDumb = modelId && modelId !== "unknown" ? modelId : currentModel
+              const dumbNow = resolveDumbHarness({
+                dumbModelMode: configLoader.get().agent.dumbModelMode,
+                model: modelForDumb,
+                modelRegistry,
+                softBlockReliability: configLoader.get().agent.softBlockReliability,
+                minSampleSize: configLoader.get().agent.minSampleSize,
+              })
+              const dumbMode = dumbNow.active
               const threshold = dumbMode ? Math.min(configLoader.get().agent.hallucinationThreshold, 0.2) : configLoader.get().agent.hallucinationThreshold
               const blockEnabled = dumbMode || configLoader.get().agent.blockOnHallucination
               if (hallucinationRate >= threshold && blockEnabled) {

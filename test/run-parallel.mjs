@@ -38,6 +38,7 @@ const FILES = [
   "_runall-edge-config.mjs",
   "_runall-gaps.mjs",
   "_runall-rag-selfimprove.mjs",
+  "_runall-dumb-model.mjs",
   // Part B (9 files)
   "_b_sandbox.mjs",
   "_b_planners.mjs",

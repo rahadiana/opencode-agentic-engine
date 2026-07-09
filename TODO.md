@@ -47,6 +47,7 @@
 - [x] Wired into `MemoryOrchestrator.queryWithKnowledge`, `system.transform`, `agentic_execute`, `AgentLoop` feedback
 - [x] Session tracks `rag:lastUsedTitles` + `workflow:researched` for closed-loop feedback
 - [x] Parallel runner includes `_runall-rag-selfimprove.mjs` (84 tests)
+- [x] **Auto dumb-model harness** — `dumbModelMode: "auto"` (default): weak name (mini/free/flash/…) + bad ModelRegistry stats → WorkflowPolicy strict + block hallucination
 
 ## 📊 Metrics (current)
 

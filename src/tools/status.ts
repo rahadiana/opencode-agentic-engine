@@ -46,6 +46,7 @@ export function makeStatusTool(ctx: ToolContext): ToolSpec {
         confidenceStore,
         worldModel,
         log,
+        configLoader,
       } = ctx
 
       // ── If detail='full', run comprehensive dashboard ──
@@ -111,6 +112,26 @@ export function makeStatusTool(ctx: ToolContext): ToolSpec {
         output += `**Retry entries:** ${weStatus.retryEntries}\n`
 
         output += `\n### 🤖 Model Reliability\n${modelReliability}\n`
+        // Dumb-model harness status (auto / forced)
+        try {
+          const { resolveDumbHarness, workflowModeForDumb } = await import("../core/dumb-model.js")
+          const agentCfg = configLoader.get().agent
+          const modelId = llmEngine.getCurrentModel()
+          const dumb = resolveDumbHarness({
+            dumbModelMode: agentCfg.dumbModelMode,
+            model: modelId,
+            modelRegistry,
+            softBlockReliability: agentCfg.softBlockReliability,
+            minSampleSize: agentCfg.minSampleSize,
+          })
+          const wf = workflowModeForDumb(dumb, agentCfg.workflowPolicyMode)
+          output += `\n### 🛡️ Dumb-Model Harness\n`
+          output += `**Status:** ${dumb.active ? "ACTIVE" : "off"} (${dumb.source})\n`
+          output += `**Config:** \`${JSON.stringify(agentCfg.dumbModelMode ?? "auto")}\`\n`
+          output += `**Model:** \`${modelId ?? "unknown"}\`\n`
+          output += `**Reason:** ${dumb.reason}\n`
+          output += `**WorkflowPolicy:** \`${wf}\` · blockOnHallucination effective: \`${dumb.active || !!agentCfg.blockOnHallucination}\`\n`
+        } catch (e) { log.warn("Silent catch: dumb harness status", { error: String(e) }) }
 
         try {
           const ocModels = await llmEngine.listOpenCodeModels()

@@ -128,8 +128,25 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
       softBlockReliability: { type: "number", min: 0, max: 1 },
       minSampleSize: { type: "number", min: 1 },
       workflowPolicyMode: { type: "string", values: ["advisory", "strict"] },
-      dumbModelMode: { type: "boolean" },
     })
+    // dumbModelMode: boolean | "auto" (custom — shape helper is single-type only)
+    const dmm = (cfg.agent as Record<string, unknown>).dumbModelMode
+    if (dmm !== undefined && dmm !== null) {
+      const ok =
+        typeof dmm === "boolean" ||
+        dmm === "auto" ||
+        dmm === "true" ||
+        dmm === "false"
+      if (!ok) {
+        issues.push({
+          path: "agent.dumbModelMode",
+          message: `Expected boolean or "auto", got ${typeof dmm}`,
+          severity: "warning",
+          expected: "boolean|auto",
+          actual: String(dmm),
+        })
+      }
+    }
     // Validate nested deepVerification
     const dv = (cfg.agent as Record<string, unknown>).deepVerification
     if (dv && typeof dv === "object") {
@@ -176,7 +193,11 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
     }
   }
   if (cfg.agent && typeof cfg.agent === "object") {
-    merged.agent = { ...defaults.agent, ...cfg.agent as AgentConfig }
+    const agentIn = { ...(cfg.agent as Record<string, unknown>) }
+    // Normalize string "true"/"false" → boolean for dumbModelMode
+    if (agentIn.dumbModelMode === "true") agentIn.dumbModelMode = true
+    if (agentIn.dumbModelMode === "false") agentIn.dumbModelMode = false
+    merged.agent = { ...defaults.agent, ...agentIn } as AgentConfig
   }
   if (cfg.storage && typeof cfg.storage === "object") {
     merged.storage = { ...defaults.storage, ...cfg.storage as StorageConfig }
@@ -243,8 +264,15 @@ export interface AgentConfig {
   toolGuardrails?: ToolGuardrailAgentConfig
   /** Runtime workflow enforcement: advisory warns, strict blocks unsafe completion */
   workflowPolicyMode?: "advisory" | "strict"
-  /** Dumb model mode: assumes LLM is unreliable. Forces strict workflow, lower hallucination threshold, blocks on hallucination. */
-  dumbModelMode?: boolean
+  /**
+   * Dumb-model harness:
+   * - true  → always strict (WorkflowPolicy + block hallucination)
+   * - false → never force; use workflowPolicyMode / blockOnHallucination as set
+   * - "auto"→ detect weak models by name + ModelRegistry stats (default)
+   *
+   * Boolean still accepted for backward compat.
+   */
+  dumbModelMode?: boolean | "auto"
 }
 
 /** Config for ToolGuardrailController — infinite loop detection */
@@ -347,6 +375,8 @@ export const DEFAULT_CONFIG: AgenticConfigSchema = {
     softBlockReliability: 0.4,
     minSampleSize: 5,
     workflowPolicyMode: "advisory",
+    // Auto-detect free/mini/flash/degraded models → strict harness
+    dumbModelMode: "auto",
     deepVerification: {
       security: true,
       performance: true,
