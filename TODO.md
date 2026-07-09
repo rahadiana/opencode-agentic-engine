@@ -37,10 +37,8 @@
 
 ## 🔴 High Priority
 
-### H1. Git push (operational)
-- [ ] Push commits to `origin/main` when GitHub credentials available
-  - Prior unpushed: RAG critical path, dumb harness, docs
-  - This session: updateEntry + deep escalate + hybrid docs
+### H1. Git push (operational) ✅
+- [x] Pushed to `origin/main` (`0b505ea..4a7ce2f`, 5 commits including this batch)
 
 ### H2. RAG quality write-back ✅
 - [x] `MultiIndexRAG.updateEntry(selector, patch)`
@@ -115,7 +113,7 @@
 | 6 | M5 Docs/PLAN drift | ✅ |
 | 7 | H4 agentic_auto SWE hardening | ⏳ partial notes only |
 | 8 | M4 coverage/lint | ⏳ |
-| 9 | H1 git push | ⏳ blocked (credentials) |
+| 9 | H1 git push | ✅ `4a7ce2f` on origin |
 
 ---
 
@@ -134,7 +132,7 @@
 | Coverage gate | stmts 80% / branch 60% / func 70% / lines 80% |
 | RAG self-improve critical path | ✅ + updateEntry write-back + deep escalate |
 | Dumb-model harness | ✅ auto |
-| Branch vs origin | check with `git status` |
+| Branch vs origin | synced (push ✅) |
 
 ---
 
