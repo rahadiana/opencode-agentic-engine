@@ -68,6 +68,9 @@ export class ContinuousEvolution {
   private trendCache: { key: string; trend: PerformanceTrend } | null = null
   /** Cumulative results fed (never pruned) — used for milestone triggers */
   private cumulativeResults = 0
+  /** RAG quality audit callback — dipanggil saat degradation terdeteksi.
+   *  Reference: SCIM (MDPI, 2026) §3.3 degradation detection */
+  private ragQualityCallback?: () => Promise<void>
 
   constructor(windowSize = 30, maxEvolvePerSession = 10) {
     this.windowSize = windowSize
@@ -97,6 +100,12 @@ export class ContinuousEvolution {
   /** Register a callback that fires when degradation is detected */
   onDegradation(cb: DegradationCallback): void {
     this.degradationCallbacks.push(cb)
+  }
+
+  /** Set RAG quality audit callback — fires when degradation suggests RAG issues.
+   *  Reference: SCIM (MDPI, 2026) degradation detection + Closed-Loop RAG (ITM Web, 2026) */
+  setRAGQualityCallback(cb: () => Promise<void>): void {
+    this.ragQualityCallback = cb
   }
 
   private static readonly DIR_IMPROVING = "improving" as const
@@ -330,6 +339,12 @@ export class ContinuousEvolution {
         this.lastEvolveSession = sessionId
         this.lastEvolveTime = Date.now()
         this.evolveCount++
+
+        // Trigger RAG quality audit on degradation (SCIM-inspired)
+        if (this.ragQualityCallback) {
+          this.ragQualityCallback().catch(() => { /* non-fatal */ })
+        }
+
         return {
           reason: `Auto-evolution triggered by ${isSustained ? "sustained" : "severe"} performance degradation: ${(trend.rolling.successRate * 100).toFixed(0)}% success rate in recent window`,
           type: "degradation",

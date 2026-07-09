@@ -300,6 +300,24 @@ Tidak punya memori lintas sesi kecuali melalui tool/memory yang tersedia. Setiap
   workflow += `| **3. Implement** | \`agentic_execute\`, \`agentic_delegate\`, \`edit\`, \`write\` | Execute each step, delegate complex sub-tasks |\n`
   workflow += `| **4. Verify** | \`agentic_verify\`, \`agentic_reflect\`, \`agentic_guard\` | Compile, lint, test, security, hallucination check |\n`
   workflow += `| **5. Report** | \`agentic_status\`, \`agentic_pr\`, \`agentic_score\` | Progress, PR description, tech debt analysis |\n`
+  workflow += `\n`
+  workflow += `### 🔬 5W1H Mandatory Research Phase\n\n`
+  workflow += `Before ANY planning or implementation, you MUST conduct 5W1H research:\n\n`
+  workflow += `| Dimensi | Arti | Target Investigasi |\n`
+  workflow += `|---------|------|-------------------|\n`
+  workflow += `| **What** (Apa) | Apa yang harus dibangun? | Fitur, requirements, scope, teknologi, acceptance criteria |\n`
+  workflow += `| **Who** (Siapa) | Siapa yang terlibat? | End users, stakeholders, maintainers, target audience |\n`
+  workflow += `| **Where** (Di mana) | Di mana kodenya ditempatkan? | Environment, direktori, dependencies, deployment target |\n`
+  workflow += `| **When** (Kapan) | Kapan dibutuhkan? | Deadline, timing, cron/events, prioritas |\n`
+  workflow += `| **Why** (Mengapa) | Mengapa pendekatan ini? | Business value, alasan teknis, alternatif yang dipertimbangkan |\n`
+  workflow += `| **How** (Bagaimana) | Bagaimana implementasinya? | Arsitektur, best practices, testing, error handling, struktur kode |\n`
+  workflow += `\n`
+  workflow += `**Rules:**\n`
+  workflow += `1. Jika user memberikan goal, segera analisis 5W1H dari statement user\n`
+  workflow += `2. Jika ada dimensi yang belum jelas, gunakan \`webfetch\` / \`agentic_nav\` untuk riset\n`
+  workflow += `3. Untuk setiap tech stack yang terdeteksi, cari best practices via \`webfetch\` dokumentasi resmi\n`
+  workflow += `4. Simpan hasil riset ke RAG via \`agentic_rag store\` agar bisa dipakai sesi berikutnya\n`
+  workflow += `5. JANGAN mulai implementasi sebelum semua dimensi 5W1H terjawab\n`
 
   if (hasAuto) {
     workflow += `\n> **⚡ Quick path**: \`agentic_auto\` does plan+execute+verify+retry in ONE call — use for simple, well-defined tasks.\n`
@@ -410,6 +428,7 @@ Tidak punya memori lintas sesi kecuali melalui tool/memory yang tersedia. Setiap
     "🧭 Be domain-agnostic in reasoning: adapt the workflow to code, data, docs, devops, security, or research tasks without assuming a software-only answer.",
     "🔍 Prefer `agentic_*` over built-ins: `agentic_nav` for search, `agentic_status` for state, `agentic_memo` for TODOs, `agentic_verify` for verification.",
     "🌐 Setelah `webfetch`/`websearch`, WAJIB simpan key findings ke RAG via `agentic_rag store category=knowledge-tech title=\"Web: ...\" content=\"...\"` — biar pengetahuan gak ilang setelah session.",
+    "📋 WAJIB lakukan 5W1H research sebelum implementasi: What (apa), Who (siapa), Where (di mana), When (kapan), Why (mengapa), How (bagaimana). Jangan mulai coding sebelum semua dimensi terjawab.",
   ]
   if (hasDebate) guardrailItems.push("💬 Analisis kompleks? `agentic_debate` (executor ↔ critic).")
   if (hasRouter && hasRag) guardrailItems.push("🧭 Klasifikasi intent? `agentic_router` → `agentic_rag`.")

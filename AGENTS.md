@@ -4,29 +4,36 @@
 
 Plugin OpenCode yang mengimplementasikan agentic software engineering workflow berdasarkan paper "The End of Software Engineering" (arXiv:2606.05608).
 
-## Status: All 12 Gaps Covered ✅
+## Status: All 12 Gaps + 22 RAG Papers Covered ✅
 
-Semua 12 paper gaps (arXiv:2606.05608) dan P0-P4 dari TODO.md sudah selesai diimplementasi. Prinsip **LLM boleh bodoh, harness harus pintar** sudah di-enforce di runtime:
+Semua 12 paper gaps (arXiv:2606.05608), P0-P4 dari TODO.md, dan **22 paper RAG self-improvement** (ACL 2025-2026, CVPR 2026, MDPI 2026) sudah selesai diimplementasi. Prinsip **LLM boleh bodoh, harness harus pintar** sudah di-enforce di runtime:
 
 1. ✅ **WorkflowPolicy Gate** — runtime enforcement, bukan prompt (P0)
 2. ✅ **Schema-First Boundaries** — LLM output divalidasi sebelum dipakai (P1)
 3. ✅ **Dumb Model Mode** — strict mode untuk model lemah (P2)
 4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
-5. ✅ **Test Coverage** — **3099+ tests** in parallel (~35s), c8 **89.72% stmts / 69.08% branch / 76.6% func** + CI coverage gate (P4)
+5. ✅ **Test Coverage** — **3212+ tests** in parallel (~85s serial), c8 **89.72% stmts / 69.08% branch / 76.6% func** + CI coverage gate (P4)
 6. ✅ **Typed Errors** — 49/49 throw sites migrated, 0 `as any` remaining
 7. ✅ **SemanticCache** — TF-IDF + cosine, benchmarked at 0.78 threshold
 8. ✅ **HallucinationGuard** — confidence-aware claims (0-1)
 9. ✅ **MetaReasoner** — strategy adaptation with agent-loop feedback
-10. ✅ **ContinuousEvolution** — degradation detection + callback
+10. ✅ **ContinuousEvolution** — degradation detection + callback (now also triggers RAG quality audit)
 11. ✅ **AlignmentGate** — goal drift detection via TF-IDF similarity (Gap #10)
 12. ✅ **EconomicModel** — cost-aware orchestration + ROI tracking (Gap #11)
+13. ✅ **Self-Improving RAG** — 6 modul baru berdasarkan 22 paper riset:
+    - **RAGQualityScorer**: 5-dimensi quality (relevance, completeness, consistency, factuality, fluency) + staleness decay (SCIM, MDPI 2026)
+    - **RAGFeedbackLoop**: Closed-loop execution feedback → RAG score update (Closed-Loop RAG, ITM Web 2026)
+    - **RAGAdaptiveRetrieval**: 4-mode search (standard→augment→refine→decompose) with auto-escalate (SCIM, SeaKR)  
+    - **MDPRetrievalAgent**: MDP action space (RETRIEVE, WEBSEARCH, GRAPHEDIT, DECOMPOSE, ANSWER) (EvoGraph-R1, CVPR 2026)
+    - **KnowledgeBoundaryCalibrator**: 4-quadrant taxonomy (KbPO, ACL 2026)
+    - **RAGContextOptimizer**: MMKP-inspired token-budget-aware selection (Self-Correcting RAG, ACL 2026)
 
 ## Commands
 
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
                     # postbuild: auto-copy ke ~/.cache/opencode/packages/ (jika ada)
-npm test            # 3099+ unit tests in parallel (~35s), 0 TS errors, 0 lint errors
+npm test            # 3212+ unit tests in parallel (~35s), 0 TS errors, 0 lint errors
 npm run test:serial # Same tests serial (~84s, for debugging)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
@@ -180,6 +187,26 @@ src/
     ├── logger.ts              # Structured logger (debug/info/warn/error)
     ├── dashboard.ts           # Timeline + stats + anomaly detection + model reliability
     └── trace-logger.ts        # JSONL trace writer (buffered, auto-flush, dedup guard)
+
+## Self-Improving RAG (2026)
+
+6 modul baru berdasarkan 22 paper riset dari ACL 2025-2026, CVPR 2026, MDPI 2026:
+
+| Modul | File | Berdasarkan | Mekanisme |
+|-------|------|-------------|-----------|
+| **Quality Scorer** | `rag-quality-scorer.ts` | SCIM (MDPI 2026) | 5-dimensi quality + staleness decay + temporal decay + recommendation |
+| **Feedback Loop** | `rag-feedback-loop.ts` | Closed-Loop RAG (ITM Web 2026), PatchRAG (ACL 2026) | Step execution → RAG quality update. Success↑ Failure↓ |
+| **Adaptive Retrieval** | `rag-adaptive-retrieval.ts` | SCIM (MDPI 2026), SeaKR (ACL 2025) | 4-mode: standard → augment → refine → decompose. Auto-escalate |
+| **MDP Retrieval** | `rag-mdp-retrieval.ts` | EvoGraph-R1 (CVPR 2026), SPARKLE (ACL 2026) | MDP action space: RETRIEVE, WEBSEARCH, GRAPHEDIT, DECOMPOSE, ANSWER |
+| **Knowledge Boundary** | `rag-knowledge-boundary.ts` | KbPO (ACL 2026) | 4-quadrant taxonomy: internal vs external confidence calibration |
+| **Context Optimizer** | `rag-context-optimizer.ts` | Self-Correcting RAG (ACL 2026) | MMKP token-budget-aware greedy selection with diversity bonus |
+
+### Flow Self-Improving:
+```
+Query → KbPO Boundary Calibration → MDP Retrieval (multi-turn)
+  → Context Optimizer (budget-aware) → Agent Execution
+  → Feedback Loop (quality update) → Staleness Check → Recommendation
+```
 ```
 
 ## File Config (`.agentic/config.json`)

@@ -20,6 +20,9 @@ export interface AgentContext {
   /** Explicit timeout in milliseconds. Overrides the dynamic timeout calculation.
    *  Default: min 30s, scaled by prompt size, max 600s (10 min). */
   timeoutMs?: number
+  /** 5W1H Research context — hasil investigasi sebelum implementasi.
+   *  Kalau ada, di-inject ke system prompt biar sub-agent tahu konteks lengkap. */
+  researchContext?: string
 }
 
 export interface AgentResult {
@@ -280,6 +283,9 @@ export class AgentRuntime {
     if (ctx.sharedMemory?.length) {
       promptParts.push(`\n\n## Shared Memory\n${ctx.sharedMemory.map(m => `[${m.key}] (by ${m.writtenBy}): ${m.value.slice(0, 200)}`).join("\n")}`)
     }
+    if (ctx.researchContext) {
+      promptParts.push(`\n\n## 5W1H Research Context\n${ctx.researchContext}`)
+    }
     promptParts.push(`\n\n## Available Tools\nYou have access to all agentic tools (agentic_plan, agentic_execute, agentic_verify, agentic_auto, etc.) plus edit/write/read/bash. Use agentic_auto for multi-step tasks — it will plan, implement, and verify automatically. Each tool call you make will be visible as progress in this session.`)
 
     let modelOverride: { providerID: string; modelID: string } | undefined
@@ -416,6 +422,9 @@ export class AgentRuntime {
     }
     if (ctx.sharedMemory && ctx.sharedMemory.length > 0) {
       promptParts.push(`\n\n## Shared Memory\n${ctx.sharedMemory.map(m => `[${m.key}] (by ${m.writtenBy}): ${m.value.slice(0, 200)}`).join("\n")}`)
+    }
+    if (ctx.researchContext) {
+      promptParts.push(`\n\n## 5W1H Research Context\n${ctx.researchContext}`)
     }
 
     // Parse model preference string → { providerID, modelID } untuk dikirim ke SDK

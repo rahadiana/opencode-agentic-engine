@@ -4,6 +4,47 @@ import type { ScoredResult } from "./vector-store.js"
 import { VectorStore } from "./vector-store.js"
 import { LocalEmbedder, type EmbedderConfig } from "./local-embedder.js"
 
+export interface QualityDimensions {
+  /** Relevance: seberapa relevan konten dengan query target (0-1) */
+  relevance: number
+  /** Completeness: apakah konten mencakup semua aspek penting (0-1) */
+  completeness: number
+  /** Consistency: apakah konten konsisten secara internal & eksternal (0-1) */
+  consistency: number
+  /** Factuality: seberapa faktual (bukan opini/asumsi) (0-1) */
+  factuality: number
+  /** Fluency: kualitas penulisan, kejelasan (0-1) */
+  fluency: number
+}
+
+export interface UsageStats {
+  /** Total berapa kali entry ini diretrieve */
+  retrievalCount: number
+  /** Berapa kali entry ini dipakai di step yang sukses */
+  successCount: number
+  /** Berapa kali entry ini dipakai di step yang gagal */
+  failureCount: number
+  /** Kapan terakhir diretrieve */
+  lastRetrievedAt: string | null
+  /** Kapan terakhir dipake di step sukses */
+  lastSuccessAt: string | null
+  /** Kapan terakhir dipake di step gagal */
+  lastFailureAt: string | null
+}
+
+export interface FeedbackEntry {
+  /** Timestamp feedback */
+  timestamp: string
+  /** Step ID atau session ID yang ngasih feedback */
+  sourceId: string
+  /** Positive = entry membantu, negative = entry menyesatkan */
+  type: "positive" | "negative" | "neutral"
+  /** Dimensi yang dikoreksi (optional) */
+  dimension?: keyof QualityDimensions
+  /** Catatan tambahan */
+  note?: string
+}
+
 export interface IndexEntry {
   category: string
   episode?: Episode
@@ -19,6 +60,53 @@ export interface IndexEntry {
   hybridScore?: number
   /** Confidence score 0.0–1.0 (populated by searchWithConfidence) */
   confidence?: number
+
+  // ── RAG Self-Improvement Quality Tracking (SCIM + Reflective RAG inspired) ──
+
+  /** Multi-dimensional quality scores — default: 0.7 each */
+  quality?: QualityDimensions
+  /** Overall quality score (weighted average of dimensions) — auto-calculated */
+  qualityScore?: number
+  /** Usage statistics */
+  usageStats?: UsageStats
+  /** Feedback history — limited to last 50 entries */
+  feedbackHistory?: FeedbackEntry[]
+  /** Kapan terakhir kualitasnya diverifikasi/diupdate */
+  lastVerifiedAt?: string
+  /** Staleness score 0-1: 0 = fresh, 1 = completely stale.
+   *  Auto-calculated based on age, last verification, and usage pattern. */
+  stalenessScore?: number
+  /** Source URL atau ID entry yang menjadi referensi (untuk update chain) */
+  derivedFrom?: string
+  /** Versi entry (increment setiap update) */
+  version?: number
+}
+
+/**
+ * Default quality dimensions untuk entry baru.
+ */
+export function createDefaultQuality(): QualityDimensions {
+  return {
+    relevance: 0.7,
+    completeness: 0.7,
+    consistency: 0.7,
+    factuality: 0.7,
+    fluency: 0.7,
+  }
+}
+
+/**
+ * Weighted average dari multi-dimensional quality.
+ * SCIM-inspired weighting: relevance & factuality > completeness & consistency > fluency.
+ */
+export function computeQualityScore(q: QualityDimensions): number {
+  return (
+    q.relevance * 0.25 +
+    q.factuality * 0.25 +
+    q.completeness * 0.20 +
+    q.consistency * 0.20 +
+    q.fluency * 0.10
+  )
 }
 
 /**
@@ -177,6 +265,54 @@ export class MultiIndexRAG {
     })
 
     this.notifyPersist()
+  }
+
+  /**
+   * Find an episode by ID across all categories.
+   * Returns the actual stored reference (mutable).
+   */
+  findEpisodeById(id: string): { episode: Episode; category: string } | null {
+    for (const [cat, index] of this.indices) {
+      const ep = index.episodes.find(e => e.id === id)
+      if (ep) return { episode: ep, category: cat }
+    }
+    return null
+  }
+
+  /**
+   * Find episodes by title fuzzy match.
+   * Returns actual stored references (mutable).
+   * Used oleh RAGFeedbackLoop untuk update quality scores secara langsung.
+   */
+  findEpisodesByTitle(title: string): Array<{ episode: Episode; category: string }> {
+    const results: Array<{ episode: Episode; category: string }> = []
+    const lowerTitle = title.toLowerCase()
+    for (const [cat, index] of this.indices) {
+      for (const ep of index.episodes) {
+        if (ep.planGoal.toLowerCase().includes(lowerTitle) || lowerTitle.includes(ep.planGoal.toLowerCase())) {
+          results.push({ episode: ep, category: cat })
+        }
+      }
+    }
+    return results
+  }
+
+  /**
+   * Update metadata (quality scores, usage stats, etc.) on an episode.
+   * Karena Episode interface tidak punya field quality, kita simpan sebagai
+   * properti on-the-fly via Object.assign atau langsung set property.
+   * Returns true if episode was found and updated.
+   */
+  updateEpisodeMetadata(id: string, metadata: Record<string, unknown>): boolean {
+    for (const [, index] of this.indices) {
+      const ep = index.episodes.find(e => e.id === id)
+      if (ep) {
+        Object.assign(ep, metadata)
+        this.notifyPersist()
+        return true
+      }
+    }
+    return false
   }
 
   /**
@@ -499,8 +635,15 @@ export class MultiIndexRAG {
 
       for (const entry of catResult.entries) {
         const rawScore = entry.hybridScore ?? 0
-        const confidence = rawScore >= 0.3 ? rawScore : rawScore * 0.5
-        entry.confidence = Math.min(1, Math.max(0, confidence))
+        const baseConfidence = rawScore >= 0.3 ? rawScore : rawScore * 0.5
+
+        // Quality-weighted confidence (SCIM-inspired):
+        // final = confidence * 0.6 + qualityScore * 0.3 + (1 - staleness) * 0.1
+        const qualityScore = entry.qualityScore ?? 0.7
+        const staleness = entry.stalenessScore ?? 0
+        const qualityWeighted = baseConfidence * 0.6 + qualityScore * 0.3 + (1 - staleness) * 0.1
+
+        entry.confidence = Math.min(1, Math.max(0, qualityWeighted))
         allResults.push(entry)
       }
     }

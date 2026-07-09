@@ -12,6 +12,7 @@ import { runAutoEvolve } from "../evolution/auto-evolve.js"
 import { TechDebtScorer } from "../core/tech-debt-scorer.js"
 import { AutoRetryManager } from "../core/auto-retry.js"
 import type { TaskIntent, Subtask } from "../core/intent-parser.js"
+import { ResearchAgent5W1H, type ResearchReport } from "../core/5w1h-framework.js"
 
 export function makeAutoTool(ctx: ToolContext): ToolSpec {
   const {
@@ -96,6 +97,48 @@ export function makeAutoTool(ctx: ToolContext): ToolSpec {
         } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
         // Record research artifact for WorkflowPolicy
         sessionStore.getOrCreate(context.sessionID).artifacts.set("workflow:researched", String(Date.now()))
+
+        // ═══════════════════════════════════════════════
+        // PHASE 1b: 5W1H Research — investigate before planning
+        // ═══════════════════════════════════════════════
+        let researchReport: ResearchReport | null = null
+        const researchAgent = new ResearchAgent5W1H()
+        try {
+          researchReport = await researchAgent.research({
+            goal: args.goal,
+            projectDir,
+            llm: llmEngine,
+            rag: multiIndexRAG,
+            episodicStore,
+            skillStore,
+            navigator,
+          })
+          if (researchReport) {
+            // Store findings for delegation context
+            const researchCtx = researchAgent.formatForDelegation(researchReport)
+            sessionStore.getOrCreate(context.sessionID).artifacts.set("5w1h:report", JSON.stringify(researchReport))
+            sessionStore.getOrCreate(context.sessionID).artifacts.set("5w1h:context", researchCtx)
+
+            // Store to RAG for cross-session reuse
+            researchAgent.storeResearchToRAG(researchReport, multiIndexRAG, projectId).catch((e: unknown) =>
+              log.warn(`[agentic_auto] 5W1H RAG store failed: ${e}`)
+            )
+
+            // Log findings summary
+            const dimCount = researchReport.findings.length
+            const gaps = researchReport.missingDimensions
+            log.info(`[agentic_auto] 5W1H research: ${dimCount} findings, ${gaps.length > 0 ? `⚠️ gaps: ${gaps.join(", ")}` : "✅ all dimensions covered"}`)
+            if (researchReport.techStack.frameworks.length > 0 || researchReport.techStack.databases.length > 0) {
+              log.info(`[agentic_auto] Tech stack detected: ${[
+                ...researchReport.techStack.languages,
+                ...researchReport.techStack.frameworks,
+                ...researchReport.techStack.databases,
+              ].join(", ")}`)
+            }
+          }
+        } catch (e) {
+          log.warn(`[agentic_auto] 5W1H research failed (non-blocking): ${e}`)
+        }
 
         // ═══════════════════════════════════════════════
         // PHASE 2: Plan — decompose goal into steps
@@ -185,6 +228,15 @@ export function makeAutoTool(ctx: ToolContext): ToolSpec {
           const pipelineRunId = `run-${context.sessionID}-${pipelineId}`
           orchestrator.startRun(pipelineRunId, pipelineId)
 
+          // Inject 5W1H research context into pipeline shared memory
+          if (researchReport) {
+            const researchCtx = researchAgent.formatForDelegation(researchReport)
+            coordinator.writeSharedMemory("5w1h:research", researchCtx, "coordinator")
+            if (researchReport.bestPractices.length > 0) {
+              coordinator.writeSharedMemory("5w1h:best-practices", researchReport.bestPractices.join("\n"), "coordinator")
+            }
+          }
+
           const piperesult = await orchestrator.executePipeline({
             pipeline,
             runId: pipelineRunId,
@@ -231,9 +283,13 @@ export function makeAutoTool(ctx: ToolContext): ToolSpec {
           // recovery, and emits events for Second Brain tracking.
           const stepExecutor = async (subtask: Subtask): Promise<{ success: boolean; output: string; filesModified: string[]; error?: string }> => {
             const subtaskGoal = subtask.description
+            // Inject 5W1H research context if available — best practices + tech stack
+            const researchContextStr = researchReport && researchReport.bestPractices.length > 0
+              ? `\n\n## 5W1H Research Context\nTech Stack: ${[...researchReport.techStack.frameworks, ...researchReport.techStack.languages, ...researchReport.techStack.databases].join(", ") || "unknown"}\n\n### Mandatory Best Practices\n${researchReport.bestPractices.slice(0, 8).map(bp => `- ${bp}`).join("\n")}\n`
+              : ""
             const llmSystemPrompt = `Return JSON array of {path, content}. Write COMPLETE file contents.
       Rules: ESM imports (.js) · match existing patterns · valid imports
-      {"files":[{"path":"src/x.ts","content":"..."}]} or {"noChanges":true}`
+      {"files":[{"path":"src/x.ts","content":"..."}]} or {"noChanges":true}${researchContextStr}`
 
             const fileContentsForSubtask: Record<string, string> = {}
             for (const f of relevantFiles) {
@@ -538,6 +594,15 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
               }
             } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
 
+            // 5W1H Research Summary — inject findings into output
+            if (researchReport) {
+              const techStr = [...researchReport.techStack.frameworks, ...researchReport.techStack.languages, ...researchReport.techStack.databases].join(", ")
+              const bpCount = researchReport.bestPractices.length
+              const gapStr = researchReport.missingDimensions.length > 0 ? ` ⚠️ gaps: ${researchReport.missingDimensions.join(", ")}` : ""
+              log.info(`[agentic_auto] 5W1H research: ${researchReport.findings.length} findings, ${bpCount} best practices${gapStr}`)
+              if (techStr) log.info(`[agentic_auto] Tech stack: ${techStr}`)
+            }
+
             // Phase 4A: Auto-mature skills that meet next-stage criteria
             try {
               const matureSummary = skillStore.autoMature()
@@ -573,9 +638,12 @@ Rules: ESM imports (.js) · match existing patterns · valid imports
           : (rolledBack ? "\n\n⚠️ All changes were rolled back due to verification failure." : "")
         const memNote = memoryContexts.length > 0 ? `\n📚 ${memoryContexts.length} similar past tasks consulted` : ""
         const skillNote = skillContexts.length > 0 ? `\n🎯 ${skillContexts.length} relevant skills applied` : ""
+        const researchNote = researchReport
+          ? `\n🔬 5W1H Research: ${researchReport.findings.length} findings, ${researchReport.bestPractices.length} best practices, stack: ${[...researchReport.techStack.frameworks, ...researchReport.techStack.languages, ...researchReport.techStack.databases].join(", ") || "auto-detected"}`
+          : ""
 
         return {
-          output: `## 🤖 Auto Complete\n\n**Goal:** ${args.goal}\n**Duration:** ${duration}s\n**Files:** ${allModified.length}\n**Verify:** ${verifyNote}${rolledBack}${memNote}${skillNote}${fileList}`,
+          output: `## 🤖 Auto Complete\n\n**Goal:** ${args.goal}\n**Duration:** ${duration}s\n**Files:** ${allModified.length}\n**Verify:** ${verifyNote}${researchNote}${rolledBack}${memNote}${skillNote}${fileList}`,
           metadata: { result, success: allSuccess, plan, filesModified: allModified, episodes: memoryContexts.length, skills: skillContexts.length, rolledBack: hasGitRollback && !verifyPassed },
         }
       },

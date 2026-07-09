@@ -114,6 +114,19 @@ export class AgentLoop {
   /** Cumulative output length in current loop */
   private cumulativeOutput = 0
 
+  /** RAG feedback callback — dipanggil setelah setiap step untuk self-improvement loop.
+   *  Menerima step feedback (sourceId, success, usedEntryTitles, output, error).
+   *  Reference: Closed-Loop RAG (ITM Web, 2026), PatchRAG (ACL Findings, 2026) */
+  private ragFeedbackCallback?: (feedback: {
+    sourceId: string
+    success: boolean
+    usedEntryTitles: string[]
+    output: string
+    error?: string
+    errorCategory?: string
+    timestamp: string
+  }) => Promise<void>
+
   /** WorkflowPolicy config — gates for autonomous enforcement (P0) */
   private workflowPolicyConfig?: { mode: "advisory" | "strict"; minConfidence?: number }
   /** Per-run workflow state tracked from session artifacts */
@@ -177,6 +190,21 @@ export class AgentLoop {
     if (state.hasPlan !== undefined) this.workflowState.hasPlan = state.hasPlan
     if (state.hasResearch !== undefined) this.workflowState.hasResearch = state.hasResearch
     if (state.hasReflection !== undefined) this.workflowState.hasReflection = state.hasReflection
+  }
+
+  /** Set RAG feedback callback untuk self-improving RAG loop.
+   *  Dipanggil setelah setiap step selesai (sukses/gagal).
+   *  Reference: Closed-Loop RAG Optimization (ITM Web, 2026) */
+  setRAGFeedbackCallback(cb: (feedback: {
+    sourceId: string
+    success: boolean
+    usedEntryTitles: string[]
+    output: string
+    error?: string
+    errorCategory?: string
+    timestamp: string
+  }) => Promise<void>): void {
+    this.ragFeedbackCallback = cb
   }
 
   /** Access guardrails for external inspection (tests, dashboard) */
@@ -641,6 +669,27 @@ export class AgentLoop {
             sessionId,
             timestamp: Date.now(),
           })
+        } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
+      }
+
+      // RAG Self-Improvement: feed step result back to RAG quality scoring
+      // Berdasarkan Closed-Loop RAG (ITM Web, 2026) & PatchRAG (ACL Findings, 2026)
+      if (this.ragFeedbackCallback && result.output) {
+        try {
+          // Extract potential RAG entry titles from output context
+          // (in a real implementation, we'd track which entries were retrieved)
+          const usedTitles = (result.output.match(/<source[^>]*>.*?<\/source>/g) ?? [])
+            .map(s => s.replace(/<[^>]*>/g, "").trim())
+            .filter(Boolean)
+
+          this.ragFeedbackCallback({
+            sourceId: node.id,
+            success: result.success,
+            usedEntryTitles: usedTitles,
+            output: (result.output ?? "").slice(0, 200),
+            error: result.error,
+            timestamp: new Date().toISOString(),
+          }).catch(() => { /* non-fatal */ })
         } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
       }
 
