@@ -20,6 +20,8 @@ export interface RoutingContext {
   domain: string
   /** Whether this is a sub-agent call */
   isSubAgent: boolean
+  /** Development lifecycle phase (define/plan/build/verify/review/ship) */
+  lifecyclePhase?: string
 }
 
 export interface RoutingResult {
@@ -232,8 +234,32 @@ export class ToolRouter {
    * Always exposes built-in tools (edit, write, webfetch, question) without listing them.
    * Uses: keyword scoring + colocation + usage stats → ranked → top K
    */
+  /**
+   * Lifecycle-aware tool bonuses: tools relevant to the dev phase get a boost.
+   */
+  private lifecycleToolBonus(toolName: string, lifecycle?: string): number {
+    if (!lifecycle) return 0
+    const phase = lifecycle.toLowerCase()
+
+    // Map dari lifecycle phase ke tools yang relevan
+    const phaseTools: Record<string, string[]> = {
+      define: ["agentic_plan", "agentic_debate", "agentic_router", "agentic_nav", "agentic_episodes"],
+      plan: ["agentic_plan", "agentic_parallel", "agentic_pipeline", "agentic_delegate", "agentic_score"],
+      build: ["agentic_execute", "agentic_delegate", "agentic_auto", "agentic_skill", "agentic_nav"],
+      verify: ["agentic_verify", "agentic_reflect", "agentic_guard", "agentic_debate", "agentic_auto"],
+      review: ["agentic_debate", "agentic_score", "agentic_pr", "agentic_guard", "agentic_skill"],
+      ship: ["agentic_auto", "agentic_pr", "agentic_skill", "agentic_verify", "agentic_status"],
+    }
+
+    const tools = phaseTools[phase]
+    if (!tools) return 0
+    if (tools.includes(toolName)) return 4 // strong relevance bonus
+    return 0
+  }
+
   selectTools(context: RoutingContext, topK = this.allocatedToolCount): { selected: ToolMeta[]; reasons: string } {
-    const { taskInput, recentTools } = context
+    const { taskInput, recentTools, lifecyclePhase } = context
+    const lc = lifecyclePhase
 
     const scored: RoutingResult[] = []
     const allToolNames = [...this.metas.keys()]
@@ -244,6 +270,9 @@ export class ToolRouter {
       const kwScore = keywordScore(tool, taskInput)
       const colo = colocationBonus(tool, recentTools)
       const usage = usageBonus(tool)
+
+      // ── Lifecycle phase bonus ──
+      const lcBonus = this.lifecycleToolBonus(name, lc)
 
       // ── Anti-keyword penalty (arXiv:2605.00737 "To Call or Not to Call") ──
       const antiPenalty = antiKeywordPenalty(tool, taskInput)
@@ -256,7 +285,7 @@ export class ToolRouter {
         else if (prob > 0.1) transitionBonus = 1  // weak inertia
       }
 
-      const total = kwScore + colo + usage + antiPenalty + transitionBonus
+      const total = kwScore + colo + usage + lcBonus + antiPenalty + transitionBonus
 
       const reasons: string[] = []
       if (kwScore > 0) reasons.push(`keyword:${kwScore}`)

@@ -102,6 +102,19 @@ const BOOTSTRAP_NOWLEDGE: BootstrapEntry[] = [
     decisions: ["Test pyramid: 80/15/5", "Test outcomes not interactions", "DAMP over DRY in tests", "Beyonce Rule applied"]
   },
 
+  {
+    goal: "Checklist: Accessibility — WCAG 2.1 AA compliance",
+    summary: "KEYBOARD: All interactive elements reachable via keyboard. Focus indicators visible (not just :focus-visible). No keyboard traps. SCREEN READERS: All images have alt text. ARIA landmarks for page structure. Form inputs have associated labels. Dynamic content changes announced via live regions. VISUAL: Color contrast ratio ≥ 4.5:1 for normal text, ≥ 3:1 for large text. Content not conveyed by color alone. Text zoomable to 200% without loss. TESTING: Run axe DevTools or Lighthouse accessibility audit. Test with screen reader (VoiceOver/NVDA). Test keyboard-only navigation.",
+    tags: ["checklist", "accessibility", "wcag", "a11y", "reference"],
+    decisions: ["WCAG 2.1 AA minimum", "Keyboard nav required", "Screen reader tested", "Color contrast 4.5:1"]
+  },
+  {
+    goal: "Checklist: Observability — logs, metrics, traces, alerts",
+    summary: "STRUCTURED LOGGING: Log in structured format (JSON) — not plain text. Include correlation ID per request. Log levels: debug, info, warn, error — use appropriately. No sensitive data in logs. METRICS: RED metrics for services: Rate (requests/sec), Errors (failed requests/sec), Duration (latency distribution). USE metrics for resources: Utilization, Saturation, Errors. TRACING: Distributed tracing for requests crossing service boundaries. Include trace ID in all logs. Instrument database queries, external API calls, and async operations. ALERTING: Symptom-based alerting (user-visible problems) NOT cause-based (disk full). Alert on SLIs/SLOs. Runbook for every alert. ON-CALL: Clear escalation path. Documented runbooks for common issues. Dashboard for every service.",
+    tags: ["checklist", "observability", "monitoring", "logging", "tracing", "reference"],
+    decisions: ["RED/USE metrics", "Structured JSON logging", "Distributed tracing", "Symptom-based alerting"]
+  },
+
   // ── P3 Procedural Checklists ──
   {
     goal: "Checklist: How to add a new agentic_ tool",

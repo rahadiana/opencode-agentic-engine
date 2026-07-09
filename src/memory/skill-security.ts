@@ -311,11 +311,14 @@ export class BehavioralMonitor {
     // Undeclared tools
     for (const [tool] of profile.actualTools) {
       if (!profile.declaredTools.includes(tool)) {
+        // Base: undeclared tool
         score += 1
-        // Bonus untuk tool berbahaya
-        if (/curl|wget|nc\s|ncat|eval|exec/.test(tool)) score += 2
-        if (/rm|mv|chmod|dd/.test(tool)) score += 2
-        if (/\.env|passwd|ssh/.test(tool)) score += 2
+        // Bonus berdasarkan kategori tool
+        if (/curl|wget|nc\s|ncat/.test(tool)) score += 3  // network exfil
+        if (/eval|exec|Function|spawn|fork/.test(tool)) score += 3  // code execution
+        if (/rm|mv|chmod|dd|shutdown|poweroff/.test(tool)) score += 3  // destructive
+        if (/\.env|passwd|ssh|secret|token|credential/.test(tool)) score += 3  // credential access
+        if (/chmod|chown|sudo|su\b/.test(tool)) score += 2  // privilege escalation
       }
     }
 
@@ -327,7 +330,8 @@ export class BehavioralMonitor {
     }
 
     profile.deviationScore = Math.round(score * 10) / 10
-    profile.isConsistent = profile.deviationScore <= 3
+    // Threshold: >2 = deviating, >5 = violated
+    profile.isConsistent = profile.deviationScore <= 2
   }
 
   getProfile(skillId: string): BehavioralProfile | undefined {
@@ -342,7 +346,7 @@ export class BehavioralMonitor {
     const profile = this.profiles.get(skillId)
     if (!profile) return "consistent"
     if (profile.deviationScore > 5) return "violated"
-    if (profile.deviationScore > 3) return "deviating"
+    if (profile.deviationScore > 2) return "deviating"
     return "consistent"
   }
 }

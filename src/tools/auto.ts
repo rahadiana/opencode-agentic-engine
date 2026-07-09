@@ -13,6 +13,7 @@ import { TechDebtScorer } from "../core/tech-debt-scorer.js"
 import { AutoRetryManager } from "../core/auto-retry.js"
 import type { TaskIntent, Subtask } from "../core/intent-parser.js"
 import { ResearchAgent5W1H, type ResearchReport } from "../core/5w1h-framework.js"
+import { detectLifecyclePhase } from "../core/router-agent.js"
 
 export function makeAutoTool(ctx: ToolContext): ToolSpec {
   const {
@@ -281,6 +282,17 @@ export function makeAutoTool(ctx: ToolContext): ToolSpec {
           // ── AgentLoop path: DAG-based execution for complex tasks ──
           // AgentLoop handles per-step execution, verification, confidence scoring,
           // recovery, and emits events for Second Brain tracking.
+          // Lifecycle-aware phase injection
+          const lifecycleContext = (() => {
+            try {
+              const lc = detectLifecyclePhase(String(args.goal ?? ""))
+              if (lc.phase !== "unknown" && lc.confidence > 0.2) {
+                return `\n\n🧭 **Development Phase: ${lc.phase.toUpperCase()}**\nRecommended Action: ${lc.recommendedAction}\nRelevant Roles: ${lc.relevantRoles.join(", ")}`
+              }
+            } catch { /* ignore */ }
+            return ""
+          })()
+
           const stepExecutor = async (subtask: Subtask): Promise<{ success: boolean; output: string; filesModified: string[]; error?: string }> => {
             const subtaskGoal = subtask.description
             // Inject 5W1H research context if available — best practices + tech stack
@@ -289,7 +301,7 @@ export function makeAutoTool(ctx: ToolContext): ToolSpec {
               : ""
             const llmSystemPrompt = `Return JSON array of {path, content}. Write COMPLETE file contents.
       Rules: ESM imports (.js) · match existing patterns · valid imports
-      {"files":[{"path":"src/x.ts","content":"..."}]} or {"noChanges":true}${researchContextStr}`
+      {"files":[{"path":"src/x.ts","content":"..."}]} or {"noChanges":true}${lifecycleContext}${researchContextStr}`
 
             const fileContentsForSubtask: Record<string, string> = {}
             for (const f of relevantFiles) {

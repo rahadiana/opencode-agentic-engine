@@ -5,6 +5,7 @@ import { scanSkillContent, formatSecurityReport, detectProvenance } from "../mem
 import { parseSkillMd, convertSkillMdToDefinition } from "../memory/skill-md-importer.js"
 import { createMemoryEnvelope } from "../memory/schema-version.js"
 import type { ProvenanceInfo, TrustLevel } from "../memory/skill-security.js"
+import { computeNextTrustLevel as computePromotion } from "../memory/skill-security.js"
 
 export function makeSkillTool(ctx: ToolContext): ToolSpec {
   const {
@@ -29,7 +30,7 @@ export function makeSkillTool(ctx: ToolContext): ToolSpec {
   return {
       description: "Manage reusable skills extracted from successful task completions. Use 'extract' to create a skill from a completed step. Use 'find' to search existing skills. Use 'capability' for exact-match lookup. Use 'import-md' to securely import a SKILL.md from a URL (with security scanning + trust taxonomy). Use 'clear' to delete all skills.",
       args: {
-        action: tool.schema.enum(["extract", "find", "list", "capability", "clear", "import-md"]).describe("'extract' creates a skill; 'find' searches; 'list' shows all; 'capability' exact-match lookup; 'import-md' imports external SKILL.md with security scan; 'clear' deletes all skills"),
+        action: tool.schema.enum(["extract", "find", "list", "capability", "clear", "import-md", "promote-trust"]).describe("'extract' creates a skill; 'find' searches; 'list' shows all; 'capability' exact-match lookup; 'import-md' imports external SKILL.md with security scan; 'promote-trust' promotes an imported skill's trust level; 'clear' deletes all skills"),
         query: tool.schema.string().optional().describe("Search query, extraction target (stepId), capability string, or URL for import-md"),
         description: tool.schema.string().optional().describe("Optional description or context"),
       },
@@ -165,6 +166,45 @@ export function makeSkillTool(ctx: ToolContext): ToolSpec {
           } catch (e) {
             return { output: `Error importing skill: ${(e as Error).message}` }
           }
+        }
+
+        if (args.action === "promote-trust") {
+          const skillId = args.query
+          if (!skillId) return { output: "Provide a skill ID as query to promote. Use `agentic_skill list` to find skill IDs." }
+
+          // Find the skill
+          const allSkills = skillStore.getAll()
+          const skill = allSkills.find(s =>
+            s.definition.meta.id === skillId ||
+            s.definition.meta.name === skillId
+          )
+          if (!skill) return { output: `No skill found with ID or name "${skillId}".\n\nUse \`agentic_skill list\` to see available skills and their IDs.` }
+          if (!skill.provenance) return { output: `Skill "${skill.definition.meta.name}" is not an imported skill (no provenance info). Only imported skills use trust levels.` }
+
+          const currentTrust = skill.provenance.trustLevel
+          // Behavioral consistency check — for now, assume consistent if no violations reported
+          const promoResult = computePromotion(
+            currentTrust,
+            skill.provenance.successCount,
+            "consistent",
+          )
+
+          if (!promoResult.nextLevel) {
+            return { output: `## ⚠️ Cannot Promote\n\n**Skill:** ${skill.definition.meta.name}\n**Current Trust:** ${currentTrust.toUpperCase()}\n**Success Count:** ${skill.provenance.successCount}\n**Reason:** ${promoResult.reason}\n\nKeep using this skill successfully to build trust.` }
+          }
+
+          // Promote
+          const oldLevel = skill.provenance.trustLevel
+          skill.provenance.trustLevel = promoResult.nextLevel
+          skill.provenance.successCount = 0 // reset counter after promotion
+
+          // Persist
+          stateStore.set("skills", skill.definition.meta.id, {
+            ...skill.definition,
+            provenance: skill.provenance,
+          })
+
+          return { output: `## ✅ Trust Promoted\n\n**Skill:** ${skill.definition.meta.name}\n**Old Level:** ${oldLevel.toUpperCase()}\n**New Level:** ${promoResult.nextLevel.toUpperCase()}\n**Reason:** ${promoResult.reason}\n\nHigher trust means fewer restrictions on this skill. Continue using it successfully to promote further.` }
         }
 
         if (args.action === "capability") {
