@@ -41,15 +41,21 @@
 - [ ] Verify CI pipeline: `npm run test:coverage:ci`, `test-container.sh`
 - [ ] Phase 4 Smart Agentic Analysis final report
 
+## ✅ Ecosystem Solid (v0.5.20-dev)
+
+- [x] `RAGSelfImprovePipeline` — facade Adaptive→KbPO→MMKP as **default critical path**
+- [x] Wired into `MemoryOrchestrator.queryWithKnowledge`, `system.transform`, `agentic_execute`, `AgentLoop` feedback
+- [x] Session tracks `rag:lastUsedTitles` + `workflow:researched` for closed-loop feedback
+- [x] Parallel runner includes `_runall-rag-selfimprove.mjs` (84 tests)
+
 ## 📊 Metrics (current)
 
 | Metric | Value |
 |--------|-------|
-| index.ts | 1,645 lines |
-| definitions.ts | 2,575 lines (was 5,691) |
-| Total src/tools/ | 14 files |
-| Unit tests | 3,101 ✅ |
+| index.ts | ~1,690 lines |
+| Unit tests | 3,311 ✅ |
 | Lint errors | 0 |
-| Lint warnings | 335 |
+| Lint warnings | ~1821 (mostly unused ctx destructure) |
 | SWE-bench mock | 7/7 ✅ |
 | Build | ✅ |
+| RAG self-improve critical path | ✅ wired |

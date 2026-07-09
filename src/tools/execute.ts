@@ -9,6 +9,7 @@ import { evaluateWorkflowPolicy, formatWorkflowPolicyDecisions, verificationEvid
 import { getDslExecutor, getSchemaValidator } from "../core/shared-instances.js"
 import type { HallucinationCheck, ClaimResult } from "../drift/hallucination-guard.js"
 import { runAutoEvolve } from "../evolution/auto-evolve.js"
+import { getRAGSelfImprovePipeline } from "../memory/rag-self-improve.js"
 
 export function makeExecuteTool(ctx: ToolContext): ToolSpec {
   const {
@@ -391,6 +392,52 @@ export function makeExecuteTool(ctx: ToolContext): ToolSpec {
             category: analysis.category,
           })
         }
+
+        // ── Self-Improving RAG closed-loop feedback (always-on) ──
+        // Uses titles injected at system.transform / last RAG search.
+        try {
+          const titlesRaw = session.artifacts.get("rag:lastUsedTitles")
+          let usedTitles: string[] = []
+          if (titlesRaw) {
+            try { usedTitles = JSON.parse(titlesRaw) as string[] } catch { usedTitles = [] }
+          }
+          // Fallback: extract source titles from output claims
+          if (usedTitles.length === 0 && args.output) {
+            usedTitles = (args.output.match(/(?:source|title)[=:]\s*["']?([^"'\n]+)/gi) ?? [])
+              .map((s: string) => s.replace(/^(?:source|title)[=:]\s*["']?/i, "").trim())
+              .filter(Boolean)
+              .slice(0, 10)
+          }
+          if (usedTitles.length > 0) {
+            const report = await getRAGSelfImprovePipeline().feedStepResult({
+              sourceId: args.stepId,
+              success: !!args.success,
+              usedEntryTitles: usedTitles,
+              output: args.output.slice(0, 300),
+              error: args.error,
+              errorCategory: args.success ? undefined : (args.error ? "runtime" : undefined),
+              timestamp: new Date().toISOString(),
+            })
+            if (report && report.entriesUpdated > 0) {
+              response += `\n### 📚 RAG Self-Improve\n`
+              response += `Updated **${report.entriesUpdated}** knowledge entries from step outcome.\n`
+              if (report.flaggedForReview.length > 0) {
+                response += `⚠️ Flagged for review: ${report.flaggedForReview.slice(0, 3).map(t => `\`${t}\``).join(", ")}\n`
+              }
+            }
+            // Also notify AgentLoop callback path for consistency
+            eventBus.emit({
+              type: "feedback.recorded",
+              payload: {
+                sessionID: context.sessionID,
+                stepId: `rag-feedback-${args.stepId}`,
+                feedback: args.success ? "positive" : "negative",
+                model: "",
+                taskType: "rag-self-improve",
+              },
+            })
+          }
+        } catch (e) { log.warn("Silent catch: RAG feedback non-fatal", { error: String(e) }) }
 
         if (args.success) {
           // Feed success to ContinuousEvolution

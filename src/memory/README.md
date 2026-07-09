@@ -12,26 +12,35 @@
 | **Persistence** | `persistence.ts`, `sqlite-persistence.ts`, `schema-version.ts` | File-based JSON + SQLite persistence, schema migration |
 | **Query/Orch** | `memory-query-engine.ts`, `memory-orchestrator.ts`, `consolidation-scheduler.ts`, `importance-index.ts`, `execution-tracer.ts` | Multi-level query, memory orchestration, consolidation, importance scoring, execution tracing |
 
-## Self-Improving RAG System (NEW)
+## Self-Improving RAG System (CRITICAL PATH)
 
 Berdasarkan 22 paper dari ACL 2025–2026, CVPR 2026, dan arXiv 2024–2026.
-Implementasi closed-loop knowledge quality improvement.
+**Sudah di-wire ke runtime default** lewat `RAGSelfImprovePipeline` (bukan library lepas).
 
 | Modul | File | Paper Reference | Fungsi |
 |-------|------|----------------|--------|
-| **Quality Scorer** | `rag-quality-scorer.ts` | SCIM (MDPI, 2026) | 5-dimensi quality (relevance, completeness, consistency, factuality, fluency) + staleness decay + recommendation engine |
-| **Feedback Loop** | `rag-feedback-loop.ts` | Closed-Loop RAG (ITM Web, 2026), PatchRAG (ACL Findings, 2026) | Step execution result → RAG quality update. Feed success/failure back ke entry scores |
-| **Adaptive Retrieval** | `rag-adaptive-retrieval.ts` | SCIM (2026), SeaKR (ACL, 2025) | 4-mode search: standard → augment (completeness) → refine (consistency) → decompose. Auto-escalate berdasarkan deficits |
-| **MDP Retrieval** | `rag-mdp-retrieval.ts` | EvoGraph-R1 (CVPR, 2026), SPARKLE (ACL, 2026), RouteRAG (2026) | Markov Decision Process: RETRIEVE, WEBSEARCH, GRAPHEDIT, DECOMPOSE, ANSWER action space |
-| **Knowledge Boundary** | `rag-knowledge-boundary.ts` | KbPO (ACL, 2026) | 4-quadrant taxonomy: internal vs external confidence. Integrate / Trust-RAG / Trust-Self / Refuse |
-| **Context Optimizer** | `rag-context-optimizer.ts` | Self-Correcting RAG (ACL Findings, 2026) | MMKP-inspired token-budget-aware selection. Memaksimalkan information density di bawah budget |
+| **Pipeline (facade)** | `rag-self-improve.ts` | All 22 papers (composition) | **Critical path** — Adaptive → KbPO → MMKP + feedback. Dipakai `MemoryOrchestrator.queryWithKnowledge`, `system.transform`, `agentic_execute`, `AgentLoop` |
+| **Quality Scorer** | `rag-quality-scorer.ts` | SCIM (MDPI, 2026) | 5-dimensi quality + staleness decay + recommendation |
+| **Feedback Loop** | `rag-feedback-loop.ts` | Closed-Loop RAG, PatchRAG | Step outcome → quality update |
+| **Adaptive Retrieval** | `rag-adaptive-retrieval.ts` | SCIM, SeaKR | standard → augment → refine → decompose |
+| **MDP Retrieval** | `rag-mdp-retrieval.ts` | EvoGraph-R1, SPARKLE | Deep mode multi-turn (opt-in `mode: "deep"`) |
+| **Knowledge Boundary** | `rag-knowledge-boundary.ts` | KbPO | 4-quadrant trust calibration |
+| **Context Optimizer** | `rag-context-optimizer.ts` | Self-Correcting RAG | MMKP token-budget selection |
 
-### Alur Self-Improving RAG
+### Alur Self-Improving RAG (runtime default)
 
 ```
-User Query → KnowledgeBoundary (KbPO) → MDP Retrieval (EvoGraph-R1)
-  → Context Optimizer (MMKP) → Agent Execution
-  → Feedback Loop (Closed-Loop RAG) → Quality update → Staleness check
+User Query
+  → MemoryOrchestrator.queryWithKnowledge()
+      → RAGSelfImprovePipeline.search()
+          → Adaptive Retrieval (auto-escalate)
+          → KbPO Boundary calibrate
+          → MMKP Context Optimizer
+  → system.transform injects knowledge + tracks usedTitles
+  → Agent Execution (manual tools OR agentic_auto)
+  → agentic_execute / AgentLoop
+      → RAGSelfImprovePipeline.feedStepResult()
+          → quality/staleness update (Closed-Loop)
 ```
 
 ### Konsep Kunci

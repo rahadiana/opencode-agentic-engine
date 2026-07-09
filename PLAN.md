@@ -8,8 +8,8 @@
 
 | Metrik | Nilai |
 |--------|-------|
-| **Versi** | v0.5.19-dev |
-| **Unit tests** | 3212 (all mock, no LLM needed) |
+| **Versi** | v0.5.20-dev |
+| **Unit tests** | 3311 (all mock, no LLM needed) |
 | **Agentic tools** | 31 (`agentic_*` prefix) |
 | **Source files** | 175+ di `src/` (11 subdirektori + 6 baru memory/) |
 | **Coverage gate** | ✅ Stmts 89.72%+, Branch 69.08%+, Func 76.6%+, Lines 80%+ |

@@ -80,7 +80,7 @@ export function scanSkillContent(raw: string, sourceUrl: string): ScanResult {
 
   // ── Pattern: Destructive Shell ──
   const destructivePatterns = [
-    { pattern: /\brm\s+-rf\s*[\/~]/, severity: "critical" as const, category: "shell" as const, msg: "Destructive rm -rf on root/home" },
+    { pattern: /\brm\s+-rf\s*[/~]/, severity: "critical" as const, category: "shell" as const, msg: "Destructive rm -rf on root/home" },
     { pattern: /\bdd\s+if=/, severity: "critical" as const, category: "shell" as const, msg: "Raw disk write via dd" },
     { pattern: /:\(\)\s*\{/, severity: "critical" as const, category: "shell" as const, msg: "Fork bomb pattern" },
     { pattern: /\bmv\s+\/[^\s]+\s+\/[^\s]+/, severity: "warning" as const, category: "shell" as const, msg: "Root-level file move — potentially destructive" },

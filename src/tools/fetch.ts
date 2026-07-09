@@ -150,8 +150,10 @@ export function makeFetchTool(ctx: ToolContext): ToolSpec {
           log.warn(`[agentic_fetch] RAG indexing failed: ${ragErr instanceof Error ? ragErr.message : String(ragErr)}`)
         }
         
-        // Track that research was done (for WorkflowPolicy Gate)
-        try { sessionStore.getOrCreate(context.sessionID).artifacts.set("workflow:researched", String(Date.now())) } catch (e) { log.warn("Silent catch: silent: session may not be ready", { error: String(e) }) }
+        // Track research for WorkflowPolicy Gate + ecosystem solid path
+        try {
+          sessionStore.getOrCreate(context.sessionID).artifacts.set("workflow:researched", String(Date.now()))
+        } catch (e) { log.warn("Silent catch: session may not be ready", { error: String(e) }) }
         
         return {
           output: outputText.slice(0, 50000),

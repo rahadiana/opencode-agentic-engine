@@ -23,6 +23,7 @@ import { ExecutionTracer } from "./execution-tracer.js"
 import { MemoryQueryEngine } from "./memory-query-engine.js"
 import type { MultiIndexRAG } from "./multi-index-rag.js"
 import type { MemoryProvider, PrefetchOptions, MemoryProviderQueryResult } from "./memory-provider.js"
+import type { RAGSelfImprovePipeline } from "./rag-self-improve.js"
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -135,6 +136,9 @@ export class MemoryOrchestrator {
 
   /** Query subsystem — delegated to MemoryQueryEngine */
   private memoryQueryEngine: MemoryQueryEngine
+
+  /** Optional self-improve pipeline (injected from composition root) */
+  private ragSelfImprove?: RAGSelfImprovePipeline
 
   /** RAG store for knowledge-first semantic search */
   private ragStore?: MultiIndexRAG
@@ -371,6 +375,16 @@ export class MemoryOrchestrator {
   /** Inject RAG store after construction (to break circular init dependency) */
   setRagStore(rag: MultiIndexRAG): void {
     this.ragStore = rag
+    if (this.ragSelfImprove) this.ragSelfImprove.setRagStore(rag)
+  }
+
+  /**
+   * Wire Self-Improving RAG pipeline as default knowledge retrieval path.
+   * Called from composition root (index.ts) after MultiIndexRAG is ready.
+   */
+  setRAGSelfImprove(pipeline: RAGSelfImprovePipeline): void {
+    this.ragSelfImprove = pipeline
+    if (this.ragStore) pipeline.setRagStore(this.ragStore)
   }
 
   /** Query across all (or selected) memory levels, ranked by relevance + importance */
@@ -379,8 +393,11 @@ export class MemoryOrchestrator {
   }
 
   /**
-   * Query with knowledge-first RAG enrichment.
-   * Sync query() first, then enrich with confidence-scored RAG entries.
+   * Query with knowledge-first RAG enrichment via Self-Improving pipeline.
+   *
+   * Default critical path (ecosystem solid):
+   *   Adaptive Retrieval → KbPO Boundary → MMKP Context Optimizer
+   * Falls back to classic searchWithConfidence if pipeline fails.
    */
   async queryWithKnowledge(query: string, category?: string, limit = 5): Promise<MemoryQueryResult> {
     const base = this.query({ query, maxResults: limit })
@@ -388,9 +405,43 @@ export class MemoryOrchestrator {
     if (!this.ragStore) return base
 
     try {
+      // Prefer unified self-improve pipeline (always-on critical path)
+      if (this.ragSelfImprove) {
+        if (!this.ragSelfImprove.getRagStore()) this.ragSelfImprove.setRagStore(this.ragStore)
+
+        const improved = await this.ragSelfImprove.search(query, {
+          mode: "standard",
+          limit,
+          category,
+          internalConfidence: 0.35, // knowledge-first: parametric knowledge is suspect
+        })
+
+        if (improved.knowledge.length > 0) {
+          base.knowledge = improved.knowledge.map(k => ({
+            source: k.source,
+            confidence: k.confidence,
+            content: k.content,
+            category: k.category,
+          }))
+          base.hasHighConfidence = improved.hasHighConfidence
+          // Stash titles for closed-loop feedback (consumers may read via pipeline result)
+          ;(base as MemoryQueryResult & { usedTitles?: string[]; selfImproveMeta?: typeof improved.meta }).usedTitles =
+            improved.usedTitles
+          ;(base as MemoryQueryResult & { selfImproveMeta?: typeof improved.meta }).selfImproveMeta = improved.meta
+          return base
+        }
+
+        // Q4 refuse / empty — do not invent confidence from classic path when pipeline said research
+        if (improved.meta.action === "refuse" || improved.meta.recommendation === "manual-research") {
+          base.hasHighConfidence = false
+          base.knowledge = []
+          return base
+        }
+      }
+
+      // Classic fallback when pipeline not wired or returned empty without refuse
       const cats = category ? [category] : undefined
       const ragResult = await this.ragStore.searchWithConfidence(query, cats, limit)
-
       if (!ragResult.isEmpty) {
         base.knowledge = ragResult.entries
           .map(entry => ({

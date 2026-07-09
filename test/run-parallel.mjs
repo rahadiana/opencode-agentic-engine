@@ -1,7 +1,7 @@
 // test/run-parallel.mjs — Parallel test runner (true multi-process parallelism)
 //
 // Runs each test file in a separate Node.js child process for REAL parallelism.
-// 22 workers total: 13 Part A + 9 Part B, all concurrent.
+// 23 workers total: 14 Part A + 9 Part B, all concurrent.
 //
 // Each worker gets its own temp directory (TEST_PROJECT_DIR env var) so
 // there are no filesystem conflicts between parallel processes.
@@ -23,7 +23,7 @@ const RESET = "\x1b[0m"
 
 // All test files to run in parallel
 const FILES = [
-  // Part A (13 sub-files)
+  // Part A (14 sub-files)
   "_runall-core.mjs",
   "_runall-verify.mjs",
   "_runall-adv.mjs",
@@ -37,6 +37,7 @@ const FILES = [
   "_runall-edge-deep.mjs",
   "_runall-edge-config.mjs",
   "_runall-gaps.mjs",
+  "_runall-rag-selfimprove.mjs",
   // Part B (9 files)
   "_b_sandbox.mjs",
   "_b_planners.mjs",

@@ -7,6 +7,16 @@ export { MemoryOrchestrator } from "./memory-orchestrator.js"
 export { MemoryQueryEngine } from "./memory-query-engine.js"
 export { MemorySchemaVersion, MEMORY_SCHEMA_VERSION, createMemoryEnvelope } from "./schema-version.js"
 export { MultiIndexRAG, enrichWithVectors, type IndexData, type IndexSearchResult, type IndexEntry, type RAGConfig, type RAGStats, type SearchWithConfidenceResult } from "./multi-index-rag.js"
+export {
+  RAGSelfImprovePipeline,
+  getRAGSelfImprovePipeline,
+  setRAGSelfImprovePipeline,
+  resetRAGSelfImprovePipeline,
+  type SelfImproveSearchResult,
+  type SelfImproveSearchOptions,
+  type SelfImproveKnowledgeEntry,
+  type SelfImproveMode,
+} from "./rag-self-improve.js"
 export { NoOpMemoryProvider } from "./memory-provider.js"
 export { PersistenceLayer } from "./persistence.js"
 export { SQLitePersistence, type SQLiteConfig } from "./sqlite-persistence.js"

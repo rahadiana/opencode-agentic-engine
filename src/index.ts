@@ -650,6 +650,16 @@ const confidenceStore = new ConfidenceStore()
   // Wire RAG into MemoryOrchestrator — single coordinator for all memory
   memoryOrchestrator.setRagStore(multiIndexRAG)
 
+  // ── Self-Improving RAG pipeline (critical path — ecosystem solid) ──
+  // Adaptive → KbPO → MMKP (+ optional MDP deep) + closed-loop feedback
+  const { getRAGSelfImprovePipeline } = await import("./memory/rag-self-improve.js")
+  const ragSelfImprove = getRAGSelfImprovePipeline()
+  ragSelfImprove.setRagStore(multiIndexRAG)
+  memoryOrchestrator.setRAGSelfImprove(ragSelfImprove)
+  agentLoop.setRAGFeedbackCallback(async (feedback) => {
+    await ragSelfImprove.feedStepResult(feedback)
+  })
+
   const debateLoop = new DebateLoop(llmEngine, agentRuntime)
   const routerAgent = new RouterAgent(llmEngine)
   const dataCleaner = new DataCleaner(llmEngine)
@@ -1231,10 +1241,22 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
             } else {
               const { keywords, category } = routerAgent.extractKeywords(queryForRag)
               if (keywords.length > 0) {
+                // Critical path: Self-Improving RAG via MemoryOrchestrator
+                // (Adaptive + KbPO + MMKP wired in queryWithKnowledge)
                 const memResult = await memoryOrchestrator.queryWithKnowledge(keywords.join(" "), category, 5)
                 if (memResult.knowledge && memResult.knowledge.length > 0) {
                   knowledgeEntries = memResult.knowledge
                   hasHighConfidenceKnowledge = memResult.hasHighConfidence ?? false
+                }
+                // Track used titles for closed-loop RAG feedback on execute
+                const usedTitles = (memResult as { usedTitles?: string[] }).usedTitles
+                  ?? knowledgeEntries.map(k => k.source).filter(Boolean)
+                if (sessionId && usedTitles.length > 0) {
+                  try {
+                    const sess = sessionStore.getOrCreate(sessionId)
+                    sess.artifacts.set("rag:lastUsedTitles", JSON.stringify(usedTitles.slice(0, 20)))
+                    sess.artifacts.set("workflow:researched", "1")
+                  } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
                 }
               }
               // Populate cache (even if empty — prevents repeated empty queries)
@@ -1643,6 +1665,16 @@ export { RAGAdaptiveRetrieval, type AdaptiveSearchResult, type RetrievalMode } f
 export { MDPRetrievalAgent, type MDPState, type MDPActionChoice, type MDPLogEntry, type MDPResult, type MDPAction } from "./memory/rag-mdp-retrieval.js"
 export { KnowledgeBoundaryCalibrator, type KnowledgeState, type KnowledgeQuadrant, type CalibratedEntry } from "./memory/rag-knowledge-boundary.js"
 export { RAGContextOptimizer, type OptimizedContext, type ContextEntryScore } from "./memory/rag-context-optimizer.js"
+export {
+  RAGSelfImprovePipeline,
+  getRAGSelfImprovePipeline,
+  setRAGSelfImprovePipeline,
+  resetRAGSelfImprovePipeline,
+  type SelfImproveSearchResult,
+  type SelfImproveSearchOptions,
+  type SelfImproveKnowledgeEntry,
+  type SelfImproveMode,
+} from "./memory/rag-self-improve.js"
 export { LocalEmbedder, type EmbedderConfig, type EmbeddingResult } from "./memory/local-embedder.js"
 export { SkillExtractor, normalize } from "./memory/skill-extractor.js"
 export { parseSkillMd, convertSkillMdToDefinition, importSkillMdToStore, type ParsedSkillMd, type SkillMdFrontmatter } from "./memory/skill-md-importer.js"
