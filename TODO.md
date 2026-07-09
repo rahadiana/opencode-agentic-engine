@@ -54,7 +54,8 @@
 | Metric | Value |
 |--------|-------|
 | index.ts | ~1,690 lines |
-| Unit tests | 3,311 ✅ |
+| Unit tests | 3,342 ✅ |
+| Docs sync (config/arch/workflow/memory) | ✅ v0.5.20-dev |
 | Lint errors | 0 |
 | Lint warnings | ~1821 (mostly unused ctx destructure) |
 | SWE-bench mock | 7/7 ✅ |

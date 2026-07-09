@@ -75,7 +75,8 @@ agentic_model list
 
 ## Next Steps
 
-- [Pelajari semua 31 tools](features/tools.md)
-- [Pahami workflow](guide/workflow.md)
+- [Pelajari semua 32 tools](features/tools.md)
+- [Pahami workflow](guide/workflow.md) (termasuk WorkflowPolicy + dumb-model harness)
+- [Memory & Self-Improving RAG](guide/memory.md)
 - [Setting multi-agent pipeline](guide/multi-agent.md)
-- [Konfigurasi lengkap](config.md)
+- [Konfigurasi lengkap](config.md) (`dumbModelMode: "auto"`)

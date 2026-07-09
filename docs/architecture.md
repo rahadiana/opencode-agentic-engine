@@ -4,7 +4,7 @@
 
 ```
 src/
-├── index.ts              # Plugin entry: 31 tools + 5 hooks
+├── index.ts              # Plugin entry: 32 tools + hooks
 ├── README.md             # Dokumentasi fungsi per folder (AI context)
 │
 ├── core/                 # Inti engine: planning, execution, verification
@@ -71,7 +71,9 @@ src/
 LLM Call
   → system.transform hook
     → RouterAgent.extractKeywords()
-    → MultiIndexRAG.searchWithConfidence()
+    → MemoryOrchestrator.queryWithKnowledge()
+        → RAGSelfImprovePipeline (critical path):
+            Adaptive Retrieval → KbPO → MMKP Context Optimizer
     → Second Brain injection (decisions, TODOs, reflection)
     → buildAgenticSystemInstructions()
       → <identity> "reasoning engine"
@@ -80,23 +82,46 @@ LLM Call
       → <guardrails> constraints
     → if no high-confidence knowledge:
       → append "MANDATORY RESEARCH REQUIRED"
+    → if dumb harness active:
+      → append Dumb-Model Harness rules (strict workflow)
+    → track rag:lastUsedTitles + workflow:researched
+  → Agent execution
+    → agentic_execute / AgentLoop
+        → WorkflowPolicy + HallucinationGuard
+        → RAGSelfImprovePipeline.feedStepResult() (closed-loop quality)
 ```
 
-### 2. Gap-Driven Development
+### 2. Dumb-Model Harness (model boleh bodoh)
+
+```
+dumbModelMode: "auto" | true | false   (default: "auto")
+
+resolveDumbHarness(model, ModelRegistry stats)
+  → weak name (mini/free/flash/…) OR bad reliability stats
+  → WorkflowPolicy strict
+  → blockOnHallucination effective true
+  → prompt notice + agentic_status section
+```
+
+Modul: `src/core/dumb-model.ts`. Config: [config.md](config.md#dumb-model-harness-agentdumbmodelmode).
+
+### 3. Gap-Driven Development
 
 Setiap Gap dari paper "The End of Software Engineering" diimplementasi sebagai modul independen:
 
 | Gap | Modul | Deskripsi |
 |-----|-------|-----------|
+| #1 | `workflow-policy.ts` | Runtime workflow gates (advisory/strict) |
+| #3 | `dumb-model.ts` + config | Dumb model mode / auto harness |
 | #4 | `verifier.ts` | Multi-dimensi verification |
-| #5 | `error-recovery.ts` | Self-healing error recovery |
+| #5 | `error-recovery.ts` / hallucination-guard | Self-healing + claim checks |
 | #7 | `semantic-cache.ts` | Semantic caching LLM responses |
 | #8 | `meta-reasoner.ts` | Strategy adaptation |
-| #9 | Continuous learning via feedback | |
+| #9 | ContinuousEvolution + feedback events | Continuous learning |
 | #10 | `alignment-gate.ts` | Goal drift detection |
 | #11 | `economic-model.ts` | ROI tracking |
 
-### 3. Event-Driven Architecture
+### 4. Event-Driven Architecture
 
 ```
 EventBus (pub/sub)
@@ -109,7 +134,7 @@ EventBus (pub/sub)
   └── feedback.recorded → Gap #9 adaptation
 ```
 
-### 4. Model Resolution
+### 5. Model Resolution
 
 ```
 agentic_model set category=deep model="9router/StrongReason"

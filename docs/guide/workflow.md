@@ -76,6 +76,36 @@ agentic_verify tier="deep"
 agentic_status
 ```
 
+## WorkflowPolicy + Dumb-Model Harness
+
+Policy di-enforce di **runtime** (`agentic_execute`, `AgentLoop`), bukan hanya di prompt.
+
+| Mode | Kapan | Perilaku |
+|------|-------|----------|
+| `advisory` | Default jika model dianggap capable | Warning, jarang hard-block |
+| `strict` | `dumbModelMode: true` **atau** auto deteksi model lemah | Bisa **block** step (mis. `research-missing`) |
+
+Default config: `dumbModelMode: "auto"` — model free/mini/flash otomatis strict.
+
+```bash
+# Cek apakah harness aktif
+agentic_status detail=full
+# → 🛡️ Dumb-Model Harness: ACTIVE | off
+
+# Execute tanpa research (dengan free model) → sering diblokir:
+agentic_execute stepId="..." success=true filesModified=["src/x.ts"] ...
+# → 🛑 BLOCKED by WorkflowPolicy: research-missing
+# Perbaiki: agentic_nav atau agentic_fetch dulu
+```
+
+Alur aman untuk model lemah:
+
+```
+agentic_nav / agentic_fetch  →  agentic_plan  →  implement  →  agentic_execute  →  agentic_verify
+```
+
+Lihat: [config.md — Dumb-Model Harness](../config.md#dumb-model-harness-agentdumbmodelmode).
+
 ## Auto Mode (Satu Langsung)
 
 ```bash

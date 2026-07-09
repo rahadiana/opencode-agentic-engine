@@ -16,11 +16,35 @@ Level 2: Episodic Memory (Cross-session)
 Level 3: Semantic Memory (Patterns)
   → MultiIndexRAG: categorized knowledge
   → Hybrid TF-IDF + vector search
+  → Self-Improving RAG pipeline (critical path):
+      Adaptive → KbPO → MMKP → inject
+      execute feedback → quality/staleness update
 
 Level 4: Procedural Memory (Skills)
   → SkillStore: reusable task patterns
   → agentic-skill/v1 format
 ```
+
+## Self-Improving RAG (default critical path)
+
+Modul paper (SCIM, KbPO, Closed-Loop RAG, MMKP, …) digabung di `RAGSelfImprovePipeline`
+(`src/memory/rag-self-improve.ts`) dan di-wire ke:
+
+| Titik | Peran |
+|-------|--------|
+| `MemoryOrchestrator.queryWithKnowledge` | Default search path |
+| `system.transform` | Inject knowledge + track `rag:lastUsedTitles` |
+| `agentic_execute` / AgentLoop | Closed-loop `feedStepResult` → quality update |
+
+```
+Query → Adaptive (auto-escalate) → KbPO calibrate → MMKP budget select
+     → knowledge-context in prompt
+Step outcome → FeedbackLoop → entry quality ↑/↓ + staleness
+```
+
+- **Default:** mode `standard` (cepat, selalu on)
+- **Deep / MDP multi-turn:** opt-in (`mode: "deep"`), bukan default chat
+- **Manual store/search:** tetap lewat `agentic_rag`
 
 ## Second Brain (`agentic_memo`)
 

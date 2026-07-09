@@ -15,11 +15,7 @@ File: `.agentic/config.json`
 ```json
 {
   "$schema": "v1",
-  "embedding": {
-    "model": "text-embedding-3-small",
-    "endpoint": "https://api.openai.com/v1/embeddings",
-    "apiKey": null
-  },
+  "embedding": null,
   "memory": {
     "enabled": true,
     "mode": "lightweight",
@@ -43,10 +39,12 @@ File: `.agentic/config.json`
     "hallucinationThreshold": 0.3,
     "hardBlockReliability": 0.2,
     "softBlockReliability": 0.4,
+    "workflowPolicyMode": "advisory",
+    "dumbModelMode": "auto",
     "deepVerification": {
       "security": true,
-      "perf": true,
-      "arch": true,
+      "performance": true,
+      "architecture": true,
       "deps": true
     }
   },
@@ -61,30 +59,112 @@ File: `.agentic/config.json`
 
 | Key | Type | Default | Deskripsi |
 |-----|------|---------|-----------|
-| `$schema` | string | "v1" | Schema version |
-| `embedding.model` | string | null | Embedding model name |
-| `embedding.endpoint` | string | null | Embedding API endpoint |
-| `embedding.apiKey` | string | null | Embedding API key |
-| `memory.enabled` | boolean | true | Enable cross-session memory |
-| `memory.mode` | enum | "lightweight" | "lightweight" / "full" |
-| `memory.maxEntries` | number | 1000 | Max memory entries |
-| `memory.forgetAfterDays` | number | 30 | Auto-forget setelah N hari |
-| `memory.search.keywordWeight` | number | 0.3 | Bobot keyword TF-IDF |
-| `memory.search.vectorWeight` | number | 0.7 | Bobot vector similarity |
-| `memory.compressThreshold` | number | 500 | Auto-compress threshold (tokens) |
-| `memory.stopWordsLanguages` | string[] | ["ind","eng"] | Stop words languages |
-| `agent.maxDelegationDepth` | number | 3 | Max delegation chain depth |
-| `agent.defaultRole` | string | "developer" | Default agent role |
-| `agent.requireSemanticCheck` | boolean | false | Wajib semantic check |
-| `agent.blockOnHallucination` | boolean | false | Block jika hallucination |
-| `agent.autoSkillExtract` | boolean | true | Auto-extract skill dari task sukses |
-| `agent.autoHallucinationCheck` | boolean | true | Auto-cek hallucination |
-| `agent.hallucinationThreshold` | number | 0.3 | Threshold hallucination score |
-| `agent.hardBlockReliability` | number | 0.2 | Reliability threshold hard block |
-| `agent.softBlockReliability` | number | 0.4 | Reliability threshold soft block |
-| `agent.deepVerification.*` | boolean | true | Per-dimension toggle |
-| `storage.traceRetentionDays` | number | 7 | Retensi trace file |
-| `storage.skillMaxCount` | number | 200 | Max skills |
+| `$schema` | string | `"v1"` | Schema version |
+| `embedding` | object\|null | `null` | Embedding config (`model`, `endpoint`, `apiKey`). `null` = TF-IDF only |
+| `memory.enabled` | boolean | `true` | Enable cross-session memory |
+| `memory.mode` | enum | `"lightweight"` | `"lightweight"` / `"full"` (full butuh embedding) |
+| `memory.maxEntries` | number | `1000` | Max memory entries |
+| `memory.forgetAfterDays` | number | `30` | Auto-forget setelah N hari |
+| `memory.search.keywordWeight` | number | `0.3` | Bobot keyword TF-IDF |
+| `memory.search.vectorWeight` | number | `0.7` | Bobot vector similarity |
+| `memory.compressThreshold` | number | `500` | Auto-compress threshold |
+| `memory.stopWordsLanguages` | string[] | `["ind","eng"]` | Stop words languages |
+| `agent.maxDelegationDepth` | number | `3` | Max delegation chain depth |
+| `agent.defaultRole` | string | `"developer"` | Default agent role |
+| `agent.requireSemanticCheck` | boolean | `false` | Wajib semantic check |
+| `agent.blockOnHallucination` | boolean | `false` | Block jika hallucination (selalu on saat dumb harness active) |
+| `agent.autoSkillExtract` | boolean | `true` | Auto-extract skill dari task sukses |
+| `agent.autoHallucinationCheck` | boolean | `true` | Auto-cek hallucination di `agentic_execute` |
+| `agent.hallucinationThreshold` | number | `0.3` | Threshold hallucination score (diperketat ke ≤0.2 di dumb mode) |
+| `agent.hardBlockReliability` | number | `0.2` | Reliability threshold hard block model |
+| `agent.softBlockReliability` | number | `0.4` | Soft threshold + signal untuk auto dumb-mode |
+| `agent.minSampleSize` | number | `5` | Min sample stats sebelum reliability decisions |
+| `agent.workflowPolicyMode` | `"advisory"\|"strict"` | `"advisory"` | Policy gate: warn vs block. Override ke `strict` saat dumb harness active |
+| `agent.dumbModelMode` | `boolean\|"auto"` | `"auto"` | **Dumb-model harness** — lihat section di bawah |
+| `agent.deepVerification.*` | boolean | `true` | Toggle security / performance / architecture / deps |
+| `storage.traceRetentionDays` | number | `7` | Retensi trace file |
+| `storage.skillMaxCount` | number | `200` | Max skills |
+
+---
+
+## Dumb-Model Harness (`agent.dumbModelMode`)
+
+Prinsip: **LLM boleh bodoh, harness harus pintar.**
+
+| Nilai | Efek |
+|-------|------|
+| `"auto"` (**default**) | Deteksi model lemah → strict harness otomatis |
+| `true` | Selalu strict (model apapun) |
+| `false` | Jangan force; ikut `workflowPolicyMode` + `blockOnHallucination` |
+
+### Auto detection
+
+ON jika salah satu:
+
+1. **Nama model** mengandung sinyal lemah: `mini`, `free`, `flash`, `nano`, `tiny`, `lite`, `small`, `haiku`, `0.5b`–`8b`, `gpt-4o-mini`, `mimo-v2.5-free`, `FlashCombo`, …
+2. **ModelRegistry stats** (setelah `minSampleSize`): status `unstable`/`degraded`, reliability &lt; `softBlockReliability`, atau hallucination rate tinggi
+
+Strong names (`sonnet`, `opus`, `r1`, `gpt-4o` non-mini, …) tidak dipaksa ON hanya karena nama.
+
+### Saat harness ACTIVE
+
+- `WorkflowPolicy` → **strict** (bisa **block** execute tanpa research/plan evidence)
+- Hallucination → **block** (threshold diperketat)
+- Notice di system prompt + output `agentic_execute`
+- Status di `agentic_status detail=full`
+
+```bash
+# Cek status harness
+agentic_status detail=full
+# → 🛡️ Dumb-Model Harness
+#   Status: ACTIVE (auto-name)
+#   Model: opencode/mimo-v2.5-free
+#   WorkflowPolicy: strict
+```
+
+### Contoh config
+
+```json
+{
+  "agent": {
+    "dumbModelMode": "auto",
+    "workflowPolicyMode": "advisory",
+    "autoHallucinationCheck": true
+  }
+}
+```
+
+Paksa selalu ketat (CI / model sangat lemah):
+
+```json
+{ "agent": { "dumbModelMode": true } }
+```
+
+Matikan auto (hanya advisory):
+
+```json
+{ "agent": { "dumbModelMode": false, "workflowPolicyMode": "advisory" } }
+```
+
+Implementasi: `src/core/dumb-model.ts` (`resolveDumbHarness`).
+
+---
+
+## Self-Improving RAG (critical path)
+
+Tidak ada flag terpisah di config untuk mematikan pipeline default. Retrieval knowledge selalu lewat:
+
+```
+Adaptive Retrieval → KbPO Boundary → MMKP Context Optimizer
+  → inject di system.transform
+  → feedback di agentic_execute / AgentLoop
+```
+
+MDP multi-turn = mode `deep` (opt-in API), bukan default chat.
+
+Lihat: [Memory guide](guide/memory.md), `src/memory/rag-self-improve.ts`.
+
+---
 
 ## Model Preferences
 
@@ -117,8 +197,5 @@ agentic_model list
 
 File: `~/.config/opencode/models-stats.json`
 
-Tracked per model: reliability, hallucination rate, latency, calls, consecutive failures.
-
-Auto-quarantine jika:
-- Consecutive failures >= 5
-- Hallucination rate > 50%
+Tracked per model: reliability, hallucination rate, latency, calls, consecutive failures.  
+Stats ini juga dipakai **auto dumb-model** detection.

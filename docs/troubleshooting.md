@@ -59,6 +59,36 @@ npm run build
 
 Kemudian restart agent sesi.
 
+### Execute BLOCKED by WorkflowPolicy (`research-missing`)
+
+```
+## Step …: 🛑 BLOCKED by WorkflowPolicy
+🛑 research-missing: Call agentic_nav or webfetch first.
+```
+
+**Kenapa:** Dumb-Model Harness **ACTIVE** (default `dumbModelMode: "auto"` pada model free/mini/flash) memaksa WorkflowPolicy **strict**. Modify file tanpa jejak research diblokir.
+
+**Fix:**
+
+```
+# 1) Cek harness
+agentic_status detail=full
+
+# 2) Research dulu
+agentic_nav query="relevant files"
+# atau
+agentic_fetch url="https://..."
+
+# 3) Baru execute
+agentic_execute stepId="..." success=true filesModified=[...]
+```
+
+Matikan auto (tidak disarankan untuk model lemah):
+
+```json
+{ "agent": { "dumbModelMode": false } }
+```
+
 ### Agent loop runaway
 
 ```

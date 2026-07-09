@@ -12,7 +12,8 @@ Semua 12 paper gaps (arXiv:2606.05608), P0-P4 dari TODO.md, dan **22 paper RAG s
 2. ✅ **Schema-First Boundaries** — LLM output divalidasi sebelum dipakai (P1)
 3. ✅ **Dumb Model Mode** — strict mode untuk model lemah (P2)
 4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
-5. ✅ **Test Coverage** — **3212+ tests** in parallel (~85s serial), c8 **89.72% stmts / 69.08% branch / 76.6% func** + CI coverage gate (P4)
+5. ✅ **Test Coverage** — **3342+ tests** in parallel (~27s), c8 gate + CI coverage (P4)
+5b. ✅ **Auto Dumb-Model Harness** — `dumbModelMode: "auto"` (name + stats → WorkflowPolicy strict)
 6. ✅ **Typed Errors** — 49/49 throw sites migrated, 0 `as any` remaining
 7. ✅ **SemanticCache** — TF-IDF + cosine, benchmarked at 0.78 threshold
 8. ✅ **HallucinationGuard** — confidence-aware claims (0-1)
@@ -33,8 +34,8 @@ Semua 12 paper gaps (arXiv:2606.05608), P0-P4 dari TODO.md, dan **22 paper RAG s
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
                     # postbuild: auto-copy ke ~/.cache/opencode/packages/ (jika ada)
-npm test            # 3212+ unit tests in parallel (~35s), 0 TS errors, 0 lint errors
-npm run test:serial # Same tests serial (~84s, for debugging)
+npm test            # 3342+ unit tests in parallel (~27s), 0 TS errors, 0 lint errors
+npm run test:serial # Same tests serial (for debugging)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
 node test/e2e-scenario.mjs # EvoClaw: 50-file codebase, 5 iterations
@@ -201,13 +202,16 @@ src/
 | **Knowledge Boundary** | `rag-knowledge-boundary.ts` | KbPO (ACL 2026) | 4-quadrant taxonomy: internal vs external confidence calibration |
 | **Context Optimizer** | `rag-context-optimizer.ts` | Self-Correcting RAG (ACL 2026) | MMKP token-budget-aware greedy selection with diversity bonus |
 
-### Flow Self-Improving:
+### Flow Self-Improving (runtime default — wired):
 ```
-Query → KbPO Boundary Calibration → MDP Retrieval (multi-turn)
-  → Context Optimizer (budget-aware) → Agent Execution
-  → Feedback Loop (quality update) → Staleness Check → Recommendation
+Query → RAGSelfImprovePipeline (Adaptive → KbPO → MMKP)
+  → system.transform inject + track usedTitles
+  → Agent Execution
+  → agentic_execute / AgentLoop → Feedback Loop (quality update)
 ```
-```
+MDP multi-turn = opt-in `mode: "deep"`, bukan default.
+
+Facade: `src/memory/rag-self-improve.ts`.
 
 ## File Config (`.agentic/config.json`)
 
@@ -230,14 +234,16 @@ Konfigurasi plugin disimpan di `.agentic/config.json` (per project). Auto-create
 | `agent.maxDelegationDepth` | `number` | `3` | Max depth delegasi agent |
 | `agent.defaultRole` | `string` | `"developer"` | Default role untuk agent tanpa spesifikasi |
 | `agent.requireSemanticCheck` | `boolean` | `false` | Wajibkan semantic check tiap execute |
-| `agent.blockOnHallucination` | `boolean` | `false` | Block step jika hallucination terdeteksi |
+| `agent.blockOnHallucination` | `boolean` | `false` | Block step jika hallucination (selalu effective saat dumb harness ON) |
 | `agent.minSampleSize` | `number` | `5` | Minimum sample size untuk statistik model |
 | `agent.autoSkillExtract` | `boolean` | `true` | Auto-extract skill dari task sukses |
 | `agent.autoHallucinationCheck` | `boolean` | `true` | Auto-cek hallucination tiap execute |
 | `agent.hallucinationThreshold` | `number` | `0.3` | Threshold hallucination score |
 | `agent.hardBlockReliability` | `number` | `0.2` | Reliability threshold untuk hard block |
-| `agent.softBlockReliability` | `number` | `0.4` | Reliability threshold untuk soft block |
-| `agent.deepVerification` | `object` | `{ security, perf, arch, deps: true }` | Toggle per-dimensi deep verify |
+| `agent.softBlockReliability` | `number` | `0.4` | Soft block + signal auto dumb-mode |
+| `agent.workflowPolicyMode` | `"advisory"\|"strict"` | `"advisory"` | Policy gate; di-override ke strict saat dumb harness ON |
+| `agent.dumbModelMode` | `boolean\|"auto"` | `"auto"` | **`true`=always strict; `false`=off; `"auto"`=detect weak model by name + stats** |
+| `agent.deepVerification` | `object` | `{ security, performance, architecture, deps: true }` | Toggle per-dimensi deep verify |
 | `storage.traceRetentionDays` | `number` | `7` | Retensi trace file |
 | `storage.skillMaxCount` | `number` | `200` | Max skills tersimpan |
 
@@ -255,10 +261,18 @@ Konfigurasi plugin disimpan di `.agentic/config.json` (per project). Auto-create
   "agent": {
     "maxDelegationDepth": 5,
     "autoHallucinationCheck": true,
-    "hallucinationThreshold": 0.4
+    "hallucinationThreshold": 0.4,
+    "dumbModelMode": "auto",
+    "workflowPolicyMode": "advisory"
   }
 }
 ```
+
+### Dumb-Model Harness (ringkas)
+
+- Default `"auto"`: model free/mini/flash → WorkflowPolicy **strict** + block hallucination.
+- Cek: `agentic_status detail=full` → section `🛡️ Dumb-Model Harness`.
+- Modul: `src/core/dumb-model.ts`. Docs: `docs/config.md`.
 
 ### File Terkait
 

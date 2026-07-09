@@ -1,8 +1,16 @@
 # OpenCode Agentic Engine — 32 Tools Reference
 
 > **Plugin**: opencode-agentic-engine  
-> **Version**: 0.5.17-dev  
+> **Version**: 0.5.20-dev  
 > **Total Tools**: 32 (Stage I–V + Blueprint)
+
+### Runtime harness (bukan tool terpisah)
+
+| Fitur | Config / cek | Efek |
+|-------|----------------|------|
+| **Dumb-Model Harness** | `agent.dumbModelMode` default `"auto"`; `agentic_status detail=full` | Model free/mini/flash → WorkflowPolicy **strict** + block hallucination |
+| **Self-Improving RAG** | selalu on di critical path | Adaptive→KbPO→MMKP inject; feedback di `agentic_execute` |
+| **WorkflowPolicy** | `agent.workflowPolicyMode` | advisory vs strict; strict bisa block `research-missing` |
 
 ---
 
@@ -670,7 +678,7 @@ Stage V    Autonomous     [1 tool]    auto
 Blueprint  Experimental   [7 tools]   debate, router, clean, rag, mcp, a2a,
                                       tools
 ───────────────────────────────────────────────────
-Total                    [31 tools]
+Total                    [32 tools]
 ```
 
 ---

@@ -1,6 +1,6 @@
 # Features Overview
 
-31 tools dikelompokkan dalam 5 Stage + Blueprint.
+32 tools dikelompokkan dalam 5 Stage + Blueprint.
 
 ---
 

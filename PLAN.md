@@ -9,8 +9,8 @@
 | Metrik | Nilai |
 |--------|-------|
 | **Versi** | v0.5.20-dev |
-| **Unit tests** | 3311 (all mock, no LLM needed) |
-| **Agentic tools** | 31 (`agentic_*` prefix) |
+| **Unit tests** | 3342 (all mock, no LLM needed) + OpenCode real spawn verified for dumb harness |
+| **Agentic tools** | 32 (`agentic_*` prefix) |
 | **Source files** | 175+ di `src/` (11 subdirektori + 6 baru memory/) |
 | **Coverage gate** | ✅ Stmts 89.72%+, Branch 69.08%+, Func 76.6%+, Lines 80%+ |
 | **Lint** | ✅ **0 warnings, 0 errors** |
@@ -48,18 +48,19 @@ Semua gap dari arXiv:2606.05608 sudah diimplementasi dan di-enforce di runtime:
 
 ```
 src/
-├── index.ts              # Entry: 31 tools + 5 hooks
-├── core/                 # Planning, execution, verification, LLM, DAG (78 file)
-├── agents/               # Multi-agent: orchestrator, coordinator, A2A (9 file)
-├── drift/                # Hallucination guard, checkpoints, patterns (7 file)
-├── memory/               # Episodic, skill, RAG, vector, session store + Self-Improving RAG (28 file)
-│   ├── multi-index-rag.ts        # RAG dengan quality-weighted scoring
-│   ├── rag-quality-scorer.ts     # 🆕 5-dimensi quality + staleness + decay (SCIM)
-│   ├── rag-feedback-loop.ts      # 🆕 Closed-loop execution → RAG update (PatchRAG)
-│   ├── rag-adaptive-retrieval.ts # 🆕 4-mode adaptive search (SCIM + SeaKR)
-│   ├── rag-mdp-retrieval.ts      # 🆕 MDP action space (EvoGraph-R1 + SPARKLE)
-│   ├── rag-knowledge-boundary.ts # 🆕 4-quadrant calibration (KbPO)
-│   └── rag-context-optimizer.ts  # 🆕 MMKP token-budget optimizer (Self-Correcting RAG)
+├── index.ts              # Entry: 32 tools + hooks
+├── core/                 # Planning, execution, verification, LLM, DAG + dumb-model.ts
+├── agents/               # Multi-agent: orchestrator, coordinator, A2A
+├── drift/                # Hallucination guard, checkpoints, patterns
+├── memory/               # Episodic, skill, RAG + Self-Improving RAG (critical path)
+│   ├── multi-index-rag.ts        # RAG base + quality-weighted scoring
+│   ├── rag-self-improve.ts       # 🆕 Facade critical path (Adaptive→KbPO→MMKP+feedback)
+│   ├── rag-quality-scorer.ts     # 5-dimensi quality + staleness (SCIM)
+│   ├── rag-feedback-loop.ts      # Closed-loop execution → RAG update
+│   ├── rag-adaptive-retrieval.ts # 4-mode adaptive search
+│   ├── rag-mdp-retrieval.ts      # MDP (deep mode opt-in)
+│   ├── rag-knowledge-boundary.ts # KbPO 4-quadrant
+│   └── rag-context-optimizer.ts  # MMKP token-budget
 ├── evaluation/           # Live evaluator (5 dimensi) (3 file)
 ├── evolution/            # Self-evolution, continuous evolution (4 file)
 ├── observability/        # Logger, dashboard, trace (5 file)
@@ -100,7 +101,8 @@ Berdasarkan riset 22 paper terbaru (2024–2026). Closed-loop knowledge quality 
 | Branch coverage >75% | 🔮 Future | Saat ini ~69% (CI gate at 60%) |
 | Gaps #1–#12 | ✅ **Semua selesai** | 12 gaps dari arXiv:2606.05608 |
 | Lint warnings 0 | ✅ **0 warnings, 0 errors** | All `no-explicit-any` eliminated |
-| Self-Improving RAG | ✅ **22 paper terimplementasi** | 6 modul baru, terverifikasi dengan real simulation |
+| Self-Improving RAG | ✅ **22 paper + critical-path facade** | `rag-self-improve.ts` wired ke query/transform/execute |
+| Auto dumb-model harness | ✅ **default `"auto"`** | name + stats → strict; verified via `opencode run` real |
 
 ---
 
