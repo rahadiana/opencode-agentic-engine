@@ -31,8 +31,8 @@
 
 ## 🔴 High Priority
 
-### H1. Git push ✅ (earlier) — re-push this batch
-- [ ] Push H4/M4 commits to origin after commit
+### H1. Git push ✅
+- [x] Pushed H4/M4: `9114830` on origin
 
 ### H4. agentic_auto SWE reliability ✅ (harness)
 - [x] Path hints + file targeting
