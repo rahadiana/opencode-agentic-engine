@@ -2,7 +2,7 @@
 
 | File | Fungsi |
 |------|--------|
-| `live-evaluator.ts` | 5-dimensi real-time scoring dari tool hooks |
+| `live-evaluator.ts` | 5-dimensi real-time scoring dari tool hooks / events |
 
 ## Dimensi
 
@@ -14,4 +14,5 @@
 | `multiAgent` | 15% | >90% delegation success |
 | `skillReuse` | 10% | >50% skill found |
 
-Skor ditampilkan di dashboard via `agentic_status detail="full"`.
+Feed dari EventBus (`step.completed` / `step.failed` / delegation) di `index.ts`.  
+Skor di dashboard: `agentic_status detail="full"`.

@@ -2,18 +2,21 @@
 
 | File | Fungsi |
 |------|--------|
-| `logger.ts` | Structured logger: debug/info/warn/error, timestamped |
-| `dashboard.ts` | Timeline + stats + anomaly detection + model reliability |
-| `trace-logger.ts` | JSONL trace writer (buffered, auto-flush, dedup guard) |
+| `logger.ts` | Structured logger: debug/info/warn/error |
+| `dashboard.ts` | Timeline + stats + anomaly + model reliability (+ evolution/constraint metrics) |
+| `trace-logger.ts` | JSONL trace writer (buffered, auto-flush, dedup) |
 
-## Dashboard Metrics
+## Dashboard via `agentic_status detail="full"`
 
-Tersedia via `agentic_status detail="full"`:
-- Statistics (calls, success rate, latency, peak concurrency)
-- Tools Used (sorted table)
-- Timeline (last 20 events)
-- Anomalies (timeout, loop, retry storm detection)
-- Evolution metrics (skills, lifecycle, usage)
-- Constraint safety (violations, circuit breaker)
-- Performance (slowest tools, semantic cache hit rate)
-- Model reliability (per-model: reliability %, hallucination %, calls)
+- Execution overview / progress
+- Workflow engine retry entries
+- **Model reliability** (per-model)
+- **🛡️ Dumb-Model Harness** — ACTIVE/off, source, model, WorkflowPolicy effective
+- Available models (dari OpenCode)
+- Error recovery / Alignment / Economics summaries
+- Trace timeline, anomalies, evolution metrics (jika data ada)
+
+## Events → traces
+
+`EventBus.onAny` di `index.ts` menulis ke TraceLogger.  
+File: `.agentic/trace.jsonl` (retensi lewat `storage.traceRetentionDays`).

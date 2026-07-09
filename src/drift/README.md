@@ -2,14 +2,27 @@
 
 | File | Fungsi |
 |------|--------|
-| `checkpoints.ts` | Risk evaluation: BLOCK/REVIEW/WARNING. Deteksi file deletion, mass changes, API changes, config/secret exposure |
-| `context-compressor.ts` | Sliding window + key info extraction untuk context compression |
-| `dependency-tracker.ts` | Per-session file change + error propagation tracking |
-| `hallucination-guard.ts` | Verifikasi 4 claim types: file_exists, function_exists, import_valid, api_signature. Path traversal protection |
-| `pattern-discovery.ts` | Error pattern discovery dari riwayat error |
+| `checkpoints.ts` | Risk evaluation: BLOCK / REVIEW / WARNING (deletion, mass change, secrets, …) |
+| `context-compressor.ts` | Sliding window + key info extraction |
+| `dependency-tracker.ts` | Per-session file change + error propagation across steps |
+| `hallucination-guard.ts` | Claim verification (file/func/import/api) + confidence 0–1; auto di `agentic_execute` |
+| `pattern-discovery.ts` | Recurring error patterns dari riwayat |
 
 ## Flow
 
 ```
-execute step → hallucination guard (auto) → checkpoint risk eval → dependency track → pattern discovery
+agentic_execute
+  → WorkflowPolicy (core) — boleh BLOCK dulu (research-missing, …)
+  → record result
+  → HallucinationGuard (jika autoHallucinationCheck)
+      → dumb harness ON → threshold lebih ketat + blockOnHallucination effective
+  → checkpoints.evaluate
+  → dependencyTracker.recordChange / analyzeErrorPropagation
+  → patternDiscovery (via AgentLoop / events)
 ```
+
+## Catatan
+
+- Guard **auto** di execute (`config.agent.autoHallucinationCheck`, default true).
+- `agentic_guard` = re-check manual, bukan pengganti auto-check.
+- Checkpoint types beda dari WorkflowPolicy: checkpoint = risk UX; policy = workflow gate.

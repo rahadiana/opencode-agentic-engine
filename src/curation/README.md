@@ -2,25 +2,28 @@
 
 ## Fungsi
 
-Memfilter dan mengkurasi skill yang diekstrak dari percakapan. Skill dengan kualitas rendah otomatis ditolak, skill bagus dipromosikan ke skill store.
+Lifecycle + kualitas skill: inject ke prompt, mark stale, archive, handle negative feedback.
 
 ## File
 
 | File | Deskripsi |
 |------|-----------|
-| `skill-curator.ts` | SkillCurator class — quality gate untuk skill baru |
+| `skill-curator.ts` | SkillCurator — lifecycle + auto-injection ke system prompt |
 
 ## Flow
 
 ```
-Skill diekstrak → SkillCurator.curate()
-  ├─ Validasi metadata (name, description)
-  ├─ Validasi workflow steps
-  ├─ Check success rate threshold
-  └─ Jika lolos → simpan ke SkillStore
+Skill extract (execute / skill tool)
+  → SkillStore
+  → Curator: inject top-N by relevance (TF-IDF vs goal)
+  → periodic applyLifecycle() (stale / archive)
+  → negative feedback → handleNegativeFeedback
 ```
+
+Config: `config.curator.*` (enabled, staleAfterDays, maxSkillsInPrompt, injectThreshold, …).
 
 ## Key Dependencies
 
-- `memory/skill-store.ts` — penyimpanan skill yang sudah dikurasi
-- `memory/skill-format.ts` — format/validasi schema skill
+- `memory/skill-store.ts` — storage
+- `memory/skill-security.ts` — scan saat import SKILL.md eksternal (bukan curator, tapi pipeline skill)
+- `core/prompt-builder.ts` — inject curated skills ke system prompt
