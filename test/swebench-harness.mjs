@@ -64,6 +64,169 @@ function mockCtx(sessionID) {
   }
 }
 
+/**
+ * Real HTTP LLM client compatible with OpenCode SDK surface used by LLMEngine.
+ * Routes session.prompt → OpenAI-compatible chat/completions (zen free or custom).
+ * Without this, agentic_auto gets [NO_LLM] and SWE scores are meaningless.
+ */
+function createHttpLlmClient(opts = {}) {
+  const baseURL = (opts.baseURL || process.env.OPENAI_BASE_URL || "https://opencode.ai/zen/v1").replace(/\/$/, "")
+  const model = opts.model || process.env.OPENAI_MODEL || "mimo-v2.5-free"
+  // OpenCode Free zen accepts NO auth (or empty bearer). Fake keys like "opencode-free" → 401.
+  const apiKey = opts.apiKey || process.env.OPENAI_API_KEY || ""
+  const timeoutMs = opts.timeoutMs || 180_000
+  let callCount = 0
+
+  async function chatCompletions({ system, user, maxTokens = 8192, temperature = 0.2, jsonMode = false }) {
+    callCount++
+    const messages = []
+    // Free reasoning models often put answer only after long reasoning;
+    // reinforce JSON-only final answer in system.
+    let sys = system || ""
+    if (jsonMode || /Return JSON|ONLY valid JSON/i.test(sys + (user || ""))) {
+      sys = `${sys}\n\nIMPORTANT: Your final answer must be ONLY valid JSON (no markdown fences). Put any reasoning before the JSON if needed, but end with the raw JSON object.`
+    }
+    if (sys) messages.push({ role: "system", content: sys })
+    messages.push({ role: "user", content: user })
+    const body = {
+      model,
+      messages,
+      max_tokens: maxTokens,
+      temperature,
+    }
+    // Do NOT force response_format — free models often 400 / ignore it
+    const controller = new AbortController()
+    const t = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      const headers = { "Content-Type": "application/json" }
+      if (apiKey) headers.Authorization = `Bearer ${apiKey}`
+      const res = await fetch(`${baseURL}/chat/completions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      })
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "")
+        throw new Error(`LLM HTTP ${res.status}: ${errText.slice(0, 300)}`)
+      }
+      const data = await res.json()
+      const choice = data.choices?.[0]
+      // Free models (mimo) often return content:null and only reasoning text
+      let content = choice?.message?.content
+        || choice?.message?.reasoning
+        || choice?.text
+        || ""
+      if (typeof content !== "string") content = JSON.stringify(content ?? "")
+      // If reasoning embeds JSON, extract last {...} or ```json block
+      if (!content.includes('"files"') && !content.includes('"path"')) {
+        const fence = content.match(/```(?:json)?\s*([\s\S]*?)```/i)
+        if (fence) content = fence[1].trim()
+        else {
+          const brace = content.match(/\{[\s\S]*"files"[\s\S]*\}/)
+          if (brace) content = brace[0]
+        }
+      }
+      // Strip markdown fences if present
+      content = content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim()
+      if (process.env.SWE_DEBUG_LLM) {
+        console.log(`  [LLM debug] contentLen=${content.length} finish=${choice?.finish_reason} usage=${JSON.stringify(data.usage)}`)
+        console.log(`  [LLM debug] preview=${content.slice(0, 200).replace(/\n/g, " ")}`)
+      }
+      return {
+        content,
+        usage: data.usage || {},
+        model: data.model || model,
+      }
+    } finally {
+      clearTimeout(t)
+    }
+  }
+
+  return {
+    _stats: () => ({ callCount, model, baseURL }),
+    config: {
+      providers: async () => ({
+        data: {
+          providers: [
+            {
+              name: "OpenCode Free",
+              id: "opencode",
+              models: { [model]: { id: model, providerID: "opencode", name: model, status: "active" } },
+            },
+          ],
+          default: { build: `opencode/${model}`, plan: `opencode/${model}` },
+        },
+      }),
+    },
+    session: {
+      create: async () => ({ data: { id: `swe-sess-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` } }),
+      delete: async () => true,
+      get: async () => ({
+        data: {
+          cost: 0,
+          model: { id: model, providerID: "opencode" },
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          title: "SWE-bench",
+          agent: "build",
+        },
+      }),
+      prompt: async (opts) => {
+        const body = opts?.body || {}
+        const system = body.system || ""
+        const userParts = (body.parts || []).filter(p => p.type === "text").map(p => p.text).join("\n")
+        const user = userParts || ""
+        const jsonMode = /ONLY valid JSON|json mode|Return JSON/i.test(system + user)
+        const result = await chatCompletions({
+          system,
+          user,
+          // Free reasoning models burn tokens on reasoning first — need headroom
+          maxTokens: 8192,
+          temperature: 0.2,
+          jsonMode,
+        })
+        return {
+          // Support both SDK shapes: { parts } and { data: { parts } }
+          info: {
+            id: `msg-${callCount}`,
+            sessionID: opts?.path?.id || "swe",
+            role: "assistant",
+            cost: 0,
+            tokens: {
+              input: result.usage.prompt_tokens || 0,
+              output: result.usage.completion_tokens || 0,
+              reasoning: result.usage.completion_tokens_details?.reasoning_tokens || 0,
+              cache: { read: 0, write: 0 },
+            },
+            finish: "stop",
+            model: { id: model, providerID: "opencode" },
+          },
+          parts: [{ id: `part-${callCount}`, type: "text", text: result.content }],
+          data: {
+            info: {
+              id: `msg-${callCount}`,
+              sessionID: opts?.path?.id || "swe",
+              role: "assistant",
+              cost: 0,
+              tokens: {
+                input: result.usage.prompt_tokens || 0,
+                output: result.usage.completion_tokens || 0,
+                reasoning: 0,
+                cache: { read: 0, write: 0 },
+              },
+              finish: "stop",
+            },
+            parts: [{ id: `part-${callCount}`, type: "text", text: result.content }],
+          },
+        }
+      },
+    },
+    app: {
+      log: async () => true,
+    },
+  }
+}
+
 function tryExec(cmd, args, opts) {
   try { execFileSync(cmd, args, { ...opts, stdio: "pipe", timeout: 30000 }); return true }
   catch { return false }
@@ -374,12 +537,27 @@ async function runScenario(scenario) {
   // Apply scenario-specific setup
   scenario.setup(worktree)
 
-  // Load plugin
+  // Load plugin with REAL HTTP LLM client when not LLM_OFF
+  // (Previously AgenticEngine was called without client → [NO_LLM] / 0-token fake "success")
   const mod = await import(PLUGIN_DIST)
-  const ctx = mockCtx(scenario.id)
-  ctx.directory = worktree
-  ctx.worktree = worktree
-  const hooks = await mod.AgenticEngine(ctx)
+  const toolCtx = mockCtx(scenario.id)
+  toolCtx.directory = worktree
+  toolCtx.worktree = worktree
+  const llmClient = CAN_USE_LLM ? createHttpLlmClient() : null
+  const hooks = await mod.AgenticEngine({
+    client: llmClient || {
+      session: {
+        create: async () => ({ data: { id: "mock" } }),
+        delete: async () => true,
+        prompt: async () => ({ parts: [{ type: "text", text: "[NO_LLM]" }], data: { parts: [{ type: "text", text: "[NO_LLM]" }] } }),
+      },
+      config: { providers: async () => ({ data: { providers: [], default: {} } }) },
+      app: { log: async () => true },
+    },
+    project: { name: scenario.id, path: worktree, worktree },
+    directory: worktree,
+    worktree,
+  })
 
   let scenarioPass = false
   let scenarioNote = ""
@@ -388,9 +566,22 @@ async function runScenario(scenario) {
   try {
     const autoResult = await hooks.tool.agentic_auto.execute({
       goal: scenario.description,
-      constraints: ["TypeScript", "ESM modules"],
-    }, ctx)
+      constraints: ["TypeScript", "ESM modules", "Prefer editing TARGET FILES listed in the prompt"],
+      thorough: true,
+      maxSteps: 4,
+    }, toolCtx)
     const out = typeof autoResult === "string" ? autoResult : (autoResult.output || "")
+    const meta = typeof autoResult === "object" ? (autoResult.metadata || {}) : {}
+    if (llmClient) {
+      const st = llmClient._stats()
+      console.log(`  LLM calls: ${st.callCount} model=${st.model}`)
+    }
+    if (meta.targetFiles?.length) {
+      console.log(`  Targets: ${meta.targetFiles.slice(0, 5).join(", ")}`)
+    }
+    if (meta.filesModified?.length) {
+      console.log(`  Modified: ${meta.filesModified.join(", ")}`)
+    }
 
     if (!CAN_USE_LLM) {
       // Mock mode: check agent produced output without crashing
@@ -398,8 +589,9 @@ async function runScenario(scenario) {
       scenarioPass = true
       scenarioNote = "mock mode — no LLM"
     } else {
-      if (out.includes("[NO_LLM]") || out.includes("no LLM")) {
+      if (out.includes("[NO_LLM]") || /\bno LLM\b/i.test(out)) {
         scenarioNote = "no LLM available"
+        assert(false, `${scenario.id}: ${scenarioNote}`)
       } else {
         // Evaluate correctness
         const evalResult = scenario.evaluate(worktree)

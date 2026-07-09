@@ -103,7 +103,7 @@ Berdasarkan riset 22 paper terbaru (2024–2026). Closed-loop knowledge quality 
 | Tool extraction remaining | 🟡 Partial | Almost all tools already in `src/tools/*`; definitions.ts is thin barrel |
 | Branch coverage >75% | 🔮 Future | Saat ini ~69% (CI gate at 60%) |
 | agentic_auto SWE harness | ✅ | Path hints, target files, verify-before-done, dumb mode fix |
-| agentic_auto SWE real-LLM remeasure | 🔮 | Run live free-model SWE after H4 harness |
+| agentic_auto SWE real-LLM (free) | ✅ **3/7 (43%)** | mimo-v2.5-free; was 2/7 baseline; harness now real HTTP client |
 | Lint unused-ctx | ✅ | ~1820 → ~86 warnings |
 | Git push origin | 🔄 | Push after each batch |
 | NPM publish | 🔮 Future | `npm publish` untuk `opencode plugin opencode-agentic-engine` |

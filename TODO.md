@@ -34,11 +34,17 @@
 ### H1. Git push ✅
 - [x] Pushed H4/M4: `9114830` on origin
 
-### H4. agentic_auto SWE reliability ✅ (harness)
+### H4. agentic_auto SWE reliability ✅ (harness + real measure)
 - [x] Path hints + file targeting
 - [x] Research/plan/verify artifacts + final compile gate
 - [x] Dumb harness mode resolution fix
-- [ ] Optional: re-run **real LLM** SWE-bench to measure 2/7 → ? (needs network/LLM)
+- [x] **Real LLM SWE (2026-07-09)** after harness HTTP client fix:
+  - Model: `mimo-v2.5-free` via OpenCode zen (no auth)
+  - **Score: 3/7 (43%)** — was baseline **2/7 (29%)** (fake NO_LLM / broken prior harness)
+  - Pass: S1 package.json ✅ (new vs baseline), S3 email ✅, S6 auth middleware ✅
+  - Fail: S2 test-writing, S4 logger import, S5 rate-limit, S7 CORS
+  - Note: free model still writes extra files / wrong imports; H4 targeting helped S1
+  - Harness: `createHttpLlmClient` in `test/swebench-harness.mjs` (was missing client → not real LLM)
 
 ---
 
