@@ -59,8 +59,10 @@
     "format:check": "prettier --check \"src/**/*.ts\"",
     "test:swebench": "node test/swebench-harness.mjs",
     "test:fixture": "npx vitest run test/e2e-codebase-fixture/tests/integration/profile-endpoint.test.ts --reporter=verbose",
-"test:swebench-llm": "OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_MODEL=qwen2.5:0.5b node test/swebench-harness.mjs",
-    "prepublishOnly": "npm run build"
+    "test:swebench-llm": "OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_MODEL=qwen2.5:0.5b node test/swebench-harness.mjs",
+    "prepublishOnly": "npm run build",
+    "test:swebench:mock": "LLM_OFF=true node test/swebench-harness.mjs",
+    "test:swebench:free": "bash -c \"unset LLM_OFF OPENAI_API_KEY; export OPENAI_BASE_URL=https://opencode.ai/zen/v1 OPENAI_MODEL=mimo-v2.5-free; node test/swebench-harness.mjs\""
   },
   "dependencies": {
     "stopwords-iso": "^1.1.0"

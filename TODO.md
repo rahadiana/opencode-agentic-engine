@@ -64,7 +64,7 @@
 - [ ] `npm run test:coverage:ci` + `./test-container.sh` full verify
 - [ ] NPM publish
 - [ ] Streaming (OpenCode SDK)
-- [ ] Real-LLM SWE baseline re-measure after H4
+- [x] Real-LLM SWE remeasure + docs: `docs/guide/swebench.md` (3/7 free)
 
 ---
 

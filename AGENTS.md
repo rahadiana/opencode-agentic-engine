@@ -39,8 +39,13 @@ npm run test:serial # Same tests serial (for debugging)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
 node test/e2e-scenario.mjs # EvoClaw: 50-file codebase, 5 iterations
-node test/swebench-harness.mjs # SWE-bench: 7 scenarios (auto: OpenCode Free)
-LLM_OFF=true node test/swebench-harness.mjs # SWE-bench mock mode (no LLM)
+node test/swebench-harness.mjs # SWE-bench real: 7 scenarios (OpenCode Free HTTP client)
+LLM_OFF=true node test/swebench-harness.mjs # SWE-bench mock (7/7 no LLM — CI)
+# Real free (recommended copy-paste):
+#   unset LLM_OFF OPENAI_API_KEY
+#   export OPENAI_BASE_URL=https://opencode.ai/zen/v1 OPENAI_MODEL=mimo-v2.5-free
+#   node test/swebench-harness.mjs
+# Docs: docs/guide/swebench.md  |  Do NOT set OPENAI_API_KEY=opencode-free (401)
 node test/e2e-llm.mjs       # LLM E2E: 19 tests (auto: OpenCode Free)
 ./test-container.sh # Full Docker pipeline (7 layers)
 ```

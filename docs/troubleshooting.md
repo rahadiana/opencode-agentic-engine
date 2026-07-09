@@ -155,3 +155,9 @@ A: SQLite (default) atau JSON files di `.agentic/`.
 
 **Q: Apa bedanya agentic_auto sama manual flow?**
 A: `agentic_auto` = satu call: plan → execute → verify → retry → score. Manual = panggil tiap tool satu-satu.
+
+**Q: SWE-bench real LLM 401 / Invalid API key?**
+A: Jangan set `OPENAI_API_KEY=opencode-free`. Untuk OpenCode Free zen: `unset OPENAI_API_KEY`. Lihat [Guide: SWE-bench](guide/swebench.md).
+
+**Q: SWE-bench "real" selesai dalam ~20 detik dan skor aneh?**
+A: Itu sering mode palsu (no HTTP LLM / NO_LLM). Real free butuh ~10–15+ menit dan log `LLM calls: N`. Docs: [swebench.md](guide/swebench.md).

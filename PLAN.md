@@ -14,9 +14,10 @@
 | **Source files** | 175+ di `src/` (11 subdirektori + 6 baru memory/) |
 | **Coverage gate** | ✅ Stmts 89.72%+, Branch 69.08%+, Func 76.6%+, Lines 80%+ |
 | **Lint** | ✅ **0 warnings, 0 errors** |
-| **SWE-bench (mock)** | ✅ 7/7 (100%) |
-| **SWE-bench (real LLM)** | ✅ **7/7 (100%)** via delegate + manual fix |
-| **SWE-bench (real LLM) baseline** | ✅ 2/7 (29%) — OpenCode Free |
+| **SWE-bench (mock)** | ✅ 7/7 (100%) — `LLM_OFF=true` |
+| **SWE-bench (real free, agentic_auto)** | ✅ **3/7 (43%)** — mimo-v2.5-free + HTTP client (2026-07-09) |
+| **SWE-bench (real, delegate+manual)** | ✅ 7/7 (100%) — model kuat / manual, not pure auto |
+| **SWE-bench docs** | ✅ `docs/guide/swebench.md` |
 | **EvoClaw score** | ✅ 100% (target: >55%) |
 | **CI** | ✅ Build + lint + coverage gate + unit test |
 | **22 Paper RAG Self-Improvement** | ✅ **Semua terimplementasi + terverifikasi dengan real simulation** |

@@ -1,21 +1,31 @@
 // test/swebench-harness.mjs — SWE-bench-style evaluation harness
-// Evaluates agent performance on coding tasks with measurable outcomes.
+// Evaluates agentic_auto on 7 coding scenarios (fixture: e2e-codebase-fixture).
+// Full docs: docs/guide/swebench.md
 //
 // Usage:
-//   node test/swebench-harness.mjs                          # auto: OpenCode Free (no auth needed)
-//   OPENAI_BASE_URL=http://localhost:11434/v1 node test/swebench-harness.mjs
-//   OPENAI_API_KEY=sk-... node test/swebench-harness.mjs
-//   LLM_OFF=true node test/swebench-harness.mjs             # mock mode (skip LLM)
+//   # Mock (CI) — expect 7/7, no network
+//   LLM_OFF=true node test/swebench-harness.mjs
 //
-// Scoring:
-//   Each scenario = 1 point for pass, 0 for fail.
-//   Total score = points / scenarios * 100.
-//   Target: >60% per SWE-bench Verified standard.
+//   # Real LLM — OpenCode Free (default). NO fake API key.
+//   unset LLM_OFF OPENAI_API_KEY
+//   export OPENAI_BASE_URL=https://opencode.ai/zen/v1
+//   export OPENAI_MODEL=mimo-v2.5-free
+//   node test/swebench-harness.mjs
 //
-// LLM auto-detection:
-//   By default uses OpenCode Free (opencode.ai/zen/v1) — no API key needed.
-//   Set OPENAI_API_KEY, ANTHROPIC_API_KEY, OPENAI_BASE_URL to override.
-//   Set LLM_OFF=true to force mock mode (no LLM calls).
+//   # Other OpenAI-compatible endpoints
+//   OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_MODEL=qwen2.5:0.5b node test/swebench-harness.mjs
+//   OPENAI_API_KEY=sk-... OPENAI_BASE_URL=... OPENAI_MODEL=... node test/swebench-harness.mjs
+//
+//   # Debug LLM payloads
+//   SWE_DEBUG_LLM=1 node test/swebench-harness.mjs
+//
+// Pitfalls:
+//   - OPENAI_API_KEY=opencode-free → HTTP 401 (Invalid API key). Unset key for zen free.
+//   - Without createHttpLlmClient (old harness), "real" runs were NO_LLM / 0-token fakes.
+//   - Real free run takes ~10–15+ min; mock ~10–20s.
+//
+// Scoring: 1 point per scenario. Target >60% (SWE-bench Verified style).
+// Baseline free (2026-07-09, post-H4): 3/7 (43%). Mock: 7/7.
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, cpSync } from "node:fs"
 import { resolve, dirname, join } from "node:path"

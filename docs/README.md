@@ -18,6 +18,7 @@ Berdasarkan paper **"The End of Software Engineering"** (arXiv:2606.05608).
 | [Guide: Memory & Skills](guide/memory.md) | Cross-session, skills, Self-Improving RAG |
 | [Guide: Protocols](guide/protocols.md) | MCP, A2A integration |
 | [Guide: Evolution](guide/evolution.md) | Self-evolution, fine-tuning |
+| [Guide: SWE-bench](guide/swebench.md) | **Mock vs real LLM**, cara ulang eval `agentic_auto` |
 | [Configuration](config.md) | `.agentic/config.json`, models, **dumbModelMode auto** |
 | [Architecture](architecture.md) | Knowledge-first + RAG pipeline + dumb harness |
 | [Troubleshooting](troubleshooting.md) | FAQ, error handling |
