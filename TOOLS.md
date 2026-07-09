@@ -1,7 +1,7 @@
 # OpenCode Agentic Engine — 32 Tools Reference
 
 > **Plugin**: opencode-agentic-engine  
-> **Version**: 0.5.20-dev  
+> **Version**: 0.5.7  
 > **Total Tools**: 32 (Stage I–V + Blueprint)
 
 ### Runtime harness (bukan tool terpisah)

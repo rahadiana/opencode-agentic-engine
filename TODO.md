@@ -1,6 +1,6 @@
 # TODO — opencode-agentic-engine
 
-> Last updated: 2026-07-09 (v0.5.20-dev)  
+> Last updated: 2026-07-09 (v0.5.7)  
 > High + Medium workstream complete (with residual lint polish).
 
 ---
@@ -72,7 +72,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Version | 0.5.20-dev |
+| Version | **0.5.7** |
 | Unit tests | **3373** ✅ |
 | SWE-bench mock | **7/7** ✅ |
 | Lint errors | 0 |

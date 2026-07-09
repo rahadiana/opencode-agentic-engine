@@ -8,7 +8,7 @@
 
 | Metrik | Nilai |
 |--------|-------|
-| **Versi** | v0.5.20-dev |
+| **Versi** | **v0.5.7** (npm; was 0.5.6 on registry) |
 | **Unit tests** | 3342 (all mock, no LLM needed) + OpenCode real spawn verified for dumb harness |
 | **Agentic tools** | 32 (`agentic_*` prefix) |
 | **Source files** | 175+ di `src/` (11 subdirektori + 6 baru memory/) |
