@@ -47,6 +47,7 @@ export function makeStatusTool(ctx: ToolContext): ToolSpec {
         worldModel,
         log,
         configLoader,
+        stateStore,
       } = ctx
 
       // ── If detail='full', run comprehensive dashboard ──
@@ -132,6 +133,20 @@ export function makeStatusTool(ctx: ToolContext): ToolSpec {
           output += `**Reason:** ${dumb.reason}\n`
           output += `**WorkflowPolicy:** \`${wf}\` · blockOnHallucination effective: \`${dumb.active || !!agentCfg.blockOnHallucination}\`\n`
         } catch (e) { log.warn("Silent catch: dumb harness status", { error: String(e) }) }
+
+        // Hybrid store roots (local project vs global user)
+        try {
+          const roots = stateStore.getStoreRoots()
+          const scopes = stateStore.getNamespaceScopes()
+          const mem = configLoader.get().memory
+          output += `\n### 💾 Store Roots (hybrid local/global)\n`
+          output += `**Local (project):** \`${roots.localDir}\`\n`
+          output += `**Global (user):** \`${roots.globalDir}\`\n`
+          output += `**Namespaces:** local=${Object.entries(scopes).filter(([, s]) => s === "local").map(([k]) => k).join(", ")}\n`
+          output += `**Namespaces:** global=${Object.entries(scopes).filter(([, s]) => s === "global").map(([k]) => k).join(", ")}\n`
+          output += `**Namespaces:** both=${Object.entries(scopes).filter(([, s]) => s === "both").map(([k]) => k).join(", ")}\n`
+          output += `**RAG deep escalate:** \`${mem.ragDeepEscalate !== false}\` (threshold=${mem.ragDeepEscalateThreshold ?? 0.35})\n`
+        } catch (e) { log.warn("Silent catch: store roots status", { error: String(e) }) }
 
         try {
           const ocModels = await llmEngine.listOpenCodeModels()

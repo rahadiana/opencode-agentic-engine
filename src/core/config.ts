@@ -234,6 +234,17 @@ export interface MemoryConfig {
     keywordWeight: number
     vectorWeight: number
   }
+  /**
+   * Auto-escalate Self-Improve RAG from standard → deep (MDP) when
+   * adaptive confidence is below this threshold (0–1).
+   * Default 0.35. Set to 0 to disable auto deep escalate.
+   */
+  ragDeepEscalateThreshold?: number
+  /**
+   * When true (default), allow auto deep/MDP escalate under low confidence.
+   * When false, only explicit mode:"deep" uses MDP.
+   */
+  ragDeepEscalate?: boolean
 }
 
 export interface DeepVerificationAgentConfig {
@@ -362,6 +373,9 @@ export const DEFAULT_CONFIG: AgenticConfigSchema = {
       keywordWeight: 0.3,
       vectorWeight: 0.7,
     },
+    // Auto-escalate adaptive → MDP deep when avg confidence below threshold
+    ragDeepEscalate: true,
+    ragDeepEscalateThreshold: 0.35,
   },
   agent: {
     maxDelegationDepth: 3,

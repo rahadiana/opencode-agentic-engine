@@ -23,9 +23,9 @@ Berdasarkan 22 paper (ACL 2025–2026, CVPR 2026, MDPI 2026).
 |-------|------|-------|--------|
 | **Pipeline (facade)** | `rag-self-improve.ts` | composition | Adaptive → KbPO → MMKP + feedback. Entry point tunggal |
 | **Quality Scorer** | `rag-quality-scorer.ts` | SCIM | 5-dimensi quality + staleness + recommendation |
-| **Feedback Loop** | `rag-feedback-loop.ts` | Closed-Loop RAG, PatchRAG | Step outcome → quality update |
+| **Feedback Loop** | `rag-feedback-loop.ts` | Closed-Loop RAG, PatchRAG | Step outcome → `updateEntry` write-back + quality |
 | **Adaptive Retrieval** | `rag-adaptive-retrieval.ts` | SCIM, SeaKR | standard → augment → refine → decompose |
-| **MDP Retrieval** | `rag-mdp-retrieval.ts` | EvoGraph-R1, SPARKLE | Deep mode multi-turn (**opt-in** `mode: "deep"`) |
+| **MDP Retrieval** | `rag-mdp-retrieval.ts` | EvoGraph-R1, SPARKLE | Deep mode: explicit `mode:"deep"` **or** auto-escalate |
 | **Knowledge Boundary** | `rag-knowledge-boundary.ts` | KbPO | 4-quadrant trust (internal vs external) |
 | **Context Optimizer** | `rag-context-optimizer.ts` | Self-Correcting RAG | MMKP token-budget selection |
 
@@ -65,7 +65,8 @@ User Query
 
 - Quality-weighted: `hybrid*0.6 + quality*0.3 + (1-staleness)*0.1`
 - KbPO: Q1 Integrate · Q2 Trust-RAG · Q3 Trust-Self · Q4 Refuse/research
-- MDP deep: hanya `mode: "deep"` (bukan chat default)
+- MDP deep: `mode: "deep"` **atau** auto-escalate (`memory.ragDeepEscalate`, threshold default 0.35)
+- Write-back: `MultiIndexRAG.updateEntry({ id \| title }, patch)` + `getEntrySnapshot()`
 - Singleton: `getRAGSelfImprovePipeline()` / `setRAGSelfImprovePipeline()`
 
 ## Memory Levels

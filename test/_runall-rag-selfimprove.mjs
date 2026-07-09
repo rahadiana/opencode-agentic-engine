@@ -305,7 +305,8 @@ export async function runRAGSelfImproveTests(mod) {
   sip.setRagStore(sipRag)
   assert(sip.getRagStore() === sipRag, "SIP-3a: setRagStore binds store")
 
-  const filled = await sip.search("express routing api", { limit: 3, mode: "standard" })
+  // deepEscalate:false so meta.mode stays standard for this assertion
+  const filled = await sip.search("express routing api", { limit: 3, mode: "standard", deepEscalate: false })
   assert(Array.isArray(filled.knowledge), "SIP-3b: knowledge is array")
   assert(Array.isArray(filled.usedTitles), "SIP-3c: usedTitles tracked")
   assert(filled.knowledgeState && typeof filled.knowledgeState.quadrant === "number", "SIP-3d: KbPO state present")
@@ -337,6 +338,96 @@ export async function runRAGSelfImproveTests(mod) {
   })
   assert(fbNeg !== null, "SIP-5a: negative feedback ok")
   assert(true, "SIP-6: orchestrator wiring covered via setRAGSelfImprove API")
+
+  // ── H2: updateEntry + getEntrySnapshot write-back ──
+  section("MultiIndexRAG.updateEntry")
+
+  const ueRag = new MultiIndexRAG()
+  ueRag.indexEpisode("knowledge-tech", {
+    id: "ue-ep-1",
+    planGoal: "Update Entry API Test",
+    outcome: "success",
+    summary: "Original summary for updateEntry",
+    decisions: ["d1"],
+    filesChanged: [],
+    sessionId: "ue-sess",
+    timestamp: new Date().toISOString(),
+    tags: ["update", "entry"],
+    score: 1.0,
+    usageCount: 0,
+    significance: "routine",
+  })
+
+  // UE-1: update by id
+  const n1 = ueRag.updateEntry({ id: "ue-ep-1" }, {
+    qualityScore: 0.91,
+    quality: { relevance: 0.9, completeness: 0.9, consistency: 0.9, factuality: 0.9, fluency: 0.9 },
+    lastVerifiedAt: new Date().toISOString(),
+  })
+  assert(n1 === 1, `UE-1a: update by id count=1 got=${n1}`)
+  const snap1 = ueRag.getEntrySnapshot({ id: "ue-ep-1" })
+  assert(snap1.length === 1, "UE-1b: snapshot by id")
+  assert(snap1[0].qualityScore === 0.91, `UE-1c: qualityScore written got=${snap1[0].qualityScore}`)
+  assert((snap1[0].version ?? 0) >= 2, `UE-1d: version bumped got=${snap1[0].version}`)
+
+  // UE-2: update by title
+  const n2 = ueRag.updateEntry({ title: "Update Entry API" }, { qualityScore: 0.55 })
+  assert(n2 >= 1, `UE-2a: update by title got=${n2}`)
+  const snap2 = ueRag.getEntrySnapshot({ title: "Update Entry API Test" })
+  assert(snap2.length >= 1 && snap2[0].qualityScore === 0.55, "UE-2b: title update reflected")
+
+  // UE-3: missing id → 0
+  assert(ueRag.updateEntry({ id: "no-such-ep" }, { qualityScore: 0.1 }) === 0, "UE-3: missing id → 0")
+  assert(ueRag.updateEntry({}, { qualityScore: 0.1 }) === 0, "UE-3b: empty selector → 0")
+
+  // UE-4: feedback loop uses updateEntry write-back (round-trip score)
+  const fbl2 = new RAGFeedbackLoop()
+  const before = ueRag.getEntrySnapshot({ id: "ue-ep-1" })[0].qualityScore
+  const fbr = await fbl2.feedStepResult(ueRag, {
+    sourceId: "ue-fb-1",
+    success: true,
+    usedEntryTitles: ["Update Entry API Test"],
+    output: "ok",
+    timestamp: new Date().toISOString(),
+  })
+  assert(fbr.entriesUpdated >= 1, "UE-4a: feedback updated entries")
+  const after = ueRag.getEntrySnapshot({ id: "ue-ep-1" })[0]
+  assert(typeof after.qualityScore === "number", "UE-4b: qualityScore present after feedback")
+  assert(after.usageStats && after.usageStats.successCount >= 1, "UE-4c: usageStats successCount")
+  assert(after.qualityScore !== before || after.lastVerifiedAt, "UE-4d: snapshot changed after feedback")
+
+  // ── M1: deep escalate ──
+  section("RAGSelfImprove deep escalate")
+
+  resetRAGSelfImprovePipeline()
+  const sip2 = getRAGSelfImprovePipeline()
+  const emptyRag = new MultiIndexRAG()
+  sip2.setRagStore(emptyRag)
+
+  // Empty store + escalate on → deep path attempted (mode deep or deepEscalated)
+  const esc = await sip2.search("totally unknown obscure query xyz", {
+    mode: "standard",
+    deepEscalate: true,
+    deepEscalateThreshold: 0.99, // force escalate even if tiny scores
+  })
+  assert(esc.meta.mode === "deep" || esc.meta.deepEscalated === true || esc.mdp !== null || esc.knowledge.length === 0,
+    `SIP-ESC-1: escalate path runs (mode=${esc.meta.mode} escalated=${esc.meta.deepEscalated})`)
+
+  // deepEscalate false → stays standard
+  const noEsc = await sip2.search("totally unknown obscure query xyz", {
+    mode: "standard",
+    deepEscalate: false,
+  })
+  assert(noEsc.meta.mode === "standard", `SIP-ESC-2: no escalate stays standard got=${noEsc.meta.mode}`)
+  assert(!noEsc.meta.deepEscalated, "SIP-ESC-2b: deepEscalated false")
+
+  // threshold 0 → never escalate
+  const thr0 = await sip2.search("another empty query", {
+    mode: "standard",
+    deepEscalate: true,
+    deepEscalateThreshold: 0,
+  })
+  assert(thr0.meta.mode === "standard", "SIP-ESC-3: threshold 0 disables escalate")
 
   resetRAGSelfImprovePipeline()
 }

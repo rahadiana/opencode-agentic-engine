@@ -170,9 +170,19 @@ export class RAGFeedbackLoop {
       }
     }
 
-    // Persist semua perubahan ke RAG store
+    // Persist via public updateEntry API (version bump + notifyPersist)
+    let persisted = 0
     for (const [epId, metadata] of episodeMetadataMap) {
-      rag.updateEpisodeMetadata(epId, metadata)
+      const n = rag.updateEntry({ id: epId }, metadata)
+      if (n > 0) persisted++
+      else {
+        // Fallback for older callers / edge cases
+        if (rag.updateEpisodeMetadata(epId, metadata)) persisted++
+      }
+    }
+
+    if (persisted > 0) {
+      log.info(`[RAGFeedback] write-back persisted=${persisted} titles=${feedback.usedEntryTitles.length}`)
     }
 
     return {
@@ -275,25 +285,29 @@ export class RAGFeedbackLoop {
   }
 
   /**
-   * Update entry in RAG store.
-   * Since MultiIndexRAG doesn't expose direct entry update,
-   * we work with the reference directly (entries are objects).
-   * For persistence, we rely on the RAG's notifyPersist mechanism.
+   * @deprecated Use MultiIndexRAG.updateEntry() — kept as thin wrapper for callers.
    */
-  private async _updateEntryInRAG(rag: MultiIndexRAG, _entry: IndexEntry): Promise<void> {
-    // Entries are stored as references in the indices.
-    // When we modify entry properties, the in-memory state is updated.
-    // The RAG's auto-persist mechanism will save changes to disk.
-    // We just need to ensure persistence is notified.
-
-    // For now, we rely on the RAG's internal dirty tracking.
-    // Future improvement: add explicit updateEntry() method to MultiIndexRAG.
-    try {
-      // Trigger persist notification
-      const persistMethod = (rag as unknown as { notifyPersist: () => void }).notifyPersist
-      if (persistMethod) persistMethod()
-    } catch {
-      // Non-fatal
+  private async _updateEntryInRAG(rag: MultiIndexRAG, entry: IndexEntry): Promise<void> {
+    const id = entry.episode?.id
+    if (!id) {
+      // Title-only fallback
+      if (entry.title) rag.updateEntry({ title: entry.title }, {
+        quality: entry.quality,
+        qualityScore: entry.qualityScore,
+        usageStats: entry.usageStats,
+        feedbackHistory: entry.feedbackHistory,
+        lastVerifiedAt: entry.lastVerifiedAt,
+        stalenessScore: entry.stalenessScore,
+      })
+      return
     }
+    rag.updateEntry({ id }, {
+      quality: entry.quality,
+      qualityScore: entry.qualityScore,
+      usageStats: entry.usageStats,
+      feedbackHistory: entry.feedbackHistory,
+      lastVerifiedAt: entry.lastVerifiedAt,
+      stalenessScore: entry.stalenessScore,
+    })
   }
 }

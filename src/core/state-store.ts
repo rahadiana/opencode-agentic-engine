@@ -50,7 +50,8 @@ export interface StateStoreConfig {
 
 // ── Namespace config: lokal vs global ──
 
-const NAMESPACE_SCOPE: Record<StateNamespace, "local" | "global" | "both"> = {
+/** Namespace → storage root (local project / global user / both). Exported for docs + status. */
+export const NAMESPACE_SCOPE: Record<StateNamespace, "local" | "global" | "both"> = {
   rag:        "local",
   skills:     "global",
   episodes:   "local",
@@ -102,6 +103,16 @@ export class StateStore {
   constructor(config: StateStoreConfig) {
     this.localDir = resolve(config.worktree, ".agentic", "store")
     this.globalDir = config.globalDir ?? resolve(homedir(), ".config", "opencode", "agentic-store")
+  }
+
+  /** Absolute paths for local (project) and global (user) store roots. */
+  getStoreRoots(): { localDir: string; globalDir: string } {
+    return { localDir: this.localDir, globalDir: this.globalDir }
+  }
+
+  /** Namespace scope map (local | global | both). */
+  getNamespaceScopes(): Record<StateNamespace, "local" | "global" | "both"> {
+    return { ...NAMESPACE_SCOPE }
   }
 
   // ── Public API ──

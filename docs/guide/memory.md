@@ -17,13 +17,37 @@ Level 3: Semantic Memory (Patterns)
   → MultiIndexRAG: categorized knowledge
   → Hybrid TF-IDF + vector search
   → Self-Improving RAG pipeline (critical path):
-      Adaptive → KbPO → MMKP → inject
-      execute feedback → quality/staleness update
+      Adaptive → (optional MDP deep escalate) → KbPO → MMKP → inject
+      execute feedback → updateEntry write-back + quality/staleness
 
 Level 4: Procedural Memory (Skills)
   → SkillStore: reusable task patterns
   → agentic-skill/v1 format
 ```
+
+## Hybrid storage: local vs global
+
+Bukan pure-local atau pure-global — **hybrid ber-namespace** via `StateStore`.
+
+| Root | Path | Isi utama |
+|------|------|-----------|
+| **Local (project)** | `<worktree>/.agentic/store` | RAG, episodes, evolution, evaluation, session, Second Brain (decisions/todos/reflections/graph) |
+| **Global (user)** | `~/.config/opencode/agentic-store` | Skills reusable, model reliability stats |
+| **Both** | local + global merge | Prompt evolution (`prompts`) |
+| **Session RAM** | per `sessionID` | Plan, turns, artifacts (`rag:lastUsedTitles`, `workflow:researched`) — not the full cross-project brain |
+
+| Namespace | Scope |
+|-----------|--------|
+| `rag`, `episodes`, `evolution`, `evaluation`, `session` | **local** |
+| `decisions`, `todos`, `reflections`, `graph` | **local** |
+| `skills`, `models` | **global** |
+| `prompts` | **both** |
+
+Config prefs: `.agentic/config.json` + `.agentic/models.json` = **local project**.  
+Model stats file: `~/.config/opencode/models-stats.json` = **global**.
+
+Knowledge inject ke prompt default = **project RAG + session**, bukan semua project.  
+Cek roots di runtime: `agentic_status detail=full` → section **Store Roots**.
 
 ## Self-Improving RAG (default critical path)
 
@@ -43,7 +67,11 @@ Step outcome → FeedbackLoop → entry quality ↑/↓ + staleness
 ```
 
 - **Default:** mode `standard` (cepat, selalu on)
-- **Deep / MDP multi-turn:** opt-in (`mode: "deep"`), bukan default chat
+- **Deep / MDP multi-turn:**
+  - Explicit: `mode: "deep"`
+  - **Auto-escalate:** jika adaptive `avgScore` di bawah threshold (default `0.35`) dan `memory.ragDeepEscalate: true` → MDP deep sekali, lalu lanjut KbPO/MMKP
+  - Matikan: `"ragDeepEscalate": false` di `.agentic/config.json`
+- **Closed-loop write-back:** `feedStepResult` → `MultiIndexRAG.updateEntry({ id })` (version bump + persist), bukan cuma mutasi in-memory
 - **Manual store/search:** tetap lewat `agentic_rag`
 
 ## Second Brain (`agentic_memo`)

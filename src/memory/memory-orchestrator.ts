@@ -409,11 +409,27 @@ export class MemoryOrchestrator {
       if (this.ragSelfImprove) {
         if (!this.ragSelfImprove.getRagStore()) this.ragSelfImprove.setRagStore(this.ragStore)
 
+        // Read escalate knobs from config if available (memory.ragDeepEscalate*)
+        let deepEscalate = true
+        let deepEscalateThreshold = 0.35
+        try {
+          const { getConfigLoader } = await import("../core/shared-instances.js")
+          const mem = getConfigLoader()?.get()?.memory
+          if (mem) {
+            if (mem.ragDeepEscalate === false) deepEscalate = false
+            if (typeof mem.ragDeepEscalateThreshold === "number") {
+              deepEscalateThreshold = mem.ragDeepEscalateThreshold
+            }
+          }
+        } catch { /* config optional in unit tests */ }
+
         const improved = await this.ragSelfImprove.search(query, {
           mode: "standard",
           limit,
           category,
           internalConfidence: 0.35, // knowledge-first: parametric knowledge is suspect
+          deepEscalate,
+          deepEscalateThreshold,
         })
 
         if (improved.knowledge.length > 0) {

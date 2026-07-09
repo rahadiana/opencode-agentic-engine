@@ -51,6 +51,17 @@ export interface SelfImproveSearchOptions {
   internalConfidence?: number
   /** Optional category filter */
   category?: string
+  /**
+   * Auto-escalate standard → deep (MDP) when adaptive confidence is low.
+   * Default true. Set false to keep MDP fully opt-in.
+   * Config: memory.ragDeepEscalate
+   */
+  deepEscalate?: boolean
+  /**
+   * Confidence threshold (0–1) below which deep escalate fires.
+   * Default 0.35. Config: memory.ragDeepEscalateThreshold
+   */
+  deepEscalateThreshold?: number
 }
 
 export interface SelfImproveSearchResult {
@@ -72,6 +83,8 @@ export interface SelfImproveSearchResult {
     action: string
     sufficient: boolean
     recommendation: string
+    /** True when standard path auto-escalated to MDP deep */
+    deepEscalated?: boolean
   }
 }
 
@@ -110,10 +123,12 @@ export class RAGSelfImprovePipeline {
    * Falls back gracefully if RAG is empty or any stage fails.
    */
   async search(query: string, options: SelfImproveSearchOptions = {}): Promise<SelfImproveSearchResult> {
-    const mode: SelfImproveMode = options.mode ?? "standard"
+    let mode: SelfImproveMode = options.mode ?? "standard"
     const limit = options.limit ?? DEFAULT_LIMIT
     const tokenBudget = options.tokenBudget ?? DEFAULT_TOKEN_BUDGET
     const internalConfidence = options.internalConfidence ?? DEFAULT_INTERNAL_CONFIDENCE
+    const deepEscalate = options.deepEscalate ?? true
+    const deepEscalateThreshold = options.deepEscalateThreshold ?? DEFAULT_INTERNAL_CONFIDENCE
 
     const empty = this._emptyResult(mode)
 
@@ -125,6 +140,7 @@ export class RAGSelfImprovePipeline {
       let entries: IndexEntry[] = []
       let adaptive: AdaptiveSearchResult | null = null
       let mdpResult: MDPResult | null = null
+      let escalatedFromStandard = false
 
       if (mode === "deep") {
         mdpResult = await this.mdp.run(this.rag, query, 4, tokenBudget)
@@ -137,6 +153,21 @@ export class RAGSelfImprovePipeline {
       } else {
         adaptive = await this.adaptive.searchWithAutoEscalate(this.rag, query, 3, Math.max(limit * 2, 6))
         entries = adaptive.entries
+
+        // M1: Auto-escalate to MDP deep when adaptive confidence is low
+        // and escalate is enabled (config memory.ragDeepEscalate)
+        if (deepEscalate && this._shouldDeepEscalate(adaptive, entries, deepEscalateThreshold)) {
+          log.info(
+            `[RAGSelfImprove] deep-escalate: avgScore=${(adaptive.avgScore ?? 0).toFixed(2)} ` +
+            `threshold=${deepEscalateThreshold} → MDP`,
+          )
+          mdpResult = await this.mdp.run(this.rag, query, 4, tokenBudget)
+          if (mdpResult.entries.length > 0) {
+            entries = mdpResult.entries
+          }
+          mode = "deep"
+          escalatedFromStandard = true
+        }
       }
 
       // Optional category filter (soft)
@@ -173,6 +204,7 @@ export class RAGSelfImprovePipeline {
             recommendation: knowledgeState.action === "refuse" || knowledgeState.action === "research"
               ? "manual-research"
               : (adaptive?.recommendation ?? "manual-research"),
+            deepEscalated: escalatedFromStandard,
           },
         }
       }
@@ -217,6 +249,7 @@ export class RAGSelfImprovePipeline {
           recommendation: sufficient
             ? "proceed"
             : (adaptive?.recommendation ?? "manual-research"),
+          deepEscalated: escalatedFromStandard,
         },
       }
     } catch (err) {
@@ -272,6 +305,30 @@ export class RAGSelfImprovePipeline {
   }
 
   // ── helpers ──
+
+  /**
+   * Decide whether standard adaptive results are too weak → escalate to MDP deep.
+   * Triggers when: empty results, avgScore below threshold, or not sufficient + low scores.
+   */
+  private _shouldDeepEscalate(
+    adaptive: AdaptiveSearchResult | null,
+    entries: IndexEntry[],
+    threshold: number,
+  ): boolean {
+    if (threshold <= 0) return false
+    if (!adaptive) return entries.length === 0
+    if (entries.length === 0) return true
+    if (adaptive.avgScore < threshold) return true
+    if (!adaptive.sufficient && adaptive.avgScore < threshold + 0.1) return true
+    // Recommendation already says manual-research / decompose → try MDP once
+    if (
+      (adaptive.recommendation === "manual-research" || adaptive.recommendation === "decompose")
+      && adaptive.avgScore < Math.max(threshold, 0.5)
+    ) {
+      return true
+    }
+    return false
+  }
 
   private _toKnowledge(entries: IndexEntry[]): SelfImproveKnowledgeEntry[] {
     return entries

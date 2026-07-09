@@ -16,6 +16,17 @@
 | **Tool System** | `tool-router.ts`, `tool-catalog.ts`, `dynamic-tool-registry.ts`, `mcp-client.ts`, `mcp-server.ts`, `protocol-adapter.ts`, `tool-usage-tracker.ts` | Tool routing, MCP client/server, protocol adaptation |
 | **Agent Blueprint** | `agent-blueprint.ts`, `workflow-engine.ts` | Agent blueprint system, workflow engine |
 | **Advanced** | `attention-scheduler.ts`, `code-intent-analyzer.ts`, `dag-engine.ts`, `dag-helpers.ts`, `event-bus.ts`, `event-taxonomy.ts`, `fine-tuning.ts`, `formal-model.ts`, `git.ts`, `id-chain.ts`, `meta-reasoner.ts`, `navigator.ts`, `simulation-engine.ts`, `skill-improver.ts`, `skill-schema.ts`, `state-store.ts`, `tech-debt-scorer.ts`, `world-model.ts` | DAG, formal contracts, fine-tuning, meta-reasoning, nav, simulation, world model |
+
+### FormalModel + AttentionScheduler (wiring audit M2)
+
+| Component | Used where | Critical-path default? |
+|-----------|------------|------------------------|
+| `DependencyGraph` | `planner.ts` cycle detection | ✅ Yes (plan) |
+| `ContractVerifier` | `executor.ts` pre/post contracts | ✅ Yes (execute path) |
+| `FormalModel` aggregate A=(M,T,M,Π) | Types + exports; not a single runtime singleton | Partial — pieces wired, not full A gate |
+| `AttentionScheduler` | Unit tests + export; multi-agent uses orchestrator/delegate/parallel | ❌ **Opt-in / experimental** — not default wire |
+
+Do **not** force AttentionScheduler into every multi-agent run (extra scheduling layer without clear ROI). Prefer orchestrator phases + parallel.
 | **Config / shared** | `config.ts`, `shared-instances.ts`, `project-context.ts`, `rate-limit.ts`, `plugin-updater.ts`, `lru-cache.ts` | Plugin config (incl. `dumbModelMode`), DI singletons, project detect |
 
 ## Dumb-Model Harness (`dumb-model.ts`)

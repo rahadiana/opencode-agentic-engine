@@ -96,11 +96,18 @@ Berdasarkan riset 22 paper terbaru (2024–2026). Closed-loop knowledge quality 
 
 | Item | Status | Catatan |
 |------|--------|---------|
+| RAG `updateEntry` write-back | ✅ | `MultiIndexRAG.updateEntry` + feedback loop persist |
+| Hybrid local/global docs | ✅ | memory.md + config.md + status store roots |
+| MDP auto deep-escalate | ✅ | `memory.ragDeepEscalate` + threshold (default 0.35) |
+| FormalModel / AttentionScheduler audit | ✅ | DependencyGraph+ContractVerifier wired; AttentionScheduler opt-in |
+| Tool extraction remaining | 🟡 Partial | Almost all tools already in `src/tools/*`; definitions.ts is thin barrel |
+| Branch coverage >75% | 🔮 Future | Saat ini ~69% (CI gate at 60%) |
+| agentic_auto SWE real-LLM | 🔮 High | Free-model auto ~2/7 — harness hardening remaining |
+| Git push origin | 🔮 Ops | main may be ahead of origin (credentials) |
 | NPM publish | 🔮 Future | `npm publish` untuk `opencode plugin opencode-agentic-engine` |
 | Streaming | 🔮 Future | Didelegasikan ke OpenCode SDK (47/48 capabilities) |
-| Branch coverage >75% | 🔮 Future | Saat ini ~69% (CI gate at 60%) |
 | Gaps #1–#12 | ✅ **Semua selesai** | 12 gaps dari arXiv:2606.05608 |
-| Lint warnings 0 | ✅ **0 warnings, 0 errors** | All `no-explicit-any` eliminated |
+| Lint warnings 0 | ✅ **0 errors** | Unused-ctx warnings remain (M4) |
 | Self-Improving RAG | ✅ **22 paper + critical-path facade** | `rag-self-improve.ts` wired ke query/transform/execute |
 | Auto dumb-model harness | ✅ **default `"auto"`** | name + stats → strict; verified via `opencode run` real |
 

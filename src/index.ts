@@ -1669,7 +1669,7 @@ export { ProtocolAdapter, type Protocol, type ToolDescriptor, type ProtocolCallR
 export { DynamicToolRegistry, type DynamicToolRegistration, type ToolCallResult } from "./core/dynamic-tool-registry.js"
 export { EventBus } from "./core/event-bus.js"
 export { WorkflowEngine, type WorkflowConfig, type ChainedResult } from "./core/workflow-engine.js"
-export { StateStore, type StoreEntry, type StateNamespace } from "./core/state-store.js"
+export { StateStore, NAMESPACE_SCOPE, type StoreEntry, type StateNamespace } from "./core/state-store.js"
 export { MCPServer, type MCPServerConfig, type MCPServerStatus } from "./core/mcp-server.js"
 export { ConfidenceScorer, ConfidenceStore, type ConfidenceScore, type ConfidenceDimensions, type ScoringSignals, type StepConfidenceRecord } from "./core/confidence-scorer.js"
 export { SecondBrain, initSecondBrain, parseReflectionPayload, type ReflectionPayload, type Decision, type Todo, type Reflection, type GraphEdge, type KnowledgeSnapshot } from "./memory/second-brain.js"

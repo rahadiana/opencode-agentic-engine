@@ -304,15 +304,113 @@ export class MultiIndexRAG {
    * Returns true if episode was found and updated.
    */
   updateEpisodeMetadata(id: string, metadata: Record<string, unknown>): boolean {
-    for (const [, index] of this.indices) {
+    for (const [cat, index] of this.indices) {
       const ep = index.episodes.find(e => e.id === id)
       if (ep) {
         Object.assign(ep, metadata)
+        // Bump version if quality/content-related fields changed
+        const epAny = ep as unknown as Record<string, unknown>
+        if (metadata.quality !== undefined || metadata.qualityScore !== undefined || metadata.summary !== undefined) {
+          epAny.version = ((epAny.version as number) ?? 1) + 1
+        }
+        // Re-index TF-IDF when content/title-related fields change so search stays consistent
+        if (metadata.summary !== undefined || metadata.planGoal !== undefined || metadata.decisions !== undefined) {
+          this.vectorStore.index({
+            id: `ep-${ep.id}`,
+            category: cat,
+            title: ep.planGoal,
+            content: `${ep.summary}\n${(ep.decisions ?? []).join("\n")}`,
+            keywords: ep.tags,
+            metadata: { type: "episode", episodeId: ep.id },
+          })
+        }
         this.notifyPersist()
         return true
       }
     }
     return false
+  }
+
+  /**
+   * Public closed-loop API: update a RAG entry by id or title (fuzzy).
+   * Used by RAGFeedbackLoop and callers that need explicit write-back + persist.
+   *
+   * Prefer `id` when known (exact). Falls back to title match via findEpisodesByTitle.
+   * Returns number of entries updated (0 if none found).
+   */
+  updateEntry(
+    selector: { id?: string; title?: string },
+    patch: Record<string, unknown>,
+  ): number {
+    if (!selector?.id && !selector?.title) return 0
+    let updated = 0
+
+    if (selector.id) {
+      if (this.updateEpisodeMetadata(selector.id, patch)) updated++
+      return updated
+    }
+
+    const title = selector.title!
+    const matches = this.findEpisodesByTitle(title)
+    for (const { episode } of matches) {
+      if (this.updateEpisodeMetadata(episode.id, patch)) updated++
+    }
+    return updated
+  }
+
+  /**
+   * Lookup entry quality/usage snapshot by id or title (read-only).
+   * Useful for tests and observability after feedback write-back.
+   */
+  getEntrySnapshot(selector: { id?: string; title?: string }): Array<{
+    id: string
+    title: string
+    category: string
+    qualityScore?: number
+    quality?: QualityDimensions
+    usageStats?: UsageStats
+    version?: number
+    stalenessScore?: number
+    lastVerifiedAt?: string
+  }> {
+    const out: Array<{
+      id: string
+      title: string
+      category: string
+      qualityScore?: number
+      quality?: QualityDimensions
+      usageStats?: UsageStats
+      version?: number
+      stalenessScore?: number
+      lastVerifiedAt?: string
+    }> = []
+
+    const push = (episode: Episode, category: string) => {
+      const epAny = episode as unknown as Record<string, unknown>
+      out.push({
+        id: episode.id,
+        title: episode.planGoal,
+        category,
+        qualityScore: epAny.qualityScore as number | undefined,
+        quality: epAny.quality as QualityDimensions | undefined,
+        usageStats: epAny.usageStats as UsageStats | undefined,
+        version: epAny.version as number | undefined,
+        stalenessScore: epAny.stalenessScore as number | undefined,
+        lastVerifiedAt: epAny.lastVerifiedAt as string | undefined,
+      })
+    }
+
+    if (selector.id) {
+      const found = this.findEpisodeById(selector.id)
+      if (found) push(found.episode, found.category)
+      return out
+    }
+    if (selector.title) {
+      for (const m of this.findEpisodesByTitle(selector.title)) {
+        push(m.episode, m.category)
+      }
+    }
+    return out
   }
 
   /**

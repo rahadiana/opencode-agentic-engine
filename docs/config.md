@@ -26,7 +26,9 @@ File: `.agentic/config.json`
       "vectorWeight": 0.7
     },
     "compressThreshold": 500,
-    "stopWordsLanguages": ["ind", "eng"]
+    "stopWordsLanguages": ["ind", "eng"],
+    "ragDeepEscalate": true,
+    "ragDeepEscalateThreshold": 0.35
   },
   "agent": {
     "maxDelegationDepth": 3,
@@ -69,6 +71,8 @@ File: `.agentic/config.json`
 | `memory.search.vectorWeight` | number | `0.7` | Bobot vector similarity |
 | `memory.compressThreshold` | number | `500` | Auto-compress threshold |
 | `memory.stopWordsLanguages` | string[] | `["ind","eng"]` | Stop words languages |
+| `memory.ragDeepEscalate` | boolean | `true` | Auto-escalate standard RAG → MDP deep saat confidence rendah |
+| `memory.ragDeepEscalateThreshold` | number | `0.35` | Ambang avgScore (0–1); `0` = never auto deep. Explicit `mode:"deep"` tetap bisa |
 | `agent.maxDelegationDepth` | number | `3` | Max delegation chain depth |
 | `agent.defaultRole` | string | `"developer"` | Default agent role |
 | `agent.requireSemanticCheck` | boolean | `false` | Wajib semantic check |
@@ -121,6 +125,17 @@ agentic_status detail=full
 #   Model: opencode/mimo-v2.5-free
 #   WorkflowPolicy: strict
 ```
+
+## Hybrid store (local vs global)
+
+| Root | Path |
+|------|------|
+| Local project | `<worktree>/.agentic/store` |
+| Global user | `~/.config/opencode/agentic-store` |
+
+Namespaces: **local** = rag, episodes, evolution, evaluation, session, decisions, todos, reflections, graph · **global** = skills, models · **both** = prompts.
+
+See `docs/guide/memory.md` for full table. Runtime: `agentic_status detail=full` → **Store Roots**.
 
 ### Contoh config
 
