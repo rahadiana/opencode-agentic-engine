@@ -1557,9 +1557,10 @@ const gi_assert = (c, m) => { if (c) { gi++; console.log(`  PASS: ${m}`) } else 
   const available = git.isAvailable()
   gi_assert(available === false, "GI-6a isAvailable returns false for /tmp/test-git-project")
 
-  // GI-7: isAvailable — projectDir IS a git repo
+  // GI-7: isAvailable — projectDir (must have .git)
   const projectAvailable = projectGit.isAvailable()
-  gi_assert(projectAvailable === true, "GI-7a isAvailable returns true for project dir")
+  const hasDotGit = existsSync(join(process.cwd(), ".git"))
+  gi_assert(projectAvailable === hasDotGit, "GI-7a isAvailable matches .git presence for project dir")
 
   // GI-8: getCurrentBranch — non-git dir returns "main"
   const branch = git.getCurrentBranch()

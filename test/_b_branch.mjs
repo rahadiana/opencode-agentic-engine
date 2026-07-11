@@ -3135,22 +3135,21 @@ const tlfc_assert = (cond, msg) => { if (cond) { tlfc++ } else { console.error(`
 
 {
   const { TraceLogger: TL } = await import(pluginDist)
-  const { mkdirSync, chmodSync, rmSync } = await import("fs")
+  const { mkdirSync, rmSync } = await import("fs")
 
   // TL-FC-1: init() catch → throws AgenticError when mkdir fails (lines 141-142)
   {
     const parent = `/tmp/tlfc1-${Date.now()}`
     mkdirSync(parent, { recursive: true })
-    chmodSync(parent, 0o444)
+    writeFileSync(parent + "/sub", "not-a-dir", "utf-8")
     try {
-      const t = new TL(parent + "/sub")
+      const t = new TL(parent + "/sub/deep")
       await t.init()
       tlfc_assert(false, "TL-FC-1 should have thrown AgenticError")
     } catch (e) {
       const isAe = e.constructor && e.constructor.name === "AgenticError" && e.message.includes("TraceLogger.init")
       tlfc_assert(isAe, "TL-FC-1 init throws AgenticError on mkdir failure")
     } finally {
-      chmodSync(parent, 0o755)
       try { rmSync(parent, { recursive: true, force: true }) } catch {}
     }
   }
