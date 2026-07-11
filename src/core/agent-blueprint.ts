@@ -210,7 +210,7 @@ export class BlueprintParser {
       const trimmed = raw.trimEnd()
       if (trimmed.trim() === "" || trimmed.trim().startsWith("#")) continue
 
-      const indent = raw.length - trimmed.length
+      const indent = trimmed.length - trimmed.trimStart().length
       const line = trimmed.trim()
 
       // Pop stack sampai dapet parent yang sesuai

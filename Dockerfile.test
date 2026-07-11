@@ -33,9 +33,9 @@ RUN echo "=== LAYER 3: DIST CONTENTS ===" && \
     test -f dist/index.js && \
     echo "=== LAYER 3: OK ==="
 
-# — Layer 4: Unit tests (including reflect + enhanced status) —
-RUN echo "=== LAYER 4: UNIT TESTS (test/run.mjs) ===" && \
-    node test/run.mjs && \
+# — Layer 4: Unit tests (parallel runner, isolates per-worker crashes) —
+RUN echo "=== LAYER 4: UNIT TESTS (npm test == parallel) ===" && \
+    npm test && \
     echo "=== LAYER 4: OK ==="
 
 # — Layer 5: Drop-in simulation —
@@ -92,4 +92,4 @@ RUN echo "" && \
     echo "  ALL CONTAINER TESTS PASSED" && \
     echo "=========================================="
 
-CMD ["node", "/workspace/test/run.mjs"]
+CMD ["node", "/workspace/test/run-parallel.mjs"]

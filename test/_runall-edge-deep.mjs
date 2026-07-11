@@ -861,6 +861,664 @@ section("BC-PB: Prompt Builder Branch Coverage")
   )
   assert(typeof pb21 === "string", "PB-21 non-Error curator throw works")
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// BC-LLM: LLMEngine Branch Coverage
+// ═══════════════════════════════════════════════════════════════════════
+section("BC-LLM: LLMEngine Branch Coverage")
+{
+  const { LLMEngine: LLM } = mod
+
+  // LLM-1: constructor with default config
+  const llm1 = new LLM()
+  assert(typeof llm1.getClient === "function", "LLM-1a constructor creates instance")
+  assert(llm1.getCurrentModel() === undefined, "LLM-1b no last known model initially")
+  assert(llm1.getTempSessionId() === null, "LLM-1c temp session null initially")
+
+  // LLM-2: constructor with custom config
+  const llm2 = new LLM({ maxTokens: 2048, temperature: 0.7, maxFallbackAttempts: 5 })
+  assert(typeof llm2.getClient === "function", "LLM-2a custom config creates instance")
+
+  // LLM-3: setChatMode / isChatMode
+  const llm3 = new LLM()
+  assert(llm3.isChatMode() === false, "LLM-3a default chat mode false")
+  llm3.setChatMode(true)
+  assert(llm3.isChatMode() === true, "LLM-3b setChatMode true works")
+  assert(llm3.isChatMode() === true, "LLM-3c isChatMode stays true")
+  llm3.setChatMode(false)
+  assert(llm3.isChatMode() === false, "LLM-3d setChatMode false works")
+
+  // LLM-4: setToolContext / getToolContext
+  const llm4 = new LLM()
+  assert(llm4.getToolContext() === undefined, "LLM-4a default tool context undefined")
+  llm4.setToolContext("agentic_plan")
+  assert(llm4.getToolContext() === "agentic_plan", "LLM-4b setToolContext works")
+  llm4.setToolContext(undefined)
+  assert(llm4.getToolContext() === undefined, "LLM-4c clear tool context")
+
+  // LLM-5: setCurrentModel with various filters
+  const llm5 = new LLM()
+  assert(llm5.getCurrentModel() === undefined, "LLM-5a no model initially")
+  llm5.setCurrentModel("deepseek/deepseek-chat")
+  assert(llm5.getCurrentModel() === "deepseek/deepseek-chat", "LLM-5b setCurrentModel works")
+  llm5.setCurrentModel("opencode/default")
+  assert(llm5.getCurrentModel() === "deepseek/deepseek-chat", "LLM-5c opencode/default ignored")
+  llm5.setCurrentModel("unknown")
+  assert(llm5.getCurrentModel() === "deepseek/deepseek-chat", "LLM-5d unknown ignored")
+  llm5.setCurrentModel("opencode/unknown")
+  assert(llm5.getCurrentModel() === "deepseek/deepseek-chat", "LLM-5e opencode/unknown ignored")
+  llm5.setCurrentModel("")
+  assert(llm5.getCurrentModel() === "deepseek/deepseek-chat", "LLM-5f empty string ignored")
+
+  // LLM-6: setParentSessionId / getParentSessionId
+  const llm6 = new LLM()
+  assert(llm6.getParentSessionId() === null, "LLM-6a parent null initially")
+  llm6.setParentSessionId("ses_parent123")
+  assert(llm6.getParentSessionId() === "ses_parent123", "LLM-6b setParentSessionId works")
+  assert(llm6.getTempSessionId() === null, "LLM-6c temp still null")
+
+  // LLM-7: getFallbackConfig default
+  const llm7 = new LLM()
+  const cfg7 = llm7.getFallbackConfig()
+  assert(Array.isArray(cfg7.models), "LLM-7a fallback models array")
+  assert(cfg7.models.length === 0, "LLM-7b no fallback models by default")
+  assert(cfg7.maxAttempts === 3, "LLM-7c maxAttempts default 3")
+
+  // LLM-8: setFallbackModels with maxAttempts
+  const llm8 = new LLM()
+  llm8.setFallbackModels(["deepseek/deepseek-chat", "openai/gpt-4o"], 5)
+  const cfg8 = llm8.getFallbackConfig()
+  assert(cfg8.models.length === 2, "LLM-8a two fallback models")
+  assert(cfg8.maxAttempts === 5, "LLM-8b maxAttempts set to 5")
+
+  // LLM-9: setFallbackModels without maxAttempts (uses default)
+  const llm9 = new LLM()
+  llm9.setFallbackModels(["anthropic/claude-sonnet"])
+  const cfg9 = llm9.getFallbackConfig()
+  assert(cfg9.models.length === 1, "LLM-9a one fallback model")
+  assert(cfg9.maxAttempts === 3, "LLM-9b maxAttempts default 3")
+
+  // LLM-10: previewFallbackChain with no primary
+  const llm10 = new LLM()
+  llm10.setFallbackModels(["deepseek/deepseek-chat"])
+  const chain10 = llm10.previewFallbackChain(null)
+  assert(chain10.length >= 1, "LLM-10a fallback chain has entries")
+  assert(chain10[0] === "deepseek/deepseek-chat", "LLM-10b chain includes config fallback")
+
+  // LLM-11: previewFallbackChain with primary matching fallback (dedup)
+  const llm11 = new LLM()
+  llm11.setFallbackModels(["deepseek/deepseek-chat", "gpt-4o"])
+  const chain11 = llm11.previewFallbackChain("deepseek/deepseek-chat")
+  assert(chain11.length === 1, "LLM-11a primary excluded from chain")
+  assert(chain11[0] === "gpt-4o", "LLM-11b second model preserved")
+
+  // LLM-12: enableSemanticCache / getSemanticCacheStats
+  const llm12 = new LLM()
+  assert(llm12.getSemanticCacheStats() === null, "LLM-12a no cache initially")
+  llm12.enableSemanticCache()
+  const stats12 = llm12.getSemanticCacheStats()
+  assert(stats12 !== null, "LLM-12b cache enabled")
+  assert(stats12.size === 0, "LLM-12c cache empty")
+  assert(stats12.hitRate === 0, "LLM-12d cache hit rate 0")
+  llm12.enableSemanticCache({ maxEntries: 5 })
+  const stats12b = llm12.getSemanticCacheStats()
+  assert(stats12b !== null, "LLM-12e re-enable with config works")
+
+  // LLM-13: disableSemanticCache
+  const llm13 = new LLM()
+  llm13.enableSemanticCache()
+  assert(llm13.getSemanticCacheStats() !== null, "LLM-13a cache exists")
+  llm13.disableSemanticCache()
+  assert(llm13.getSemanticCacheStats() === null, "LLM-13b cache gone")
+
+  // LLM-14: getCostSwitchStats default
+  const llm14 = new LLM()
+  const s14 = llm14.getCostSwitchStats()
+  assert(s14.totalSwitches === 0, "LLM-14a no switches")
+  assert(s14.totalSavingsUsd === 0, "LLM-14b no savings")
+  assert(Array.isArray(s14.recentSwitches), "LLM-14c recentSwitches array")
+
+  // LLM-15: getMemoryContext without stores returns empty
+  const llm15 = new LLM()
+  const mc15 = llm15.getMemoryContext("test query")
+  assert(mc15 === "", "LLM-15 no memory stores returns empty")
+
+  // LLM-16: getMemoryContext with stores
+  const llm16 = new LLM()
+  llm16.setMemoryStores({
+    searchEpisodes: () => [{ planGoal: "past task", outcome: "success", timestamp: "2026-01-01T00:00:00Z" }],
+    findSkills: () => [{ name: "test-skill", successRate: 0.85 }],
+  })
+  const mc16 = llm16.getMemoryContext("test query")
+  assert(mc16.includes("past task"), "LLM-16a memory context includes episodes")
+  assert(mc16.includes("test-skill"), "LLM-16b memory context includes skills")
+  assert(mc16.includes("Memory Context"), "LLM-16c memory context header present")
+
+  // LLM-17: getMemoryContext with stores that throw
+  const llm17 = new LLM()
+  llm17.setMemoryStores({
+    searchEpisodes: () => { throw new Error("fail") },
+    findSkills: () => { throw new Error("fail") },
+  })
+  const mc17 = llm17.getMemoryContext("test query")
+  assert(mc17 === "", "LLM-17 store throw returns empty (graceful fallback)")
+
+  // LLM-18: updateConfig
+  const llm18 = new LLM()
+  llm18.updateConfig({ temperature: 0.9, maxTokens: 8192 })
+  assert(true, "LLM-18 updateConfig does not crash")
+
+  // LLM-19: setSessionId, setModelRegistry (no crash)
+  const llm19 = new LLM()
+  llm19.setSessionId("ses-test")
+  llm19.setOpencodeClient({ session: { create: async () => ({}), delete: async () => true, prompt: async () => ({ parts: [] }) } })
+  llm19.setSessionId("ses-test-2")
+  assert(true, "LLM-19a setSessionId works")
+  const { ModelRegistry } = mod
+  llm19.setModelRegistry(new ModelRegistry())
+  assert(llm19.getCurrentModel() === undefined, "LLM-19b no model yet")
+
+  // LLM-20: fallbackResponse with jsonMode
+  const llm20 = new LLM()
+  const fb20 = llm20.fallbackResponse ? llm20.fallbackResponse({ systemPrompt: "", userPrompt: "", jsonMode: true }) : null
+  if (fb20) assert(fb20.content.includes("no_llm"), "LLM-20a jsonMode fallback")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// BC-VER: Verifier Branch Coverage
+// ═══════════════════════════════════════════════════════════════════════
+section("BC-VER: Verifier Branch Coverage")
+{
+  const { Verifier: V } = mod
+
+  // VER-1: default state
+  const v1 = new V()
+  assert(v1.getLanguage() === "unknown", "VER-1a default language unknown")
+  assert(v1.hasLLM() === false, "VER-1b no LLM initially")
+
+  // VER-2: setLLM / hasLLM
+  const v2 = new V()
+  v2.setLLM({ call: async () => ({ content: "ok" }) })
+  assert(v2.hasLLM() === true, "VER-2a hasLLM true after set")
+
+  // VER-3: setDomainRegistry (no crash)
+  const v3 = new V()
+  v3.setDomainRegistry({ getCurrentDomain: () => "test", getVerifiers: () => [] })
+  assert(true, "VER-3 setDomainRegistry works")
+
+  // VER-4: clearCompileCache
+  const v4 = new V()
+  v4.clearCompileCache()
+  assert(true, "VER-4 clearCompileCache works")
+
+  // VER-5: detectLanguage with known (tsconfig.json from projectDir)
+  const v5 = new V()
+  const lang5 = v5.detectLanguage(projectDir)
+  assert(lang5 === "typescript", "VER-5a detectLanguage typescript")
+  assert(v5.getLanguage() === "typescript", "VER-5b getLanguage cached")
+
+  // VER-6: detectLanguage with unknown dir (empty dir)
+  const v6tmp = join("/tmp", "ver-empty-" + Date.now())
+  mkdirSync(v6tmp, { recursive: true })
+  const v6 = new V()
+  const lang6 = v6.detectLanguage(v6tmp)
+  assert(lang6 === "unknown", "VER-6a detectLanguage unknown dir")
+  assert(v6.getLanguage() === "unknown", "VER-6b cached as unknown")
+  try { rmSync(v6tmp, { recursive: true, force: true }) } catch {}
+
+  // VER-7: verifySemantic without LLM returns pass+skip message
+  const v7 = new V()
+  const sem7 = await v7.verifySemantic("s1", "do thing", [], projectDir)
+  assert(sem7.passed === true, "VER-7a semantic skip without LLM")
+  assert(sem7.output.includes("no LLM"), "VER-7b output mentions no LLM")
+
+  // VER-8: verifySemantic with LLM but no changed files
+  const v8 = new V()
+  v8.setLLM({ call: async () => ({ content: '{"passed":true,"reasoning":"OK","issuesFound":[]}' }) })
+  const sem8 = await v8.verifySemantic("s2", "do thing", [], projectDir)
+  assert(sem8.passed === true, "VER-8a semantic with no files passes")
+  assert(sem8.output.includes("no readable"), "VER-8b output mentions no readable files")
+
+  // VER-9: verifySemantic with LLM + files — unparseable response
+  const v9dir = join("/tmp", "ver-sem9-" + Date.now())
+  mkdirSync(join(v9dir, "src"), { recursive: true })
+  writeFileSync(join(v9dir, "src", "a.ts"), "const x = 1")
+  const v9 = new V()
+  v9.setLLM({ call: async () => ({ content: "this is not json" }) })
+  const sem9 = await v9.verifySemantic("s3", "test", ["src/a.ts"], v9dir)
+  assert(sem9.passed === false, "VER-9a semantic unparseable fails")
+  assert(sem9.output.includes("unparseable"), "VER-9b output mentions unparseable")
+  try { rmSync(v9dir, { recursive: true, force: true }) } catch {}
+
+  // VER-10: verifySemantic with LLM + files — valid response
+  const v10dir = join("/tmp", "ver-sem10-" + Date.now())
+  mkdirSync(join(v10dir, "src"), { recursive: true })
+  writeFileSync(join(v10dir, "src", "a.ts"), "export function add(a: number, b: number) { return a + b }")
+  const v10 = new V()
+  v10.setLLM({ call: async () => ({ content: '{"passed":true,"reasoning":"Correct","issuesFound":[]}' }) })
+  const sem10 = await v10.verifySemantic("s4", "add func", ["src/a.ts"], v10dir)
+  assert(sem10.passed === true, "VER-10a semantic valid passes")
+  assert(sem10.output.includes("PASS"), "VER-10b output says PASS")
+  try { rmSync(v10dir, { recursive: true, force: true }) } catch {}
+
+  // VER-11: verifyCriteria without LLM
+  const v11 = new V()
+  const cr11 = await v11.verifyCriteria([], "test", [], projectDir)
+  assert(cr11.passed === true, "VER-11a criteria skip no criteria")
+  assert(cr11.output.includes("no LLM"), "VER-11b skip message")
+
+  // VER-12: verifyCriteria with LLM + criteria
+  const v12dir = join("/tmp", "ver-cr12-" + Date.now())
+  mkdirSync(join(v12dir, "src"), { recursive: true })
+  writeFileSync(join(v12dir, "src", "a.ts"), "const x = 1")
+  const v12 = new V()
+  v12.setLLM({ call: async () => ({ content: '{"allPassed":true,"results":[{"criterion":"compile","passed":true,"reasoning":"OK"}]}' }) })
+  const cr12 = await v12.verifyCriteria(["compile must pass"], "test", ["src/a.ts"], v12dir)
+  assert(cr12.passed === true, "VER-12a criteria passes")
+  try { rmSync(v12dir, { recursive: true, force: true }) } catch {}
+
+  // VER-13: verifyCriteria unparseable
+  const v13 = new V()
+  v13.setLLM({ call: async () => ({ content: "bad json" }) })
+  const cr13 = await v13.verifyCriteria(["test"], "goal", ["src/a.ts"], projectDir)
+  assert(cr13.passed === false, "VER-13a criteria unparseable fails")
+
+  // VER-14: parseLLMCheck static helper via private method — test indirectly via runLLMCheck
+  const v14 = new V()
+  v14.setLLM({ call: async () => ({ content: '{"passed":true,"reasoning":"OK","issuesFound":[]}' }) })
+  // verifySecurity calls runLLMCheck internally
+  const v14dir = join("/tmp", "ver-sec14-" + Date.now())
+  mkdirSync(join(v14dir, "src"), { recursive: true })
+  writeFileSync(join(v14dir, "src", "a.ts"), "const x = 1")
+  v14.detectLanguage(v14dir)
+  const sec14 = await v14.verifySecurity("test", ["src/a.ts"], v14dir)
+  assert(sec14.passed === true, "VER-14a security passes")
+  assert(sec14.name === "security", "VER-14b name is security")
+  try { rmSync(v14dir, { recursive: true, force: true }) } catch {}
+
+  // VER-15: verifyPerformance
+  const v15dir = join("/tmp", "ver-perf15-" + Date.now())
+  mkdirSync(join(v15dir, "src"), { recursive: true })
+  writeFileSync(join(v15dir, "src", "a.ts"), "for(let i=0;i<100;i++){}")
+  const v15 = new V()
+  v15.setLLM({ call: async () => ({ content: '{"passed":true,"reasoning":"OK","issuesFound":[]}' }) })
+  v15.detectLanguage(v15dir)
+  const perf15 = await v15.verifyPerformance("test", ["src/a.ts"], v15dir)
+  assert(perf15.passed === true, "VER-15a performance passes")
+  assert(perf15.name === "performance", "VER-15b name is performance")
+  try { rmSync(v15dir, { recursive: true, force: true }) } catch {}
+
+  // VER-16: verifyArchitecture with non-source files
+  const v16dir = join("/tmp", "ver-arch16-" + Date.now())
+  mkdirSync(join(v16dir, "src"), { recursive: true })
+  writeFileSync(join(v16dir, "src", "a.ts"), "import { b } from './b'")
+  const v16 = new V()
+  v16.setLLM({ call: async () => ({ content: '{"passed":true,"reasoning":"Clean","issuesFound":[]}' }) })
+  v16.detectLanguage(v16dir)
+  const arch16 = await v16.verifyArchitecture("test", ["src/a.ts", "data.json", "config.yml"], v16dir)
+  assert(arch16.passed === true, "VER-16a architecture passes")
+  assert(arch16.name === "architecture", "VER-16b name is architecture")
+  try { rmSync(v16dir, { recursive: true, force: true }) } catch {}
+
+  // VER-17: runLLMCheck with no LLM returns pass+skip
+  const v17 = new V()
+  // Access via verifySecurity since runLLMCheck is private
+  const sec17 = await v17.verifySecurity("test", [], projectDir)
+  assert(sec17.passed === true, "VER-17a no LLM security returns pass")
+  assert(sec17.output.includes("skipped"), "VER-17b output says skipped")
+
+  // VER-18: verifyFast with cache hit (same files twice)
+  const v18dir = join("/tmp", "ver-fast18-" + Date.now())
+  mkdirSync(join(v18dir, "src"), { recursive: true })
+  writeFileSync(join(v18dir, "src", "a.ts"), "const x = 1")
+  const v18 = new V()
+  v18.detectLanguage(v18dir)
+  const fast18a = v18.verifyFast("s1", v18dir, ["src/a.ts"])
+  assert(typeof fast18a.passed === "boolean", "VER-18a fast verify works")
+  // Second call with same files — should hit cache
+  const fast18b = v18.verifyFast("s2", v18dir, ["src/a.ts"])
+  assert(fast18b.checks.length >= 1, "VER-18b cached fast verify works")
+  const hasCached = fast18b.checks.some(c => c.name.includes("cached"))
+  assert(hasCached, "VER-18c cache hit produces cached check")
+  try { rmSync(v18dir, { recursive: true, force: true }) } catch {}
+
+  // VER-19: verifyFast with no files
+  const v19 = new V()
+  v19.detectLanguage(projectDir)
+  const fast19 = v19.verifyFast("s3", projectDir)
+  assert(typeof fast19.passed === "boolean", "VER-19a fast verify without files works")
+
+  // VER-20: verifyDeps without lockfiles → skip
+  const v20dir = join("/tmp", "ver-deps20-" + Date.now())
+  mkdirSync(v20dir, { recursive: true })
+  const v20 = new V()
+  v20.detectLanguage(v20dir)
+  const deps20 = v20.verifyDeps(v20dir)
+  assert(deps20.passed === true, "VER-20a deps skip without lockfile")
+  assert(deps20.output.includes("skipped"), "VER-20b output says skipped")
+  try { rmSync(v20dir, { recursive: true, force: true }) } catch {}
+
+  // VER-21: parseLLMCheck with passed=false
+  const v21 = new V()
+  v21.setLLM({ call: async () => ({ content: '{"passed":false,"reasoning":"Issue","issuesFound":["x"]}' }) })
+  const v21dir = join("/tmp", "ver-par21-" + Date.now())
+  mkdirSync(join(v21dir, "src"), { recursive: true })
+  writeFileSync(join(v21dir, "src", "a.ts"), "const x = 1")
+  const sec21 = await v21.verifySecurity("test", ["src/a.ts"], v21dir)
+  assert(sec21.passed === false, "VER-21a parseLLMCheck passed=false")
+  assert(sec21.output.includes("ISSUES FOUND"), "VER-21b output mentions issues")
+  try { rmSync(v21dir, { recursive: true, force: true }) } catch {}
+
+  // VER-22: formatVerificationChecklist — all pass
+  const checklist22 = V.formatVerificationChecklist({
+    compile: { passed: true },
+    lint: { passed: true },
+    test: { passed: true, total: 10, passedCount: 10 },
+  })
+  assert(checklist22.includes("All checks passed"), "VER-22a all pass verdict")
+
+  // VER-23: formatVerificationChecklist — some fail
+  const checklist23 = V.formatVerificationChecklist({
+    compile: { passed: false },
+    lint: { passed: true },
+    test: { passed: false },
+  })
+  assert(checklist23.includes("Some checks failed"), "VER-23a fail verdict")
+  assert(checklist23.includes("Compile"), "VER-23b compile section present")
+  assert(checklist23.includes("Tests"), "VER-23c tests section present")
+
+  // VER-24: formatVerificationChecklist — with criteria
+  const checklist24 = V.formatVerificationChecklist({
+    compile: { passed: true },
+    criteria: [{ name: "style-guide", passed: true }, { name: "coverage", passed: false }],
+  })
+  assert(checklist24.includes("style-guide"), "VER-24a criteria included")
+  assert(checklist24.includes("coverage"), "VER-24b failing criteria included")
+
+  // VER-25: formatVerificationChecklist — empty results
+  const checklist25 = V.formatVerificationChecklist({})
+  assert(checklist25.includes("Verdict"), "VER-25a empty still has verdict")
+
+  // VER-26: verifyFast — detectLanguage trigger when unknown (calls detectLanguage inside)
+  const v26dir = join("/tmp", "ver-fast26-" + Date.now())
+  mkdirSync(join(v26dir, "src"), { recursive: true })
+  mkdirSync(v26dir, { recursive: true })
+  writeFileSync(join(v26dir, "tsconfig.json"), "{}")
+  writeFileSync(join(v26dir, "src", "a.ts"), "const x = 1")
+  const v26 = new V()
+  // First verifyFast triggers detectLanguage when unknown
+  const fast26 = v26.verifyFast("s1", v26dir)
+  assert(typeof fast26.passed === "boolean", "VER-26 auto-detect on verifyFast")
+  try { rmSync(v26dir, { recursive: true, force: true }) } catch {}
+
+  // VER-27: verifyAll (public method) — unknown language
+  const v27dir = join("/tmp", "ver-all27-" + Date.now())
+  mkdirSync(v27dir, { recursive: true })
+  const v27 = new V()
+  const all27 = v27.verifyAll("s1", v27dir)
+  assert(all27.checks.length >= 1, "VER-27a verifyAll has checks")
+  assert(typeof all27.passed === "boolean", "VER-27b verifyAll returns boolean passed")
+  try { rmSync(v27dir, { recursive: true, force: true }) } catch {}
+
+  // VER-28: verifyRelated — unknown language (triggers detectLanguage)
+  const v28dir = join("/tmp", "ver-rel28-" + Date.now())
+  mkdirSync(v28dir, { recursive: true })
+  const v28 = new V()
+  const rel28 = v28.verifyRelated("s1", v28dir, [])
+  assert(rel28.checks.length >= 1, "VER-28a verifyRelated has compile check")
+  try { rmSync(v28dir, { recursive: true, force: true }) } catch {}
+
+  // VER-29: verifyAllDeep — fast tier with detect language
+  const v29dir = join("/tmp", "ver-vad29-" + Date.now())
+  mkdirSync(join(v29dir, "src"), { recursive: true })
+  writeFileSync(join(v29dir, "src", "a.ts"), "const x = 1")
+  writeFileSync(join(v29dir, "tsconfig.json"), "{}")
+  const v29 = new V()
+  const vad29 = await v29.verifyAllDeep("s1", v29dir, undefined, [], false, "fast")
+  assert(vad29.checks.length >= 1, "VER-29a fast tier has compile check")
+  assert(vad29.dimensions?.tier === "fast", "VER-29b tier is fast")
+  assert(vad29.dimensions?.security === undefined, "VER-29c no security in fast tier")
+  try { rmSync(v29dir, { recursive: true, force: true }) } catch {}
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// BC-BP: BlueprintParser & BlueprintResolver Branch Coverage
+// ═══════════════════════════════════════════════════════════════════════
+section("BC-BP: BlueprintParser & BlueprintResolver Branch Coverage")
+{
+  const { BlueprintParser: BP, BlueprintResolver: BR, ValidationError } = mod
+  const { ModelRegistry: MR } = mod
+
+  // BP-1: parse JSON blueprint
+  const bp1 = new BP()
+  const parsed1 = bp1.parse(JSON.stringify({
+    spec_version: "v1",
+    metadata: { name: "test-agent" },
+    agent: {
+      identity: "You are a test agent",
+      model_tiers: { default: "capable" },
+    },
+  }))
+  assert(parsed1.spec_version === "v1", "BP-1a parse JSON spec_version v1")
+  assert(parsed1.metadata.name === "test-agent", "BP-1b parse JSON metadata.name")
+  assert(parsed1.agent.identity === "You are a test agent", "BP-1c parse JSON agent.identity")
+  assert(parsed1.agent.model_tiers.default === "capable", "BP-1d parse JSON model_tiers")
+
+  // BP-2: parse YAML-like blueprint (simple without arrays)
+  const bp2 = new BP()
+  const yaml2 = `spec_version: v1
+metadata:
+  name: yaml-agent
+  description: A simple agent
+  labels:
+    env: test
+    team: core
+agent:
+  identity: You are YAML agent
+  model_tiers:
+    default: capable
+    quick: fast
+  safety:
+    max_steps: 50
+    loop_detection: true`
+  const parsed2 = bp2.parse(yaml2)
+  assert(parsed2.spec_version === "v1", "BP-2a parse YAML spec_version")
+  assert(parsed2.metadata.name === "yaml-agent", "BP-2b YAML metadata.name")
+  assert(parsed2.metadata.description === "A simple agent", "BP-2c YAML description")
+  assert(parsed2.metadata.labels?.env === "test", "BP-2d YAML labels env")
+  assert(parsed2.metadata.labels?.team === "core", "BP-2dd YAML labels team")
+  assert(parsed2.agent.model_tiers.default === "capable", "BP-2e YAML default tier")
+  assert(parsed2.agent.model_tiers.quick === "fast", "BP-2f YAML quick tier")
+  assert(parsed2.agent.safety?.max_steps === 50, "BP-2g YAML safety max_steps")
+  assert(parsed2.agent.safety?.loop_detection === true, "BP-2h YAML safety loop_detection")
+
+  // BP-3: parse with no spec_version (auto-set to v1)
+  const bp3 = new BP()
+  const parsed3 = bp3.parse(JSON.stringify({
+    metadata: { name: "auto-version" },
+    agent: {
+      identity: "You are auto",
+      model_tiers: { default: "fast" },
+    },
+  }))
+  assert(parsed3.spec_version === "v1", "BP-3a auto spec_version v1")
+
+  // BP-4: validate — wrong spec_version throws
+  const bp4 = new BP()
+  let threw4 = false
+  try { bp4.validate({ spec_version: "v2", metadata: { name: "x" }, agent: { identity: "x", model_tiers: { default: "capable" } } }) }
+  catch (e) { threw4 = e instanceof ValidationError && e.message.includes("Unsupported") }
+  assert(threw4, "BP-4 wrong spec_version throws ValidationError")
+
+  // BP-5: validate — missing metadata.name throws
+  const bp5 = new BP()
+  let threw5 = false
+  try { bp5.validate({ spec_version: "v1", metadata: {}, agent: { identity: "x", model_tiers: { default: "capable" } } }) }
+  catch (e) { threw5 = e instanceof ValidationError && e.message.includes("metadata.name") }
+  assert(threw5, "BP-5 empty metadata.name throws")
+
+  // BP-6: validate — missing agent.identity throws
+  const bp6 = new BP()
+  let threw6 = false
+  try { bp6.validate({ spec_version: "v1", metadata: { name: "test" }, agent: { identity: "", model_tiers: { default: "capable" } } }) }
+  catch (e) { threw6 = e instanceof ValidationError && e.message.includes("agent.identity") }
+  assert(threw6, "BP-6 empty agent.identity throws")
+
+  // BP-7: validate — missing model_tiers throws
+  const bp7 = new BP()
+  let threw7 = false
+  try { bp7.validate({ spec_version: "v1", metadata: { name: "test" }, agent: { identity: "You are" } }) }
+  catch (e) { threw7 = e instanceof ValidationError && e.message.includes("model_tiers") }
+  assert(threw7, "BP-7 missing model_tiers throws")
+
+  // BP-8: validate — agent field itself missing
+  const bp8 = new BP()
+  let threw8 = false
+  try { bp8.validate({ spec_version: "v1", metadata: { name: "test" } }) }
+  catch (e) { threw8 = e instanceof ValidationError }
+  assert(threw8, "BP-8 missing entire agent field throws")
+
+  // BP-9: toFrontmatter with all fields
+  const bp9 = new BP()
+  const fm9 = bp9.toFrontmatter({
+    spec_version: "v1",
+    metadata: { name: "fm-agent", description: "Full agent", labels: { env: "prod" } },
+    agent: {
+      identity: "You are an agent with \"quotes\"",
+      capabilities: ["code", "debug"],
+      model_tiers: { default: "capable", quick: "fast" },
+      tools: ["agentic_plan", "agentic_nav"],
+      safety: { max_steps: 100, loop_detection: true, circuit_breaker: true, hallucination_threshold: 0.3 },
+    },
+  })
+  assert(fm9.includes("spec_version: v1"), "BP-9a frontmatter spec_version")
+  assert(fm9.includes("name: fm-agent"), "BP-9b frontmatter name")
+  assert(fm9.includes('"') || fm9.includes("escaped"), "BP-9c identity content preserved")
+  assert(fm9.includes("model_tiers"), "BP-9d frontmatter model_tiers")
+
+  // BP-10: toFrontmatter minimal (no optional fields)
+  const bp10 = new BP()
+  const fm10 = bp10.toFrontmatter({
+    spec_version: "v1",
+    metadata: { name: "minimal" },
+    agent: {
+      identity: "Minimal agent",
+      model_tiers: { default: "fast" },
+    },
+  })
+  assert(fm10.includes("minimal"), "BP-10a minimal frontmatter")
+  assert(!fm10.includes("capabilities"), "BP-10b no capabilities section")
+  assert(!fm10.includes("tools:"), "BP-10c no tools section")
+  assert(!fm10.includes("safety:"), "BP-10d no safety section")
+
+  // BP-11: YAML parse with comments and empty lines
+  const bp11 = new BP()
+  const yaml11 = `# This is a comment
+spec_version: v1
+metadata:
+  name: comment-agent
+
+  # Another comment
+agent:
+  identity: "Has comments"
+  model_tiers:
+    default: capable`
+  const parsed11 = bp11.parse(yaml11)
+  assert(parsed11.metadata.name === "comment-agent", "BP-11 YAML with comments")
+
+  // BP-12: YAML parse with numeric and boolean values
+  const bp12 = new BP()
+  const yaml12 = `spec_version: v1
+metadata:
+  name: typed-agent
+agent:
+  identity: "Typed"
+  model_tiers:
+    default: capable
+  safety:
+    max_steps: 50
+    loop_detection: true`
+  const parsed12 = bp12.parse(yaml12)
+  assert(parsed12.agent.safety?.max_steps === 50, "BP-12a YAML numeric parsed")
+  assert(parsed12.agent.safety?.loop_detection === true, "BP-12b YAML boolean parsed")
+
+  // BP-13: YAML nested object handling
+  const bp13 = new BP()
+  const yaml13 = `spec_version: v1
+metadata:
+  name: deep-nest
+  labels:
+    env: staging
+    team: backend
+agent:
+  identity: "Nested"
+  model_tiers:
+    default: capable
+    quick: fast
+    deep: reasoning`
+  const parsed13 = bp13.parse(yaml13)
+  assert(parsed13.metadata.name === "deep-nest", "BP-13a YAML nested")
+  assert(parsed13.metadata.labels?.env === "staging", "BP-13b nested labels")
+  assert(parsed13.agent.model_tiers.deep === "reasoning", "BP-13c third tier")
+
+  // ─── BlueprintResolver ───
+  const mr = new MR()
+  mr.addModel("deepseek/deepseek-chat")
+  mr.addModel("openai/gpt-4o")
+
+  // BR-1: constructor
+  const br1 = new BR(mr)
+  assert(typeof br1.resolveTier === "function", "BR-1a constructor works")
+  assert(typeof br1.classify === "function", "BR-1b classify function exists")
+
+  // BR-2: classify with empty models
+  const br2 = new BR(mr)
+  const cls2 = br2.classify([])
+  assert(cls2.fast.length === 0, "BR-2a no models -> fast empty")
+  assert(cls2.capable.length === 0, "BR-2b no models -> capable empty")
+
+  // BR-3: classify with models but no specs (default behavior)
+  const br3 = new BR(mr)
+  const cls3 = br3.classify(["deepseek/deepseek-chat", "openai/gpt-4o"])
+  // Without spec details, classification uses fallback
+  assert(cls3.fast.length >= 0, "BR-3a classify returns fast array")
+  assert(cls3.capable.length >= 0, "BR-3b classify returns capable array")
+
+  // BR-4: setModelsDb invalidates classification cache
+  const br4 = new BR(mr)
+  br4.classify(["gpt-4o"])
+  br4.setModelsDb(new Map([["gpt-4o", { family: "gpt", cost: { input: 2.5, output: 10, cache_read: 1, cache_write: 2.5 } }]]))
+  const cls4 = br4.classify(["gpt-4o"])
+  assert(cls4.fast.includes("gpt-4o"), "BR-4a setModelsDb reclassifies")
+  assert(cls4.capable.length >= 0, "BR-4b capable models exist")
+
+  // BR-5: resolveTier with custom tier that resolves to model
+  const br5 = new BR(mr)
+  const resolved5 = br5.resolveTier("fast", ["deepseek/deepseek-chat", "openai/gpt-4o"])
+  assert(typeof resolved5 === "string", "BR-5a resolveTier returns string")
+  assert(resolved5.length > 0, "BR-5b resolved model not empty")
+
+  // BR-6: resolveTier with no available models → returns "default"
+  const br6 = new BR(mr)
+  const resolved6 = br6.resolveTier("fast", [])
+  assert(resolved6 === "default", "BR-6 resolveTier empty returns default")
+
+  // BR-7: resolveBlueprint
+  const br7 = new BR(mr)
+  const bp7b = {
+    spec_version: "v1",
+    metadata: { name: "test" },
+    agent: {
+      identity: "You are test",
+      model_tiers: { default: "capable", quick: "fast" },
+    },
+  }
+  const resolved7 = br7.resolveBlueprint(bp7b, ["deepseek/deepseek-chat", "openai/gpt-4o"])
+  assert(typeof resolved7.default === "string", "BR-7a resolved default tier")
+  assert(typeof resolved7.quick === "string", "BR-7b resolved quick tier")
+  assert(Object.keys(resolved7).length === 2, "BR-7c two tiers resolved")
+}
+
 }
 // ── Standalone execution ──
 const _isMain = typeof process !== "undefined" && process.argv[1] && (process.argv[1] === import.meta.url || process.argv[1].endsWith("/_runall-edge-deep.mjs"))

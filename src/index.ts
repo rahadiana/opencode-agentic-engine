@@ -1658,6 +1658,8 @@ export { ModelRegistry, type ModelStats, type ModelScore } from "./core/model-re
 export { ProtocolAdapter, type Protocol, type ToolDescriptor, type ProtocolCallResult, type ProtocolAdapterStats } from "./core/protocol-adapter.js"
 export { DynamicToolRegistry, type DynamicToolRegistration, type ToolCallResult } from "./core/dynamic-tool-registry.js"
 export { EventBus } from "./core/event-bus.js"
+export { BlueprintParser, BlueprintResolver } from "./core/agent-blueprint.js"
+export { ValidationError } from "./core/errors.js"
 export { WorkflowEngine, type WorkflowConfig, type ChainedResult } from "./core/workflow-engine.js"
 export { StateStore, NAMESPACE_SCOPE, type StoreEntry, type StateNamespace } from "./core/state-store.js"
 export { MCPServer, type MCPServerConfig, type MCPServerStatus } from "./core/mcp-server.js"

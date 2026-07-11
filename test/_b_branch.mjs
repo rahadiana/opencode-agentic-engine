@@ -2012,7 +2012,7 @@ const brg_assert = (c, m) => { if (c) { brg++; console.log(`  PASS: ${m}`) } els
   if (typeof BlueprintParser === "function") {
     const parser = new BlueprintParser()
     const yml = parser.yamlToJson("a:\n  b: true")
-    brg_assert(yml.b === true, "AB-BR-1 yamlToJson nested works")
+    brg_assert(yml.a?.b === true, "AB-BR-1 yamlToJson nested works")
   }
 }
 

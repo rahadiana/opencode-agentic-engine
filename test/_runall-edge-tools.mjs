@@ -1036,6 +1036,235 @@ assert(blockedPromo.nextLevel === "karantina", "TP-15: blocked promotes to karan
 
 assert(true, "skill-security trust promotion tests passed")
 
+// ── Branch Coverage: agentic_debate format variants ──
+console.log("\n[88] agentic_debate — format variants")
+const debMdSid = freshSid()
+const debMd = await hooks.tool.agentic_debate.execute({
+  task: "What is 2+2? Answer briefly.",
+  format: "markdown",
+  maxRounds: 1,
+  timeoutMs: 10000,
+}, mockCtx(debMdSid))
+const debMdOut = typeof debMd === "string" ? debMd : (debMd.output || "")
+assert(debMdOut.includes("Debate") || debMdOut.includes("Result") || debMdOut.length > 0, "debate with markdown format returns output")
+// markdown format => no json code block wrapper
+const debMdHasJsonBlock = debMdOut.includes("```json")
+if (debMdOut.length > 0) assert(!debMdHasJsonBlock || debMdOut.includes("```json\n\n```"), "debate markdown output not wrapped in json block (or empty output)")
+
+const debJsonSid = freshSid()
+const debJson = await hooks.tool.agentic_debate.execute({
+  task: "What is 3+3? Answer briefly.",
+  maxRounds: 1,
+  timeoutMs: 10000,
+}, mockCtx(debJsonSid))
+const debJsonOut = typeof debJson === "string" ? debJson : (debJson.output || "")
+assert(debJsonOut.includes("Debate") || debJsonOut.includes("Result") || debJsonOut.length > 0, "debate with default json format returns output")
+assert(true, "agentic_debate format tests passed")
+
+// ── Branch Coverage: agentic_episodes recent and stats ──
+console.log("\n[89] agentic_episodes — recent and stats actions")
+
+// Recent (may be empty or have data from prior tests)
+const epRecent3 = await hooks.tool.agentic_episodes.execute({ action: "recent" }, mockCtx(freshSid()))
+const epRe3Out = typeof epRecent3 === "string" ? epRecent3 : (epRecent3.output || "")
+assert(epRe3Out.includes("Recent") || epRe3Out.includes("Episodes") || epRe3Out.includes("episode") || epRe3Out.includes("No episode"), "recent action returns formatted output")
+
+// Stats action
+const epStats3 = await hooks.tool.agentic_episodes.execute({ action: "stats" }, mockCtx(freshSid()))
+const epSt3Out = typeof epStats3 === "string" ? epStats3 : (epStats3.output || "")
+assert(epSt3Out.includes("Total") || epSt3Out.includes("Stats") || epSt3Out.includes("sessions") || epSt3Out.includes("total"), "stats returns formatted metrics")
+
+assert(true, "agentic_episodes recent and stats tests passed")
+
+// ── Branch Coverage: agentic_rag edit, delete, detail ──
+console.log("\n[90] agentic_rag — edit, delete, detail actions")
+const ragSid3 = freshSid()
+
+// Store an entry
+await hooks.tool.agentic_rag.execute({
+  action: "store",
+  title: "Test Entry for Edit Delete Detail",
+  content: "This entry will be edited, detailed, and deleted.",
+  category: "test-category",
+}, mockCtx(ragSid3))
+
+// Detail without query
+const ragDetNq = await hooks.tool.agentic_rag.execute({ action: "detail" }, mockCtx(ragSid3))
+const ragDnqOut = typeof ragDetNq === "string" ? ragDetNq : (ragDetNq.output || "")
+assert(ragDnqOut.includes("Query") || ragDnqOut.includes("query"), "rag detail without query returns error")
+
+// Detail with query
+const ragDet = await hooks.tool.agentic_rag.execute({ action: "detail", query: "Test Entry for Edit Delete Detail" }, mockCtx(ragSid3))
+const ragDetOut = typeof ragDet === "string" ? ragDet : (ragDet.output || "")
+assert(ragDetOut.includes("Episode") || ragDetOut.includes("Summary") || ragDetOut.includes("Entry") || ragDetOut.length > 0, "rag detail with query produces output")
+
+// Edit without query
+const ragEditNq = await hooks.tool.agentic_rag.execute({ action: "edit" }, mockCtx(ragSid3))
+const ragEnqOut = typeof ragEditNq === "string" ? ragEditNq : (ragEditNq.output || "")
+assert(ragEnqOut.includes("Query") || ragEnqOut.includes("query"), "rag edit without query returns error")
+
+// Edit without content
+const ragEditNc = await hooks.tool.agentic_rag.execute({ action: "edit", query: "Test Entry for Edit Delete Detail" }, mockCtx(ragSid3))
+const ragEncOut = typeof ragEditNc === "string" ? ragEditNc : (ragEditNc.output || "")
+assert(ragEncOut.includes("content") || ragEncOut.includes("Content"), "rag edit without content returns error")
+
+// Edit with full params
+const ragEdit = await hooks.tool.agentic_rag.execute({
+  action: "edit", query: "Test Entry for Edit Delete Detail", content: "Updated content for testing edit.",
+}, mockCtx(ragSid3))
+const ragEditOut = typeof ragEdit === "string" ? ragEdit : (ragEdit.output || "")
+assert(ragEditOut.includes("Updated") || ragEditOut.includes("Entry Updated") || ragEditOut.includes("updated"), "rag edit succeeds")
+
+// Delete without query
+const ragDelNq = await hooks.tool.agentic_rag.execute({ action: "delete" }, mockCtx(ragSid3))
+const ragDnq2Out = typeof ragDelNq === "string" ? ragDelNq : (ragDelNq.output || "")
+assert(ragDnq2Out.includes("Query") || ragDnq2Out.includes("query"), "rag delete without query returns error")
+
+// Delete with valid query
+const ragDel = await hooks.tool.agentic_rag.execute({ action: "delete", query: "Test Entry for Edit Delete Detail" }, mockCtx(ragSid3))
+const ragDelOut = typeof ragDel === "string" ? ragDel : (ragDel.output || "")
+assert(ragDelOut.includes("Deleted") || ragDelOut.includes("deleted"), "rag delete succeeds")
+
+assert(true, "agentic_rag edit/delete/detail tests passed")
+
+// ── Branch Coverage: agentic_budget get and status ──
+console.log("\n[91] agentic_budget — get and status actions")
+const bSid5 = freshSid()
+
+// Get with default scope
+const bGet = await hooks.tool.agentic_budget.execute({ action: "get" }, mockCtx(bSid5))
+const bGetOut = typeof bGet === "string" ? bGet : (bGet.output || "")
+assert(bGetOut.includes("Budget") || bGetOut.includes("budget") || bGetOut.includes("limits"), "budget get returns formatted limits")
+
+// Get with task scope
+const bGetTask = await hooks.tool.agentic_budget.execute({ action: "get", scope: "task" }, mockCtx(freshSid()))
+const bGetTaskOut = typeof bGetTask === "string" ? bGetTask : (bGetTask.output || "")
+assert(bGetTaskOut.includes("task"), "budget get with task scope works")
+
+// Set some limits
+await hooks.tool.agentic_budget.execute({
+  action: "set", maxTokens: 5000, maxSteps: 10, maxTimeMs: 60000, scope: "session",
+}, mockCtx(bSid5))
+
+// Status with session scope
+const bStatus = await hooks.tool.agentic_budget.execute({ action: "status" }, mockCtx(bSid5))
+const bStatusOut = typeof bStatus === "string" ? bStatus : (bStatus.output || "")
+assert(bStatusOut.includes("Budget") || bStatusOut.includes("Metric") || bStatusOut.includes("Tokens"), "budget status returns formatted output")
+
+// Status with task scope
+const bStatusTask = await hooks.tool.agentic_budget.execute({ action: "status", scope: "task" }, mockCtx(freshSid()))
+const bStatusTaskOut = typeof bStatusTask === "string" ? bStatusTask : (bStatusTask.output || "")
+assert(bStatusTaskOut.includes("task"), "budget status with task scope works")
+
+assert(true, "agentic_budget get and status tests passed")
+
+// ── Branch Coverage: agentic_guard step with file claims ──
+console.log("\n[92] agentic_guard — step with file claims")
+const gdSid4 = freshSid()
+
+// Guard with empty stepId (edge case — empty string)
+const gdEmpty = await hooks.tool.agentic_guard.execute({ stepId: "" }, mockCtx(gdSid4))
+const gdEmptyOut = typeof gdEmpty === "string" ? gdEmpty : (gdEmpty.output || "")
+assert(gdEmptyOut.includes("No execution") || gdEmptyOut.includes("no execution"), "guard with empty stepId handled")
+
+// Plan + execute a step with file claims, then guard
+await hooks.tool.agentic_plan.execute({
+  goal: "Guard file claims test",
+  subtasks: [{ id: "gd-4", description: "Step claiming files", dependsOn: [], verificationCriteria: [] }],
+}, mockCtx(gdSid4))
+await hooks.tool.agentic_execute.execute({
+  stepId: "gd-4", success: true, autoVerify: false,
+  output: "Modified src/index.ts and src/nonexistent-file-xyz.ts",
+  filesModified: ["src/index.ts", "src/nonexistent-file-xyz.ts"],
+}, mockCtx(gdSid4))
+const gdWithFiles = await hooks.tool.agentic_guard.execute({ stepId: "gd-4" }, mockCtx(gdSid4))
+const gdWfOut = typeof gdWithFiles === "string" ? gdWithFiles : (gdWithFiles.output || "")
+assert(gdWfOut.includes("Verdict") || gdWfOut.includes("claims") || gdWfOut.includes("Check") || gdWfOut.includes("Hallucination"), "guard with file claims executes")
+assert(true, "agentic_guard file claims tests passed")
+
+// ── Branch Coverage: agentic_reflect error details and successful step ──
+console.log("\n[93] agentic_reflect — error details and successful step")
+
+// Reflect on successful step
+const refSuccSid = freshSid()
+await hooks.tool.agentic_plan.execute({
+  goal: "Reflect success test",
+  subtasks: [{ id: "ref-s2", description: "Successful step", dependsOn: [], verificationCriteria: [] }],
+}, mockCtx(refSuccSid))
+await hooks.tool.agentic_execute.execute({
+  stepId: "ref-s2", success: true, output: "Step succeeded",
+}, mockCtx(refSuccSid))
+const refSucc = await hooks.tool.agentic_reflect.execute({ stepId: "ref-s2" }, mockCtx(refSuccSid))
+const refSuccOut = typeof refSucc === "string" ? refSucc : (refSucc.output || "")
+assert(refSuccOut.includes("successful") || refSuccOut.includes("no reflection"), "reflect on successful step returns no-reflection message")
+
+// Reflect on failed step with errorDetails param
+const refDetSid = freshSid()
+await hooks.tool.agentic_plan.execute({
+  goal: "Reflect error details test",
+  subtasks: [{ id: "ref-e2", description: "Failing step with details", dependsOn: [], verificationCriteria: [] }],
+}, mockCtx(refDetSid))
+await hooks.tool.agentic_execute.execute({
+  stepId: "ref-e2", success: false, output: "Something broke", error: "TypeError: cannot read property",
+}, mockCtx(refDetSid))
+const refDet = await hooks.tool.agentic_reflect.execute({
+  stepId: "ref-e2", errorDetails: "Full stack trace at test.ts:10",
+}, mockCtx(refDetSid))
+const refDetOut = typeof refDet === "string" ? refDet : (refDet.output || "")
+assert(refDetOut.includes("Error") || refDetOut.includes("Analysis") || refDetOut.includes("error") || refDetOut.includes("TypeError"), "reflect with errorDetails produces analysis")
+
+assert(true, "agentic_reflect error details tests passed")
+
+// ── Branch Coverage: agentic_pipeline suggest and status ──
+console.log("\n[94] agentic_pipeline — suggest and status actions")
+const pSid3 = freshSid()
+
+// Suggest pipeline with feature description
+const pSuggest = await hooks.tool.agentic_pipeline.execute({
+  action: "suggest", description: "Add user authentication",
+}, mockCtx(pSid3))
+const pSugOut = typeof pSuggest === "string" ? pSuggest : (pSuggest.output || "")
+assert(pSugOut.includes("Suggested") || pSugOut.includes("Pipeline") || pSugOut.includes("pipeline"), "pipeline suggest returns output")
+
+// Suggest with non-feature description (fix)
+const pSuggestFix = await hooks.tool.agentic_pipeline.execute({
+  action: "suggest", description: "Fix login bug",
+}, mockCtx(freshSid()))
+const pSugFixOut = typeof pSuggestFix === "string" ? pSuggestFix : (pSuggestFix.output || "")
+assert(pSugFixOut.includes("Suggested") || pSugFixOut.includes("Pipeline") || pSugFixOut.includes("pipeline"), "pipeline suggest for fix returns output")
+
+// Define a pipeline for status test
+await hooks.tool.agentic_pipeline.execute({
+  action: "define",
+  pipelineId: "test-pipe-status",
+  name: "Status Test Pipeline",
+  stages: [
+    { role: "architect", description: "Design the feature" },
+    { role: "developer", description: "Implement the feature" },
+  ],
+}, mockCtx(pSid3))
+
+// Status without pipelineId
+const pStatusNoId = await hooks.tool.agentic_pipeline.execute({ action: "status" }, mockCtx(pSid3))
+const pSnidOut = typeof pStatusNoId === "string" ? pStatusNoId : (pStatusNoId.output || "")
+assert(pSnidOut.includes("pipelineId") || pSnidOut.includes("Specify"), "pipeline status without pipelineId returns error")
+
+// Status with pipelineId (no run started — shows all pending)
+const pStatusWithId = await hooks.tool.agentic_pipeline.execute({
+  action: "status", pipelineId: "test-pipe-status",
+}, mockCtx(pSid3))
+const pSwidOut = typeof pStatusWithId === "string" ? pStatusWithId : (pStatusWithId.output || "")
+assert(pSwidOut.includes("Pipeline") || pSwidOut.includes("Status") || pSwidOut.includes("status"), "pipeline status with pipelineId works")
+
+// Status with non-existent pipeline
+const pStatusBadId = await hooks.tool.agentic_pipeline.execute({
+  action: "status", pipelineId: "nonexistent-pipeline",
+}, mockCtx(pSid3))
+const pSbidOut = typeof pStatusBadId === "string" ? pStatusBadId : (pStatusBadId.output || "")
+assert(pSbidOut.includes("Pipeline") || pSbidOut.includes("Status") || pSbidOut.includes("status") || pSbidOut.length > 0, "pipeline status with bad pipelineId produces output")
+
+assert(true, "agentic_pipeline suggest and status tests passed")
+
 }
 // ── Standalone execution ──
 const _isMain = typeof process !== "undefined" && process.argv[1] && (process.argv[1] === import.meta.url || process.argv[1].endsWith("/_runall-edge-tools.mjs"))
