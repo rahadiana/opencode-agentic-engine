@@ -12,7 +12,7 @@ Semua 12 paper gaps (arXiv:2606.05608), P0-P4 dari TODO.md, dan **22 paper RAG s
 2. ✅ **Schema-First Boundaries** — LLM output divalidasi sebelum dipakai (P1)
 3. ✅ **Dumb Model Mode** — strict mode untuk model lemah (P2)
 4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
-5. ✅ **Test Coverage** — **3568+ tests** in parallel (~27s), c8 gate + CI coverage (P4)
+5. ✅ **Test Coverage** — **3718+ tests** in parallel (~27s), c8 gate + CI coverage (P4)
 5b. ✅ **Auto Dumb-Model Harness** — `dumbModelMode: "auto"` (name + stats → WorkflowPolicy strict)
 6. ✅ **Typed Errors** — 49/49 throw sites migrated, 0 `as any` remaining
 7. ✅ **SemanticCache** — TF-IDF + cosine, benchmarked at 0.78 threshold
@@ -34,7 +34,7 @@ Semua 12 paper gaps (arXiv:2606.05608), P0-P4 dari TODO.md, dan **22 paper RAG s
 ```bash
 npm run build       # tsc --emitDeclarationOnly && node esbuild.config.mjs → dist/index.js
                     # postbuild: auto-copy ke ~/.cache/opencode/packages/ (jika ada)
-npm test            # 3568+ unit tests in parallel (~27s), 0 TS errors, 0 lint warnings
+npm test            # 3718+ unit tests in parallel (~27s), 0 TS errors, 0 lint warnings
 npm run test:serial # Same tests serial (for debugging)
 node test/dropin.mjs       # Simulates opencode auto-discovery
 node test/load-samedir.mjs # Same-directory load + E2E workflow
@@ -822,6 +822,15 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 - **.gitignore**: Added `debug.log` + `.agentic/store/` entries
 - **Docs sync**: AGENTS.md coverage metrics updated (89.72% stmts, 69.08% branch, 76.6% func)
 - **Total: 3568 tests, 0 TS errors, 0 lint warnings, CI all green**
+
+### v0.5.8 — Zero Lint + Docker CI + NPM Publish (2026-07-11)
+
+- **Branch coverage +330 tests**: llm.ts, verifier.ts, agent-blueprint.ts, auto-retry.ts — **3718 total tests**
+- **Container test verified**: Docker 28.0.4, 9-layer pipeline, 3 Docker-only test failures fixed
+- **NPM publish**: v0.5.8 tag pushed → auto-triggers GitHub Actions publish workflow (requires NPM_TOKEN secret)
+- **Dockerfile fix**: Missing `agentic-agent-prompt.md` created
+- **CHANGELOG.md**: Created with full version history
+- **Total: 3718 tests, 0 lint warnings, 0 TS errors, Docker CI verified, build OK**
 
 ### v0.5.7+ — Zero Lint + Branch Coverage + Git Push (2026-07-11)
 
