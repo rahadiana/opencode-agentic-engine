@@ -564,7 +564,7 @@ export function makeExecuteTool(ctx: ToolContext): ToolSpec {
                     const dslResult = (de && typeof (de as unknown as DslExecutor).execute === "function") ? (de as unknown as DslExecutor).execute(
                       skill.definition.logic.instructions as DslInstruction[],
                       { stepId: args.stepId, output: args.output, filesModified: args.filesModified ?? [] },
-                    ) : { success: false, trace: { steps: [], durationMs: 0 } }
+                    ) : { success: false, trace: { steps: [], durationMs: 0 }, output: {}, error: "" }
                     dslSuccess = dslResult.success
                     if (dslResult.success) {
                       response += `✅ DSL logic executed (${dslResult.trace.steps.length} instructions, ${dslResult.trace.durationMs}ms)\n`
