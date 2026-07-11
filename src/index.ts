@@ -64,7 +64,7 @@ import { MCPClient } from "./core/mcp-client.js"
 import { ProtocolAdapter } from "./core/protocol-adapter.js"
 import { DynamicToolRegistry } from "./core/dynamic-tool-registry.js"
 import { MCPServer } from "./core/mcp-server.js"
-import { buildAgenticSystemInstructions, type ToolEntry } from "./core/prompt-builder.js"
+import { buildAgenticSystemInstructions, buildCompactToolBrief, type ToolEntry } from "./core/prompt-builder.js"
 import { AGENTIC_TOOL_REGISTRY } from "./core/tool-catalog.js"
 import { detectProjectContext, type ProjectContext } from "./core/project-context.js"
 import { type KnowledgeEntry } from "./core/prompt-template.js"
@@ -281,15 +281,17 @@ const createEngine: Plugin = async (input, _options) => {
       // Only add webfetch reminder since they might search for reference.
       return "Note: the web fetch tool is `webfetch` (not `websearch`)."
     }
-    const toolList = tools.length > 0
-      ? `Your available tools: ${tools.map(t => `\`${t}\``).join(", ")}`
+    const specificTools = tools.length > 0
+      ? `Your role-specific tools: ${tools.map(t => `\`${t}\``).join(", ")}`
       : "Use the tools provided by your role definition."
     return [
       `## ⚠️ Role: ${role}`,
-      toolList,
+      specificTools,
       `- Web search: use \`webfetch\` (NOT \`websearch\`)`,
       `- All agentic tools use \`agentic_\` prefix — no bare names`,
       `- On failure: call \`agentic_reflect\` before retrying`,
+      ``,
+      buildCompactToolBrief(),
     ].join("\n")
   }
 
@@ -1636,7 +1638,7 @@ export { DAGEngine, type DAGNode, type DAGPlan, type DAGNodeType, type NodeStatu
 export { PlanningLayer, type PlanVersion, type PlanValidationResult, type PlanningLayerConfig } from "./core/planning-layer.js"
 export { ExecutionLayer, type ExecutionLayerConfig, type NodeExecutionResult, type PhaseExecutionResult, type ExecutionSnapshot } from "./core/execution-layer.js"
 export { RecoveryLayer, type RecoveryLevel, type RecoveryStatus, type RecoveryRecord, type RecoveryDecision, type RecoveryLayerConfig, type ReplanResult } from "./core/recovery-layer.js"
-export { buildAgentPrompt, buildAgenticSystemInstructions, buildGenericAgentPrompt } from "./core/prompt-builder.js"
+export { buildAgentPrompt, buildAgenticSystemInstructions, buildGenericAgentPrompt, buildCompactToolBrief } from "./core/prompt-builder.js"
 export { ToolGuardrailController, DEFAULT_GUARDRAIL_CONFIG, type ToolGuardrailConfig, type GuardrailDecision } from "./core/tool-guardrails.js"
 export { SkillCurator, DEFAULT_CURATOR_CONFIG, type CuratorConfig, type InjectedSkill, type LifecycleReport, type CuratorLifecycleState } from "./curation/skill-curator.js"
 export { NoOpMemoryProvider, type MemoryProvider, type PrefetchOptions, type MemoryProviderStoreData, type MemoryProviderQueryResult } from "./memory/memory-provider.js"

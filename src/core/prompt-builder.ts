@@ -237,6 +237,9 @@ Tidak punya memori lintas sesi kecuali melalui tool/memory yang tersedia. Setiap
 `Cek <knowledge-context> bawah. Kosong? → \`webfetch\`. Baru implementasi.`
   )
 
+  // ── COMPACT TOOL BRIEF (tool overview before detail sections) ──
+  t.instructions(buildCompactToolBrief())
+
   // ── PROJECT CONTEXT (dynamic detection) ──
   const pc = config?.projectContext
   if (pc && pc.languages.length > 0) {
@@ -456,6 +459,29 @@ Tidak punya memori lintas sesi kecuali melalui tool/memory yang tersedia. Setiap
   t.guardrails(rules)
 
   return t
+}
+
+/**
+ * Build a COMPACT tool brief — 5 lines, all 32 tools by category.
+ * Designed for sub-agent prompts where 500-line full prompt is too heavy.
+ * LLM needs to know tool names exist; descriptions can be discovered via trial.
+ */
+export function buildCompactToolBrief(): string {
+  return [
+    "## 🔧 Agentic Tools (32 tools, agentic_* prefix)",
+    "",
+    "**Research:** agentic_nav (cari file), agentic_rag (search knowledge), agentic_skill (cari skill), agentic_episodes (task history), agentic_router (klasifikasi intent), agentic_db (SQL query), agentic_tools (cari tool via MCP/A2A), agentic_context (compress context), agentic_fetch (fetch URL + auto-index ke RAG)",
+    "",
+    "**Planning & Execution:** agentic_plan (breakdown goal), agentic_execute (record step + auto-verify), agentic_auto (satu call: plan→execute→verify), agentic_delegate (assign sub-task), agentic_pipeline (multi-agent chain), agentic_parallel (jalanin step independen bareng), agentic_snapshot (checkpoint sebelum risky), agentic_status (cek progress & timeline)",
+    "",
+    "**Verification:** agentic_verify (compile+lint+test+security), agentic_reflect (debug error + propagasi), agentic_guard (cek hallucination), agentic_score (cek tech debt), agentic_debate (executor vs critic multi-round), agentic_clean (bersihin output debate)",
+    "",
+    "**Memory & Evolution:** agentic_memo (Second Brain: decisions+TODOs+reflection), agentic_model (ganti LLM model per role), agentic_evolve (self-evolution), agentic_finetune (fine-tune dari skill), agentic_budget (pasang limit token/steps)",
+    "",
+    "**Communication:** agentic_message (kirim pesan antar agent), agentic_pr (generate PR), agentic_mcp (konek external server), agentic_a2a (inter-agent protocol)",
+    "",
+    "> 💡 Gunakan agentic_auto untuk task sederhana. agentic_plan→agentic_execute→agentic_verify untuk task multi-step. agentic_reflect sebelum retry setelah error.",
+  ].join("\n")
 }
 
 /**

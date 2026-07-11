@@ -2,6 +2,7 @@ import { LLMEngine } from "../core/llm.js"
 import type { ModelRegistry } from "../core/model-registry.js"
 import type { AgentRole } from "./coordinator.js"
 import { RoleRegistry } from "./role-registry.js"
+import { buildCompactToolBrief } from "../core/prompt-builder.js"
 
 export interface AgentContext {
   systemPrompt: string
@@ -286,7 +287,7 @@ export class AgentRuntime {
     if (ctx.researchContext) {
       promptParts.push(`\n\n## 5W1H Research Context\n${ctx.researchContext}`)
     }
-    promptParts.push(`\n\n## Available Tools\nYou have access to all agentic tools (agentic_plan, agentic_execute, agentic_verify, agentic_auto, etc.) plus edit/write/read/bash. Use agentic_auto for multi-step tasks — it will plan, implement, and verify automatically. Each tool call you make will be visible as progress in this session.`)
+    promptParts.push(`\n\n## Available Tools\n${buildCompactToolBrief()}\n\n> Note: edit/write/read/bash also available. Each tool call is visible as progress in this session.`)
 
     let modelOverride: { providerID: string; modelID: string } | undefined
     if (ctx.modelPreference) {
