@@ -593,6 +593,27 @@ export class MultiIndexRAG {
   // ── Search ──
 
   /**
+   * Search by exact title match within a category — untuk dedup check.
+   * Returns the first matching entry, or undefined.
+   */
+  searchByTitle(title: string, category?: string): IndexEntry | undefined {
+    for (const [cat, index] of this.indices) {
+      if (category && cat !== category) continue
+      for (const ep of index.episodes) {
+        if (ep.planGoal === title) {
+          return { category: cat, episode: ep, timestamp: ep.timestamp, keywords: ep.tags, title: ep.planGoal }
+        }
+      }
+      for (const sk of index.skills) {
+        if (sk.definition.meta.name === title) {
+          return { category: cat, skill: sk, timestamp: sk.lastUsed, keywords: sk.definition.trigger.keywords ?? [], title: sk.definition.meta.name }
+        }
+      }
+    }
+    return undefined
+  }
+
+  /**
    * Search within a specific category using hybrid TF-IDF + Vector scoring.
    */
   searchByCategory(query: string, category: string, limit = 10): IndexSearchResult {

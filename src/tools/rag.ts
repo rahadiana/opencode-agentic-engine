@@ -258,6 +258,15 @@ export function makeRagTool(ctx: ToolContext): ToolSpec {
             const title = args.title || args.query || "untitled"
 
             if (args.type === "skill" && content) {
+              // ── Dedup: cek apakah skill dengan title sama sudah ada ──
+              const existingByTitle = multiIndexRAG.searchByTitle(title, cat)
+              if (existingByTitle) {
+                return {
+                  output: `## ⏭️ Skill already exists\n\n**Title:** ${title}\n**Category:** ${cat}\n**ID:** ${existingByTitle.skill?.definition.meta.id ?? "unknown"}\n\nSkill dengan judul yang sama sudah ada — skip duplikasi.`,
+                  metadata: { category: cat, existing: true, skillId: existingByTitle.skill?.definition.meta.id },
+                }
+              }
+
               // Extract keywords from content (filter common words)
               const words = content.toLowerCase().match(/\b[a-z]{4,}\b/g) ?? []
               const freq = new Map<string, number>()
