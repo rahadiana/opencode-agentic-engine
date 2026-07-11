@@ -365,6 +365,10 @@ const createEngine: Plugin = async (input, _options) => {
   consolidationScheduler.start()
   const traceLogger = new TraceLogger(worktree)
   const roleRegistry = new RoleRegistry()
+  // Wire any existing custom roles to orchestrator so pipeline stages see their prompts
+  for (const custom of roleRegistry.getAllCustom()) {
+    orchestrator.setRolePrompt(custom.role, custom.prompt)
+  }
   const _schemaVersion = new MemorySchemaVersion()
   const selfEvolver = new SelfEvolver()
   selfEvolver.setRoleRegistry(roleRegistry) // P2: auto-apply prompt patches to roles

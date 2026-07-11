@@ -46,7 +46,7 @@ export function makeEvolveTool(ctx: ToolContext): ToolSpec {
     secondBrain: _secondBrain,
     rag: _multiIndexRAG,
     coordinator,
-    orchestrator: _orchestrator,
+    orchestrator,
     roleRegistry,
     agentRuntime: _agentRuntime,
     debateLoop: _debateLoop,
@@ -149,6 +149,8 @@ return {
                 prompt: blueprint.agent.identity,
                 tools: blueprint.agent.tools ?? ["read", "edit", "write", "bash", "agentic_verify", "agentic_skill"],
               })
+              // Wire custom role to orchestrator so pipeline stages see the prompt
+              orchestrator.setRolePrompt(roleId, blueprint.agent.identity)
 
               stateStore.set("evolution", "trend", continuousEvolution.toJSON(), projectId)
 
@@ -180,6 +182,8 @@ return {
             prompt: args.prompt,
             tools: args.tools ?? ["read", "edit", "write", "bash"],
           })
+          // Wire custom role to orchestrator so pipeline stages see the prompt
+          orchestrator.setRolePrompt(roleId, args.prompt)
           // Auto-save evolution trend after role registration
           stateStore.set("evolution", "trend", continuousEvolution.toJSON(), projectId)
           return { output: `Custom role "${args.name}" registered as \`${roleId}\`. Available via \`agentic_delegate role=${roleId}\`.` }
