@@ -34,7 +34,7 @@ import { createLogger } from "../observability/logger.js"
 import type { IndexEntry } from "./multi-index-rag.js"
 import { createDefaultQuality, computeQualityScore } from "./multi-index-rag.js"
 
-const log = createLogger("KnowledgeBoundary")
+const _log = createLogger("KnowledgeBoundary")
 
 // ── Types ──────────────────────────────────────────────────────
 

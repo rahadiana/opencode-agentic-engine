@@ -125,7 +125,7 @@ export function convertSkillMdToDefinition(parsed: ParsedSkillMd): SkillDefiniti
       frontmatter.name,
       triggerPattern,
       keywords,
-      steps.map((s, i) => ({
+      steps.map((s, _i) => ({
         action: s.action,
         description: s.description,
         tool: inferTool(s.action, s.description),

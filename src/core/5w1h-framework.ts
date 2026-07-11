@@ -448,8 +448,8 @@ export class ResearchAgent5W1H {
     techStack: ResearchReport["techStack"],
   ): Promise<ResearchFinding[]> {
     const findings: ResearchFinding[] = []
-    const questions = DIMENSION_QUESTIONS[dim].prompts
-    const lowerGoal = ctx.goal.toLowerCase()
+    const _questions = DIMENSION_QUESTIONS[dim].prompts
+    const _lowerGoal = ctx.goal.toLowerCase()
 
     // 1. Extract user-stated facts from goal
     if (dim === "what") {
@@ -552,7 +552,7 @@ export class ResearchAgent5W1H {
   }
 
   /** Extract constraints from goal and findings */
-  private _extractConstraints(goal: string, findings: ResearchFinding[]): string[] {
+  private _extractConstraints(goal: string, _findings: ResearchFinding[]): string[] {
     const constraints: string[] = []
     const lower = goal.toLowerCase()
 

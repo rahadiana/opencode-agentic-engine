@@ -25,7 +25,7 @@ import { createLogger } from "../observability/logger.js"
 import type { IndexEntry } from "./multi-index-rag.js"
 import { createDefaultQuality, computeQualityScore } from "./multi-index-rag.js"
 
-const log = createLogger("RAGContextOpt")
+const _log = createLogger("RAGContextOpt")
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -165,7 +165,7 @@ export class RAGContextOptimizer {
     // First pass: estimate tokens and base scores
     const scored: ContextEntryScore[] = entries.map(entry => {
       const tokens = this.estimateEntryTokens(entry)
-      const quality = entry.qualityScore ?? computeQualityScore(entry.quality ?? createDefaultQuality())
+      const _quality = entry.qualityScore ?? computeQualityScore(entry.quality ?? createDefaultQuality())
       const relevance = query ? this._computeRelevance(entry, query) : 0.5
       return { entry, tokens, value: 0, relevance, diversity: 0 }
     })

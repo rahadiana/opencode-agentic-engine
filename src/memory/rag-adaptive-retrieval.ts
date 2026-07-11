@@ -17,9 +17,9 @@
  *   finalScore = hybridScore * 0.6 + qualityScore * 0.3 + (1 - staleness) * 0.1
  */
 import { createLogger } from "../observability/logger.js"
-import type { MultiIndexRAG, IndexEntry, QualityDimensions } from "./multi-index-rag.js"
+import type { MultiIndexRAG, IndexEntry, QualityDimensions as _QualityDimensions } from "./multi-index-rag.js"
 import { createDefaultQuality, computeQualityScore } from "./multi-index-rag.js"
-import { RAGQualityScorer, QUALITY_THRESHOLDS } from "./rag-quality-scorer.js"
+import { RAGQualityScorer, QUALITY_THRESHOLDS as _QUALITY_THRESHOLDS } from "./rag-quality-scorer.js"
 
 const log = createLogger("RAGAdaptive")
 

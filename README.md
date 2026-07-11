@@ -84,7 +84,7 @@ agentic_status detail="full"
 | Section | Link |
 |---------|------|
 | Getting Started | [docs/getting-started.md](./docs/getting-started.md) |
-| 31 Tools Reference | [docs/features/tools.md](./docs/features/tools.md) |
+| 32 Tools Reference | [docs/features/tools.md](./docs/features/tools.md) |
 | Workflow Guide | [docs/guide/workflow.md](./docs/guide/workflow.md) |
 | Multi-Agent | [docs/guide/multi-agent.md](./docs/guide/multi-agent.md) |
 | Memory & Skills | [docs/guide/memory.md](./docs/guide/memory.md) |
@@ -97,7 +97,7 @@ agentic_status detail="full"
 ## Testing
 
 ```bash
-npm test                 # 3099+ unit tests in parallel (~35s, no LLM needed)
+npm test                 # 3360+ unit tests in parallel (~35s, no LLM needed)
 npm run test:serial      # Same tests serial (~84s, for debugging)
 node test/e2e-llm.mjs    # LLM E2E: 19 tests
 ./test-container.sh      # Full Docker pipeline (7 layers)

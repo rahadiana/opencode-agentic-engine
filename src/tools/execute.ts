@@ -7,6 +7,8 @@ import { readFileSync } from "node:fs"
 import { detectTaskType } from "../core/task-classifier.js"
 import { evaluateWorkflowPolicy, formatWorkflowPolicyDecisions, verificationEvidenceFailed } from "../core/workflow-policy.js"
 import { getDslExecutor, getSchemaValidator } from "../core/shared-instances.js"
+import type { SchemaValidator, SchemaField } from "../core/skill-schema.js"
+import type { DslExecutor, DslInstruction } from "../core/dsl-executor.js"
 import type { HallucinationCheck, ClaimResult } from "../drift/hallucination-guard.js"
 import { runAutoEvolve } from "../evolution/auto-evolve.js"
 import { getRAGSelfImprovePipeline } from "../memory/rag-self-improve.js"
@@ -84,7 +86,7 @@ export function makeExecuteTool(ctx: ToolContext): ToolSpec {
     buildSubAgentInjection: _buildSubAgentInjection,
     ctxDir,
   } = ctx
-  const debtScorer = techDebtScorer
+  const _debtScorer = techDebtScorer
   const curator = skillCurator
 
   function evidenceToSignals(evidence?: { build?: string; lint?: string; techDebt?: string; tests?: Array<{ command?: string; passed?: number; failed?: number }> }): Partial<import("../core/confidence-scorer.js").ScoringSignals> {
@@ -539,8 +541,8 @@ export function makeExecuteTool(ctx: ToolContext): ToolSpec {
                 if (skill.definition.input_schema) {
                   try {
                     const parsedInput = args.filesModified ? { stepId: args.stepId, filesModified: args.filesModified, ...(args.error ? { error: args.error } : {}) } : {}
-                    const svResult = (getSchemaValidator() as any).validate(
-                      skill.definition.input_schema,
+                    const svResult = (getSchemaValidator() as unknown as SchemaValidator).validate(
+                      skill.definition.input_schema as Record<string, SchemaField>,
                       parsedInput,
                     )
                     if (!svResult.valid) {
@@ -559,8 +561,8 @@ export function makeExecuteTool(ctx: ToolContext): ToolSpec {
                 if (skill.definition.logic && skill.definition.logic.instructions.length > 0) {
                    try {
                     const de = getDslExecutor()
-                    const dslResult = (de && typeof (de as any).execute === "function") ? (de as any).execute(
-                      skill.definition.logic.instructions,
+                    const dslResult = (de && typeof (de as unknown as DslExecutor).execute === "function") ? (de as unknown as DslExecutor).execute(
+                      skill.definition.logic.instructions as DslInstruction[],
                       { stepId: args.stepId, output: args.output, filesModified: args.filesModified ?? [] },
                     ) : { success: false, trace: { steps: [], durationMs: 0 } }
                     dslSuccess = dslResult.success
@@ -584,8 +586,8 @@ export function makeExecuteTool(ctx: ToolContext): ToolSpec {
                 if (skill.definition.output_schema) {
                   try {
                     const parsedOutput = JSON.parse(args.output)
-                    const svResult = (getSchemaValidator() as any).validate(
-                      skill.definition.output_schema,
+                    const svResult = (getSchemaValidator() as unknown as SchemaValidator).validate(
+                      skill.definition.output_schema as Record<string, SchemaField>,
                       parsedOutput,
                     )
                     if (!svResult.valid) {

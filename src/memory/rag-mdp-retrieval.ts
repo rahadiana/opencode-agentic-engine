@@ -25,9 +25,9 @@
  */
 import { createLogger } from "../observability/logger.js"
 import type { MultiIndexRAG, IndexEntry } from "./multi-index-rag.js"
-import { createDefaultQuality, computeQualityScore } from "./multi-index-rag.js"
+import { createDefaultQuality as _createDefaultQuality, computeQualityScore } from "./multi-index-rag.js"
 import { RAGQualityScorer } from "./rag-quality-scorer.js"
-import { RAGAdaptiveRetrieval, type AdaptiveSearchResult } from "./rag-adaptive-retrieval.js"
+import { RAGAdaptiveRetrieval, type AdaptiveSearchResult as _AdaptiveSearchResult } from "./rag-adaptive-retrieval.js"
 
 const log = createLogger("RAGMDP")
 
@@ -490,7 +490,7 @@ export class MDPRetrievalAgent {
    */
   private _generateSubQueries(query: string): string[] {
     const separators = [/\s+dan\s+/i, /\s+and\s+/i, /\s*,\s*/]
-    const queries: string[] = [query]
+    const _queries: string[] = [query]
 
     for (const sep of separators) {
       if (sep.test(query)) {

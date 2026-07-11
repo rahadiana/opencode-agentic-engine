@@ -106,18 +106,18 @@ export function makeDelegateTool(ctx: ToolContext): ToolSpec {
           const task = taskMap.get(taskId)!
           const start = Date.now()
           try {
-            const agent = coordinator.getAgent(task.role as any)
+            const agent = coordinator.getAgent(task.role)
             if (!agent) return { taskId, role: task.role, success: false, error: 'Unknown role "' + task.role + '"', durationMs: Date.now() - start }
             const sessionModelPref = sessionStore.getModelPreference(execCtx.sessionID, task.role)
             const relevantSkills = skillStore.find(task.description).slice(0, 3).map(s => ({
               name: s.definition.meta.name, successRate: s.successRate,
               steps: s.definition.workflow.steps.map(st => st.action + ': ' + st.description).join('; '),
             }))
-            coordinator.delegate(task.role as any, { id: taskId, assignedTo: task.role, description: task.description, input: task.context ?? task.description, status: 'running' }, execCtx.sessionID, 0, relevantSkills)
+            coordinator.delegate(task.role, { id: taskId, assignedTo: task.role, description: task.description, input: task.context ?? task.description, status: 'running' }, execCtx.sessionID, 0, relevantSkills)
             eventBus.emit({ type: 'task.delegated', payload: { sessionID: execCtx.sessionID, taskId, role: task.role, description: task.description, delegationDepth: 0 } })
             const agentCtx = {
               systemPrompt: agent.prompt ?? 'You are a ' + task.role + ' in a software engineering team.',
-              sessionId: execCtx.sessionID, role: task.role as any,
+              sessionId: execCtx.sessionID, role: task.role,
               taskDescription: task.context ?? task.description,
               modelPreference: sessionModelPref || undefined,
             }

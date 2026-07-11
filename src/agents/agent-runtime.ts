@@ -334,6 +334,7 @@ export class AgentRuntime {
       // 3. Fetch session messages to show what the delegated agent actually did
       let conversationLog = ""
       try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sdk = this.opencodeClient as Record<string, any>
         if (typeof sdk?.session?.messages === "function") {
           const messagesResp = await sdk.session.messages({
@@ -341,6 +342,7 @@ export class AgentRuntime {
             query: { limit: 50 },
           })
           // Response shape: { data: { 200: [...] } } or { data: [...] } or array directly
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           let rawMessages: Array<Record<string, any>> = []
           if (Array.isArray(messagesResp?.data?.[200])) rawMessages = messagesResp.data[200]
           else if (Array.isArray(messagesResp?.data)) rawMessages = messagesResp.data

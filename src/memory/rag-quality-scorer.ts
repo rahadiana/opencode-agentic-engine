@@ -19,10 +19,10 @@
  * - Staleness detection: flag entry yang perlu di-refresh
  */
 import { createLogger } from "../observability/logger.js"
-import type { QualityDimensions, IndexEntry, UsageStats, FeedbackEntry } from "./multi-index-rag.js"
+import type { QualityDimensions, IndexEntry, UsageStats, FeedbackEntry as _FeedbackEntry } from "./multi-index-rag.js"
 import { createDefaultQuality, computeQualityScore } from "./multi-index-rag.js"
 
-const log = createLogger("RAGQuality")
+const _log = createLogger("RAGQuality")
 
 // ── Constants ──────────────────────────────────────────────────
 

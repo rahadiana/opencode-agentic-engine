@@ -204,7 +204,7 @@ export class RAGFeedbackLoop {
    */
   async detectDegradation(
     rag: MultiIndexRAG,
-    minRetrievals: number = 3,
+    _minRetrievals: number = 3,
   ): Promise<Array<{
     entry: IndexEntry
     classification: "high" | "acceptable" | "low" | "critical"
@@ -217,7 +217,7 @@ export class RAGFeedbackLoop {
     }> = []
 
     // Get all entries
-    const stats = rag.getStats()
+    const _stats = rag.getStats()
     // We iterate through all categories
     // Since we can't easily iterate all entries, we use the search API
     // For a more thorough approach, we'd need exportAllEntries()

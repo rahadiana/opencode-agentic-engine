@@ -13,7 +13,7 @@ export interface MaturationCriteria {
   minSuccessRate: number
 }
 
-import type { ProvenanceInfo, TrustLevel } from "./skill-security.js"
+import type { ProvenanceInfo, TrustLevel as _TrustLevel } from "./skill-security.js"
 
 export interface SkillRecord {
   definition: SkillDefinition

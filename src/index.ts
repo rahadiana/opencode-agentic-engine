@@ -1,7 +1,6 @@
 import type { Plugin, PluginModule } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin"
-import { readFileSync, writeFileSync, mkdirSync, existsSync, appendFileSync, readdirSync } from "node:fs"
-import { execFileSync } from "node:child_process"
+import { readFileSync, mkdirSync, existsSync, appendFileSync, readdirSync } from "node:fs"
 import { join, dirname, resolve } from "node:path"
 import { homedir } from "node:os"
 import { DomainRegistry, type DomainPack } from "./core/domain-registry.js"
@@ -11,7 +10,7 @@ import { securityDomain } from "./core/domains/security.js"
 import { devopsDomain } from "./core/domains/devops.js"
 import { dataScienceDomain } from "./core/domains/data-science.js"
 import { mobileDomain } from "./core/domains/mobile.js"
-import { IntentParser, type TaskIntent, type Subtask } from "./core/intent-parser.js"
+import { IntentParser } from "./core/intent-parser.js"
 import { Executor } from "./core/executor.js"
 import { Verifier } from "./core/verifier.js"
 import { ErrorAnalyzer } from "./core/error-analyzer.js"
@@ -24,28 +23,26 @@ import { GitIntegration } from "./core/git.js"
 import { TechDebtScorer } from "./core/tech-debt-scorer.js"
 import { AgentCoordinator } from "./agents/coordinator.js"
 import { AgentRuntime } from "./agents/agent-runtime.js"
-import type { AgentRole, AgentTask } from "./agents/coordinator.js"
-import { Orchestrator, type WorkflowPipeline } from "./agents/orchestrator.js"
+import type { AgentRole } from "./agents/coordinator.js"
+import { Orchestrator } from "./agents/orchestrator.js"
 import { SkillStore } from "./memory/skill-store.js"
 import { SkillCurator } from "./curation/skill-curator.js"
-import { EpisodicStore, type Episode } from "./memory/episodic-store.js"
+import { EpisodicStore } from "./memory/episodic-store.js"
 import { MemoryOrchestrator } from "./memory/memory-orchestrator.js"
 import { ConsolidationScheduler } from "./memory/consolidation-scheduler.js"
 import { initSecondBrain, getSecondBrain } from "./memory/second-brain.js"
-import { HallucinationGuard, type ClaimResult, type HallucinationCheck } from "./drift/hallucination-guard.js"
-import { ParallelExecutor, parseLLMStepImplementation } from "./core/parallel.js"
+import { HallucinationGuard } from "./drift/hallucination-guard.js"
+import { ParallelExecutor } from "./core/parallel.js"
 import { Dashboard } from "./observability/dashboard.js"
 import { createLogger, setGlobalLogClient, type LogClient } from "./observability/logger.js"
 import { CheckpointSystem } from "./drift/checkpoints.js"
 import { SessionStore } from "./memory/session-store.js"
-import { TOOL_COMPLEXITY } from "./core/llm-types.js"
 import { TraceLogger } from "./observability/trace-logger.js"
 import { RoleRegistry, type PromptEntry } from "./agents/role-registry.js"
 
 import { MemorySchemaVersion, createMemoryEnvelope } from "./memory/schema-version.js"
-import { createSkillDefinition, inspectSkill, serializeSkill, formatAntiRationalizations } from "./memory/skill-format.js"
-import { detectTaskType } from "./core/task-classifier.js"
-import { skillsToTrainingData, trainingDatasetSummary, skillToTrainingExample } from "./memory/skill-training.js"
+
+
 import { SelfEvolver } from "./evolution/self-evolver.js"
 import { ContinuousEvolution } from "./evolution/continuous-evolution.js"
 import { LLMEngine } from "./core/llm.js"
@@ -55,7 +52,6 @@ import { SQLitePersistence } from "./memory/sqlite-persistence.js"
 import { ModelRegistry } from "./core/model-registry.js"
 import { ConfigLoader } from "./core/config.js"
 import { BudgetTracker } from "./core/budget-tracker.js"
-import { AutoRetryManager } from "./core/auto-retry.js"
 import { EventBus } from "./core/event-bus.js"
 import { WorkflowEngine } from "./core/workflow-engine.js"
 import { PatternDiscovery } from "./drift/pattern-discovery.js"
@@ -73,27 +69,21 @@ import { AGENTIC_TOOL_REGISTRY } from "./core/tool-catalog.js"
 import { detectProjectContext, type ProjectContext } from "./core/project-context.js"
 import { type KnowledgeEntry } from "./core/prompt-template.js"
 import { ToolRouter } from "./core/tool-router.js"
-import { ConfidenceScorer, ConfidenceStore, type ConfidenceScore } from "./core/confidence-scorer.js"
+import { ConfidenceScorer, ConfidenceStore } from "./core/confidence-scorer.js"
 import { codeIntentAnalyzer } from "./core/code-intent-analyzer.js"
 import { SchemaValidator } from "./core/skill-schema.js"
-import { parseFileEntries, writeFiles as writeFilesHelper } from "./core/execution-helpers.js"
 import { DslExecutor } from "./core/dsl-executor.js"
 import { ErrorRecovery } from "./core/error-recovery.js"
 import { AlignmentGate } from "./core/alignment-gate.js"
 import { EconomicModel } from "./core/economic-model.js"
 import { ConstraintManifold } from "./core/constraint-manifold.js"
 import { WorldModel } from "./core/world-model.js"
-import { SimulationEngine, type SimulatedStep } from "./core/simulation-engine.js"
+import { SimulationEngine } from "./core/simulation-engine.js"
 import { MetaReasoner } from "./core/meta-reasoner.js"
 import { ToolUsageTracker } from "./core/tool-usage-tracker.js"
 import { BlueprintParser, BlueprintResolver, type ModelSpecMap } from "./core/agent-blueprint.js"
 import { autoUpdatePlugin } from "./core/plugin-updater.js"
-import { evaluateWorkflowPolicy, formatWorkflowPolicyDecisions, verificationEvidenceFailed } from "./core/workflow-policy.js"
-import { setSkillStore, setEpisodicStore, setAgenticKnowledge, setConfigLoader, getSkillStore, getEpisodicStore, getConfigLoader, getA2AClient, setA2AClient, getA2AServer, setA2AServer } from "./core/shared-instances.js"
-import { makeStatusTool } from "./tools/status.js"
-import { makeCleanTool } from "./tools/clean.js"
-import { makeSnapshotTool } from "./tools/snapshot.js"
-import { makeBudgetTool } from "./tools/budget.js"
+import { setSkillStore, setEpisodicStore, setAgenticKnowledge, setConfigLoader } from "./core/shared-instances.js"
 
 // ── Build-time version injected by esbuild define ──
 declare const __VERSION__: string
@@ -107,7 +97,7 @@ type VerificationEvidence = {
 
 // ── Helpers for agentic_fetch auto-indexing ──
 /** Detect content type: HTML page, source code, JSON, or plain text */
-function detectContentType(content: string, contentTypeHeader: string, url: string): "html" | "code" | "json" | "text" {
+function _detectContentType(content: string, contentTypeHeader: string, url: string): "html" | "code" | "json" | "text" {
   if (contentTypeHeader.startsWith("text/html") || contentTypeHeader.startsWith("application/xhtml")) return "html"
   if (contentTypeHeader.startsWith("application/json") || url.match(/\.json$/i)) return "json"
   if (content.match(/^\s*</)) return "html"
@@ -115,7 +105,7 @@ function detectContentType(content: string, contentTypeHeader: string, url: stri
   return "text"
 }
 /** Extract readable text from HTML while preserving <pre>/<code> blocks */
-function htmlToText(html: string): string {
+function _htmlToText(html: string): string {
   const codeBlocks: string[] = []
   const saved = html.replace(/<(pre|code)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/gi, (_, _tag, inner) => {
     codeBlocks.push(inner.replace(/<[^>]+>/g, "").trim())
@@ -134,7 +124,7 @@ function htmlToText(html: string): string {
     .replace(/---CODEBLOCK(\d+)---/g, (_, idx) => `\n\`\`\`\n${codeBlocks[parseInt(idx as string)] || ""}\n\`\`\`\n`)
 }
 /** Extract meaningful summary based on content type */
-function extractSummary(content: string, type: "html" | "code" | "json" | "text"): string {
+function _extractSummary(content: string, type: "html" | "code" | "json" | "text"): string {
   if (type === "code") {
     const lines = content.split("\n").filter(l => l.trim() && !l.trim().startsWith("//") && !l.trim().startsWith("/*") && !l.trim().startsWith("*"))
     const sigLines = lines.slice(0, Math.min(15, lines.length)).join("\n")
@@ -149,7 +139,7 @@ function extractSummary(content: string, type: "html" | "code" | "json" | "text"
   return content.replace(/\s+/g, " ").trim().slice(0, 1000)
 }
 /** Build tags for a fetched URL */
-function buildFetchTags(url: string, ctype: string): string[] {
+function _buildFetchTags(url: string, ctype: string): string[] {
   const tags: string[] = ["web-fetch"]
   const parts = url.split("/").filter(Boolean).slice(-3).map(t => t.replace(/[^a-zA-Z0-9-]/g, "").toLowerCase()).filter(Boolean)
   tags.push(...parts)
@@ -168,7 +158,7 @@ function buildFetchTags(url: string, ctype: string): string[] {
   return [...new Set(tags)]
 }
 
-function evidenceToSignals(evidence?: VerificationEvidence): Partial<import("./core/confidence-scorer.js").ScoringSignals> {
+function _evidenceToSignals(evidence?: VerificationEvidence): Partial<import("./core/confidence-scorer.js").ScoringSignals> {
   if (!evidence) return {}
   const testTotals = evidence.tests?.reduce<{ passed: number; failed: number }>((acc, t) => {
     acc.passed += t.passed ?? 0
@@ -351,7 +341,7 @@ const createEngine: Plugin = async (input, _options) => {
    * Converts Zod args schema → JSON Schema using Zod 4's built-in toJSONSchema().
    * Automatically wraps execute with error handling for all tools.
    */
-  function registryTool(
+  function _registryTool(
     name: string,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     def: { description: string; args: any; execute: (args: any, context: any) => Promise<any> },
@@ -451,7 +441,7 @@ const createEngine: Plugin = async (input, _options) => {
   consolidationScheduler.start()
   const traceLogger = new TraceLogger(worktree)
   const roleRegistry = new RoleRegistry()
-  const schemaVersion = new MemorySchemaVersion()
+  const _schemaVersion = new MemorySchemaVersion()
   const selfEvolver = new SelfEvolver()
   selfEvolver.setRoleRegistry(roleRegistry) // P2: auto-apply prompt patches to roles
   const continuousEvolution = new ContinuousEvolution()
@@ -550,7 +540,7 @@ const confidenceStore = new ConfidenceStore()
   })()
 
   // ── Load models.json cache for BlueprintResolver ──
-  const blueprintParser = new BlueprintParser()
+  const _blueprintParser = new BlueprintParser()
   const modelsDb: ModelSpecMap = new Map()
   const blueprintResolver = new BlueprintResolver(modelRegistry, modelsDb)
   // Fire-and-forget: load models.json from OpenCode cache
@@ -632,9 +622,9 @@ const confidenceStore = new ConfidenceStore()
   const stateStore = new StateStore({ worktree })
   // SQLite backend — lebih cepat dari file JSON, support structured queries
   // Graceful fallback: jika better-sqlite3 (Node) atau bun:sqlite (Bun) gak available
-  let sqliteDB: SQLitePersistence | null = null
+  let _sqliteDB: SQLitePersistence | null = null
   try {
-    sqliteDB = new SQLitePersistence()
+    _sqliteDB = new SQLitePersistence()
   } catch (e) {
     log.info("[Agentic] SQLite not available — agentic_db tool disabled: " + (e as Error).message)
   }
@@ -753,7 +743,7 @@ const confidenceStore = new ConfidenceStore()
   bootstrapKnowledge(multiIndexRAG, projectId)
 
   // ── SchemaValidator + DslExecutor (Phase 2) ──
-  const schemaValidator = new SchemaValidator()
+  const _schemaValidator = new SchemaValidator()
   const dslExecutor = new DslExecutor()
   dslExecutor.setMCPClient(mcpClient)
   // Wire skillResolver — lookup skill by capability via SkillStore
@@ -938,7 +928,7 @@ const confidenceStore = new ConfidenceStore()
   // ── Batch Delegate: fan-out parallel execution for multiple agents ──
   // Based on A2A Fan-Out / Anthropic orchestrator-worker pattern.
   // Groups tasks by dependency phases, runs each phase concurrently via Promise.allSettled.
-  async function executeBatchDelegate(
+  async function _executeBatchDelegate(
     tasks: Array<{ taskId: string; role: string; description: string; context?: string; dependsOn?: string[] }>,
     maxParallel: number,
     abortOnFailure: boolean,
@@ -1721,7 +1711,7 @@ export { SQLitePersistence } from "./memory/sqlite-persistence.js"
 export { debounce, throttle, type DebounceOptions, type ThrottleOptions } from "./core/rate-limit.js"
 export { gatherEvolutionData, runAutoEvolve as runAutoEvolveInternal } from "./evolution/auto-evolve.js"
 import { buildAllTools } from "./tools/definitions.js"
-import { runAutoEvolve as _runAutoEvolve, gatherEvolutionData } from "./evolution/auto-evolve.js"
+import { runAutoEvolve as _runAutoEvolve } from "./evolution/auto-evolve.js"
 
 /** Simple smoke-test function — verifies the plugin builds and exports correctly */
 export function hello(name?: string): string {

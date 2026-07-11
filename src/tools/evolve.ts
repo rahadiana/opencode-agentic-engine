@@ -5,6 +5,8 @@ import { join as _join } from "node:path"
 import { mkdirSync as _mkdirSync } from "node:fs"
 import { getSecondBrain as _getSecondBrain } from "../memory/second-brain.js"
 import { getSchemaVersion, getBlueprintParser, getBlueprintResolver } from "../core/shared-instances.js"
+import type { MemorySchemaVersion } from "../memory/schema-version.js"
+import type { BlueprintParser, BlueprintResolver } from "../core/agent-blueprint.js"
 import { skillsToTrainingData, trainingDatasetSummary, skillToTrainingExample } from "../memory/skill-training.js"
 import { createMemoryEnvelope, MemorySchemaVersion } from "../memory/schema-version.js"
 import { createSkillDefinition, serializeSkill, inspectSkill } from "../memory/skill-format.js"
@@ -105,7 +107,7 @@ return {
           const builtIn = roleRegistry.getAllBuiltIn()
           const custom = roleRegistry.getAllCustom()
           const sv = getSchemaVersion()
-          const migrations = sv && typeof (sv as any).getMigrations === "function" ? (sv as any).getMigrations() : []
+          const migrations = sv && typeof (sv as unknown as MemorySchemaVersion).getMigrations === "function" ? (sv as unknown as MemorySchemaVersion).getMigrations() : []
 
           let out = `## 🔮 Agent System State (Stage IV)\n\n`
           out += `**Memory schema version:** ${MemorySchemaVersion.currentVersion()}\n`
@@ -131,12 +133,12 @@ return {
           // Blueprint mode: spec YAML/JSON → parse + register
           if (args.spec) {
             try {
-              const blueprint = (getBlueprintParser() as any).parse(args.spec)
+              const blueprint = (getBlueprintParser() as unknown as BlueprintParser).parse(args.spec)
               const roleId = blueprint.metadata.name.toLowerCase().replace(/\s+/g, "-")
 
               // Resolve model tiers → actual model recommendations
               const allModels = modelRegistry.getAllScores().map(s => s.model)
-              const resolvedTiers = (getBlueprintResolver() as any).resolveBlueprint(blueprint, allModels.length > 0 ? allModels : ["default"])
+              const resolvedTiers = (getBlueprintResolver() as unknown as BlueprintResolver).resolveBlueprint(blueprint, allModels.length > 0 ? allModels : ["default"])
 
               const tierInfo = Object.entries(resolvedTiers)
                 .map(([tier, model]) => `  - **${tier}** → \`${model}\``)
@@ -205,7 +207,7 @@ return {
           out += `### Envelope Format\n\`\`\`ts\n${JSON.stringify(createMemoryEnvelope({ example: true }, "example"), null, 2)}\n\`\`\`\n\n`
           out += `### Registered Migrations\n`
           const sv2 = getSchemaVersion()
-          const migrations = sv2 && typeof (sv2 as any).getMigrations === "function" ? (sv2 as any).getMigrations() : []
+          const migrations = sv2 && typeof (sv2 as unknown as MemorySchemaVersion).getMigrations === "function" ? (sv2 as unknown as MemorySchemaVersion).getMigrations() : []
           if (migrations.length === 0) {
             out += `No migrations registered yet. Schema v${MemorySchemaVersion.currentVersion()} is current.\n`
           } else {

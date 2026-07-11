@@ -510,6 +510,63 @@ const ctxVeOut = typeof ctxViewEmpty === "string" ? ctxViewEmpty : (ctxViewEmpty
 assert(ctxVeOut.length > 0, "context view with no data returns output")
 assert(true, "agentic_context edge case tests passed")
 
+// ── Branch Coverage: agentic_message ──
+console.log("\n[77b] agentic_message — branch coverage")
+const msgSid_ = freshSid()
+
+// conversation without taskId
+const msgNoTaskId = await hooks.tool.agentic_message.execute({ action: "conversation" }, mockCtx(msgSid_))
+const msgNtOut = typeof msgNoTaskId === "string" ? msgNoTaskId : (msgNoTaskId.output || "")
+assert(msgNtOut.includes("taskId required"), "conversation without taskId returns error")
+
+// conversation with non-existent task
+const msgNoConv = await hooks.tool.agentic_message.execute({ action: "conversation", taskId: "no-such-task" }, mockCtx(msgSid_))
+const msgNcOut = typeof msgNoConv === "string" ? msgNoConv : (msgNoConv.output || "")
+assert(msgNcOut.includes("No messages"), "conversation for non-existent task handled")
+
+// mark-read without messageId
+const msgNoMid = await hooks.tool.agentic_message.execute({ action: "mark-read" }, mockCtx(msgSid_))
+const msgNmOut = typeof msgNoMid === "string" ? msgNoMid : (msgNoMid.output || "")
+assert(msgNmOut.includes("messageId required"), "mark-read without messageId returns error")
+
+// mark-read with invalid messageId
+const msgBadMid = await hooks.tool.agentic_message.execute({ action: "mark-read", messageId: "nonexistent" }, mockCtx(msgSid_))
+const msgBmOut = typeof msgBadMid === "string" ? msgBadMid : (msgBadMid.output || "")
+assert(msgBmOut.includes("not found"), "mark-read with invalid messageId handled")
+
+// send with missing 'to' field
+const msgNoTo = await hooks.tool.agentic_message.execute({ action: "send", message: "test message" }, mockCtx(msgSid_))
+const msgNoToOut = typeof msgNoTo === "string" ? msgNoTo : (msgNoTo.output || "")
+assert(msgNoToOut.includes("required") || msgNoToOut.includes("`to`"), "send with missing 'to' returns error")
+
+assert(true, "agentic_message branch coverage tests passed")
+
+// ── Branch Coverage: agentic_tools ──
+console.log("\n[77c] agentic_tools — branch coverage")
+const tSid_ = freshSid()
+
+// call missing source
+const tCallNoSource = await hooks.tool.agentic_tools.execute({ action: "call", method: "test", protocol: "mcp" }, mockCtx(tSid_))
+const tCnsOut = typeof tCallNoSource === "string" ? tCallNoSource : (tCallNoSource.output || "")
+assert(tCnsOut.includes("source"), "tools call missing source returns error")
+
+// call missing method
+const tCallNoMethod = await hooks.tool.agentic_tools.execute({ action: "call", source: "test", protocol: "mcp" }, mockCtx(tSid_))
+const tCnmOut = typeof tCallNoMethod === "string" ? tCallNoMethod : (tCallNoMethod.output || "")
+assert(tCnmOut.includes("method"), "tools call missing method returns error")
+
+// call missing protocol
+const tCallNoProto = await hooks.tool.agentic_tools.execute({ action: "call", source: "test", method: "test" }, mockCtx(tSid_))
+const tCnpOut = typeof tCallNoProto === "string" ? tCallNoProto : (tCallNoProto.output || "")
+assert(tCnpOut.includes("protocol"), "tools call missing protocol returns error")
+
+// search with query returning no results
+const tSearchNoRes = await hooks.tool.agentic_tools.execute({ action: "search", query: "zzzznonexistent" }, mockCtx(tSid_))
+const tSnrOut = typeof tSearchNoRes === "string" ? tSearchNoRes : (tSearchNoRes.output || "")
+assert(tSnrOut.includes("No tools"), "tools search with no results handled")
+
+assert(true, "agentic_tools branch coverage tests passed")
+
 // ── Coverage Expansion: agentic_snapshot ──
 console.log("\n[77] agentic_snapshot — edge cases")
 const snSid = freshSid()
@@ -523,6 +580,17 @@ assert(snLeOut.length > 0, "snapshot list empty returns output")
 const snSaveNoPlan = await hooks.tool.agentic_snapshot.execute({ action: "save", label: "test-snap" }, mockCtx(snSid))
 const snSnpOut = typeof snSaveNoPlan === "string" ? snSaveNoPlan : (snSaveNoPlan.output || "")
 assert(snSnpOut.includes("snapshot") || snSnpOut.includes("Snapshot") || snSnpOut.length > 0, "snapshot save returns output")
+
+// Restore with explicit label
+const snRestore = await hooks.tool.agentic_snapshot.execute({ action: "restore", label: "test-snap" }, mockCtx(snSid))
+const snRestOut = typeof snRestore === "string" ? snRestore : (snRestore.output || "")
+assert(snRestOut.includes("Restored") || snRestOut.includes("restore"), "snapshot restore with explicit label works")
+
+// List after save shows snapshots
+const snListAfter = await hooks.tool.agentic_snapshot.execute({ action: "list" }, mockCtx(snSid))
+const snLaOut = typeof snListAfter === "string" ? snListAfter : (snListAfter.output || "")
+assert(snLaOut.includes("test-snap") || snLaOut.includes("Snapshot"), "snapshot list after save shows entries")
+
 assert(true, "agentic_snapshot edge case tests passed")
 
 // ── Coverage Expansion: agentic_pr ──
@@ -544,6 +612,18 @@ const prWithData = await hooks.tool.agentic_pr.execute({ goal: "PR test feature"
 const prWdOut = typeof prWithData === "string" ? prWithData : (prWithData.output || "")
 assert(prWdOut.length > 0, "PR after execution returns output")
 assert(typeof prWithData === "object", "PR returns object")
+
+// PR generate with title override
+const prTitleSid = freshSid()
+await hooks.tool.agentic_plan.execute({
+  goal: "Base goal",
+  subtasks: [{ id: "prt-1", description: "PR title test", dependsOn: [], verificationCriteria: [] }],
+}, mockCtx(prTitleSid))
+await hooks.tool.agentic_execute.execute({ stepId: "prt-1", success: true, autoVerify: false, output: "Done" }, mockCtx(prTitleSid))
+const prTitle = await hooks.tool.agentic_pr.execute({ title: "Custom PR Title" }, mockCtx(prTitleSid))
+const prTitleOut = typeof prTitle === "string" ? prTitle : (prTitle.output || "")
+assert(prTitleOut.includes("Custom PR Title"), "PR generate with custom title works")
+
 assert(true, "agentic_pr edge case tests passed")
 
 // ── Coverage Expansion: agentic_score ──
@@ -556,6 +636,12 @@ const scEmpOut = typeof scEmpty === "string" ? scEmpty : (scEmpty.output || "")
 assert(scEmpOut.length > 0, "score with empty session returns output")
 assert(scEmpOut.includes("Score") || scEmpOut.includes("score") || scEmpOut.includes("debt") || scEmpOut.includes("Debt") || scEmpOut.includes("files") || scEmpOut.includes("modified"), "score output mentions score or files")
 assert(typeof scEmpty === "object", "score returns object")
+
+// Score with specific files parameter (no plan, hits ?? "Unknown" fallback)
+const scFiles = await hooks.tool.agentic_score.execute({ files: [join(projectDir, "src/index.ts")] }, mockCtx(freshSid()))
+const scFilesOut = typeof scFiles === "string" ? scFiles : (scFiles.output || "")
+assert(scFilesOut.includes("Score") || scFilesOut.includes("Tech") || scFilesOut.includes("score"), "score with specific files works")
+
 assert(true, "agentic_score edge case tests passed")
 
 // ── Coverage Expansion: agentic_guard ──

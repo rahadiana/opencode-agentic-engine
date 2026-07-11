@@ -715,7 +715,7 @@ Rules:
               const report = memoryOrchestrator.consolidate(sessionStore.getActiveSessions())
               if (report.workingArchived > 0 || report.patternsExtracted > 0) {
                 const cs = getConsolidationScheduler()
-                if (cs && typeof (cs as any).onSessionEnd === "function") (cs as any).onSessionEnd()
+                if (cs) (cs as unknown as import("../memory/consolidation-scheduler.js").ConsolidationScheduler).onSessionEnd?.()
               }
             } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
 

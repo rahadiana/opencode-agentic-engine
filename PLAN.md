@@ -9,11 +9,11 @@
 | Metrik | Nilai |
 |--------|-------|
 | **Versi** | **v0.5.7** (npm; was 0.5.6 on registry) |
-| **Unit tests** | 3342 (all mock, no LLM needed) + OpenCode real spawn verified for dumb harness |
+| **Unit tests** | 3360 (all mock, no LLM needed) + OpenCode real spawn verified for dumb harness |
 | **Agentic tools** | 32 (`agentic_*` prefix) |
 | **Source files** | 175+ di `src/` (11 subdirektori + 6 baru memory/) |
-| **Coverage gate** | ✅ Stmts 89.72%+, Branch 69.08%+, Func 76.6%+, Lines 80%+ |
-| **Lint** | ✅ **0 warnings, 0 errors** |
+| **Coverage gate** | ✅ Stmts 90.06%+, Branch 69.82%+, Func 75.83%+, Lines 80%+ |
+| **Lint** | ✅ **87 warnings, 0 errors** |
 | **SWE-bench (mock)** | ✅ 7/7 (100%) — `LLM_OFF=true` |
 | **SWE-bench (real free, agentic_auto)** | ✅ **3/7 (43%)** — mimo-v2.5-free + HTTP client (2026-07-09) |
 | **SWE-bench (real, delegate+manual)** | ✅ 7/7 (100%) — model kuat / manual, not pure auto |

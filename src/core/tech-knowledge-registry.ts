@@ -15,7 +15,7 @@
  *   5. Global + project-level: bisa override per project
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs"
-import { join, dirname } from "node:path"
+import { join, dirname as _dirname } from "node:path"
 import { createLogger } from "../observability/logger.js"
 
 const log = createLogger("TechKnowledge")
