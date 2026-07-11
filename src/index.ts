@@ -360,6 +360,10 @@ const createEngine: Plugin = async (input, _options) => {
         // Auto-set LLM session + tool context for model resolution
         llmEngine.setSessionId(context.sessionID as string)
         llmEngine.setToolContext(name)
+        // Tool calls MUST use direct session (not chat-mode temp sessions).
+        // Chat mode creates+deletes temp sessions per call — fragile for
+        // multi-call operations like debate (10+ LLM calls per invocation).
+        llmEngine.setChatMode(false)
         const result = await def.execute(args, context)
         return result
       } catch (err: unknown) {

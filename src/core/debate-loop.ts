@@ -400,6 +400,8 @@ export class DebateLoop {
     try {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), perCallTimeout)
+      // Combine total timeout signal + per-call timeout signal
+      const combinedPerCallSignal = combinedAbort(signal, controller.signal)
       const resp = await this.llmEngine.call({
         systemPrompt: EXECUTOR_PROMPT,
         userPrompt: input,
@@ -408,7 +410,7 @@ export class DebateLoop {
         bypassCache: round > 1,
         model: config.executorModel,
         toolName: 'debate-executor',
-        signal,
+        signal: combinedPerCallSignal,
         timeoutMs: perCallTimeout,
       })
       clearTimeout(timeoutId)
@@ -495,6 +497,7 @@ export class DebateLoop {
     try {
       const criticController = new AbortController()
       const criticTimeoutId = setTimeout(() => criticController.abort(), perCallTimeout)
+      const criticCombinedSignal = combinedAbort(signal, criticController.signal)
       const resp = await this.llmEngine.call({
         systemPrompt: CRITIC_PROMPT,
         userPrompt: criticInput,
@@ -503,7 +506,7 @@ export class DebateLoop {
         bypassCache: round > 1,
         model: config.criticModel,
         toolName: 'debate-critic',
-        signal,
+        signal: criticCombinedSignal,
         timeoutMs: perCallTimeout,
       })
       clearTimeout(criticTimeoutId)
