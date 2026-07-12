@@ -230,25 +230,25 @@ Bisa dijadikan optional dependency `rag_kit` untuk stopwords 58 bahasa + TF-IDF 
 
 ---
 
-## 5. `@opencode/confidence-scorer` 🟡 Prioritas #5
+## 5. `@opencode/confidence-scorer` ✅ **Selesai**
 
-**File:** `src/core/confidence-scorer.ts`  
-**Ukuran:** 498 lines  
-**Dep:** 0 (pure TypeScript)
+**Repo:** `https://github.com/rahadiana/confidence-scorer`  
+**Versi:** 0.1.0  
+**Lisensi:** MIT  
+**Test:** 19 tests, 0 runtime dependencies
 
-### API
+**3 entry points:** `index` (all), `scorer`, `store`
 
 ```typescript
-class ConfidenceScorer {
-  score(signals: ScoringSignals): ConfidenceScore
-  getBreakdown(score: ConfidenceScore): DimensionScore[]
-}
+import { ConfidenceScorer, ConfidenceStore } from "@opencode/confidence-scorer"
 
-class ConfidenceStore {
-  record(stepId: string, score: ConfidenceScore): void
-  getHistory(stepId?: string): StepConfidenceRecord[]
-  getAverage(): number
-}
+const scorer = new ConfidenceScorer()
+const score = scorer.score({
+  stepId: "step-1",
+  compileResult: { passed: true },
+  testResult: { passed: true, total: 42, passedCount: 42 },
+})
+console.log(score.overall)  // 0-1
 ```
 
 ---
