@@ -107,63 +107,70 @@ function checkBannedTokens(code: string, customTokens?: BannedToken[]): BannedTo
 
 ---
 
-## 3. `@opencode/rag-kit` 🟡 Prioritas #3
+## 3. `@opencode/rag-kit` ✅ **Selesai**
 
-**Package multi-file:**
+**Repo:** `https://github.com/rahadiana/rag_kit`  
+**Versi:** 0.1.0  
+**Lisensi:** MIT  
+**Test:** 167 tests, coverage 97.88% stmts / 86.92% branch
 
-| File | Lines | Fungsi |
-|------|-------|--------|
-| `multi-index-rag.ts` | 1.037 | Hybrid TF-IDF + vector RAG |
-| `vector-store.ts` | 325 | TF-IDF sparse vector engine |
-| `local-embedder.ts` | 273 | Text embedding via API |
-| `stopwords.ts` | 207 | Tokenizer + TF-IDF + cosine |
-| **Total** | **1.842** | |
+### Status
 
-### API
+| Aspek | Keterangan |
+|-------|-----------|
+| **Core critical path** | ✅ Hybrid retrieval, SCIM quality, KbPO boundary, full MMKP, MDP, adaptive, feedback loop |
+| **Advanced features** | ✅ Knowledge Graph, QueryDecomposer, CrossEncoderReranker, HyDE, AutoTuner, PatternLearner, ContinualLearner |
+| **Plugin extension points** | ✅ `QueryCache`, `RagEventCallback`, `TokenFilter`, `PersistHook`, `autoFeedback` — interface-based, host-agnostic |
+| **Adapters** | ✅ MCP stdio server, CLI, `toTools()` for any host framework |
+| **Host-agnostic** | ✅ Zero import dari SDK manapun — OpenCode/Claude/Cursor agnostic |
+
+### Architecture
+
+```
+src/
+├── types/          Shared contracts
+├── ingest/         Load text / file / directory
+├── chunk/          Recursive + Section chunker
+├── embed/          LocalEmbedder + ContinualLearner
+├── store/          HybridStore (TF-IDF + dense) + KnowledgeGraph
+├── retrieve/       searchWithConfidence + QueryDecomposer + HyDE + Reranker
+├── quality/        SCIM scorer: dimensions, staleness, decay
+├── boundary/       KbPO 4-quadrant + noise detection
+├── context/        Full MMKP token-budget optimizer
+├── agentic/        Adaptive, MDP, graders, AutoTuner, AgenticLoop
+├── feedback/       Closed-loop write-back + PatternLearner
+├── persist/        JSON snapshot persistence
+└── adapters/       toTools, MCP, CLI
+```
+
+### Extension Points (untuk integrasi ke plugin)
+
+| Interface | Config Key | Plugin implements |
+|-----------|-----------|------------------|
+| `QueryCache` | `cache` | TTL + prefix match cache (`system.transform`) |
+| `RagEventCallback` | `onEvent` | `EventBus.emit()` → observability pipeline |
+| `TokenFilter` | `tokenFilter` | `stopwords-iso` (58 bahasa) |
+| `PersistHook` | `persistHooks` | `StateStore` write-behind queue |
+
+### Cara Integrasi ke Plugin
 
 ```typescript
-class MultiIndexRAG {
-  constructor(config?: RAGConfig)
-  
-  searchByCategory(query: string, category: string, limit?: number): IndexSearchResult
-  searchByCategoryAsync(query: string, category: string, limit?: number): Promise<IndexSearchResult>
-  searchAllAsync(query: string, limit?: number): Promise<CategorySearchResult[]>
-  searchWithConfidence(query: string, category?: string): SearchWithConfidenceResult
-  
-  indexEpisode(category: string, episode: Episode): void
-  indexSkill(category: string, skill: SkillRecord): void
-  
-  getStats(): RAGStats
-  clearCategory(category: string): void
-  listAll(category?: string): CategoryEntry[]
-}
+import { createRagKit } from "rag-kit"
 
-class VectorStore {
-  constructor()
-  
-  index(item: Indexable): void
-  search(query: string, category?: string, limit?: number): ScoredResult[]
-  remove(id: string): void
-  clear(category?: string): void
-}
-
-class LocalEmbedder {
-  constructor(config?: EmbedderConfig)
-  
-  embed(text: string): Promise<number[]>
-  embedBatch(texts: string[]): Promise<number[][]>
-}
+// Adapter di plugin: src/memory/rag-kit-adapter.ts
+const rag = createRagKit({
+  cache: new AgenticRagCache(),       // QueryCache
+  onEvent: (e) => eventBus.emit(e),   // RagEventCallback
+  tokenFilter: new StopwordsIsoFilter(["ind", "eng"]), // TokenFilter
+  persistHooks: [new StateStoreHook(stateStore)], // PersistHook
+  agentic: { autoFeedback: true },
+})
 ```
 
-### Dependency Graph
+### Untuk Plugin Sekarang
 
-```
-rag-kit
-  ├── stopwords       (pure — 0 dep)
-  ├── vector-store    → stopwords
-  └── local-embedder  → fetch (built-in)
-  └── multi-index-rag → vector-store + local-embedder
-```
+Internal `MultiIndexRAG` + `RAGSelfImprovePipeline` masih jadi default.  
+`rag_kit` bisa diaktifkan via config toggle (`"rag.kit": true`) — lihat `src/memory/rag-kit-adapter.ts` (Fase 1).
 
 ---
 
