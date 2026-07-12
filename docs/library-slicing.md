@@ -145,12 +145,14 @@ src/
 
 ### Extension Points (untuk integrasi ke plugin)
 
-| Interface | Config Key | Plugin implements |
-|-----------|-----------|------------------|
-| `QueryCache` | `cache` | TTL + prefix match cache (`system.transform`) |
-| `RagEventCallback` | `onEvent` | `EventBus.emit()` → observability pipeline |
-| `TokenFilter` | `tokenFilter` | `stopwords-iso` (58 bahasa) |
-| `PersistHook` | `persistHooks` | `StateStore` write-behind queue |
+| Interface | Config Key | Plugin implements | Di rag_kit |
+|-----------|-----------|------------------|------------|
+| `QueryCache` | `cache` | TTL + prefix match cache (`system.transform`) | Opsional |
+| `RagEventCallback` | `onEvent` | `EventBus.emit()` → observability pipeline | Opsional |
+| `TokenFilter` | `tokenFilter` | Auto-wired via `@opencode/text-sim` (58 bahasa) ✅ | **Default** |
+| `PersistHook` | `persistHooks` | `StateStore` write-behind queue | Opsional |
+
+> **Catatan:** `TokenFilter` sudah auto-wired oleh rag_kit via `@opencode/text-sim`. Plugin tidak perlu provide manual stopwords filter lagi — cukup install `stopwords-iso` untuk 58 bahasa.
 
 ### Cara Integrasi ke Plugin
 
@@ -158,11 +160,11 @@ src/
 import { createRagKit } from "rag-kit"
 
 // Adapter di plugin: src/memory/rag-kit-adapter.ts
+// TokenFilter sudah auto-wired dari @opencode/text-sim — tidak perlu manual
 const rag = createRagKit({
-  cache: new AgenticRagCache(),       // QueryCache
-  onEvent: (e) => eventBus.emit(e),   // RagEventCallback
-  tokenFilter: new StopwordsIsoFilter(["ind", "eng"]), // TokenFilter
-  persistHooks: [new StateStoreHook(stateStore)], // PersistHook
+  cache: new AgenticRagCache(),       // QueryCache (opsional)
+  onEvent: (e) => eventBus.emit(e),   // RagEventCallback (opsional)
+  persistHooks: [new StateStoreHook(stateStore)], // PersistHook (opsional)
   agentic: { autoFeedback: true },
 })
 ```
