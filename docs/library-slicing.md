@@ -174,23 +174,57 @@ Internal `MultiIndexRAG` + `RAGSelfImprovePipeline` masih jadi default.
 
 ---
 
-## 4. `@opencode/text-sim` 🟡 Prioritas #4
+## 4. `@opencode/text-sim` ✅ **Selesai**
 
-**File:** `src/memory/stopwords.ts`  
-**Ukuran:** 207 lines  
-**Dep:** 0 (pure TypeScript)
+**Repo:** `https://github.com/rahadiana/text-sim`  
+**Versi:** 0.1.0  
+**Lisensi:** MIT  
+**Test:** 40 tests, 0 runtime dependencies
 
-Bisa digabung dengan rag-kit atau berdiri sendiri. Berisi:
+### Status
 
-```typescript
-function tokenize(text: string): string[]                    // Unicode-aware tokenizer
-function computeTf(tokens: string[]): Map<string, number>     // Term Frequency
-function computeIdf(corpus: string[][]): Map<string, number>   // Inverse Document Frequency
-function cosineSimilarity(a: Map<string, number>, b: Map<string, number>): number
-function computeTfidf(tokens: string[], idf: Map<string, number>, docCount: number): Map<string, number>
+| Aspek | Keterangan |
+|-------|-----------|
+| **Core primitives** | ✅ `tokenize()`, `tokenizeRaw()`, `STOP_WORDS`, `isStopWord()`, `filterStopWords()` |
+| **TF-IDF** | ✅ `computeTf()`, `computeIdf()`, `computeTfIdf()`, `computeTfIdfEntries()` |
+| **Similarity** | ✅ `cosineSimilarity()`, `jaccardSimilarity()`, `euclideanDistance()` |
+| **Multilingual** | ✅ 58 bahasa via `stopwords-iso` (opsional) |
+| **Zero dependency** | ✅ Runtime: 0 deps |
+| **Tree-shakeable** | ✅ 4 entry points |
+
+### File
+
+```
+src/
+├── index.ts          # Re-export semua
+├── types.ts          # Shared types (TokenizeOptions, TfIdfEntry, StopWordStats)
+├── stopwords.ts      # STOP_WORDS, isStopWord, filterStopWords, getStopWordStats
+├── tokenize.ts       # tokenize(), tokenizeRaw()
+└── tfidf.ts          # computeTf, computeIdf, cosineSimilarity, jaccard, euclidean
+
+test/
+└── run.mjs           # 40 tests, plain assertions
 ```
 
-**Gunakan oleh:** `vector-store`, `semantic-cache`, `alignment-gate`
+### Perubahan dari Plugin
+
+1. **ESM native** — `createRequire` dari `node:module`
+2. **Logger dihapus** — ganti `createLogger()` → `console.warn`/`console.debug`
+3. **`tokenize()` API** — positional params → `TokenizeOptions` object
+4. **Fungsi baru** — `tokenizeRaw()`, `computeIdf()`, `computeTfIdf()`, `computeTfIdfEntries()`, `jaccardSimilarity()`, `euclideanDistance()`
+
+### Integrasi
+
+```bash
+npm install @opencode/text-sim
+# Optional: npm install stopwords-iso
+```
+
+```typescript
+import { tokenize, computeTf, cosineSimilarity } from "@opencode/text-sim"
+```
+
+Bisa dijadikan optional dependency `rag_kit` untuk stopwords 58 bahasa + TF-IDF standalone.
 
 ---
 
