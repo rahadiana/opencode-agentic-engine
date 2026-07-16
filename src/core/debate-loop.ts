@@ -145,10 +145,11 @@ export class DebateLoop {
       : totalController.signal
 
     try {
+      const useRuntime = !!(this.agentRuntime && config.sessionId)
       if (config.verbose) {
         log.debug(`\n━━━ Debate: "${config.task}" ━━━`)
         log.debug(`Max rounds: ${maxRounds} | Format: ${format} | Timeout: ${totalTimeoutMs}ms`)
-        log.debug(`Sub-agent mode: ${this.agentRuntime ? "✅ AgentRuntime" : "❌ direct llm (fallback)"}`)
+        log.debug(`LLM path: ${useRuntime ? "✅ AgentRuntime (shared session pool)" : "⚠️ direct llmEngine (fallback)"}`)
       }
 
       for (let round = 1; round <= maxRounds; round++) {
@@ -172,7 +173,7 @@ export class DebateLoop {
           executorInput = `Task: ${config.task}\n\nContext:\n${config.context || "(no additional context)"}\n\nYour previous draft had the following issues that MUST be fixed:\n${prevRound.issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}\n\nCritic feedback:\n${prevRound.review}\n\nRevise your analysis addressing ALL issues above.`
         }
 
-        const executorResult = await this.callExecutor(config, executorInput, round, effectiveSignal)
+        const executorResult = await this._callRole(config, 'executor', EXECUTOR_PROMPT, executorInput, round, effectiveSignal, 90_000)
         if (executorResult.error) {
           return {
             task: config.task, totalRounds: round - 1, approved: false,
@@ -207,7 +208,14 @@ export class DebateLoop {
         }
 
         // ── Step 2: Critic reviews ──
-        const criticResult = await this.callCritic(config, draft, round, effectiveSignal)
+        // Truncate long drafts so critic doesn't timeout — 8000 chars is enough to evaluate
+        const MAX_DRAFT_CHARS = 8000
+        const truncatedDraft = draft.length > MAX_DRAFT_CHARS
+          ? draft.slice(0, MAX_DRAFT_CHARS) + `\n\n[...truncated from ${draft.length} chars — reviewing first ${MAX_DRAFT_CHARS} chars]`
+          : draft
+        const criticInput = `Executor's output for task "${config.task}":\n\n${truncatedDraft}\n\nReview this output. If APPROVED, respond with "APPROVED: (message)". Otherwise list all issues.`
+
+        const criticResult = await this._callRole(config, 'critic', CRITIC_PROMPT, criticInput, round, effectiveSignal, 120_000)
         if (criticResult.error) {
           return {
             task: config.task, totalRounds: round - 1, approved: false,
@@ -264,28 +272,12 @@ export class DebateLoop {
       // ── Step 3: Clean the final output ──
       let finalOutput = currentDraft
       if (config.verbose) log.debug(`\n── Cleaner ──`)
-      try {
-        const cleanController = new AbortController()
-        const cleanTimeoutId = setTimeout(() => cleanController.abort(), 30_000)
-        const cleanResp = await this.llmEngine.call({
-          systemPrompt: CLEANER_PROMPT,
-          userPrompt: `Format: ${format}\n\nTask: ${config.task}\n\nFinal analysis to clean:\n\n${currentDraft}\n\nOutput the cleaned version in ${format} format.`,
-          temperature: 0.1,
-          maxTokens: 4096,
-          model: config.cleanerModel,
-          toolName: 'debate-cleaner',
-          signal: cleanController.signal,
-        })
-        clearTimeout(cleanTimeoutId)
-        if (!isNoLlm(cleanResp.content)) {
-          finalOutput = cleanResp.content
-        } else {
-          writeDebugLog('DebateLoop', 'Cleaner returned NO_LLM, using draft as-is', { round: rounds.length })
-        }
-        // If cleaner fails, keep draft as-is
-      } catch (error) {
-        logParseError("cleaner call", error)
-        // Use draft as-is if cleaning fails
+      const cleanerInput = `Format: ${format}\n\nTask: ${config.task}\n\nFinal analysis to clean:\n\n${currentDraft}\n\nOutput the cleaned version in ${format} format.`
+      const cleanResult = await this._callRole(config, 'cleaner', CLEANER_PROMPT, cleanerInput, 0, effectiveSignal, 30_000)
+      if (!cleanResult.error && cleanResult.output) {
+        finalOutput = cleanResult.output
+      } else {
+        writeDebugLog('DebateLoop', 'Cleaner unavailable, using draft as-is', { round: rounds.length, error: cleanResult.error })
       }
 
       // ── Build revision summary ──
@@ -333,191 +325,123 @@ export class DebateLoop {
   }
 
   /**
-   * Call the executor role — uses AgentRuntime sub-agent when available,
-   * falls back to direct llmEngine.call() for backward compat.
+   * Unified LLM call for any debate role (executor / critic / cleaner).
+   *
+   * Priority:
+   *   1. AgentRuntime shared session pool (PRIMARY) — uses temp sessions
+   *      that don't conflict with the main session busy processing the tool call.
+   *   2. Direct llmEngine.call() (FALLBACK) — only when AgentRuntime unavailable
+   *      or has no sessionId. Works in non-chat mode / unit tests.
+   *
+   * Includes retry logic: up to 2 attempts per call with exponential backoff.
    */
-  private async callExecutor(
+  private async _callRole(
     config: DebateConfig,
-    input: string,
+    role: 'executor' | 'critic' | 'cleaner',
+    systemPrompt: string,
+    userPrompt: string,
     round: number,
     signal: AbortSignal,
+    perCallTimeout: number,
   ): Promise<{ output: string; error?: string }> {
-    const MAX_RETRIES = 1 // max 2 attempts per call
-    const PER_CALL_TIMEOUT = 45_000
+    const MAX_RETRIES = 1
+
+    // Resolve model + reasoning per role
+    const modelOverride = role === 'executor' ? config.executorModel
+      : role === 'critic' ? config.criticModel
+      : config.cleanerModel
+    const reasoningEffort = role === 'executor' ? config.executorReasoning
+      : role === 'critic' ? config.criticReasoning
+      : undefined
+
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      // Primary path: direct llmEngine.call() — uses parent engine's real session.
-      // AgentRuntime sub-engine path (below) uses synthetic session IDs that may
-      // not correspond to valid OpenCode sessions, causing [NO_LLM] fallback.
-      if (!this.agentRuntime || !config.sessionId) {
-        // No agentRuntime available — use direct call only
-        const directResult = await this._directExecutorCall(config, input, round, signal, PER_CALL_TIMEOUT)
-        if (!directResult.error) return directResult
-        if (attempt < MAX_RETRIES) {
-          await sleep(Math.min(1000 * Math.pow(2, attempt), 4000))
-          continue
+      // ── Primary path: AgentRuntime shared session pool ──
+      // The main session is BUSY executing this tool call — calling
+      // session.prompt() on it would conflict. AgentRuntime creates
+      // dedicated temp sessions that avoid this contention.
+      if (this.agentRuntime && config.sessionId) {
+        const ctx: AgentContext = {
+          systemPrompt,
+          sessionId: config.sessionId,
+          role: `debate-${role}`,
+          taskDescription: userPrompt,
+          modelPreference: modelOverride
+            ? `${modelOverride.providerID}/${modelOverride.modelID}`
+            : undefined,
+          reasoningEffort,
+          timeoutMs: perCallTimeout,
         }
-        return directResult
-      }
+        const result = await this.agentRuntime.execute(ctx)
+        if (result.success && !isNoLlm(result.output)) {
+          return { output: result.output }
+        }
+        writeDebugLog('DebateLoop', `${role} AgentRuntime call failed`, {
+          round, attempt, error: result.error, outputPreview: result.output?.slice(0, 50),
+        })
 
-      // Try direct llmEngine.call() first (parent engine has a valid session)
-      const directResult = await this._directExecutorCall(config, input, round, signal, PER_CALL_TIMEOUT)
-      if (!directResult.error) return directResult
+        // AgentRuntime failed — try direct call as fallback
+        const directResult = await this._directLlmCall(systemPrompt, userPrompt, round, signal, perCallTimeout, modelOverride, `debate-${role}`)
+        if (!directResult.error) return directResult
 
-      // Fallback: AgentRuntime sub-engine (isolated context, but needs temp session support)
-      const ctx: AgentContext = {
-        systemPrompt: EXECUTOR_PROMPT,
-        sessionId: config.sessionId,
-        role: 'debate-executor',
-        taskDescription: input,
-        modelPreference: config.executorModel
-          ? `${config.executorModel.providerID}/${config.executorModel.modelID}`
-          : undefined,
-        reasoningEffort: config.executorReasoning,
-        timeoutMs: PER_CALL_TIMEOUT,
-      }
-      const result = await this.agentRuntime.execute(ctx)
-      if (!result.success || isNoLlm(result.output)) {
+        // Both paths failed — retry with backoff
         if (attempt < MAX_RETRIES) {
           await sleep(Math.min(1000 * Math.pow(2, attempt), 4000))
           continue
         }
         return { output: '', error: result.error || directResult.error || NO_LLM_RESPONSE }
       }
-      return { output: result.output }
+
+      // ── Fallback: no AgentRuntime — direct llmEngine.call() only ──
+      // Works in unit tests, non-chat mode, or when agentRuntime not injected.
+      const directResult = await this._directLlmCall(systemPrompt, userPrompt, round, signal, perCallTimeout, modelOverride, `debate-${role}`)
+      if (!directResult.error) return directResult
+      if (attempt < MAX_RETRIES) {
+        await sleep(Math.min(1000 * Math.pow(2, attempt), 4000))
+        continue
+      }
+      return directResult
     }
     /* istanbul ignore next — unreachable, type checker comfort */
-    return { output: '', error: 'Executor: max retries exceeded' }
+    return { output: '', error: `${role}: max retries exceeded` }
   }
 
-  /** Direct LLM call via parent engine (has real OpenCode session). */
-  private async _directExecutorCall(
-    config: DebateConfig,
-    input: string,
+  /**
+   * Direct LLM call via parent engine — fallback when AgentRuntime unavailable
+   * or its shared session fails. Works in unit tests and non-chat mode.
+   */
+  private async _directLlmCall(
+    systemPrompt: string,
+    userPrompt: string,
     round: number,
     signal: AbortSignal,
     perCallTimeout: number,
+    modelOverride?: { providerID: string; modelID: string },
+    toolName?: string,
   ): Promise<{ output: string; error?: string }> {
     try {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), perCallTimeout)
-      // Combine total timeout signal + per-call timeout signal
       const combinedPerCallSignal = combinedAbort(signal, controller.signal)
       const resp = await this.llmEngine.call({
-        systemPrompt: EXECUTOR_PROMPT,
-        userPrompt: input,
+        systemPrompt,
+        userPrompt,
         temperature: 0.2,
         maxTokens: 4096,
         bypassCache: round > 1,
-        model: config.executorModel,
-        toolName: 'debate-executor',
+        model: modelOverride,
+        toolName,
         signal: combinedPerCallSignal,
         timeoutMs: perCallTimeout,
       })
       clearTimeout(timeoutId)
       if (isNoLlm(resp.content)) {
-        writeDebugLog('DebateLoop', 'Executor direct call returned NO_LLM', { round, inputLen: input.length })
+        writeDebugLog('DebateLoop', `${toolName} direct call returned NO_LLM`, { round, inputLen: userPrompt.length })
         return { output: '', error: NO_LLM_RESPONSE }
       }
       return { output: resp.content }
     } catch (error) {
-      writeDebugLog('DebateLoop', 'Executor direct call threw', { error: String(error), round })
-      return { output: '', error: `Executor call failed: ${error}` }
-    }
-  }
-
-  /**
-   * Call the critic role — tries direct llmEngine.call() first (parent engine
-   * has a valid session), falls back to AgentRuntime sub-agent for isolation.
-   */
-  private async callCritic(
-    config: DebateConfig,
-    draft: string,
-    round: number,
-    signal: AbortSignal,
-  ): Promise<{ output: string; error?: string }> {
-    // Truncate long drafts so critic doesn't timeout — 8000 chars is enough to evaluate
-    const MAX_DRAFT_CHARS = 8000
-    const truncatedDraft = draft.length > MAX_DRAFT_CHARS
-      ? draft.slice(0, MAX_DRAFT_CHARS) + `\n\n[...truncated from ${draft.length} chars — reviewing first ${MAX_DRAFT_CHARS} chars]`
-      : draft
-    const criticInput = `Executor's output for task "${config.task}":\n\n${truncatedDraft}\n\nReview this output. If APPROVED, respond with "APPROVED: (message)". Otherwise list all issues.`
-
-    const MAX_RETRIES = 1
-    const PER_CALL_TIMEOUT = 90_000
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      // Primary path: direct llmEngine.call() — parent engine has real session
-      if (!this.agentRuntime || !config.sessionId) {
-        const directResult = await this._directCriticCall(config, criticInput, round, signal, PER_CALL_TIMEOUT)
-        if (!directResult.error) return directResult
-        if (attempt < MAX_RETRIES) {
-          await sleep(Math.min(1000 * Math.pow(2, attempt), 4000))
-          continue
-        }
-        return directResult
-      }
-
-      // Try direct call first (has valid session)
-      const directResult = await this._directCriticCall(config, criticInput, round, signal, PER_CALL_TIMEOUT)
-      if (!directResult.error) return directResult
-
-      // Fallback: AgentRuntime sub-engine (isolated context)
-      const ctx: AgentContext = {
-        systemPrompt: CRITIC_PROMPT,
-        sessionId: config.sessionId,
-        role: 'debate-critic',
-        taskDescription: criticInput,
-        modelPreference: config.criticModel
-          ? `${config.criticModel.providerID}/${config.criticModel.modelID}`
-          : undefined,
-        reasoningEffort: config.criticReasoning,
-        timeoutMs: PER_CALL_TIMEOUT,
-      }
-      const result = await this.agentRuntime.execute(ctx)
-      if (!result.success || isNoLlm(result.output)) {
-        if (attempt < MAX_RETRIES) {
-          await sleep(Math.min(1000 * Math.pow(2, attempt), 4000))
-          continue
-        }
-        return { output: '', error: result.error || directResult.error || NO_LLM_RESPONSE }
-      }
-      return { output: result.output }
-    }
-    /* istanbul ignore next — unreachable, type checker comfort */
-    return { output: '', error: 'Critic: max retries exceeded' }
-  }
-
-  /** Direct critic LLM call via parent engine (has real OpenCode session). */
-  private async _directCriticCall(
-    config: DebateConfig,
-    criticInput: string,
-    round: number,
-    signal: AbortSignal,
-    perCallTimeout: number,
-  ): Promise<{ output: string; error?: string }> {
-    try {
-      const criticController = new AbortController()
-      const criticTimeoutId = setTimeout(() => criticController.abort(), perCallTimeout)
-      const criticCombinedSignal = combinedAbort(signal, criticController.signal)
-      const resp = await this.llmEngine.call({
-        systemPrompt: CRITIC_PROMPT,
-        userPrompt: criticInput,
-        temperature: 0.2,
-        maxTokens: 2048,
-        bypassCache: round > 1,
-        model: config.criticModel,
-        toolName: 'debate-critic',
-        signal: criticCombinedSignal,
-        timeoutMs: perCallTimeout,
-      })
-      clearTimeout(criticTimeoutId)
-      if (isNoLlm(resp.content)) {
-        writeDebugLog('DebateLoop', 'Critic direct call returned NO_LLM', { round, inputLen: criticInput.length })
-        return { output: '', error: NO_LLM_RESPONSE }
-      }
-      return { output: resp.content }
-    } catch (error) {
-      writeDebugLog('DebateLoop', 'Critic direct call threw', { error: String(error), round })
-      return { output: '', error: `Critic call failed: ${error}` }
+      writeDebugLog('DebateLoop', `${toolName} direct call threw`, { error: String(error), round })
+      return { output: '', error: `${toolName} call failed: ${error}` }
     }
   }
 }
