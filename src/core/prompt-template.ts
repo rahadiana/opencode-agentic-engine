@@ -33,6 +33,35 @@ export interface PromptSection {
 }
 
 /**
+ * Severity level for prompt validation issues.
+ * - error: prompt will likely malfunction (missing identity, broken template vars)
+ * - warning: prompt works but quality is degraded (empty sections, low-confidence knowledge)
+ */
+export type PromptIssueSeverity = "error" | "warning"
+
+/**
+ * A single validation issue found during build-time prompt validation.
+ * Inspired by Google prompt transpilation article (2026):
+ * "Build-time validation is mandatory — catch missing imports, undefined variables,
+ *  and circular dependencies during the build process."
+ */
+export interface PromptValidationIssue {
+  severity: PromptIssueSeverity
+  section: "identity" | "knowledge" | "instructions" | "guardrails" | "template"
+  message: string
+}
+
+/**
+ * Result of build-time prompt validation.
+ * valid=true means zero errors (warnings are acceptable).
+ */
+export interface PromptValidationResult {
+  valid: boolean
+  errors: PromptValidationIssue[]
+  warnings: PromptValidationIssue[]
+}
+
+/**
  * A single knowledge entry for the <knowledge-context> section.
  * Setiap entry harus mencantumkan sumber + confidence score.
  */
@@ -205,6 +234,163 @@ mode: all
 ---
 
 ${body}`
+  }
+
+  /**
+   * Build-time validation — catch prompt issues before they reach the model.
+   *
+   * Inspired by Google prompt transpilation article (2026-07-16):
+   * "A production-grade transpiler should catch errors before runtime.
+   *  We should be running validation checks for missing imports,
+   *  undefined variables, and circular dependencies during the build process."
+   *
+   * Checks:
+   * 1. Empty identity section (ERROR — agent has no role definition)
+   * 2. Empty instructions section (WARNING — agent has no workflow)
+   * 3. Unresolved template variables: {{var}}, ${var}, {var} patterns (ERROR)
+   * 4. Knowledge entries with empty source or content (WARNING)
+   * 5. Unclosed XML-style tags in content (WARNING — render may break)
+   * 6. Empty guardrails section (WARNING — no safety constraints)
+   * 7. Excessively large sections that may exhaust context window (WARNING)
+   *
+   * @returns PromptValidationResult with valid=true if zero errors
+   */
+  validate(): PromptValidationResult {
+    const issues: PromptValidationIssue[] = []
+
+    const activeIdentity = this._identity.filter(s => s.when !== false)
+    const activeInstructions = this._instructions.filter(s => s.when !== false)
+    const activeGuardrails = this._guardrails.filter(s => s.when !== false)
+    const activeKnowledge = this._knowledge.filter(s => s.when !== false)
+
+    // ── 1. Empty identity = agent has no role definition ──
+    if (activeIdentity.length === 0) {
+      issues.push({
+        severity: "error",
+        section: "identity",
+        message: "Missing identity section — agent has no role definition. Every prompt needs an identity.",
+      })
+    } else {
+      // Check for whitespace-only identity
+      const allEmpty = activeIdentity.every(s => s.content.trim().length === 0)
+      if (allEmpty) {
+        issues.push({
+          severity: "error",
+          section: "identity",
+          message: "Identity section is empty (whitespace only) — agent has no role definition.",
+        })
+      }
+    }
+
+    // ── 2. Empty instructions = agent has no workflow ──
+    if (activeInstructions.length === 0) {
+      issues.push({
+        severity: "warning",
+        section: "instructions",
+        message: "No instructions section — agent has no workflow or tool guidance.",
+      })
+    }
+
+    // ── 3. Empty guardrails = no safety constraints ──
+    if (activeGuardrails.length === 0) {
+      issues.push({
+        severity: "warning",
+        section: "guardrails",
+        message: "No guardrails section — agent has no safety constraints or boundaries.",
+      })
+    }
+
+    // ── 4. Unresolved template variables ──
+    // Detects {{var}}, ${{var}}, {{ var }}, {%...%} patterns that should have been resolved
+    const allSections = [
+      ...activeIdentity,
+      ...activeInstructions,
+      ...activeGuardrails,
+      ...activeKnowledge,
+    ]
+
+    // Match common template patterns:
+    // - {{variable}} or {{ variable }}  (Jinja/Handlebars)
+    // - {%...%}  (Jinja control blocks)
+    // - ${variable}  (JS template literal — usually means unresolved)
+    const TEMPLATE_VAR_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
+      { pattern: /\{\{\s*[a-zA-Z_][a-zA-Z0-9_.]*\s*\}\}/g, label: "{{var}}" },
+      { pattern: /\{%[^%]*%\}/g, label: "{%...%}" },
+    ]
+
+    for (const section of allSections) {
+      for (const { pattern, label } of TEMPLATE_VAR_PATTERNS) {
+        const matches = section.content.match(pattern)
+        if (matches) {
+          // Deduplicate matches
+          const unique = [...new Set(matches)]
+          issues.push({
+            severity: "error",
+            section: "template",
+            message: `Unresolved template variable(s): ${unique.join(", ")} (pattern: ${label}). These should be resolved at build time.`,
+          })
+        }
+      }
+    }
+
+    // ── 5. Knowledge entries quality checks ──
+    for (const ks of activeKnowledge) {
+      // Check for <source> tags with empty url="" or empty content
+      const sourceTagPattern = /<source\s+url="([^"]*)"[^>]*>([\s\S]*?)<\/source>/g
+      let match
+      while ((match = sourceTagPattern.exec(ks.content)) !== null) {
+        const url = match[1]
+        const content = match[2]
+        if (!url || url.trim().length === 0) {
+          issues.push({
+            severity: "warning",
+            section: "knowledge",
+            message: "Knowledge entry has empty source URL — cannot trace provenance.",
+          })
+        }
+        if (!content || content.trim().length === 0) {
+          issues.push({
+            severity: "warning",
+            section: "knowledge",
+            message: `Knowledge entry from "${url}" has empty content — wastes context tokens.`,
+          })
+        }
+      }
+    }
+
+    // ── 6. Unclosed XML tags in rendered content ──
+    const rendered = this.render()
+    const EXPECTED_TAGS = ["identity", "knowledge-context", "instructions", "guardrails"]
+    for (const tag of EXPECTED_TAGS) {
+      const openCount = (rendered.match(new RegExp(`<${tag}>`, "g")) ?? []).length
+      const closeCount = (rendered.match(new RegExp(`</${tag}>`, "g")) ?? []).length
+      if (openCount !== closeCount) {
+        issues.push({
+          severity: "warning",
+          section: "template",
+          message: `Mismatched XML tags for <${tag}>: ${openCount} open vs ${closeCount} close.`,
+        })
+      }
+    }
+
+    // ── 7. Context window size warning ──
+    const TOKEN_ESTIMATE = rendered.length / 4 // rough: 1 token ≈ 4 chars
+    if (TOKEN_ESTIMATE > 8000) {
+      issues.push({
+        severity: "warning",
+        section: "template",
+        message: `Rendered prompt is ~${Math.round(TOKEN_ESTIMATE)} tokens (${rendered.length} chars). Consider reducing to avoid context exhaustion.`,
+      })
+    }
+
+    // ── Build result ──
+    const errors = issues.filter(i => i.severity === "error")
+    const warnings = issues.filter(i => i.severity === "warning")
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings,
+    }
   }
 
 }

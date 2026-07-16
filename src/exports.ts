@@ -49,7 +49,7 @@ export { SkillStore, createSkillDefinition, inspectSkill, serializeSkill, deseri
 export { formatAntiRationalizations, type AntiRationalization } from "./memory/skill-format.js"
 export { type SkillRecord } from "./memory/skill-store.js"
 export { STOP_WORDS, isStopWord, filterStopWords, getStopWordStats } from "./memory/stopwords.js"
-export { PromptTemplate, type KnowledgeEntry } from "./core/prompt-template.js"
+export { PromptTemplate, type KnowledgeEntry, type PromptSection, type PromptValidationResult, type PromptValidationIssue, type PromptIssueSeverity } from "./core/prompt-template.js"
 export { ToolRouter } from "./core/tool-router.js"
 export { SemanticCache } from "./core/semantic-cache.js"
 export { LRUCache, type LRUCacheOptions } from "./core/lru-cache.js"

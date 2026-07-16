@@ -1282,6 +1282,155 @@ state.passed += hkPassed; state.failed += hkFailed
   state.passed += ptPassed; state.failed += ptFailed
 }
 
+// ── PromptTemplate Validation (build-time checks, inspired by Google prompt transpilation) ──
+{
+  let pvPassed = 0, pvFailed = 0
+  const pvAssert = (c, m) => { if (c) pvPassed++; else { pvFailed++; console.log(`  FAIL: ${m}`) } }
+
+  // PV-1: Valid prompt — no errors
+  const v1 = new mod.PromptTemplate()
+  v1.identity("You are a test agent.")
+  v1.instructions("## Workflow\n1. Plan\n2. Execute")
+  v1.guardrails("Never hallucinate.")
+  const r1 = v1.validate()
+  pvAssert(r1.valid === true, "PV-1a: valid prompt has valid=true")
+  pvAssert(r1.errors.length === 0, "PV-1b: no errors")
+  pvAssert(Array.isArray(r1.warnings), "PV-1c: warnings is array")
+
+  // PV-2: Missing identity → error
+  const v2 = new mod.PromptTemplate()
+  v2.instructions("do stuff")
+  const r2 = v2.validate()
+  pvAssert(r2.valid === false, "PV-2a: missing identity is invalid")
+  pvAssert(r2.errors.some(e => e.section === "identity"), "PV-2b: error on identity section")
+
+  // PV-3: Whitespace-only identity → error
+  const v3 = new mod.PromptTemplate()
+  v3.identity("   \n  ")
+  const r3 = v3.validate()
+  pvAssert(r3.valid === false, "PV-3a: whitespace identity is invalid")
+  pvAssert(r3.errors.some(e => e.message.includes("whitespace only")), "PV-3b: whitespace message")
+
+  // PV-4: Missing instructions → warning
+  const v4 = new mod.PromptTemplate()
+  v4.identity("I am an agent")
+  const r4 = v4.validate()
+  pvAssert(r4.valid === true, "PV-4a: still valid (warning, not error)")
+  pvAssert(r4.warnings.some(w => w.section === "instructions"), "PV-4b: warning on instructions")
+
+  // PV-5: Missing guardrails → warning
+  const v5 = new mod.PromptTemplate()
+  v5.identity("I am an agent")
+  v5.instructions("do work")
+  const r5 = v5.validate()
+  pvAssert(r5.warnings.some(w => w.section === "guardrails"), "PV-5a: warning on guardrails")
+
+  // PV-6: Unresolved {{variable}} → error
+  const v6 = new mod.PromptTemplate()
+  v6.identity("You are a {{role}} agent in the {{environment}} env.")
+  v6.instructions("work in {{env}}")
+  const r6 = v6.validate()
+  pvAssert(r6.valid === false, "PV-6a: unresolved template vars is invalid")
+  pvAssert(r6.errors.some(e => e.section === "template" && e.message.includes("{{role}}")), "PV-6b: detects {{role}}")
+  pvAssert(r6.errors.some(e => e.message.includes("{{environment}}")), "PV-6c: detects {{environment}}")
+
+  // PV-7: Unresolved {%...%} Jinja blocks → error
+  const v7 = new mod.PromptTemplate()
+  v7.identity("Agent")
+  v7.instructions("{% if allow_remediation %}Allow fixes{% endif %}")
+  const r7 = v7.validate()
+  pvAssert(r7.valid === false, "PV-7a: unresolved Jinja block is invalid")
+  pvAssert(r7.errors.some(e => e.message.includes("{%")), "PV-7b: detects {%...%}")
+
+  // PV-8: Knowledge entry with empty source → warning
+  const v8 = new mod.PromptTemplate()
+  v8.identity("Agent")
+  v8.injectKnowledge([
+    { source: "", confidence: 0.85, content: "some knowledge" },
+  ])
+  const r8 = v8.validate()
+  pvAssert(r8.warnings.some(w => w.section === "knowledge" && w.message.includes("empty source")), "PV-8a: warns on empty source URL")
+
+  // PV-9: Knowledge entry with empty content → warning
+  const v9 = new mod.PromptTemplate()
+  v9.identity("Agent")
+  v9.injectKnowledge([
+    { source: "https://example.com", confidence: 0.7, content: "   " },
+  ])
+  const r9 = v9.validate()
+  pvAssert(r9.warnings.some(w => w.section === "knowledge" && w.message.includes("empty content")), "PV-9a: warns on empty content")
+
+  // PV-10: Valid knowledge entries → no knowledge warnings
+  const v10 = new mod.PromptTemplate()
+  v10.identity("Agent")
+  v10.instructions("work")
+  v10.guardrails("be safe")
+  v10.injectKnowledge([
+    { source: "https://docs.example.com/api", confidence: 0.9, content: "API docs here" },
+  ])
+  const r10 = v10.validate()
+  pvAssert(r10.valid === true, "PV-10a: valid with knowledge")
+  pvAssert(!r10.warnings.some(w => w.section === "knowledge"), "PV-10b: no knowledge warnings")
+
+  // PV-11: Conditional sections (when=false) excluded from validation
+  const v11 = new mod.PromptTemplate()
+  v11.identity("Active agent")
+  v11.instructions("{{should_be_ignored}}", false)  // when=false → not rendered
+  v11.instructions("Real instructions")
+  v11.guardrails("rules")
+  const r11 = v11.validate()
+  pvAssert(r11.valid === true, "PV-11a: disabled sections don't trigger template var errors")
+
+  // PV-12: Drift check — rendered prompt has expected structure
+  const v12 = new mod.PromptTemplate()
+  v12.identity("Agent identity")
+  v12.instructions("Agent instructions")
+  v12.guardrails("Agent guardrails")
+  const rendered12 = v12.render()
+  pvAssert(rendered12.includes("<identity>"), "PV-12a: rendered has <identity>")
+  pvAssert(rendered12.includes("</identity>"), "PV-12b: rendered has </identity>")
+  pvAssert(rendered12.includes("<instructions>"), "PV-12c: rendered has <instructions>")
+  pvAssert(rendered12.includes("</instructions>"), "PV-12d: rendered has </instructions>")
+  pvAssert(rendered12.includes("<guardrails>"), "PV-12e: rendered has <guardrails>")
+  pvAssert(rendered12.includes("</guardrails>"), "PV-12f: rendered has </guardrails>")
+  // Order check: identity before instructions before guardrails
+  const idxId = rendered12.indexOf("<identity>")
+  const idxInstr = rendered12.indexOf("<instructions>")
+  const idxGuard = rendered12.indexOf("<guardrails>")
+  pvAssert(idxId < idxInstr, "PV-12g: identity before instructions")
+  pvAssert(idxInstr < idxGuard, "PV-12h: instructions before guardrails")
+
+  // PV-13: Result type structure
+  pvAssert(typeof r1.valid === "boolean", "PV-13a: valid is boolean")
+  pvAssert(Array.isArray(r1.errors), "PV-13b: errors is array")
+  pvAssert(Array.isArray(r1.warnings), "PV-13c: warnings is array")
+  // Check issue shape
+  if (r2.errors.length > 0) {
+    const issue = r2.errors[0]
+    pvAssert(typeof issue.severity === "string", "PV-13d: issue has severity")
+    pvAssert(typeof issue.section === "string", "PV-13e: issue has section")
+    pvAssert(typeof issue.message === "string", "PV-13f: issue has message")
+  }
+
+  // PV-14: buildAgenticSystemInstructions produces valid prompt (drift check)
+  const domainPack = { name: "code", tools: ["agentic_plan", "agentic_execute", "agentic_verify"] }
+  const fakeTools = [
+    { name: "agentic_plan", description: "Plan" },
+    { name: "agentic_execute", description: "Execute" },
+    { name: "agentic_verify", description: "Verify" },
+  ]
+  const sysInstr = mod.buildAgenticSystemInstructions(domainPack, fakeTools)
+  pvAssert(sysInstr.includes("<identity>"), "PV-14a: system instructions have identity")
+  pvAssert(sysInstr.includes("<instructions>"), "PV-14b: system instructions have instructions")
+  pvAssert(sysInstr.includes("<guardrails>"), "PV-14c: system instructions have guardrails")
+  // No unresolved template vars in production prompt
+  pvAssert(!sysInstr.match(/\{\{\s*[a-zA-Z_]/), "PV-14d: no unresolved {{vars}} in prod prompt")
+  pvAssert(!sysInstr.match(/\{%[^%]*%\}/), "PV-14e: no unresolved {%...%} in prod prompt")
+
+  console.log(`  PromptTemplate Validation: ${pvPassed} passed, ${pvFailed} failed`)
+  state.passed += pvPassed; state.failed += pvFailed
+}
+
 // ── ProjectContext ─────────────────────────────────────
 {
   let pcPassed = 0, pcFailed = 0
