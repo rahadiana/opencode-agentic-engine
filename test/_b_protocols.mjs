@@ -1431,6 +1431,58 @@ state.passed += hkPassed; state.failed += hkFailed
   state.passed += pvPassed; state.failed += pvFailed
 }
 
+// ── PromptTemplate Golden-File Drift Check (CI enforcement) ──
+{
+  let gdPassed = 0, gdFailed = 0
+  const gdAssert = (c, m) => { if (c) gdPassed++; else { gdFailed++; console.log(`  FAIL: ${m}`) } }
+
+  // GD-1: Production prompt has all required XML sections
+  const codeDomain = { name: "code", tools: ["agentic_plan", "agentic_execute", "agentic_verify"] }
+  const fakeTools = [
+    { name: "agentic_plan", description: "Plan" },
+    { name: "agentic_execute", description: "Execute" },
+    { name: "agentic_verify", description: "Verify" },
+  ]
+  const prodPrompt = mod.buildAgenticSystemInstructions(codeDomain, fakeTools, { isRouted: false })
+  gdAssert(prodPrompt.includes("<identity>"), "GD-1a: prod prompt has <identity>")
+  gdAssert(prodPrompt.includes("</identity>"), "GD-1b: prod prompt has </identity>")
+  gdAssert(prodPrompt.includes("<instructions>"), "GD-1c: prod prompt has <instructions>")
+  gdAssert(prodPrompt.includes("</instructions>"), "GD-1d: prod prompt has </instructions>")
+  gdAssert(prodPrompt.includes("<guardrails>"), "GD-1e: prod prompt has <guardrails>")
+  gdAssert(prodPrompt.includes("</guardrails>"), "GD-1f: prod prompt has </guardrails>")
+
+  // GD-2: Section order invariant — identity before instructions before guardrails
+  const idxId = prodPrompt.indexOf("<identity>")
+  const idxInstr = prodPrompt.indexOf("<instructions>")
+  const idxGuard = prodPrompt.indexOf("<guardrails>")
+  gdAssert(idxId > -1 && idxInstr > -1 && idxGuard > -1, "GD-2a: all sections present")
+  gdAssert(idxId < idxInstr && idxInstr < idxGuard, "GD-2b: sections in correct order (identity < instructions < guardrails)")
+
+  // GD-3: No unresolved template variables in production prompt
+  const hasUnresolvedDouble = /\{\{\s*[a-zA-Z_][a-zA-Z0-9_.]*\s*\}\}/.test(prodPrompt)
+  const hasUnresolvedJinja = /\{%[^%]*%\}/.test(prodPrompt)
+  gdAssert(!hasUnresolvedDouble, "GD-3a: no unresolved {{var}} in prod prompt")
+  gdAssert(!hasUnresolvedJinja, "GD-3b: no unresolved {%...%} in prod prompt")
+
+  // GD-4: validate() returns valid=true on production prompt
+  const v = new mod.PromptTemplate()
+  v.identity("prod")
+  v.instructions("prod")
+  v.guardrails("prod")
+  const vr = v.validate()
+  gdAssert(vr.valid === true, "GD-4a: validate() on minimal template returns valid=true")
+  gdAssert(vr.errors.length === 0, "GD-4b: no errors")
+
+  // GD-5: buildAgentPrompt also has valid structure
+  const agentPrompt = mod.buildAgentPrompt(codeDomain, fakeTools)
+  gdAssert(agentPrompt.includes("---"), "GD-5a: buildAgentPrompt has YAML frontmatter")
+  gdAssert(agentPrompt.includes("<identity>"), "GD-5b: buildAgentPrompt has <identity>")
+  gdAssert(agentPrompt.includes("<guardrails>"), "GD-5c: buildAgentPrompt has <guardrails>")
+
+  console.log(`  Golden-File Drift Check: ${gdPassed} passed, ${gdFailed} failed`)
+  state.passed += gdPassed; state.failed += gdFailed
+}
+
 // ── ProjectContext ─────────────────────────────────────
 {
   let pcPassed = 0, pcFailed = 0

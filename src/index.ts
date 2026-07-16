@@ -67,7 +67,7 @@ import { MCPServer } from "./core/mcp-server.js"
 import { buildAgenticSystemInstructions, buildCompactToolBrief, type ToolEntry } from "./core/prompt-builder.js"
 import { AGENTIC_TOOL_REGISTRY } from "./core/tool-catalog.js"
 import { detectProjectContext, type ProjectContext } from "./core/project-context.js"
-import { type KnowledgeEntry, type PromptValidationResult, type PromptValidationIssue, type PromptIssueSeverity } from "./core/prompt-template.js"
+import { PromptTemplate, type KnowledgeEntry, type PromptValidationResult, type PromptValidationIssue, type PromptIssueSeverity } from "./core/prompt-template.js"
 import { ToolRouter } from "./core/tool-router.js"
 import { ConfidenceScorer, ConfidenceStore } from "./core/confidence-scorer.js"
 import { codeIntentAnalyzer } from "./core/code-intent-analyzer.js"
@@ -1264,6 +1264,43 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
             curator,
             goal: queryForRag,  // use the same query string for skill relevance
           })
+
+          // ── Validate prompt structure (build-time validation at runtime, warning-only) ──
+          // Inspired by Google prompt transpilation: catch issues before they reach LLM
+          // This is best-effort — never blocks the prompt injection
+          try {
+            // Parse injection into PromptTemplate structure for validation
+            const validationTemplate = new PromptTemplate()
+            // Extract sections from rendered injection (rough parse)
+            if (injection.includes("<identity>")) {
+              validationTemplate.identity("validated")
+            }
+            if (injection.includes("<instructions>")) {
+              validationTemplate.instructions("validated")
+            }
+            if (injection.includes("<guardrails>")) {
+              validationTemplate.guardrails("validated")
+            }
+            if (injection.includes("<knowledge-context>")) {
+              validationTemplate.knowledge("validated")
+            }
+            const validationResult = validationTemplate.validate()
+            // Log warnings (not errors — this is informational)
+            if (validationResult.warnings.length > 0) {
+              for (const w of validationResult.warnings) {
+                log.warn(`[Agentic] Prompt validation warning (${w.section}): ${w.message}`)
+              }
+            }
+            // Log errors but don't block (system.transform must never throw)
+            if (validationResult.errors.length > 0) {
+              for (const e of validationResult.errors) {
+                log.warn(`[Agentic] Prompt validation error (${e.section}): ${e.message}`)
+              }
+            }
+          } catch (e) {
+            // Validation failure is never fatal — log and continue
+            log.warn(`[Agentic] Prompt validation check failed: ${e instanceof Error ? e.message : String(e)}`)
+          }
 
           // ── Gap #3: Code Intent Injection ──
           try {

@@ -53,6 +53,7 @@
     "test:ci": "node test/run-parallel.mjs",
     "test:e2e": "node test/e2e-scenario.mjs",
     "test:e2e-llm": "node test/e2e-llm.mjs",
+    "validate:prompt": "node test/validate-prompt.mjs",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write \"src/**/*.ts\"",
