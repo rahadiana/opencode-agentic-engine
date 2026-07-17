@@ -8,12 +8,12 @@
 
 | Metrik | Nilai |
 |--------|-------|
-| **Versi** | **v0.5.8** (npm tag pushed; published via CI) |
-| **Unit tests** | 3718 (all mock, no LLM needed) + OpenCode real spawn verified for dumb harness |
+| **Versi** | **v0.5.9-dev** (config-driven remote RAG sync) |
+| **Unit tests** | 3785 (all mock, no LLM needed) + OpenCode real spawn verified for dumb harness |
 | **Agentic tools** | 32 (`agentic_*` prefix) |
-| **Source files** | 175+ di `src/` (11 subdirektori + 6 baru memory/) |
-| **Coverage gate** | ✅ Stmts 90.06%+, Branch 69.82%+, Func 75.83%+, Lines 80%+ |
-| **Lint** | ✅ **87 warnings, 0 errors** |
+| **Source files** | 180+ di `src/` (11 subdirektori + RAG self-improve) |
+| **Coverage gate** | ✅ Stmts ~90%, Branch ~70%, Func ~76%, Lines 80%+ |
+| **Lint** | ✅ **3 warnings, 0 errors** |
 | **SWE-bench (mock)** | ✅ 7/7 (100%) — `LLM_OFF=true` |
 | **SWE-bench (real free, agentic_auto)** | ✅ **3/7 (43%)** — mimo-v2.5-free + HTTP client (2026-07-09) |
 | **SWE-bench (real, delegate+manual)** | ✅ 7/7 (100%) — model kuat / manual, not pure auto |
@@ -21,6 +21,7 @@
 | **EvoClaw score** | ✅ 100% (target: >55%) |
 | **CI** | ✅ Build + lint + coverage gate + unit test |
 | **22 Paper RAG Self-Improvement** | ✅ **Semua terimplementasi + terverifikasi dengan real simulation** |
+| **Remote RAG Sync** | ✅ **Config-driven — `rag.remoteUrl` di `.agentic/config.json`** |
 
 ---
 
@@ -93,6 +94,25 @@ Berdasarkan riset 22 paper terbaru (2024–2026). Closed-loop knowledge quality 
 | **RAGA** | 2026 | Read-Search-Verify-Construct | Graph-edit action in MDP | ✅ |
 | **+9 survey papers** | 2024-26 | Referensi arsitektur | Semua sebagai fondasi | ✅ |
 
+## Remote RAG Sync (NEW — v0.5.9-dev)
+
+Config-driven one-way sync ke server eksternal via `rag.remoteUrl` di `.agentic/config.json`:
+
+```json
+{
+  "rag": {
+    "remoteUrl": "https://rag-server.example.com/sync",
+    "remoteApiKey": "sk-xxx",
+    "remoteBatchIntervalMs": 3000,
+    "remoteSyncMode": "full"
+  }
+}
+```
+
+- Debounced HTTP POST (default 5s interval) — gak spam tiap store kecil
+- Tanpa config `rag` → tetap lokal, zero perubahan
+- Docs: `docs/config.md#remote-rag-sync-rag`
+
 ## Gap Tersisa / Future Work
 
 | Item | Status | Catatan |
@@ -101,18 +121,20 @@ Berdasarkan riset 22 paper terbaru (2024–2026). Closed-loop knowledge quality 
 | Hybrid local/global docs | ✅ | memory.md + config.md + status store roots |
 | MDP auto deep-escalate | ✅ | `memory.ragDeepEscalate` + threshold (default 0.35) |
 | FormalModel / AttentionScheduler audit | ✅ | DependencyGraph+ContractVerifier wired; AttentionScheduler opt-in |
+| **Remote RAG sync** | ✅ **v0.5.9-dev** | Config-driven `rag.remoteUrl` + debounced HTTP POST |
 | Tool extraction remaining | 🟡 Partial | Almost all tools already in `src/tools/*`; definitions.ts is thin barrel |
-| Branch coverage >75% | 🔮 Future | Saat ini ~69% (CI gate at 60%) |
+| Branch coverage >75% | 🔮 Future | Saat ini ~70% (CI gate at 60%) |
 | agentic_auto SWE harness | ✅ | Path hints, target files, verify-before-done, dumb mode fix |
 | agentic_auto SWE real-LLM (free) | ✅ **3/7 (43%)** | mimo-v2.5-free; was 2/7 baseline; harness now real HTTP client |
-| Lint unused-ctx | ✅ | ~1820 → ~86 warnings |
+| Lint cleaning | ✅ | ~87 warnings → **3 warnings** |
 | Git push origin | 🔄 | Push after each batch |
 | NPM publish | 🔮 Future | `npm publish` untuk `opencode plugin opencode-agentic-engine` |
 | Streaming | 🔮 Future | Didelegasikan ke OpenCode SDK (47/48 capabilities) |
 | Gaps #1–#12 | ✅ **Semua selesai** | 12 gaps dari arXiv:2606.05608 |
-| Lint warnings 0 | ✅ **0 errors** | Unused-ctx warnings remain (M4) |
+| Lint warnings 0 | ✅ **0 errors** | 3 unused-import warnings remain |
 | Self-Improving RAG | ✅ **22 paper + critical-path facade** | `rag-self-improve.ts` wired ke query/transform/execute |
 | Auto dumb-model harness | ✅ **default `"auto"`** | name + stats → strict; verified via `opencode run` real |
+| **Remote RAG two-way sync** | 🔮 Future | Saat ini one-way (plugin → server). Query dari remote via MCP |
 
 ---
 
