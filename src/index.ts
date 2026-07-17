@@ -576,8 +576,40 @@ const confidenceStore = new ConfidenceStore()
     multiIndexRAG.importAll(item.data as import("./memory/multi-index-rag.js").IndexData)
   }
   // Auto-persist RAG via StateStore every time data is stored
+  // Optional remote sync: configured via config.rag.remoteUrl
+  const ragSyncCfg = config.rag ?? {}
+  const pendingSync = new Map<string, { timer: ReturnType<typeof setTimeout>; data: unknown }>()
+  function debouncedRemoteSync(
+    url: string,
+    opts: { apiKey?: string; batchIntervalMs: number; mode: string; data: unknown },
+  ): void {
+    const existing = pendingSync.get(url)
+    if (existing) clearTimeout(existing.timer)
+    pendingSync.set(url, {
+      data: opts.data,
+      timer: setTimeout(async () => {
+        const entry = pendingSync.get(url)
+        if (!entry) return
+        pendingSync.delete(url)
+        try {
+          const headers: Record<string, string> = { "Content-Type": "application/json" }
+          if (opts.apiKey) headers["Authorization"] = `Bearer ${opts.apiKey}`
+          const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(entry.data) })
+          if (!res.ok) log.warn(`[RAG] Remote sync to ${url} returned ${res.status}`)
+        } catch (e) { log.warn(`[RAG] Remote sync failed: ${e instanceof Error ? e.message : String(e)}`) }
+      }, opts.batchIntervalMs > 0 ? opts.batchIntervalMs : 0),
+    })
+  }
   multiIndexRAG.setPersistCallback((data) => {
     stateStore.set("rag", "global", data)
+    if (ragSyncCfg.remoteUrl) {
+      debouncedRemoteSync(ragSyncCfg.remoteUrl, {
+        apiKey: ragSyncCfg.remoteApiKey,
+        batchIntervalMs: ragSyncCfg.remoteBatchIntervalMs ?? 5000,
+        mode: ragSyncCfg.remoteSyncMode ?? "full",
+        data,
+      })
+    }
   })
   // Wire RAG into MemoryOrchestrator — single coordinator for all memory
   memoryOrchestrator.setRagStore(multiIndexRAG)

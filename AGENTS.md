@@ -12,7 +12,7 @@ Semua 12 paper gaps (arXiv:2606.05608), P0-P4 dari TODO.md, dan **22 paper RAG s
 2. ✅ **Schema-First Boundaries** — LLM output divalidasi sebelum dipakai (P1)
 3. ✅ **Dumb Model Mode** — strict mode untuk model lemah (P2)
 4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
-5. ✅ **Test Coverage** — **3718+ tests** in parallel (~27s), c8 gate + CI coverage (P4)
+5. ✅ **Test Coverage** — **3785+ tests** in parallel (~27s), c8 gate + CI coverage (P4)
 5b. ✅ **Auto Dumb-Model Harness** — `dumbModelMode: "auto"` (name + stats → WorkflowPolicy strict)
 6. ✅ **Typed Errors** — 49/49 throw sites migrated, 0 `as any` remaining
 7. ✅ **SemanticCache** — TF-IDF + cosine, benchmarked at 0.78 threshold
@@ -251,6 +251,10 @@ Konfigurasi plugin disimpan di `.agentic/config.json` (per project). Auto-create
 | `agent.deepVerification` | `object` | `{ security, performance, architecture, deps: true }` | Toggle per-dimensi deep verify |
 | `storage.traceRetentionDays` | `number` | `7` | Retensi trace file |
 | `storage.skillMaxCount` | `number` | `200` | Max skills tersimpan |
+| `rag.remoteUrl` | `string\|null` | `null` | URL endpoint untuk remote RAG sync (opsional) |
+| `rag.remoteApiKey` | `string\|null` | `null` | API key untuk remote RAG (opsional) |
+| `rag.remoteBatchIntervalMs` | `number` | `5000` | Debounce interval remote sync dalam ms |
+| `rag.remoteSyncMode` | `"full"\|"changes"` | `"full"` | Mode sync: full export atau delta |
 
 ### Contoh
 
@@ -269,6 +273,12 @@ Konfigurasi plugin disimpan di `.agentic/config.json` (per project). Auto-create
     "hallucinationThreshold": 0.4,
     "dumbModelMode": "auto",
     "workflowPolicyMode": "advisory"
+  },
+  "rag": {
+    "remoteUrl": "https://rag-server.example.com/sync",
+    "remoteApiKey": null,
+    "remoteBatchIntervalMs": 3000,
+    "remoteSyncMode": "full"
   }
 }
 ```
@@ -831,6 +841,19 @@ Jangan mengarang kompatibilitas atau perilaku tool. Kalau ada hal yang belum pas
 - **Dockerfile fix**: Missing `agentic-agent-prompt.md` created
 - **CHANGELOG.md**: Created with full version history
 - **Total: 3718 tests, 0 lint warnings, 0 TS errors, Docker CI verified, build OK**
+
+### v0.5.9-dev — Config-Driven Remote RAG Sync (2026-07-17)
+
+- **Config-driven remote RAG**: Tambah section `rag` di `.agentic/config.json` untuk sync otomatis ke server eksternal:
+  - `rag.remoteUrl` — URL endpoint remote sync
+  - `rag.remoteApiKey` — API key (optional, via `Authorization: Bearer`)
+  - `rag.remoteBatchIntervalMs` — debounce interval (default 5000ms)
+  - `rag.remoteSyncMode` — full/changes (default full)
+- **Debounced HTTP sync**: Setiap perubahan RAG dikumpulin dulu (default 5 detik) sebelum dikirim ke remote — gak spam HTTP tiap store kecil
+- **Config wiring**: Baca config di `setPersistCallback` — tanpa config `rag`, jalan seperti biasa (lokal, zero perubahan)
+- **Validation**: Validasi schema untuk `rag.*` di `validateConfig()` + merge ke default
+- **Docs**: `docs/config.md` field reference + section "Remote RAG Sync", `docs/guide/memory.md` mention, `AGENTS.md` table + example
+- **3785 tests, 0 lint errors, build OK****
 
 ### v0.5.7+ — Zero Lint + Branch Coverage + Git Push (2026-07-11)
 

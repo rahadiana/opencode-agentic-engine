@@ -53,6 +53,12 @@ File: `.agentic/config.json`
   "storage": {
     "traceRetentionDays": 7,
     "skillMaxCount": 200
+  },
+  "rag": {
+    "remoteUrl": null,
+    "remoteApiKey": null,
+    "remoteBatchIntervalMs": 5000,
+    "remoteSyncMode": "full"
   }
 }
 ```
@@ -73,6 +79,10 @@ File: `.agentic/config.json`
 | `memory.stopWordsLanguages` | string[] | `["ind","eng"]` | Stop words languages |
 | `memory.ragDeepEscalate` | boolean | `true` | Auto-escalate standard RAG → MDP deep saat confidence rendah |
 | `memory.ragDeepEscalateThreshold` | number | `0.35` | Ambang avgScore (0–1); `0` = never auto deep. Explicit `mode:"deep"` tetap bisa |
+| `rag.remoteUrl` | string\|null | `null` | URL endpoint untuk remote RAG sync. `null`/undefined = no remote sync |
+| `rag.remoteApiKey` | string\|null | `null` | Optional API key (dikirim sebagai `Authorization: Bearer <key>`) |
+| `rag.remoteBatchIntervalMs` | number | `5000` | Debounce interval (ms). Data dikumpulkan dulu selama N ms sebelum dikirim. `0` = kirim langsung tiap perubahan |
+| `rag.remoteSyncMode` | enum | `"full"` | `"full"` = export semua data RAG, `"changes"` = delta only (future) |
 | `agent.maxDelegationDepth` | number | `3` | Max delegation chain depth |
 | `agent.defaultRole` | string | `"developer"` | Default agent role |
 | `agent.requireSemanticCheck` | boolean | `false` | Wajib semantic check |
@@ -178,6 +188,37 @@ Adaptive Retrieval → KbPO Boundary → MMKP Context Optimizer
 MDP multi-turn = mode `deep` (opt-in API), bukan default chat.
 
 Lihat: [Memory guide](guide/memory.md), `src/memory/rag-self-improve.ts`.
+
+---
+
+## Remote RAG Sync (`rag`)
+
+Sinkronisasi data RAG ke server eksternal secara otomatis. 
+
+Cara kerja:
+1. Setiap kali ada perubahan data RAG (store/search/update), data di-persist ke file lokal (`stateStore`)
+2. Jika `rag.remoteUrl` dikonfigurasi, data juga dikirim ke endpoint tersebut via HTTP POST
+3. Dikirim dalam bentuk **debounced** (default: kumpulin 5 detik dulu) biar gak spam HTTP tiap perubahan kecil
+4. Format body: JSON array dari semua data RAG per kategori `{ category: { episodes, skills, tfidfDocs } }`
+
+```json
+{
+  "rag": {
+    "remoteUrl": "https://rag-server.example.com/sync",
+    "remoteApiKey": "sk-my-secret-key",
+    "remoteBatchIntervalMs": 3000,
+    "remoteSyncMode": "full"
+  }
+}
+```
+
+Header yang dikirim:
+```
+Content-Type: application/json
+Authorization: Bearer <remoteApiKey>   (jika dikonfigurasi)
+```
+
+> **Catatan:** Saat ini hanya **one-way sync** (plugin → remote). Two-way sync (query dari remote) belum diimplementasi. Untuk query ke remote RAG, gunakan `agentic_mcp` untuk connect ke MCP server eksternal.
 
 ---
 

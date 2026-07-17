@@ -180,6 +180,16 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
     })
   }
 
+  // Validate RAG config (optional)
+  if (cfg.rag && typeof cfg.rag === "object") {
+    validateObject("rag", cfg.rag, {
+      remoteUrl: { type: "string" },
+      remoteApiKey: { type: "string" },
+      remoteBatchIntervalMs: { type: "number", min: 0, max: 60000 },
+      remoteSyncMode: { type: "string", values: ["full", "changes"] },
+    })
+  }
+
   // Merge valid parts with defaults
   const merged = { ...defaults }
   if (embeddingRaw && typeof embeddingRaw === "object") {
@@ -201,6 +211,9 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
   }
   if (cfg.storage && typeof cfg.storage === "object") {
     merged.storage = { ...defaults.storage, ...cfg.storage as StorageConfig }
+  }
+  if (cfg.rag && typeof cfg.rag === "object") {
+    merged.rag = { ...defaults.rag, ...cfg.rag as RAGSyncConfig }
   }
 
   const hasErrors = issues.some(i => i.severity === "error")
@@ -326,11 +339,23 @@ export interface FineTuningConfigSchema {
   suffix?: string
 }
 
+export interface RAGSyncConfig {
+  /** Remote sync endpoint URL (null/undefined = no remote sync) */
+  remoteUrl?: string
+  /** Optional API key for remote sync endpoint */
+  remoteApiKey?: string
+  /** Batch/debounce interval in ms (default: 5000). 0 = sync setiap perubahan */
+  remoteBatchIntervalMs?: number
+  /** Sync mode: 'full' exports all RAG data, 'changes' exports delta only (default: full) */
+  remoteSyncMode?: "full" | "changes"
+}
+
 export interface AgenticConfigSchema {
   $schema: string
   /** Embedding — null = lightweight mode */
   embedding: EmbeddingConfig | null
   memory: MemoryConfig
+  rag?: RAGSyncConfig
   agent: AgentConfig
   storage: StorageConfig
   /** Optional fine-tuning configuration */
@@ -362,6 +387,12 @@ export interface CuratorConfigSchema {
 export const DEFAULT_CONFIG: AgenticConfigSchema = {
   $schema: "v1",
   embedding: null,
+  rag: {
+    remoteUrl: undefined,
+    remoteApiKey: undefined,
+    remoteBatchIntervalMs: 5000,
+    remoteSyncMode: "full",
+  },
   memory: {
     enabled: true,
     mode: "lightweight",

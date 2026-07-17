@@ -72,6 +72,7 @@ Step outcome → FeedbackLoop → entry quality ↑/↓ + staleness
   - **Auto-escalate:** jika adaptive `avgScore` di bawah threshold (default `0.35`) dan `memory.ragDeepEscalate: true` → MDP deep sekali, lalu lanjut KbPO/MMKP
   - Matikan: `"ragDeepEscalate": false` di `.agentic/config.json`
 - **Closed-loop write-back:** `feedStepResult` → `MultiIndexRAG.updateEntry({ id })` (version bump + persist), bukan cuma mutasi in-memory
+- **Remote sync (opsional):** Konfigurasi `rag.remoteUrl` di `.agentic/config.json` → data RAG otomatis di-sync ke server eksternal via HTTP POST (debounced, lihat [config.md](../config.md#remote-rag-sync-rag))
 - **Manual store/search:** tetap lewat `agentic_rag`
 
 ## Second Brain (`agentic_memo`)
