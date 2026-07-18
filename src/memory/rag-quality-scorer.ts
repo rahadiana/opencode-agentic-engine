@@ -1,10 +1,17 @@
 /**
  * RAG Quality Scorer — Multi-dimensional Quality Assessment for RAG Entries
  *
- * Berdasarkan paper:
- * - SCIM (MDPI Electronics, 2026): 5-dimensi quality eval + degradation detection
- * - Reflective RAG (ACL Findings, 2026): self-evaluation signals
- * - ReflectRAG (Neurocomputing, 2026): iterative reflection with GRPO
+ * Berdasarkan SCIM (MDPI Electronics, 2026):
+ * - 5-dimensi quality eval (relevance, completeness, consistency, factuality, fluency)
+ * - Bobot sesuai paper: relevance 0.25, factuality 0.25, completeness 0.20, dll
+ *
+ * Catatan: SCIM asli menggunakan Flan-T5 250M sebagai evaluator LLM.
+ * Implementasi ini menggunakan heuristic (keyword overlap + rata-rata).
+ * Staleness detection adalah tambahan plugin, tidak ada di paper asli.
+ *
+ * Referensi tambahan (konsep self-evaluation, tidak diimplementasi):
+ * - Reflective RAG (ACL Findings, 2026): reflection tagging + SFT/RL training
+ * - ReflectRAG (Neurocomputing, 2026): GRPO-optimized iterative reflection
  *
  * 5 Dimensi Kualitas:
  * 1. Relevance  — seberapa relevan konten dengan query

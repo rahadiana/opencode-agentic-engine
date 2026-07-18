@@ -1,8 +1,14 @@
 /**
  * Token-Budget-Aware Context Selection — MMKP-inspired Optimizer
  *
- * Berdasarkan paper:
- * - Self-Correcting RAG (ACL Findings, 2026): MMKP (Multi-dimensional Multiple Choice Knapsack Problem)
+ * Mengadopsi konsep MMKP (Multi-dimensional Multiple Choice Knapsack)
+ * dari Self-Correcting RAG, diimplementasi sebagai greedy 1D selection.
+ *
+ * Catatan: Self-Correcting RAG asli memiliki dua fase — MMKP formal + NLI-Guided MCTS.
+ * Fase 2 (NLI-MCTS) tidak diimplementasi di sini.
+ *
+ * Referensi:
+ * - Self-Correcting RAG (ACL Findings, 2026): MMKP + NLI-Guided MCTS
  * - SCIM (MDPI, 2026): token budget + quality awareness
  *
  * Masalah:

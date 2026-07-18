@@ -1,9 +1,13 @@
 /**
  * Knowledge Boundary Calibration — Agentic Trust Calibration
  *
- * Berdasarkan paper:
+ * Mengadopsi 4-quadrant taxonomy dari:
  * - KbPO: Knowledge Boundary Policy Optimization (ACL, 2026)
  *   "Trust Within? Seek Beyond?" — 4-quadrant cognitive taxonomy
+ *
+ * Catatan: KbPO asli menggunakan RL (GRPO) dengan reward mechanism dan
+ * semantic stability metric dari hidden states. Implementasi ini hanya
+ * mengadopsi taksonomi 4-quadrant dengan heuristic confidence thresholding.
  *
  * Quadrant Taxonomy:
  *

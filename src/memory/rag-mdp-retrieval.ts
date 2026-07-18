@@ -1,10 +1,16 @@
 /**
  * MDP-based Retrieval Policy — Agentic Retrieval via Markov Decision Process
  *
- * Berdasarkan paper:
- * - EvoGraph-R1 (CVPR, 2026): MDP dengan action GRAPHRETRIEVE, WEBSEARCH, GRAPHEDIT, ANSWER
- * - SPARKLE (ACL, 2026): proxy model + 3 agents (Retrieval Decision, Query Formulation, Knowledge Integration)
- * - RouteRAG (ACL Findings, 2026): RL-based multi-turn hybrid RAG, two-stage training
+ * MDP action space framework:
+ * - RETRIEVE, WEBSEARCH, GRAPHEDIT, DECOMPOSE, ANSWER
+ *   (terinspirasi dari EvoGraph-R1)
+ *
+ * Catatan: Paper-paper berikut menggunakan RL/GRPO untuk training policy-nya.
+ * Implementasi ini menggunakan heuristic policy dengan adaptive thresholds
+ * karena plugin tidak bisa training RL sungguhan:
+ * - EvoGraph-R1 (CVPR, 2026): MDP + GRPO + knowledge hypergraph
+ * - SPARKLE (ACL, 2026): proxy model + PPO + 3 specialized agents
+ * - RouteRAG (ACL Findings, 2026): RL-based two-stage training (GRPO)
  *
  * Arsitektur:
  *   State(t) = {query, retrievedDocs, qualityScores, iteration, tokenBudget}

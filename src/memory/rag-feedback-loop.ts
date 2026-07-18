@@ -1,10 +1,15 @@
 /**
  * RAG Feedback Loop — Closed-Loop Quality Improvement
  *
- * Berdasarkan paper:
+ * Feedback → update quality score mechanism.
+ * Konsep umum feedback-driven RAG, terinspirasi dari:
  * - Closed-Loop RAG Optimization (ITM Web, 2026): CFL + FCS + RGA
  * - PatchRAG (ACL Findings, 2026): feedback adaptation, correction lag
  * - SCIM (MDPI, 2026): multi-dimensional quality assessment
+ *
+ * Catatan: Closed-Loop RAG asli memiliki 3 modul spesifik (CFL, FCS, RGA)
+ * yang tidak diimplementasi di sini. Feedback loop ini hanya mengupdate
+ * quality score berdasarkan success/failure — mekanisme yang jauh lebih sederhana.
  *
  * Mekanisme:
  * 1. Agent execute step dengan RAG knowledge
