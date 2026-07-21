@@ -1,12 +1,16 @@
 # Changelog
 
-## v0.5.8 (2026-07-11)
+## v0.5.8 (2026-07-21)
 - fix: Docker container test pipeline verified + 3 test fixes (b7b9f42)
 - fix: yamlToJson indent calculation in BlueprintParser (2fe5796)
 - test: +330 branch coverage tests (llm, verifier, blueprint — total 3718) (2fe5796)
 - docs: CHANGELOG.md created for auto-release notes (b7b9f42)
 - feat: Container test pipeline — Docker 28.0.4, 9-layer verified
 - feat: NPM publish workflow ready — tag v0.5.8 triggers auto-publish
+- fix: config.json dan models.json lengkapi sesuai skema AGENTS.md
+- fix: dockerfile-lint false positive — hadolint skip jadi transparan
+- fix: npm audit — 3 high severity vulnerabilities fixed (brace-expansion, shell-quote)
+- fix: better-sqlite3 native binding rebuild agar test jalan lancar
 
 ## v0.5.7 (2026-07-11)
 - docs: sync test count 3568, lint 0, coverage updates (8361f41)
