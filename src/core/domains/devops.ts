@@ -65,6 +65,7 @@ const devopsVerifiers: VerifierStrategy[] = [
       }
 
       // Try hadolint if available
+      let hadolintMissing = false
       try {
         execFileSync("which", ["hadolint"], { stdio: "pipe" })
         const dockerFiles = context.filesModified.filter(f => f.endsWith("Dockerfile") || f.endsWith(".dockerfile"))
@@ -73,9 +74,14 @@ const devopsVerifiers: VerifierStrategy[] = [
           const result = safeExec("hadolint", [absPath], { cwd: context.projectDir, timeout: 15000 })
           if (result.output.trim()) issues.push(`hadolint(${df}): ${result.output.slice(0, 300)}`)
         }
-      } catch (e) { console.warn("catch: hadolint not available", { error: String(e) }) }
+      } catch (e) {
+        hadolintMissing = true
+        console.warn("catch: hadolint not available", { error: String(e) })
+      }
 
-      return issuesResult(issues, "Dockerfile checks passed")
+      const hasDockerFiles = context.filesModified.some(f => f.endsWith("Dockerfile") || f.endsWith(".dockerfile"))
+      const skipNote = hadolintMissing && hasDockerFiles ? " (hadolint not installed — install for deeper linting)" : ""
+      return issuesResult(issues, "Dockerfile checks passed" + skipNote)
     },
   },
   {
