@@ -27,6 +27,8 @@
     "hardBlockReliability": 0.2,
     "softBlockReliability": 0.4,
     "minSampleSize": 5,
+    "workflowPolicyMode": "advisory",
+    "dumbModelMode": "auto",
     "deepVerification": {
       "security": true,
       "performance": true,

@@ -1,8 +1,13 @@
 {
   "categories": {
-    "quick": "mimo-v2.5-free"
+    "quick": "mimo-v2.5-free",
+    "unspecified-low": "opencode/big-pickle",
+    "unspecified-high": "deepseek-v4-flash-free",
+    "deep": "deepseek-v4-flash-free"
   },
   "architect": "deepseek-v4-flash-free",
+  "developer": "opencode/big-pickle",
   "qa": "deepseek-v4-flash-free",
-  "developer": "opencode/big-pickle"
+  "coordinator": "opencode/big-pickle",
+  "pm": "opencode/big-pickle"
 }
