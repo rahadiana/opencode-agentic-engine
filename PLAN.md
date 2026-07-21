@@ -9,7 +9,7 @@
 | Metrik | Nilai |
 |--------|-------|
 | **Versi** | **v0.5.9-dev** (config-driven remote RAG sync) |
-| **Unit tests** | 3785 (all mock, no LLM needed) + OpenCode real spawn verified for dumb harness |
+| **Unit tests** | 3797 (all mock, no LLM needed) + OpenCode real spawn verified for dumb harness |
 | **Agentic tools** | 32 (`agentic_*` prefix) |
 | **Source files** | 180+ di `src/` (11 subdirektori + RAG self-improve) |
 | **Coverage gate** | ✅ Stmts ~90%, Branch ~70%, Func ~76%, Lines 80%+ |

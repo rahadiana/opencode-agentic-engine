@@ -375,8 +375,10 @@ const validCfg = {
 const validResult = validateConfig(validCfg)
 assert(typeof validResult === "object" && validResult !== null, "validateConfig returns an object")
 assert(Array.isArray(validResult.issues), "validateConfig result.issues is an array")
-assert(validResult.issues.length === 0, `valid config should have 0 issues, got ${validResult.issues.length}: ${JSON.stringify(validResult.issues)}`)
-assert(validResult.valid === true, "valid config has valid=true")
+// Unknown keys (search, topK, timeoutMs) generate warnings, not errors — valid stays true
+assert(validResult.valid === true, "valid config has valid=true even with unknown-key warnings")
+const validErrors = validResult.issues.filter(i => i.severity === "error")
+assert(validErrors.length === 0, `valid config should have 0 errors, got ${validErrors.length}`)
 
 // Invalid config — wrong field types inside sub-objects
 const badTypeCfg = {
@@ -442,6 +444,111 @@ const issuesAfterLoad = loader.getValidationIssues()
 assert(Array.isArray(issuesAfterLoad), "getValidationIssues returns array")
 try { rmSync(cfgWorktreeD, { recursive: true, force: true }) } catch {}
 await dHooks.dispose()
+
+// Test E: New validation features — integer, URL, array content, curator, out-of-range drop
+console.log("\n[54-E] Config validation — new features")
+{
+  // E-1: Integer validation — non-integer numeric should warn
+  const intCfg = validateConfig({
+    $schema: "v1",
+    memory: { enabled: true, mode: "lightweight", maxEntries: 3.5, compressThreshold: 50, forgetAfterDays: 7, stopWordsLanguages: ["eng"], search: { keywordWeight: 0.3, vectorWeight: 0.7 } },
+    agent: { maxDelegationDepth: 3, autoSkillExtract: true, defaultRole: "developer" },
+    storage: { traceRetentionDays: 7 }
+  })
+  const hasIntIssue = intCfg.issues.some(i => i.message && i.message.includes("Expected integer"))
+  assert(hasIntIssue, `E-1 non-integer maxEntries should warn, issues: ${JSON.stringify(intCfg.issues)}`)
+
+  // E-2: URL validation — invalid URL should warn
+  const urlCfg = validateConfig({
+    $schema: "v1",
+    embedding: { model: "test", endpoint: "not-a-url" },
+    memory: { enabled: true, mode: "lightweight", maxEntries: 100, compressThreshold: 50, forgetAfterDays: 7, stopWordsLanguages: ["eng"], search: { keywordWeight: 0.3, vectorWeight: 0.7 } },
+    agent: { maxDelegationDepth: 3, autoSkillExtract: true, defaultRole: "developer" },
+    storage: { traceRetentionDays: 7 },
+    rag: { remoteUrl: "ftp://bad-protocol.com" }
+  })
+  const hasUrlIssue = urlCfg.issues.some(i => i.message && i.message.includes("Invalid URL"))
+  assert(hasUrlIssue, `E-2 invalid URL should warn, issues: ${JSON.stringify(urlCfg.issues)}`)
+
+  // E-3: URL validation — valid URL should NOT warn
+  const goodUrlCfg = validateConfig({
+    $schema: "v1",
+    embedding: { model: "test", endpoint: "https://api.openai.com/v1/embeddings" },
+    memory: { enabled: true, mode: "lightweight", maxEntries: 100, compressThreshold: 50, forgetAfterDays: 7, stopWordsLanguages: ["eng"], search: { keywordWeight: 0.3, vectorWeight: 0.7 } },
+    agent: { maxDelegationDepth: 3, autoSkillExtract: true, defaultRole: "developer" },
+    storage: { traceRetentionDays: 7 },
+    rag: { remoteUrl: "https://rag.example.com/sync" }
+  })
+  const goodUrlIssues = goodUrlCfg.issues.filter(i => i.message && i.message.includes("Invalid URL"))
+  assert(goodUrlIssues.length === 0, `E-3 valid URLs should not warn, got: ${JSON.stringify(goodUrlIssues)}`)
+
+  // E-4: Empty URL string should be allowed (optional field)
+  const emptyUrlCfg = validateConfig({
+    $schema: "v1",
+    embedding: { model: "test", endpoint: "" },
+    memory: { enabled: true, mode: "lightweight", maxEntries: 100, compressThreshold: 50, forgetAfterDays: 7, stopWordsLanguages: ["eng"], search: { keywordWeight: 0.3, vectorWeight: 0.7 } },
+    agent: { maxDelegationDepth: 3, autoSkillExtract: true, defaultRole: "developer" },
+    storage: { traceRetentionDays: 7 }
+  })
+  const emptyUrlIssues = emptyUrlCfg.issues.filter(i => i.path && i.path.includes("endpoint") && i.message.includes("Invalid URL"))
+  assert(emptyUrlIssues.length === 0, `E-4 empty URL should be allowed, got: ${JSON.stringify(emptyUrlIssues)}`)
+
+  // E-5: Out-of-range value warns but still passes through (merge section uses raw cfg)
+  const rangeWarnCfg = validateConfig({
+    $schema: "v1",
+    memory: { enabled: true, mode: "lightweight", maxEntries: 100, compressThreshold: 50, forgetAfterDays: 7, stopWordsLanguages: ["eng"], search: { keywordWeight: 0.3, vectorWeight: 0.7 } },
+    agent: { maxDelegationDepth: 99, autoSkillExtract: true, defaultRole: "developer" },
+    storage: { traceRetentionDays: 7 }
+  })
+  assert(rangeWarnCfg.issues.some(i => i.message && i.message.includes("exceeds maximum")), "E-5 should warn about out-of-range value")
+  // Value still passes through (merge uses raw config) — warning is the important signal
+
+  // E-6: Array content validation — non-string in stopWordsLanguages
+  const arrCfg = validateConfig({
+    $schema: "v1",
+    memory: { enabled: true, mode: "lightweight", maxEntries: 100, compressThreshold: 50, forgetAfterDays: 7, stopWordsLanguages: ["eng", 123], search: { keywordWeight: 0.3, vectorWeight: 0.7 } },
+    agent: { maxDelegationDepth: 3, autoSkillExtract: true, defaultRole: "developer" },
+    storage: { traceRetentionDays: 7 }
+  })
+  const hasArrIssue = arrCfg.issues.some(i => i.message && i.message.includes("array of string"))
+  assert(hasArrIssue, `E-6 non-string in stopWordsLanguages should warn, issues: ${JSON.stringify(arrCfg.issues)}`)
+
+  // E-7: Curator config validation
+  const curatorCfg = validateConfig({
+    $schema: "v1",
+    memory: { enabled: true, mode: "lightweight", maxEntries: 100, compressThreshold: 50, forgetAfterDays: 7, stopWordsLanguages: ["eng"], search: { keywordWeight: 0.3, vectorWeight: 0.7 } },
+    agent: { maxDelegationDepth: 3, autoSkillExtract: true, defaultRole: "developer" },
+    storage: { traceRetentionDays: 7, skillMaxCount: 200 },
+    curator: { enabled: true, staleAfterDays: 30, archiveAfterDays: 90, maxSkillsInPrompt: 3, injectThreshold: 0.15, consolidationEnabled: false }
+  })
+  assert(curatorCfg.valid === true, "E-7a valid curator config should be valid")
+  assert(curatorCfg.config.curator?.enabled === true, "E-7b curator.enabled merged correctly")
+  assert(curatorCfg.config.curator?.staleAfterDays === 30, "E-7c curator.staleAfterDays merged correctly")
+
+  // E-8: Unknown keys in agent should warn
+  const unknownCfg = validateConfig({
+    $schema: "v1",
+    memory: { enabled: true, mode: "lightweight", maxEntries: 100, compressThreshold: 50, forgetAfterDays: 7, stopWordsLanguages: ["eng"], search: { keywordWeight: 0.3, vectorWeight: 0.7 } },
+    agent: { maxDelegationDepth: 3, autoSkillExtract: true, defaultRole: "developer", unknownField: "should warn" },
+    storage: { traceRetentionDays: 7 }
+  })
+  const hasUnknownIssue = unknownCfg.issues.some(i => i.message && i.message.includes("Unknown key"))
+  assert(hasUnknownIssue, `E-8 unknown keys should warn, issues: ${JSON.stringify(unknownCfg.issues)}`)
+
+  // E-9: mergeDeep array replacement — stopWordsLanguages user value should NOT be concatenated to defaults
+  const arrReplaceCfg = validateConfig({
+    $schema: "v1",
+    memory: { enabled: true, mode: "lightweight", maxEntries: 100, compressThreshold: 50, forgetAfterDays: 7, stopWordsLanguages: ["fra"], search: { keywordWeight: 0.3, vectorWeight: 0.7 } },
+    agent: { maxDelegationDepth: 3, autoSkillExtract: true, defaultRole: "developer" },
+    storage: { traceRetentionDays: 7 }
+  })
+  const swl = arrReplaceCfg.config.memory.stopWordsLanguages
+  // Should be ["fra"] only — NOT ["ind", "eng", "fra"]
+  assert(Array.isArray(swl), "E-9a stopWordsLanguages is array")
+  assert(swl.length === 1 && swl[0] === "fra", `E-9b stopWordsLanguages should be ["fra"], got ${JSON.stringify(swl)}`)
+}
+
+console.log("  ✅ Config validation new features (E-1..E-9)")
 
 // 55. VectorStore — TF-IDF sparse retrieval
 }

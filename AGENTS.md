@@ -12,7 +12,7 @@ Semua 12 paper gaps (arXiv:2606.05608), P0-P4 dari TODO.md, dan **22 paper RAG s
 2. ✅ **Schema-First Boundaries** — LLM output divalidasi sebelum dipakai (P1)
 3. ✅ **Dumb Model Mode** — strict mode untuk model lemah (P2)
 4. ✅ **Procedural Skills** — step-by-step checklist di RAG (P3)
-5. ✅ **Test Coverage** — **3785+ tests** in parallel (~27s), c8 gate + CI coverage (P4)
+5. ✅ **Test Coverage** — **3797+ tests** in parallel (~27s), c8 gate + CI coverage (P4)
 5b. ✅ **Auto Dumb-Model Harness** — `dumbModelMode: "auto"` (name + stats → WorkflowPolicy strict)
 6. ✅ **Typed Errors** — 49/49 throw sites migrated, 0 `as any` remaining
 7. ✅ **SemanticCache** — TF-IDF + cosine, benchmarked at 0.78 threshold

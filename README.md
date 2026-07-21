@@ -97,7 +97,7 @@ agentic_status detail="full"
 ## Testing
 
 ```bash
-npm test                 # 3785+ unit tests in parallel (~27s, no LLM needed)
+npm test                 # 3797+ unit tests in parallel (~27s, no LLM needed)
 npm run test:serial      # Same tests serial (~84s, for debugging)
 node test/e2e-llm.mjs    # LLM E2E: 19 tests
 ./test-container.sh      # Full Docker pipeline (7 layers)

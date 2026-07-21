@@ -30,9 +30,26 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
 
   const cfg = raw as Record<string, unknown>
 
+  // Field shape definition for validateObject
+  interface FieldDef {
+    type: string
+    required?: boolean
+    min?: number
+    max?: number
+    values?: string[]
+    /** If true, number must be an integer */
+    integer?: boolean
+    /** "url" checks for http/https prefix */
+    format?: "url"
+    /** For array type, validates element type */
+    itemType?: string
+  }
+
   // Helper: validate a nested object
-  function validateObject(path: string, obj: unknown, shape: Record<string, { type: string; required?: boolean; min?: number; max?: number; values?: string[] }>): Record<string, unknown> {
+  function validateObject(path: string, obj: unknown, shape: Record<string, FieldDef>): Record<string, unknown> {
     const result: Record<string, unknown> = {}
+    const knownKeys = new Set(Object.keys(shape))
+
     if (!obj || typeof obj !== "object") {
       for (const [key, def] of Object.entries(shape)) {
         if (def.required) {
@@ -42,6 +59,14 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
       return result
     }
     const o = obj as Record<string, unknown>
+
+    // Track unknown keys
+    for (const key of Object.keys(o)) {
+      if (!knownKeys.has(key)) {
+        issues.push({ path: `${path}.${key}`, message: `Unknown key "${key}"`, severity: "warning" })
+      }
+    }
+
     for (const [key, def] of Object.entries(shape)) {
       const val = o[key]
       if (val === undefined || val === null) {
@@ -55,6 +80,14 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
         issues.push({ path: `${path}.${key}`, message: `Expected type ${def.type}, got ${actualType}`, severity: "warning", expected: def.type, actual: actualType })
         continue
       }
+
+      // Only skip adding to result on TYPE mismatch (wrong type entirely).
+      // Range, enum, integer, URL, array-content violations still pass through
+      // (warned but merged). Since the merge section always uses raw cfg.[section],
+      // out-of-range values can't actually be excluded here — the warning is the
+      // important signal.
+      const isTypeError = actualType !== def.type
+
       if (def.type === "number") {
         const num = val as number
         if (def.min !== undefined && num < def.min) {
@@ -63,11 +96,38 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
         if (def.max !== undefined && num > def.max) {
           issues.push({ path: `${path}.${key}`, message: `Value ${num} exceeds maximum ${def.max}`, severity: "warning", expected: `<= ${def.max}`, actual: String(num) })
         }
+        if (def.integer && !Number.isInteger(num)) {
+          issues.push({ path: `${path}.${key}`, message: `Expected integer, got ${num}`, severity: "warning", expected: "integer", actual: String(num) })
+        }
       }
+
       if (def.type === "string" && def.values && !def.values.includes(val as string)) {
         issues.push({ path: `${path}.${key}`, message: `Value "${val}" not in allowed values: ${def.values.join(", ")}`, severity: "warning", expected: def.values.join("|"), actual: String(val) })
       }
-      result[key] = val
+
+      // URL format validation
+      if (def.type === "string" && def.format === "url" && val !== "") {
+        const s = val as string
+        if (!s.startsWith("http://") && !s.startsWith("https://")) {
+          issues.push({ path: `${path}.${key}`, message: `Invalid URL: "${s}"`, severity: "warning", expected: "http/https URL", actual: s })
+        }
+      }
+
+      // Array content validation
+      if (def.type === "array" && def.itemType && Array.isArray(val)) {
+        const items = val as unknown[]
+        const invalidItems = items.filter(v => typeof v !== def.itemType)
+        if (invalidItems.length > 0) {
+          issues.push({ path: `${path}.${key}`, message: `Expected array of ${def.itemType}, found ${invalidItems.length} non-${def.itemType} element(s)`, severity: "warning", expected: `${def.itemType}[]`, actual: `array with ${invalidItems.length} invalid` })
+        }
+      }
+
+      // Only skip adding to result if it's a TYPE ERROR (wrong basic type).
+      // Range, enum, integer, URL, and array-content violations still propagate
+      // because the merge section uses raw cfg.[section] directly.
+      if (!isTypeError) {
+        result[key] = val
+      }
     }
     return result
   }
@@ -80,7 +140,7 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
     } else {
       validateObject("embedding", embeddingRaw, {
         model: { type: "string", required: true },
-        endpoint: { type: "string" },
+        endpoint: { type: "string", format: "url" },
         apiKey: { type: "string" },
       })
     }
@@ -91,10 +151,10 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
     const memShape = {
       enabled: { type: "boolean" },
       mode: { type: "string", values: ["lightweight", "full"] },
-      maxEntries: { type: "number", min: 1, max: 100000 },
-      compressThreshold: { type: "number", min: 1 },
-      forgetAfterDays: { type: "number", min: 1, max: 3650 },
-      stopWordsLanguages: { type: "array" },
+      maxEntries: { type: "number", min: 1, max: 100000, integer: true },
+      compressThreshold: { type: "number", min: 1, integer: true },
+      forgetAfterDays: { type: "number", min: 1, max: 3650, integer: true },
+      stopWordsLanguages: { type: "array", itemType: "string" },
     }
     validateObject("memory", cfg.memory, memShape)
     // Validate nested search
@@ -117,7 +177,7 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
   // Validate agent
   if (cfg.agent) {
     validateObject("agent", cfg.agent, {
-      maxDelegationDepth: { type: "number", min: 1, max: 10 },
+      maxDelegationDepth: { type: "number", min: 1, max: 10, integer: true },
       autoSkillExtract: { type: "boolean" },
       defaultRole: { type: "string" },
       requireSemanticCheck: { type: "boolean" },
@@ -126,8 +186,10 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
       hallucinationThreshold: { type: "number", min: 0, max: 1 },
       hardBlockReliability: { type: "number", min: 0, max: 1 },
       softBlockReliability: { type: "number", min: 0, max: 1 },
-      minSampleSize: { type: "number", min: 1 },
+      minSampleSize: { type: "number", min: 1, integer: true },
       workflowPolicyMode: { type: "string", values: ["advisory", "strict"] },
+      deepVerification: { type: "object" },
+      toolGuardrails: { type: "object" },
     })
     // dumbModelMode: boolean | "auto" (custom — shape helper is single-type only)
     const dmm = (cfg.agent as Record<string, unknown>).dumbModelMode
@@ -162,8 +224,8 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
   // Validate storage
   if (cfg.storage) {
     validateObject("storage", cfg.storage, {
-      traceRetentionDays: { type: "number", min: 1, max: 365 },
-      skillMaxCount: { type: "number", min: 1, max: 10000 },
+      traceRetentionDays: { type: "number", min: 1, max: 365, integer: true },
+      skillMaxCount: { type: "number", min: 1, max: 10000, integer: true },
     })
   }
 
@@ -171,10 +233,10 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
   if (cfg.fineTuning && typeof cfg.fineTuning === "object") {
     validateObject("fineTuning", cfg.fineTuning, {
       apiKey: { type: "string" },
-      baseURL: { type: "string" },
+      baseURL: { type: "string", format: "url" },
       model: { type: "string" },
-      trainingEpochs: { type: "number", min: 1, max: 100 },
-      batchSize: { type: "number", min: 1, max: 256 },
+      trainingEpochs: { type: "number", min: 1, max: 100, integer: true },
+      batchSize: { type: "number", min: 1, max: 256, integer: true },
       learningRateMultiplier: { type: "number", min: 0.01, max: 10 },
       suffix: { type: "string" },
     })
@@ -183,10 +245,22 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
   // Validate RAG config (optional)
   if (cfg.rag && typeof cfg.rag === "object") {
     validateObject("rag", cfg.rag, {
-      remoteUrl: { type: "string" },
+      remoteUrl: { type: "string", format: "url" },
       remoteApiKey: { type: "string" },
-      remoteBatchIntervalMs: { type: "number", min: 0, max: 60000 },
+      remoteBatchIntervalMs: { type: "number", min: 0, max: 60000, integer: true },
       remoteSyncMode: { type: "string", values: ["full", "changes"] },
+    })
+  }
+
+  // Validate curator config (optional)
+  if (cfg.curator && typeof cfg.curator === "object") {
+    validateObject("curator", cfg.curator, {
+      enabled: { type: "boolean" },
+      staleAfterDays: { type: "number", min: 1, max: 365, integer: true },
+      archiveAfterDays: { type: "number", min: 1, max: 3650, integer: true },
+      maxSkillsInPrompt: { type: "number", min: 1, max: 50, integer: true },
+      injectThreshold: { type: "number", min: 0, max: 1 },
+      consolidationEnabled: { type: "boolean" },
     })
   }
 
@@ -214,6 +288,9 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
   }
   if (cfg.rag && typeof cfg.rag === "object") {
     merged.rag = { ...defaults.rag, ...cfg.rag as RAGSyncConfig }
+  }
+  if (cfg.curator && typeof cfg.curator === "object") {
+    merged.curator = { ...defaults.curator, ...cfg.curator as CuratorConfigSchema }
   }
 
   const hasErrors = issues.some(i => i.severity === "error")
@@ -538,9 +615,13 @@ export class ConfigLoader {
     return this.config
   }
 
-  /** Update specific keys and persist */
+  /** Update specific keys and persist — validates before saving, warns on issues */
   update(partial: Partial<AgenticConfigSchema>): AgenticConfigSchema {
     this.config = this.mergeDeep(this.config, partial)
+    const { issues } = validateConfig(this.config)
+    if (issues.length > 0) {
+      log.warn(`Config update produced ${issues.length} issue(s):\n${issues.map(i => `  - ${i.path}: ${i.message}`).join("\n")}`)
+    }
     this.save(this.config)
     return this.config
   }
@@ -625,8 +706,7 @@ export class ConfigLoader {
       const val = source[key]
       if (val === undefined) continue
       if (Array.isArray(val)) {
-        const existing = result[key]
-        result[key] = (Array.isArray(existing) ? [...existing, ...val] : [...val]) as T[keyof T]
+        result[key] = [...val] as T[keyof T]
       } else if (val !== null && typeof val === "object") {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         result[key] = this.mergeDeep(result[key] as Record<string, any>, val as Record<string, any>) as T[keyof T]
