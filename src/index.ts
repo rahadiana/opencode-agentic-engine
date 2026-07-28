@@ -563,8 +563,34 @@ const confidenceStore = new ConfidenceStore()
     try { secondBrain.handleEvent(event.type, event.payload, event.payload?.sessionID as string | undefined) } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
   })
   // Build RAG config from config file
-  // Convert embedding config: string → { model: string } | null
-  const rawEmbedding = config.embedding
+  // Auto-detect embedding capability — fallback ke TF-IDF jika tidak ada endpoint/apiKey
+  let rawEmbedding: import("./core/config.js").EmbeddingConfig | string | null = config.embedding
+  if (rawEmbedding !== null) {
+    const emb = (rawEmbedding as unknown) as Record<string, unknown>
+    const hasEndpoint = typeof rawEmbedding === "object" && !!emb?.endpoint
+    const hasApiKey = (typeof rawEmbedding === "object" && !!emb?.apiKey) || !!process.env.OPENAI_API_KEY
+
+    if (!hasEndpoint && !hasApiKey) {
+      log.info("[Embedding] Model configured but no endpoint/API key — trying local sentence-transformers...")
+      try {
+        const { execSync } = await import("node:child_process")
+        execSync("python3 -c \"import sentence_transformers; print('ok')\"", { timeout: 5000, stdio: "pipe" })
+        log.info("[Embedding] ✅ Local sentence-transformers detected! Jalankan server: python3 embedding_server.py")
+        const modelName = typeof rawEmbedding === "string" ? rawEmbedding : (emb?.model as string | undefined) ?? "all-MiniLM-L6-v2"
+        rawEmbedding = {
+          model: modelName,
+          endpoint: "http://127.0.0.1:23456/v1/embeddings",
+          apiKey: "sk-local",
+        } as import("./core/config.js").EmbeddingConfig
+      } catch {
+        log.warn("[Embedding] ❌ sentence-transformers tidak tersedia & tidak ada API key — fallback ke TF-IDF")
+        log.warn("[Embedding] Install: pip install sentence-transformers, lalu start server di port 23456")
+        rawEmbedding = null
+      }
+    }
+  }
+
+  // Convert embedding config: string | object → EmbedderConfig | null
   const embedderConfig: import("./memory/local-embedder.js").EmbedderConfig | null =
     rawEmbedding === null ? null :
     typeof rawEmbedding === "string" ? { model: rawEmbedding } :
@@ -1581,3 +1607,5 @@ function runAutoEvolve() {
   if (_ctxRef) return _runAutoEvolve(_ctxRef)
   return Promise.resolve("No context yet")
 }
+
+
