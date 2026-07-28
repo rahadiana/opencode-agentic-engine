@@ -158,6 +158,9 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
       compressThreshold: { type: "number", min: 1, integer: true },
       forgetAfterDays: { type: "number", min: 1, max: 3650, integer: true },
       stopWordsLanguages: { type: "array", itemType: "string" },
+      search: { type: "object" },
+      ragDeepEscalate: { type: "boolean" },
+      ragDeepEscalateThreshold: { type: "number", min: 0, max: 1 },
     }
     validateObject("memory", cfg.memory, memShape)
     // Validate nested search
@@ -191,6 +194,7 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
       softBlockReliability: { type: "number", min: 0, max: 1 },
       minSampleSize: { type: "number", min: 1, integer: true },
       workflowPolicyMode: { type: "string", values: ["advisory", "strict", "enforced"] },
+      dumbModelMode: { type: "string" },
       deepVerification: { type: "object" },
       toolGuardrails: { type: "object" },
     })
