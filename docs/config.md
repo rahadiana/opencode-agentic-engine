@@ -18,7 +18,7 @@ File: `.agentic/config.json`
   "embedding": null,
   "memory": {
     "enabled": true,
-    "mode": "lightweight",
+    "mode": "balanced",
     "maxEntries": 1000,
     "forgetAfterDays": 30,
     "search": {
@@ -33,7 +33,7 @@ File: `.agentic/config.json`
   "agent": {
     "maxDelegationDepth": 3,
     "defaultRole": "developer",
-    "requireSemanticCheck": false,
+    "requireSemanticCheck": true,
     "blockOnHallucination": false,
     "minSampleSize": 5,
     "autoSkillExtract": true,
@@ -48,17 +48,35 @@ File: `.agentic/config.json`
       "performance": true,
       "architecture": true,
       "deps": true
+    },
+    "toolGuardrails": {
+      "enabled": true,
+      "exactRepeatWarn": 2,
+      "exactRepeatBlock": 5,
+      "sameStepFailWarn": 3,
+      "sameStepFailBlock": 8,
+      "idempotentNoProgressBlock": 3,
+      "hardStop": false
     }
-  },
-  "storage": {
-    "traceRetentionDays": 7,
-    "skillMaxCount": 200
   },
   "rag": {
     "remoteUrl": null,
     "remoteApiKey": null,
     "remoteBatchIntervalMs": 5000,
     "remoteSyncMode": "full"
+  },
+  "storage": {
+    "traceRetentionDays": 7,
+    "skillMaxCount": 200
+  },
+  "fineTuning": null,
+  "curator": {
+    "enabled": true,
+    "staleAfterDays": 30,
+    "archiveAfterDays": 90,
+    "maxSkillsInPrompt": 3,
+    "injectThreshold": 0.15,
+    "consolidationEnabled": false
   }
 }
 ```
@@ -68,9 +86,9 @@ File: `.agentic/config.json`
 | Key | Type | Default | Deskripsi |
 |-----|------|---------|-----------|
 | `$schema` | string | `"v1"` | Schema version |
-| `embedding` | object\|null | `null` | Embedding config (`model`, `endpoint`, `apiKey`). `null` = TF-IDF only |
+| `embedding` | string\|object\|null | `null` | Model embedding: `null` (TF-IDF), `"model-name"` (string), atau `{model, endpoint, apiKey}` |
 | `memory.enabled` | boolean | `true` | Enable cross-session memory |
-| `memory.mode` | enum | `"lightweight"` | `"lightweight"` / `"full"` (full butuh embedding) |
+| `memory.mode` | enum | `"balanced"` | `"lightweight"` / `"balanced"` / `"full"` (full butuh embedding) |
 | `memory.maxEntries` | number | `1000` | Max memory entries |
 | `memory.forgetAfterDays` | number | `30` | Auto-forget setelah N hari |
 | `memory.search.keywordWeight` | number | `0.3` | Bobot keyword TF-IDF |
@@ -78,26 +96,33 @@ File: `.agentic/config.json`
 | `memory.compressThreshold` | number | `500` | Auto-compress threshold |
 | `memory.stopWordsLanguages` | string[] | `["ind","eng"]` | Stop words languages |
 | `memory.ragDeepEscalate` | boolean | `true` | Auto-escalate standard RAG → MDP deep saat confidence rendah |
-| `memory.ragDeepEscalateThreshold` | number | `0.35` | Ambang avgScore (0–1); `0` = never auto deep. Explicit `mode:"deep"` tetap bisa |
-| `rag.remoteUrl` | string\|null | `null` | URL endpoint untuk remote RAG sync. `null`/undefined = no remote sync |
-| `rag.remoteApiKey` | string\|null | `null` | Optional API key (dikirim sebagai `Authorization: Bearer <key>`) |
-| `rag.remoteBatchIntervalMs` | number | `5000` | Debounce interval (ms). Data dikumpulkan dulu selama N ms sebelum dikirim. `0` = kirim langsung tiap perubahan |
-| `rag.remoteSyncMode` | enum | `"full"` | `"full"` = export semua data RAG, `"changes"` = delta only (future) |
+| `memory.ragDeepEscalateThreshold` | number | `0.35` | Ambang avgScore (0–1); `0` = never auto deep |
+| `rag.remoteUrl` | string\|null | `null` | URL endpoint untuk remote RAG sync. `null` = no remote sync |
+| `rag.remoteApiKey` | string\|null | `null` | Optional API key untuk remote sync |
+| `rag.remoteBatchIntervalMs` | number | `5000` | Debounce interval (ms) sebelum kirim |
+| `rag.remoteSyncMode` | enum | `"full"` | `"full"` = export semua data, `"changes"` = delta only |
 | `agent.maxDelegationDepth` | number | `3` | Max delegation chain depth |
 | `agent.defaultRole` | string | `"developer"` | Default agent role |
-| `agent.requireSemanticCheck` | boolean | `false` | Wajib semantic check |
-| `agent.blockOnHallucination` | boolean | `false` | Block jika hallucination (selalu on saat dumb harness active) |
+| `agent.requireSemanticCheck` | boolean | `true` | Wajib semantic verification |
+| `agent.blockOnHallucination` | boolean | `false` | Block jika hallucination (selalu on saat dumb harness) |
 | `agent.autoSkillExtract` | boolean | `true` | Auto-extract skill dari task sukses |
 | `agent.autoHallucinationCheck` | boolean | `true` | Auto-cek hallucination di `agentic_execute` |
-| `agent.hallucinationThreshold` | number | `0.3` | Threshold hallucination score (diperketat ke ≤0.2 di dumb mode) |
+| `agent.hallucinationThreshold` | number | `0.3` | Threshold hallucination score |
 | `agent.hardBlockReliability` | number | `0.2` | Reliability threshold hard block model |
-| `agent.softBlockReliability` | number | `0.4` | Soft threshold + signal untuk auto dumb-mode |
+| `agent.softBlockReliability` | number | `0.4` | Soft threshold untuk auto dumb-mode |
 | `agent.minSampleSize` | number | `5` | Min sample stats sebelum reliability decisions |
-| `agent.workflowPolicyMode` | `"advisory"\|"strict"` | `"advisory"` | Policy gate: warn vs block. Override ke `strict` saat dumb harness active |
+| `agent.workflowPolicyMode` | enum | `"advisory"` | `"advisory"` (warning) / `"strict"` (block) / `"enforced"` (wajib research→plan→verify) |
 | `agent.dumbModelMode` | `boolean\|"auto"` | `"auto"` | **Dumb-model harness** — lihat section di bawah |
 | `agent.deepVerification.*` | boolean | `true` | Toggle security / performance / architecture / deps |
-| `storage.traceRetentionDays` | number | `7` | Retensi trace file |
-| `storage.skillMaxCount` | number | `200` | Max skills |
+| `agent.toolGuardrails.enabled` | boolean | `true` | Anti-loop protection |
+| `storage.traceRetentionDays` | number | `7` | Retensi trace file (hari) |
+| `storage.skillMaxCount` | number | `200` | Max skills tersimpan |
+| `fineTuning` | object\|null | `null` | OpenAI fine-tuning config (null = disabled) |
+| `curator.enabled` | boolean | `true` | Skill curator (auto-stale/archive) |
+| `curator.staleAfterDays` | number | `30` | Hari sebelum skill di-mark stale |
+| `curator.archiveAfterDays` | number | `90` | Hari sebelum skill di-archive |
+| `curator.maxSkillsInPrompt` | number | `3` | Max skill auto-inject ke prompt |
+| `curator.injectThreshold` | number | `0.15` | Min TF-IDF similarity untuk inject |
 
 ---
 

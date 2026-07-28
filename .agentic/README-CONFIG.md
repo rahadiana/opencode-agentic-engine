@@ -15,26 +15,19 @@ Semua file konfigurasi, state, dan data runtime disimpan di folder `.agentic/`.
     │   └── registry.json    ← Statistik reliability per model
     │
     ├── episodes/
-    │   ├── @test/
-    │   │   ├── blueprint-e2e-*.json     ← Memory test sessions
-    │   │   └── ...
-    │   └── @<project-name>/
-    │       └── ses_*.json               ← Cross-session memory
+    │   └── ses_*.json       ← Cross-session memory
     │
     ├── evolution/
-    │   ├── @diagnostic/
-    │   │   └── trend.json               ← Self-evolution trends
-    │   └── @<project-name>/
-    │       └── trend.json
+    │   └── trend.json       ← Self-evolution trends
     │
     ├── evaluation/
-    │   ├── @diagnostic/
-    │   │   └── live.json                ← Live evaluation data
-    │   └── @<project-name>/
-    │       └── live.json
+    │   └── live.json        ← Live evaluation data
+    │
+    ├── decisions/
+    │   └── global.json      ← ADR (Architecture Decision Records)
     │
     └── prompts/
-        └── state.json                   ← Prompt evolution state
+        └── state.json       ← Prompt evolution state
 ```
 
 ---
@@ -48,40 +41,68 @@ Semua file konfigurasi, state, dan data runtime disimpan di folder `.agentic/`.
 ```jsonc
 {
   "$schema": "v1",
-  "embedding": null,
+  "embedding": null,             // null (TF-IDF) | "model-name" (string) | { model, endpoint, apiKey }
   "memory": {
-    "enabled": true,           // Aktifkan cross-session memory
-    "mode": "lightweight",     // "lightweight" | "full" (full = pakai embedding)
-    "maxEntries": 1000,        // Max memory entries
-    "compressThreshold": 500,  // Threshold kompresi context
-    "forgetAfterDays": 30,     // Hapus memory setelah N hari
+    "enabled": true,             // Aktifkan cross-session memory
+    "mode": "balanced",          // "lightweight" | "balanced" | "full" (full = pakai embedding)
+    "maxEntries": 1000,          // Max memory entries
+    "compressThreshold": 500,    // Threshold kompresi context
+    "forgetAfterDays": 30,       // Hapus memory setelah N hari
     "stopWordsLanguages": ["ind", "eng"],
     "search": {
-      "keywordWeight": 0.3,    // Bobot keyword search
-      "vectorWeight": 0.7     // Bobot vector search
-    }
+      "keywordWeight": 0.3,      // Bobot keyword search
+      "vectorWeight": 0.7        // Bobot vector search
+    },
+    "ragDeepEscalate": true,     // Auto-escalate ke deep RAG kalau confidence rendah
+    "ragDeepEscalateThreshold": 0.35
   },
   "agent": {
     "maxDelegationDepth": 3,
     "autoSkillExtract": true,
     "defaultRole": "developer",
-    "requireSemanticCheck": false,
+    "requireSemanticCheck": true,  // Wajib semantic verification
     "autoHallucinationCheck": true,
     "blockOnHallucination": false,
     "hallucinationThreshold": 0.3,
     "hardBlockReliability": 0.2,
     "softBlockReliability": 0.4,
     "minSampleSize": 5,
+    "workflowPolicyMode": "advisory", // "advisory" | "strict" | "enforced"
+    "dumbModelMode": "auto",
     "deepVerification": {
       "security": true,
       "performance": true,
       "architecture": true,
       "deps": true
+    },
+    "toolGuardrails": {
+      "enabled": true,
+      "exactRepeatWarn": 2,
+      "exactRepeatBlock": 5,
+      "sameStepFailWarn": 3,
+      "sameStepFailBlock": 8,
+      "idempotentNoProgressBlock": 3,
+      "hardStop": false
     }
+  },
+  "rag": {
+    "remoteUrl": null,           // URL untuk remote RAG sync (null = disabled)
+    "remoteApiKey": null,
+    "remoteBatchIntervalMs": 5000,
+    "remoteSyncMode": "full"
   },
   "storage": {
     "traceRetentionDays": 7,
     "skillMaxCount": 200
+  },
+  "fineTuning": null,            // Konfigurasi fine-tuning (null = disabled)
+  "curator": {
+    "enabled": true,
+    "staleAfterDays": 30,
+    "archiveAfterDays": 90,
+    "maxSkillsInPrompt": 3,
+    "injectThreshold": 0.15,
+    "consolidationEnabled": false
   }
 }
 ```
