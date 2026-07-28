@@ -637,7 +637,7 @@ const confidenceStore = new ConfidenceStore()
     stateStore.set("rag", "global", data)
     if (ragSyncCfg.remoteUrl) {
       debouncedRemoteSync(ragSyncCfg.remoteUrl, {
-        apiKey: ragSyncCfg.remoteApiKey,
+        apiKey: ragSyncCfg.remoteApiKey ?? undefined,
         batchIntervalMs: ragSyncCfg.remoteBatchIntervalMs ?? 5000,
         mode: ragSyncCfg.remoteSyncMode ?? "full",
         data,

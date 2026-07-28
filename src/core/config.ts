@@ -425,9 +425,9 @@ export interface FineTuningConfigSchema {
 
 export interface RAGSyncConfig {
   /** Remote sync endpoint URL (null/undefined = no remote sync) */
-  remoteUrl?: string
+  remoteUrl?: string | null
   /** Optional API key for remote sync endpoint */
-  remoteApiKey?: string
+  remoteApiKey?: string | null
   /** Batch/debounce interval in ms (default: 5000). 0 = sync setiap perubahan */
   remoteBatchIntervalMs?: number
   /** Sync mode: 'full' exports all RAG data, 'changes' exports delta only (default: full) */
@@ -442,8 +442,8 @@ export interface AgenticConfigSchema {
   rag?: RAGSyncConfig
   agent: AgentConfig
   storage: StorageConfig
-  /** Optional fine-tuning configuration */
-  fineTuning?: FineTuningConfigSchema
+  /** Optional fine-tuning configuration (null = disabled) */
+  fineTuning?: FineTuningConfigSchema | null
   /** Optional skill curator configuration */
   curator?: CuratorConfigSchema
 }
@@ -472,8 +472,8 @@ export const DEFAULT_CONFIG: AgenticConfigSchema = {
   $schema: "v1",
   embedding: null,
   rag: {
-    remoteUrl: undefined,
-    remoteApiKey: undefined,
+    remoteUrl: null,
+    remoteApiKey: null,
     remoteBatchIntervalMs: 5000,
     remoteSyncMode: "full",
   },
@@ -526,7 +526,7 @@ export const DEFAULT_CONFIG: AgenticConfigSchema = {
     traceRetentionDays: 7,
     skillMaxCount: 200,
   },
-  fineTuning: undefined,
+  fineTuning: null,
   curator: {
     enabled: true,
     staleAfterDays: 30,
