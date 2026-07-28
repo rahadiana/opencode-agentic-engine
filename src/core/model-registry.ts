@@ -23,7 +23,7 @@ export interface ModelScore {
   reliability: number
   hallucinationRate: number
   totalCalls: number
-  status: "healthy" | "degraded" | "unstable"
+  status: "healthy" | "degraded" | "unstable" | "untested"
   /** Cost-aware routing: average cost per call in USD */
   avgCostPerCall?: number
 }
@@ -200,10 +200,10 @@ export class ModelRegistry {
     if (!stat || stat.totalCalls === 0) {
       return {
         model,
-        reliability: 0.5,
+        reliability: 0,
         hallucinationRate: 0,
         totalCalls: 0,
-        status: "healthy",
+        status: "untested",
         avgCostPerCall: stat?.avgCostPerCall,
       }
     }
@@ -224,10 +224,10 @@ export class ModelRegistry {
     if (!stat || !stat.byTaskType || !stat.byTaskType[taskType]) {
       return {
         model,
-        reliability: 0.5,
+        reliability: 0,
         hallucinationRate: 0,
         totalCalls: 0,
-        status: "healthy",
+        status: "untested",
         avgCostPerCall: stat?.avgCostPerCall,
       }
     }
@@ -236,10 +236,10 @@ export class ModelRegistry {
     if (taskStat.totalCalls === 0) {
       return {
         model,
-        reliability: 0.5,
+        reliability: 0,
         hallucinationRate: 0,
         totalCalls: 0,
-        status: "healthy",
+        status: "untested",
         avgCostPerCall: stat.avgCostPerCall,
       }
     }

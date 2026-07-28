@@ -563,10 +563,17 @@ const confidenceStore = new ConfidenceStore()
     try { secondBrain.handleEvent(event.type, event.payload, event.payload?.sessionID as string | undefined) } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
   })
   // Build RAG config from config file
+  // Convert embedding config: string → { model: string } | null
+  const rawEmbedding = config.embedding
+  const embedderConfig: import("./memory/local-embedder.js").EmbedderConfig | null =
+    rawEmbedding === null ? null :
+    typeof rawEmbedding === "string" ? { model: rawEmbedding } :
+    rawEmbedding // already EmbedderConfig-compatible
+
   const ragConfig: import("./memory/multi-index-rag.js").RAGConfig = {
     keywordWeight: config.memory.search.keywordWeight,
     vectorWeight: config.memory.search.vectorWeight,
-    embedding: config.embedding, // null = TF-IDF only
+    embedding: embedderConfig,
   }
   const multiIndexRAG = new MultiIndexRAG(undefined, ragConfig)
 

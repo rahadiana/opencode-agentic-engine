@@ -172,25 +172,25 @@ export class ConfidenceScorer {
     const ts = Date.now()
     const provenance: ProvenanceEntry[] = []
 
-    // ── 1. Compile check ──
+    // ── 1. Compile check (strict: missing → 0) ──
     const compileScore = this.scoreFromPassFail(
-      signals.compileResult, "compile", provenance, ts,
+      signals.compileResult, "compile", provenance, ts, true,
     )
 
     // ── 2. Hallucination check ──
     const guardScore = this.scoreHallucination(signals.guardResult, provenance, ts)
 
-    // ── 3. Semantic match ──
+    // ── 3. Semantic match (neutral: missing → 0.5) ──
     const semanticScore = this.scoreFromPassFail(
-      signals.semanticResult, "semantic", provenance, ts,
+      signals.semanticResult, "semantic", provenance, ts, false,
     )
 
     // ── 4. Test pass rate ──
     const testScore = this.scoreTests(signals.testResult, provenance, ts)
 
-    // ── 5. Lint check ──
+    // ── 5. Lint check (neutral: missing → 0.5) ──
     const lintScore = this.scoreFromPassFail(
-      signals.lintResult, "lint", provenance, ts,
+      signals.lintResult, "lint", provenance, ts, false,
     )
 
     // ── 6. Tech debt impact ──
@@ -242,17 +242,23 @@ export class ConfidenceScorer {
 
   /**
    * Convert a pass/fail signal to 0.0/1.0.
-   * Missing → 0 (conservative / signal not available).
+   * Missing → 0.5 (neutral — not penalized, not rewarded).
+   * Only critical dimensions (compile, guard) use strict 0 for missing.
    */
   private scoreFromPassFail(
     signal: { passed: boolean } | undefined,
     source: string,
     provenance: ProvenanceEntry[],
     ts: number,
+    strict = false,
   ): number {
     if (!signal) {
-      provenance.push({ source, value: 0, detail: "Signal not available — scored 0 (conservative)", timestamp: ts })
-      return 0
+      const value = strict ? 0 : 0.5
+      const detail = strict
+        ? "Signal not available — scored 0 (strict)"
+        : "Signal not available — scored 0.5 (neutral)"
+      provenance.push({ source, value, detail, timestamp: ts })
+      return value
     }
     const value = signal.passed ? 1 : 0
     provenance.push({ source, value, detail: signal.passed ? "Passed" : "Failed", timestamp: ts })

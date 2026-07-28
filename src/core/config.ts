@@ -132,17 +132,20 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
     return result
   }
 
-  // Validate embedding (nullable)
+  // Validate embedding (nullable) — accept string (model name) or object
   const embeddingRaw = cfg.embedding
   if (embeddingRaw !== null && embeddingRaw !== undefined) {
-    if (typeof embeddingRaw !== "object") {
-      issues.push({ path: "embedding", message: "Expected object or null", severity: "error", expected: "object|null", actual: typeof embeddingRaw })
-    } else {
+    if (typeof embeddingRaw === "string") {
+      // Simple model name (e.g. "text-embedding-3-small")
+      issues.push({ path: "embedding", message: `Embedding model: "${embeddingRaw}"`, severity: "warning" })
+    } else if (typeof embeddingRaw === "object") {
       validateObject("embedding", embeddingRaw, {
         model: { type: "string", required: true },
         endpoint: { type: "string", format: "url" },
         apiKey: { type: "string" },
       })
+    } else {
+      issues.push({ path: "embedding", message: `Expected string, object, or null, got ${typeof embeddingRaw}`, severity: "warning", expected: "string|object|null", actual: typeof embeddingRaw })
     }
   }
 
@@ -150,7 +153,7 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
   if (cfg.memory) {
     const memShape = {
       enabled: { type: "boolean" },
-      mode: { type: "string", values: ["lightweight", "full"] },
+      mode: { type: "string", values: ["lightweight", "balanced", "full"] },
       maxEntries: { type: "number", min: 1, max: 100000, integer: true },
       compressThreshold: { type: "number", min: 1, integer: true },
       forgetAfterDays: { type: "number", min: 1, max: 3650, integer: true },
@@ -187,7 +190,7 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
       hardBlockReliability: { type: "number", min: 0, max: 1 },
       softBlockReliability: { type: "number", min: 0, max: 1 },
       minSampleSize: { type: "number", min: 1, integer: true },
-      workflowPolicyMode: { type: "string", values: ["advisory", "strict"] },
+      workflowPolicyMode: { type: "string", values: ["advisory", "strict", "enforced"] },
       deepVerification: { type: "object" },
       toolGuardrails: { type: "object" },
     })
@@ -266,8 +269,12 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
 
   // Merge valid parts with defaults
   const merged = { ...defaults }
-  if (embeddingRaw && typeof embeddingRaw === "object") {
-    merged.embedding = { ...(defaults.embedding ?? {}), ...embeddingRaw } as EmbeddingConfig
+  if (embeddingRaw && typeof embeddingRaw === "string") {
+    merged.embedding = embeddingRaw
+  } else if (embeddingRaw && typeof embeddingRaw === "object") {
+    const defaultEmb = defaults.embedding
+    const baseEmb = (defaultEmb && typeof defaultEmb === "object" ? defaultEmb : {}) as EmbeddingConfig
+    merged.embedding = { ...baseEmb, ...embeddingRaw } as EmbeddingConfig
   }
   if (cfg.memory && typeof cfg.memory === "object") {
     merged.memory = { ...defaults.memory, ...cfg.memory as MemoryConfig }
@@ -313,8 +320,8 @@ export interface EmbeddingConfig {
 
 export interface MemoryConfig {
   enabled: boolean
-  /** "lightweight" (TF-IDF, no deps) | "full" (vector embedding) */
-  mode: "lightweight" | "full"
+  /** "lightweight" (TF-IDF, no deps) | "balanced" | "full" (vector embedding) */
+  mode: "lightweight" | "balanced" | "full"
   maxEntries: number
   compressThreshold: number
   forgetAfterDays: number
@@ -430,7 +437,7 @@ export interface RAGSyncConfig {
 export interface AgenticConfigSchema {
   $schema: string
   /** Embedding — null = lightweight mode */
-  embedding: EmbeddingConfig | null
+  embedding: EmbeddingConfig | string | null
   memory: MemoryConfig
   rag?: RAGSyncConfig
   agent: AgentConfig
@@ -472,7 +479,7 @@ export const DEFAULT_CONFIG: AgenticConfigSchema = {
   },
   memory: {
     enabled: true,
-    mode: "lightweight",
+    mode: "balanced",
     maxEntries: 1000,
     compressThreshold: 500,
     forgetAfterDays: 30,
@@ -489,7 +496,7 @@ export const DEFAULT_CONFIG: AgenticConfigSchema = {
     maxDelegationDepth: 3,
     autoSkillExtract: true,
     defaultRole: "developer",
-    requireSemanticCheck: false,
+    requireSemanticCheck: true,
     autoHallucinationCheck: true,
     blockOnHallucination: false,
     hallucinationThreshold: 0.3,
@@ -578,6 +585,12 @@ export class ConfigLoader {
         // Merge recovered parts with defaults
         const merged = this.mergeDeep({ ...DEFAULT_CONFIG }, config)
         this.config = merged
+        // Log auto-repair transparency
+        const errorIssues = issues.filter(i => i.severity === "error")
+        log.warn(`[CONFIG] Auto-repair: ${errorIssues.length} validation error(s) — merging with defaults:`)
+        for (const issue of errorIssues) {
+          log.warn(`[CONFIG]   🔧 ${issue.path}: ${issue.message}`)
+        }
         // Save fixed version back
         try { this.save(merged) } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
         return this.config
@@ -633,7 +646,13 @@ export class ConfigLoader {
       this.watcher = watch(this.configPath, (eventType) => {
         if (eventType === "change") {
           try {
+            const before = JSON.stringify(this.config)
             this.load()
+            const after = JSON.stringify(this.config)
+            if (before !== after) {
+              log.info(`[CONFIG] Auto-repair: config changed after reload — validation modified some fields`)
+              log.info(`[CONFIG] Changes from ${this.configPath} applied. Check warnings above for details.`)
+            }
             for (const listener of this.listeners) {
               listener(this.config)
             }
@@ -689,13 +708,16 @@ export class ConfigLoader {
 
   /** Check if full embedding is configured */
   hasEmbedding(): boolean {
-    return this.config.embedding != null && !!this.config.embedding.model
+    if (this.config.embedding == null) return false
+    if (typeof this.config.embedding === "string") return true
+    const emb = this.config.embedding
+    return typeof emb === "object" && emb !== null && !!(emb as EmbeddingConfig).model
   }
 
   /** Get effective memory mode — auto-switch to "full" if embedding configured */
-  effectiveMemoryMode(): "lightweight" | "full" {
+  effectiveMemoryMode(): "lightweight" | "balanced" | "full" {
     if (this.hasEmbedding()) return "full"
-    return this.config.memory.mode
+    return this.config.memory.mode as "lightweight" | "balanced" | "full"
   }
 
   /** Deep merge helper (handles objects and arrays) */
