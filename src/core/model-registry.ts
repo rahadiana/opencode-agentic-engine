@@ -200,7 +200,7 @@ export class ModelRegistry {
     if (!stat || stat.totalCalls === 0) {
       return {
         model,
-        reliability: 0,
+        reliability: 0.5,
         hallucinationRate: 0,
         totalCalls: 0,
         status: "untested",
@@ -224,7 +224,7 @@ export class ModelRegistry {
     if (!stat || !stat.byTaskType || !stat.byTaskType[taskType]) {
       return {
         model,
-        reliability: 0,
+        reliability: 0.5,
         hallucinationRate: 0,
         totalCalls: 0,
         status: "untested",
@@ -236,7 +236,7 @@ export class ModelRegistry {
     if (taskStat.totalCalls === 0) {
       return {
         model,
-        reliability: 0,
+        reliability: 0.5,
         hallucinationRate: 0,
         totalCalls: 0,
         status: "untested",
