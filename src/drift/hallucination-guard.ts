@@ -2,11 +2,45 @@ import { existsSync, readFileSync, realpathSync } from "node:fs"
 import { resolve, isAbsolute } from "node:path"
 
 // Known npm packages to avoid false positives on import checks
+// Daftar package populer — akan di-skip saat hallucination guard mengecek import.
+// Format: nama package tanpa scope (e.g. "@prisma/client" → "prisma").
 const KNOWN_NPM_PACKAGES = new Set([
-  "react", "vue", "express", "lodash", "zod", "axios", "chalk", "commander",
-  "dotenv", "fs-extra", "glob", "tslib", "typescript", "vitest", "jest",
-  "eslint", "prettier", "dayjs", "uuid", "path", "os", "crypto", "stream",
-  "util", "events", "http", "https", "net", "fs", "child_process",
+  // Node.js built-in modules
+  "path", "os", "crypto", "stream", "util", "events", "http", "https",
+  "net", "fs", "child_process", "url", "querystring", "zlib", "assert",
+  "buffer", "timers", "dns", "readline", "tls", "cluster",
+
+  // Core libs & utilities
+  "react", "react-dom", "vue", "express", "lodash", "zod", "axios",
+  "chalk", "commander", "dotenv", "fs-extra", "glob", "tslib",
+  "typescript", "dayjs", "uuid", "nanoid", "date-fns", "clsx",
+  "classnames", "semver", "inquirer", "ora", "yargs",
+
+  // Web frameworks & servers
+  "next", "nuxt", "hono", "fastify", "koa", "nestjs", "socket.io",
+  "passport", "helmet", "cors", "cookie-parser", "body-parser",
+
+  // API & data
+  "trpc", "graphql", "openai", "langchain", "ioredis", "pg", "mysql2",
+  "mongodb", "mongoose", "prisma", "drizzle", "typeorm",
+
+  // State & routing (React ecosystem)
+  "react-router", "react-router-dom", "zustand", "redux", "react-query",
+  "framer-motion", "next-auth", "react-hook-form",
+
+  // CSS & styling
+  "tailwindcss", "sass", "postcss", "autoprefixer", "styled-components",
+
+  // Testing
+  "vitest", "jest", "supertest", "playwright", "cypress", "mocha",
+  "chai", "sinon", "nock",
+
+  // Build & lint
+  "eslint", "prettier", "webpack", "vite", "esbuild", "swc", "babel",
+  "tsup", "rollup",
+
+  // Misc common
+  "aws-sdk", "stripe", "nodemailer", "socket.io-client", "sharp",
 ])
 
 export interface HallucinationCheck {

@@ -120,7 +120,7 @@ export class LocalEmbedder {
     clearTimeout(timeout)
     if (!resp.ok) {
       const errText = await resp.text().catch(() => "")
-      throw new LLMError(`Embedding API error ${resp.status}: ${errText.slice(0, 200)}`)
+      throw new LLMError(`Embedding API error ${resp.status}: ${errText.slice(0, 200)}`, undefined, resp.status)
     }
     return resp.json()
   }

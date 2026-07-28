@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.10 (2026-07-28)
+- fix: model-registry default reliability 0→0.5 untuk model untested — cegah false positive block (741b044)
+- fix: update test expectations for balanced mode + neutral confidence score (741b044)
+
+## v0.5.9 (2026-07-28)
+- fix: confidence scorer neutral default, model registry untested status, config validation transparency (d9dc8d6)
+- fix: auto-detect local embedder & fallback ke TF-IDF kalau gak ada (099252d)
+- fix: default config sekarang include semua field (null bukan undefined) (7ad6b7c)
+- fix: validasi config sekarang kenali semua field — stop false warnings (140ff16)
+- docs: update config docs — default values & missing fields (3e0a87c)
+
 ## v0.5.8 (2026-07-21)
 - fix: Docker container test pipeline verified + 3 test fixes (b7b9f42)
 - fix: yamlToJson indent calculation in BlueprintParser (2fe5796)

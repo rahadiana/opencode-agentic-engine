@@ -373,7 +373,10 @@ export class Verifier {
       }
     } catch (e: unknown) {
       const err = e as { stdout?: string; stderr?: string; message?: string }
-      const stdout = err.stdout ?? err.message ?? ""
+      // npm exits non-zero when vulnerabilities found — stdout contains full JSON
+      const stdout = err.stdout ?? ""
+      const stderr = err.stderr ?? ""
+      const fallbackText = stdout || stderr || err.message || ""
       try {
         const parsed = JSON.parse(stdout)
         const vulns = parsed.vulnerabilities ?? {}
@@ -389,7 +392,8 @@ export class Verifier {
         }
         return { name: "deps:npm", passed: true, output: "npm audit: no critical/high vulnerabilities." }
       } catch {
-        return { name: "deps:npm", passed: true, output: `npm audit: ${stdout.slice(0, 300)}` }
+        // JSON parsing failed — don't assume passed. Report as warning.
+        return { name: "deps:npm", passed: false, output: `npm audit: unable to parse audit result — manual review recommended. Output: ${fallbackText.slice(0, 300)}` }
       }
     }
   }
@@ -399,32 +403,90 @@ export class Verifier {
       return null
     }
     try {
-      const output = execFileSync("python", ["-m", "pip_auth", "--quiet"], {
+      const output = execFileSync("python", ["-m", "pip_audit", "--format", "json", "--progress-spinner", "off"], {
         cwd: projectDir,
-        timeout: 30000,
+        timeout: 60000,
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "pipe"],
       })
-      return { name: "deps:pip", passed: true, output: output || "pip-audit: no vulnerabilities found." }
+      // pip-audit exits 0 = no vulns. Parse JSON to confirm.
+      try {
+        const parsed = JSON.parse(output)
+        const deps = parsed.dependencies ?? []
+        const vulnCount = deps.reduce((acc: number, d: Record<string, unknown>) => acc + ((d.vulns as unknown[])?.length ?? 0), 0)
+        if (vulnCount > 0) {
+          return { name: "deps:pip", passed: false, output: `pip-audit: ${vulnCount} vulnerabilities found. Run \`pip-audit --fix\` to resolve.` }
+        }
+      } catch {
+        // JSON parse failed — output is probably human-readable "No known vulnerabilities found"
+        if (output.includes("No known vulnerabilities")) {
+          return { name: "deps:pip", passed: true, output: "pip-audit: no vulnerabilities found." }
+        }
+      }
+      return { name: "deps:pip", passed: true, output: "pip-audit: no vulnerabilities found." }
     } catch (e: unknown) {
-      const err = e as { stdout?: string; message?: string }
-      return { name: "deps:pip", passed: true, output: `pip-audit: ${(err.stdout || err.message || "").slice(0, 200)}` }
+      const err = e as { stdout?: string; stderr?: string; message?: string }
+      const outText = err.stdout || err.stderr || err.message || ""
+      // pip-audit exits 1 when vulnerabilities are found — parse JSON from stdout
+      try {
+        const parsed = JSON.parse(err.stdout || "")
+        const deps = parsed.dependencies ?? []
+        const vulnCount = deps.reduce((acc: number, d: Record<string, unknown>) => acc + ((d.vulns as unknown[])?.length ?? 0), 0)
+        if (vulnCount > 0) {
+          return { name: "deps:pip", passed: false, output: `pip-audit: ${vulnCount} vulnerabilities found. Run \`pip-audit --fix\` to resolve.` }
+        }
+      } catch {
+        // JSON parsing failed — report what we got
+      }
+      if (outText.includes("No known vulnerabilities")) {
+        return { name: "deps:pip", passed: true, output: "pip-audit: no vulnerabilities found." }
+      }
+      return { name: "deps:pip", passed: false, output: `pip-audit: error or vulnerabilities detected: ${outText.slice(0, 300)}` }
     }
   }
 
   private runCargoAudit(projectDir: string): CheckResult | null {
     if (!existsSync(resolve(projectDir, "Cargo.lock"))) return null
     try {
-      const output = execFileSync("cargo", ["audit", "--quiet"], {
+      // cargo audit --json outputs structured JSON. Exit 0 = no vulns, non-zero = vulns found.
+      // JSON structure: { vulnerabilities: { found: bool, count: usize, list: [...] }, warnings: {...} }
+      const output = execFileSync("cargo", ["audit", "--json"], {
         cwd: projectDir,
-        timeout: 60000,
+        timeout: 120000,
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "pipe"],
       })
-      return { name: "deps:cargo", passed: true, output: output || "cargo audit: no vulnerabilities found." }
+      // Exit 0 = success, parse JSON to check for vulnerabilities
+      try {
+        const parsed = JSON.parse(output)
+        const vulnInfo = parsed.vulnerabilities ?? {}
+        const vulnCount: number = typeof vulnInfo.count === "number" ? vulnInfo.count : (Array.isArray(vulnInfo.list) ? vulnInfo.list.length : 0)
+        if (vulnCount > 0) {
+          return { name: "deps:cargo", passed: false, output: `cargo audit: ${vulnCount} vulnerabilities found. Run \`cargo audit fix\` to resolve.` }
+        }
+      } catch {
+        // JSON parse failed — output might be human-readable
+      }
+      return { name: "deps:cargo", passed: true, output: "cargo audit: no vulnerabilities found." }
     } catch (e: unknown) {
-      const err = e as { stdout?: string; message?: string }
-      return { name: "deps:cargo", passed: true, output: `cargo audit: ${(err.stdout || err.message || "").slice(0, 200)}` }
+      const err = e as { stdout?: string; stderr?: string; message?: string }
+      const outText = err.stdout || err.stderr || err.message || ""
+      // cargo audit exits non-zero when vulnerabilities found — try parsing JSON from stdout
+      try {
+        const parsed = JSON.parse(err.stdout || "")
+        const vulnInfo = parsed.vulnerabilities ?? {}
+        const vulnCount: number = typeof vulnInfo.count === "number" ? vulnInfo.count : (Array.isArray(vulnInfo.list) ? vulnInfo.list.length : 0)
+        if (vulnCount > 0) {
+          return { name: "deps:cargo", passed: false, output: `cargo audit: ${vulnCount} vulnerabilities found. Run \`cargo audit fix\` to resolve.` }
+        }
+      } catch {
+        // JSON parse failed — check human-readable output for indicators
+        if (outText.includes("No vulnerabilities") || outText.includes("no vulnerabilities")) {
+          return { name: "deps:cargo", passed: true, output: "cargo audit: no vulnerabilities found." }
+        }
+      }
+      // If we can't determine, report as warning, not silent pass
+      return { name: "deps:cargo", passed: false, output: `cargo audit: potential issues detected: ${outText.slice(0, 300)}` }
     }
   }
 

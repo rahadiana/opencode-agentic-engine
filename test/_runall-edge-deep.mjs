@@ -136,6 +136,20 @@ section("BC-AR: AutoRetryManager Branch Coverage")
       const ab = an ? `\n## Error Analysis\n- **Category:** ${an.category}\n- **Summary:** ${an.summary}\n- **Root Cause:** ${an.likelyRootCause}\n- **Suggested Fix:** ${an.suggestedFix}\n- **Severity:** ${an.severity}` : ""
       return `## Retry #${this.attempts.length + 1}: ${strategy}\n\n### Original Goal\n${goal}\n\n### Previous Error\n\`\`\`\n${lastErr.slice(0, 1500)}\n\`\`\`\n${ab}\n${sw}\n\n### Strategy: ${strategy}\n\nIMPORTANT: Only output files that need change.`
     }
+    // ── Methods untuk branch coverage ──
+    getStrategyName(s) {
+      const map = { direct_fix: "Direct Fix", conservative: "Conservative", type_first: "Type-First", split_changes: "Split Changes" }
+      return map[s] ?? s
+    }
+    getStrategyInstructions(s) {
+      const map = {
+        direct_fix: "Fix the specific errors listed above.",
+        conservative: "Take a conservative approach.",
+        type_first: "Type-first approach.",
+        split_changes: "Split into smaller changes.",
+      }
+      return map[s] ?? ""
+    }
   }
 
   // AR-1: canRetry false when max retries exhausted
@@ -222,6 +236,20 @@ section("BC-AR: AutoRetryManager Branch Coverage")
   assert(ar16.getAttempts().length === 1, "AR-16a 1 attempt before reset")
   ar16.reset()
   assert(ar16.getAttempts().length === 0, "AR-16b 0 after reset")
+
+  // AR-17: getStrategyName returns correct names for all 4 strategies
+  const ar17_name = new ARM()
+  assert(ar17_name.getStrategyName("direct_fix") === "Direct Fix", "AR-17a direct_fix")
+  assert(ar17_name.getStrategyName("conservative") === "Conservative", "AR-17b conservative")
+  assert(ar17_name.getStrategyName("type_first") === "Type-First", "AR-17c type_first")
+  assert(ar17_name.getStrategyName("split_changes") === "Split Changes", "AR-17d split_changes")
+
+  // AR-18: getStrategyInstructions returns correct instructions for all 4 strategies
+  const ar18_inst = new ARM()
+  assert(ar18_inst.getStrategyInstructions("direct_fix").includes("specific errors"), "AR-18a direct_fix")
+  assert(ar18_inst.getStrategyInstructions("conservative").includes("conservative"), "AR-18b conservative")
+  assert(ar18_inst.getStrategyInstructions("type_first").includes("Type-first"), "AR-18c type_first")
+  assert(ar18_inst.getStrategyInstructions("split_changes").includes("smaller"), "AR-18d split_changes")
 
   // AR-17: getConfig returns copy
   const ar17 = new ARM({ maxRetries: 5 })

@@ -121,7 +121,7 @@ export class FineTuningClient {
 
     if (!resp.ok) {
       const errText = await resp.text().catch(() => "unknown error")
-      throw new LLMError(`Create job failed (${resp.status}): ${errText}`)
+      throw new LLMError(`Create job failed (${resp.status}): ${errText}`, undefined, resp.status)
     }
 
     const data = await resp.json() as Record<string, unknown>
@@ -219,7 +219,7 @@ export class FineTuningClient {
             await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)))
             continue
           }
-          throw new LLMError(`Request failed (${resp.status}): ${errText}`)
+          throw new LLMError(`Request failed (${resp.status}): ${errText}`, undefined, resp.status)
         }
         return resp
       } catch (e) {

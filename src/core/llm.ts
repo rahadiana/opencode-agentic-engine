@@ -401,7 +401,9 @@ export class LLMEngine {
     this._applyCostAutoSwitch(req, effectiveToolName)
 
     // ── Knowledge-first injection (tool mode) + Second Brain ──
-    this._injectContext(req)
+    // Await with timeout: RAG query ditunggu max 2 detik supaya knowledge
+    // tersedia SEBELUM LLM call, bukan sesudahnya (fix C5).
+    await this._injectContext(req)
 
     // Simpan model override sebelum call — dipake buat fallback tracking
     const explicitModel = req.model ? { ...req.model } : undefined
@@ -641,25 +643,36 @@ export class LLMEngine {
     this._onCostSwitch?.(event)
   }
 
-  /** Inject RAG knowledge + Second Brain context into system prompt */
-  private _injectContext(req: LLMRequest): void {
+  /** Inject RAG knowledge + Second Brain context into system prompt.
+   *  Sekarang async dengan timeout: RAG query ditunggu max 2 detik.
+   *  Jika timeout/gagal → proceed tanpa knowledge (graceful degradation).
+   *  Fix C5: sebelumnya fire-and-forget → race condition (knowledge masuk setelah LLM call mulai). */
+  private async _injectContext(req: LLMRequest): Promise<void> {
     if (this._chatMode || req.bypassCache) return
-    // Knowledge-first injection (fire-and-forget — non-blocking context enrichment)
+    // Knowledge-first injection
     if (this.memoryOrchestrator && !req.systemPrompt.includes("<knowledge-context>")) {
       const queryText = (req.userPrompt ?? "").slice(0, 500)
       if (queryText) {
-        this.memoryOrchestrator.queryWithKnowledge(queryText, undefined, 5)
-          .then(memResult => {
-            if (memResult.knowledge && memResult.knowledge.length > 0) {
-              const ctx = memResult.knowledge
-                .map(k => `  <source url="${k.source}" confidence="${k.confidence.toFixed(2)}">${k.content}</source>`)
-                .join("\n")
-              req.systemPrompt += `\n\n<knowledge-context>\n${ctx}\n</knowledge-context>`
-            }
-          }).catch(() => {})
+        try {
+          const memResult = await Promise.race([
+            this.memoryOrchestrator.queryWithKnowledge(queryText, undefined, 5),
+            new Promise<null>((_, reject) =>
+              setTimeout(() => reject(new Error("RAG query timeout")), 2000)
+            ),
+          ])
+          if (memResult && memResult.knowledge && memResult.knowledge.length > 0) {
+            const ctx = memResult.knowledge
+              .map(k => `  <source url="${k.source}" confidence="${k.confidence.toFixed(2)}">${k.content}</source>`)
+              .join("\n")
+            req.systemPrompt += `\n\n<knowledge-context>\n${ctx}\n</knowledge-context>`
+          }
+        } catch (e) {
+          // Timeout or error — proceed without knowledge (graceful degradation)
+          logParseError("Knowledge injection", e)
+        }
       }
     }
-    // Second Brain injection
+    // Second Brain injection (synchronous — fast)
     if (!req.systemPrompt.includes("<second-brain>")) {
       try {
         const sb = getSecondBrain()
@@ -667,7 +680,7 @@ export class LLMEngine {
           const ctx = sb.formatKnowledgeSnapshot(3, 5)
           if (ctx) req.systemPrompt += `\n${ctx}`
         }
-      } catch { /* non-fatal */ }
+      } catch { /* non-fatal — Second Brain best-effort */ }
     }
   }
 

@@ -39,9 +39,14 @@ export class BudgetExceededError extends AgenticError {
 
 /**
  * Thrown when an LLM call fails (timeout, API error, etc.).
+ * Optional fields: modelName, statusCode untuk debugging.
  */
 export class LLMError extends AgenticError {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    public readonly modelName?: string,
+    public readonly statusCode?: number,
+  ) {
     super(message, 'LLM_ERROR')
   }
 }

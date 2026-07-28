@@ -689,7 +689,7 @@ export class AgentLoop {
             output: (result.output ?? "").slice(0, 200),
             error: result.error,
             timestamp: new Date().toISOString(),
-          }).catch(() => { /* non-fatal */ })
+          }).catch((fbErr) => { log.warn("RAG feedback callback failed (non-fatal)", { error: fbErr instanceof Error ? fbErr.message : String(fbErr) }) })
         } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
       }
 

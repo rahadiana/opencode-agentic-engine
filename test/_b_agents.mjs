@@ -308,7 +308,7 @@ function assertCS2(cond, msg) {
   // Custom weights
   const weighted = new CS({ compileCheck: 0.5, hallucinationCheck: 0.5 })
   const wScore = weighted.score({ stepId: "step-w", compileResult: { passed: true }, guardResult: { passed: false, claims: [{ verified: false }] } })
-  assertCS2(Math.abs(wScore.overall - 0.525) < 0.001, "CS-4a: 50/50 weights = 0.525")
+  assertCS2(Math.abs(wScore.overall - 0.65) < 0.001, "CS-4a: 50/50 weights with neutral defaults = 0.65")
 
   // ConfidenceStore
   const store = new CStore()
