@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.11 (2026-07-28)
+- fix: pip_auth → pip_audit typo — Python audit dead code (security)
+- fix: cargo audit silent passed:true → parse JSON {found,count,list} (security)
+- fix: npm audit fallback passed:true → passed:false + warning (security)
+- fix: knowledge injection race condition → await dengan 2s timeout (reliability)
+- fix: LLMError tambah modelName? + statusCode? fields untuk debugging
+- fix: RAG feedback .catch(()=>{}) → .catch(log.warn) untuk observability
+- fix: KNOWN_NPM_PACKAGES 27 → ~80 packages — cegah false positive hallucination guard
+- test: +8 assertions AutoRetryManager strategy mapping
+- docs: TODO.md koreksi 6 entry yang salah
+
 ## v0.5.10 (2026-07-28)
 - fix: model-registry default reliability 0→0.5 untuk model untested — cegah false positive block (741b044)
 - fix: update test expectations for balanced mode + neutral confidence score (741b044)
