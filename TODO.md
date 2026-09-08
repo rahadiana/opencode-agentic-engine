@@ -12,6 +12,7 @@ Terlalu besar, branch coverage ~51%, 70+ dependency di-cast `as unknown as ToolC
 - [ ] Ekstrak system.transform hook (~240 line) ke `src/core/system-transform.ts`
 - [ ] Ekstrak tool definitions wiring (~700 line) ke `src/tools/`
 - [ ] Ekstrak event wiring + disposal logic ke modul terpisah
+- [x] **Parsial (P1)**: `detectSubAgentRole` + `buildSubAgentInjection` → `src/core/subagent-detect.ts` (-56 baris); RAG cache ke engine-scope.
 
 ### C2. `src/core/verifier.ts` — `runPipAudit()` module name typo
 - [x] **Fix**: `pip_auth` → `pip_audit`. Ditambah `--format json` untuk output terstruktur, parsing JSON untuk count vuln, fallback `passed: false` (bukan silent pass) jika error.
@@ -30,8 +31,8 @@ Terlalu besar, branch coverage ~51%, 70+ dependency di-cast `as unknown as ToolC
 
 ### C7. `src/index.ts` — Fire-and-forget async tanpa error handling
 - [x] **Verifikasi model discovery** (baris 417-468): Ada catch block yang fallback ke env vars. Discovery selesai dalam ms, sebelum tool dipanggil. Bukan bug praktis.
-- [ ] **AutoUpdatePlugin** (baris 793): Fire-and-forget — tidak ada error handling.
-- [ ] **runAutoEvolve** (baris 843-854): Fire-and-forget — error dari evolusi ditelan.
+- [x] **AutoUpdatePlugin**: kini `.catch(e => log.warn(...))` — tak ada lagi unhandled rejection (P1).
+- [x] **runAutoEvolve**: ternyata SUDAH ada `.catch` + log (P1 verifikasi) — bukan bug.
 
 ### C8. `src/index.ts` — `detectSubAgentRole()` menggunakan `systemText.includes()` fragil
 - [x] **Verifikasi**: Memang fragil secara desain, tapi ada 4 level fallback (built-in → custom → pipeline → debate). Kegagalan level 1 masih tertangani oleh level berikutnya. Bukan bug kritis.
@@ -43,7 +44,7 @@ Terlalu besar, branch coverage ~51%, 70+ dependency di-cast `as unknown as ToolC
 - [x] **Verifikasi**: `applyDumbHarnessToAgentLoop()` bisa throw (panggil configLoader), jadi try-catch adalah defensive programming yang valid. Bukan bug.
 
 ### C11. `src/index.ts` — RAG cache in-memory di dalam system.transform hook
-- [ ] **Baris 1208**: `_ragCache` adalah `Map` lokal yang dibuat ulang tiap hook dipanggil. Cache tidak persist antar-LLM-call.
+- [x] **Fix (P0)**: `_ragCache` pindah ke engine-scope + LRU-promote on hit + evict expired-then-oldest (max 50).
 
 ---
 
@@ -51,8 +52,8 @@ Terlalu besar, branch coverage ~51%, 70+ dependency di-cast `as unknown as ToolC
 
 ### Verifier (`src/core/verifier.ts`)
 - [ ] **M1**: `verifyLint()` hardcode ESLint — tidak support biome/oxlint/deno lint (baris 666-700)
-- [ ] **M2**: `verifyTests()` hanya cek `scripts.test.startsWith("jest")` — tidak detect vitest/mocha/ava (baris 619-667)
-- [ ] **M3**: `verifyRelated()` menjalankan ALL tests, bukan related tests saja — misleading name (baris 723-784)
+- [x] **M2 (P0)**: `verifyTests()` kini detect jest/vitest/mocha/ava.
+- [x] **M3 (P0)**: `verifyRelated()` kini benar-benar run related-tests via pattern; fallback ALL dengan reason eksplisit.
 - [ ] **M4**: `readChangedFiles()` silent skip file yang tidak bisa dibaca — security vuln di file itu tidak ter-review (baris 143-150)
 - [ ] **M5**: `parseLLMCheck()` return false positives saat LLM output unparseable (baris 457-469)
 - [ ] **M6**: `formatVerificationChecklist()` static method — hanya dipanggil di test, tidak di runtime production. Bisa dihapus atau dijadikan internal.
@@ -70,12 +71,12 @@ Terlalu besar, branch coverage ~51%, 70+ dependency di-cast `as unknown as ToolC
 - [ ] **M14**: RAG feedback `.catch(() => {})` kosong — error dari feedback loop ditelan total (baris 685-694)
 
 ### DAG Engine (`src/core/dag-engine.ts`)
-- [ ] **M15**: Recovery hanya dari failed node pertama — node lain yang gagal diabaikan (baris 415-437)
-- [ ] **M16**: Missing dependency menghasilkan false "DAG cycle detected!" error (baris 191-197, 290)
-- [ ] **M17**: In-flight nodes tidak di-cancel saat abort — background execution terus berjalan (baris 367-471)
+- [x] **M15 (P1)**: `notifyRecovery` untuk SEMUA failed nodes.
+- [x] **M16 (P1)**: `inDegree` hanya hitung dep yang dikenal — missing dep = external, bukan cycle.
+- [x] **M17 (P1)**: abort tandai pending/running → skipped (state konsisten; runner wajib respect signal — JS tak bisa force-kill promise).
 
 ### Memory & RAG (`src/memory/`)
-- [ ] **M18**: `MultiIndexRAG.importAll()` tidak divalidasi — data korup dari StateStore bisa merusak index
+- [x] **M18 (P2)**: `importAll()` + `isIndexData()` — bucket korup di-skip dengan warn, field defensif.
 - [ ] **M19**: `RAG Feedback Loop` fire-and-forget — tidak ada jaminan feedback tersimpan sebelum next search
 - [ ] **M20**: RAG cache eviction O(n) — iterasi semua entries tiap search. Dengan 1000+ entries jadi lambat
 - [ ] **M21**: `EpisodicStore.significance` tidak terpakai di pruning — pivotal entries tidak di-protect secara khusus
@@ -84,10 +85,10 @@ Terlalu besar, branch coverage ~51%, 70+ dependency di-cast `as unknown as ToolC
 ### Config (`src/core/config.ts`)
 - [ ] **M23**: Polling fallback dead code — `if (this.watcher) return` selalu true setelah `watch()` (baris 646-689)
 - [ ] **M24**: Validasi warning untuk string embedding yang valid — misleading (baris 135-150)
-- [ ] **M25**: Auto-repair bisa overwrite concurrent edits — tidak ada file locking / atomic write (baris 599)
+- [x] **M25 (P1)**: `save()` atomic via tmp + rename. (+ config pull-sync `remotePullEnabled`/`remotePullIntervalMs`, P2)
 
 ### Agents (`src/agents/`)
-- [ ] **M26**: `Coordinator.acquire()/release()` mutex tidak reentrant — jika agent hold lock lalu coba acquire lagi → deadlock
+- [x] **M26 (P1)**: listeners dipindah ke luar lock (snapshot di dalam, notify setelah release) — vektor deadlock reentrant tertutup.
 - [ ] **M27**: A2A Client/server error handling minimal — semua error RPC di catch generic + stringify
 - [ ] **M28**: Orchestrator pipeline stages hardcoded — PM→Architect→Developer→QA tidak bisa di-extend
 
@@ -96,7 +97,7 @@ Terlalu besar, branch coverage ~51%, 70+ dependency di-cast `as unknown as ToolC
 - [ ] **M30**: `KNOWN_NPM_PACKAGES` outdated — hanya ~20 packages, modern packages (next, drizzle, hono, trpc) tidak ada
 
 ### Evolution (`src/evolution/`)
-- [ ] **M31**: `checkAutoEvolve()` dipanggil di SETIAP step.completed/failed — untuk 50-step task, evolusi di-check 50× (index.ts:838-857)
+- [x] **M31 (P1 verifikasi)**: `shouldEvolve` sudah hysteresis 2 mnt + cap + min 10 datapoints; check sinkron murah tanpa LLM — bukan bug praktis.
 - [ ] **M32**: `SelfEvolver` JSON.parse/stringify deep copy lossy — drop undefined, Date, RegExp, Map, Set, BigInt
 - [ ] **M33**: `ContinuousEvolution.trendCache` hanya satu entry — cache invalid jika dipanggil dengan session berbeda
 
@@ -106,7 +107,7 @@ Terlalu besar, branch coverage ~51%, 70+ dependency di-cast `as unknown as ToolC
 - [ ] **M36**: `agentic_auto.ts` terlalu panjang (799 baris) — banyak logika duplikat dengan agent-loop.ts
 
 ### Observability (`src/observability/`)
-- [ ] **M37**: `TraceLogger.write-behind queue` tanpa limit — `maxBufferSize` default 10000 tapi tidak ada error handling jika overflow
+- [x] **M37 (P3 verifikasi)**: buffer SUDAH bounded — `shift()` saat penuh (backpressure, trace-logger.ts:157-162) — bukan bug.
 - [ ] **M38**: Dashboard metrics hanya in-memory — semua hilang saat plugin reload. Tidak ada persistensi
 - [ ] **M39**: Logger `globalLogClient` bisa null — jika `setGlobalLogClient()` belum dipanggil, log ke console bukan SDK
 
@@ -116,23 +117,23 @@ Terlalu besar, branch coverage ~51%, 70+ dependency di-cast `as unknown as ToolC
 
 ### Router & State (`src/core/router-agent.ts`, `state-store.ts`, `semantic-cache.ts`)
 - [ ] **M42**: `RouterAgent` LLM dipanggil untuk SETIAP query — bahkan query trivial "find my notes" trigger LLM call. Tidak ada pre-filter.
-- [ ] **M43**: `StateStore` eviction FIFO bukan LRU — entry yang paling lama di-INSERT dihapus duluan, bukan yang jarang diakses
-- [ ] **M44**: `SemanticCache` tokenizer Unicode-incomplete — tidak handle Unicode normalization (é vs e)
+- [x] **M43 (P0)**: `StateStore.get()` LRU-promote (delete+re-insert).
+- [x] **M44 (P3)**: `tokenize()` NFKD + strip diacritics — "café" ≡ "cafe" (terverifikasi via SemanticCache).
 
 ---
 
 ## 🟢 Minor (10)
 
 - [ ] **m1**: `package.json` dependency `stopwords-iso` tidak dipakai langsung — stopwords di-copy manual di semantic-cache.ts dan stopwords.ts
-- [ ] **m2**: `process.env?.NODE_ENV` optional chaining tidak perlu — `process.env` selalu object di Node.js (prompt-builder.ts:284)
+- [x] **m2 (P3)**: `process.env?.` → `process.env` (prompt-builder.ts, state-store.ts).
 - [ ] **m3**: `tsconfig.json` `noUnusedLocals: false` — melemahkan strict checking, dead variables tidak terdeteksi
-- [ ] **m4**: Prettier tidak dijalankan di CI — `format:check` ada tapi tidak di workflow CI
+- [ ] **m4**: Prettier tidak dijalankan di CI — DITUNDA (P3): `format:check` gagal di 171 file; butuh commit formatting khusus, di luar scope sesi ini.
 - [ ] **m5**: Dockerfile 9 layer tanpa layer caching optimization — bisa multi-stage build
 - [ ] **m6**: README.md test count sering ketinggalan update — doc drift yang diakui di AGENTS.md
 - [ ] **m7**: `src/core/domains/` 6 domain tapi cuma generic yang aktif — `activate("generic")` hardcode di index.ts:244
 - [ ] **m8**: `eslint.config.js` menggunakan `no-useless-escape` rule — bisa memicu false positive
-- [ ] **m9**: `.gitignore` tidak include `dist/` — build artifacts bisa ter-commit
-- [ ] **m10**: AgenticError base class tidak abstract — developer bisa `throw new AgenticError()` langsung, bypassing typed error system
+- [x] **m9 (P3 verifikasi)**: `dist/` SUDAH di `.gitignore` baris 8 — bukan bug.
+- [ ] **m10**: AgenticError base class tidak abstract — DITUNDA (P3): 11 call-site `new AgenticError(code)` (TRACE_*/A2A_*/MCP_*) tak punya subclass; abstract butuh taksonomi baru — churn > manfaat.
 
 ---
 

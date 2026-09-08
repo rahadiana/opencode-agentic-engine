@@ -171,20 +171,28 @@ export class AgentCoordinator {
   // ── Shared Memory ──────────────────────────────────────────────
 
   async writeSharedMemory(key: string, value: string, agentRole: string): Promise<SharedMemoryEntry> {
+    // P1 (M26): listeners notified AFTER release — a listener that writes back
+    // would otherwise re-acquire the same non-reentrant mutex and deadlock.
+    let entry: SharedMemoryEntry
+    let listeners: SharedMemoryListener[]
     await this.acquire()
     try {
-      const entry: SharedMemoryEntry = { key, value, writtenBy: agentRole, timestamp: Date.now() }
+      entry = { key, value, writtenBy: agentRole, timestamp: Date.now() }
       this.sharedMemory.set(key, entry)
-      for (const listener of this.memoryListeners) {
-        try { listener(entry) } catch (err) { log.warn(`[Coordinator] memoryListener error: ${String(err)}`) }
-      }
-      return entry
+      listeners = [...this.memoryListeners]
     } finally {
       this.release()
     }
+    for (const listener of listeners) {
+      try { listener(entry) } catch (err) { log.warn(`[Coordinator] memoryListener error: ${String(err)}`) }
+    }
+    return entry
   }
 
   async writeSharedMemoryBatch(entries: Array<{ key: string; value: string; agentRole: string }>): Promise<void> {
+    // P1 (M26): same as writeSharedMemory — notify after release to avoid reentrant deadlock.
+    let committed: SharedMemoryEntry[]
+    let listeners: SharedMemoryListener[]
     await this.acquire()
     try {
       const temp: SharedMemoryEntry[] = []
@@ -196,13 +204,15 @@ export class AgentCoordinator {
       for (const entry of temp) {
         this.sharedMemory.set(entry.key, entry)
       }
-      for (const entry of temp) {
-        for (const listener of this.memoryListeners) {
-          try { listener(entry) } catch (err) { log.warn(`[Coordinator] batch memoryListener error: ${String(err)}`) }
-        }
-      }
+      committed = temp
+      listeners = [...this.memoryListeners]
     } finally {
       this.release()
+    }
+    for (const entry of committed) {
+      for (const listener of listeners) {
+        try { listener(entry) } catch (err) { log.warn(`[Coordinator] batch memoryListener error: ${String(err)}`) }
+      }
     }
   }
 

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync, watch, statSync } from "node:fs"
+import { readFileSync, writeFileSync, mkdirSync, existsSync, watch, statSync, renameSync, unlinkSync } from "node:fs"
 import { join } from "node:path"
 import { createLogger } from "../observability/logger.js"
 
@@ -256,6 +256,8 @@ export function validateConfig(raw: unknown): { valid: boolean; config: AgenticC
       remoteApiKey: { type: "string" },
       remoteBatchIntervalMs: { type: "number", min: 0, max: 60000, integer: true },
       remoteSyncMode: { type: "string", values: ["full", "changes"] },
+      remotePullEnabled: { type: "boolean" },
+      remotePullIntervalMs: { type: "number", min: 5000, max: 300000, integer: true },
     })
   }
 
@@ -436,6 +438,10 @@ export interface RAGSyncConfig {
   remoteBatchIntervalMs?: number
   /** Sync mode: 'full' exports all RAG data, 'changes' exports delta only (default: full) */
   remoteSyncMode?: "full" | "changes"
+  /** Pull from remote (server → plugin). Default false = one-way push only. */
+  remotePullEnabled?: boolean
+  /** Pull interval in ms (default: 30000, min 5000 to avoid hammering) */
+  remotePullIntervalMs?: number
 }
 
 export interface AgenticConfigSchema {
@@ -480,6 +486,8 @@ export const DEFAULT_CONFIG: AgenticConfigSchema = {
     remoteApiKey: null,
     remoteBatchIntervalMs: 5000,
     remoteSyncMode: "full",
+    remotePullEnabled: false,
+    remotePullIntervalMs: 30000,
   },
   memory: {
     enabled: true,
@@ -617,13 +625,20 @@ export class ConfigLoader {
     return issues
   }
 
-  /** Save config to file */
+  /** Save config to file (P1: M25 — atomic write via tmp + rename, no partial reads) */
   save(config: AgenticConfigSchema): void {
     const dir = join(this.worktree, ".agentic")
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true })
     }
-    writeFileSync(this.configPath, JSON.stringify(config, null, 2), "utf-8")
+    const tmpPath = `${this.configPath}.tmp.${process.pid}`
+    writeFileSync(tmpPath, JSON.stringify(config, null, 2), "utf-8")
+    try {
+      renameSync(tmpPath, this.configPath)
+    } catch (e) {
+      try { unlinkSync(tmpPath) } catch { /* best-effort cleanup */ }
+      throw e
+    }
     this.config = { ...config }
   }
 

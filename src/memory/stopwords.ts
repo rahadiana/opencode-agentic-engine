@@ -163,6 +163,10 @@ export function getStopWordStats(): {
 export function tokenize(text: string, stopWords?: Set<string>): string[] {
   const sw = stopWords ?? STOP_WORDS
   const words = text
+    // P3 (M44): Unicode normalize + strip diacritics so "café" ≡ "cafe",
+    // "naïve" ≡ "naive" across TF-IDF matching.
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .split(/\s+/)

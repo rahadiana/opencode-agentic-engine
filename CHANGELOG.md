@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.5.12 (2026-09-08)
+- feat: RAG optimizer MMKP 2-dimensi — redundancyBudget + NLI-light contradiction penalty (P0-1)
+- feat: corrective feedback loop — CFL_TABLE strategies + correction-lag tracking (P0-2)
+- feat: verifier detect jest/vitest/mocha/ava + verifyRelated run related-tests (M2/M3)
+- feat: two-way RAG sync design doc + pullRemoteRAG (opt-in, default off) (M11/P2)
+- fix: StateStore LRU-promote on get; RAG cache engine-scope + evict expired-then-oldest (M43/C11)
+- fix: DAG recovery semua failed nodes; missing dep bukan false-cycle; abort → skipped (M15-M17)
+- fix: importAll validasi via isIndexData — data korup di-skip dengan warn (M18)
+- fix: config.save() atomic tmp+rename; autoUpdate .catch+log; coordinator listeners luar lock (C7/M25/M26)
+- fix: tokenizer Unicode NFKD — café ≡ cafe (M44)
+- refactor: detectSubAgentRole + buildSubAgentInjection → src/core/subagent-detect.ts (C1 parsial)
+- test: 3805 passed, 0 failed; demo /tmp 9/9
+- docs: TODO.md disinkronkan (14 item ditandai selesai/diverifikasi, 2 ditunda beralasan)
+
 ## v0.5.11 (2026-07-28)
 - fix: pip_auth → pip_audit typo — Python audit dead code (security)
 - fix: cargo audit silent passed:true → parse JSON {found,count,list} (security)

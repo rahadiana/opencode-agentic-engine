@@ -42,6 +42,35 @@ export interface StepFeedback {
   timestamp: string
 }
 
+/** P0: CFL (Causal Feedback Labeling) entry — feedback-type → root-cause → strategy. */
+export interface CFLStrategy {
+  title: string
+  errorCategory: string
+  rootCause: string
+  strategy: string
+}
+
+/** P0: correction-lag (PatchRAG) — steps between negative feedback and recovery. */
+export interface CorrectionLag {
+  title: string
+  stepsSinceNegative: number
+  recovered: boolean
+}
+
+const CFL_TABLE: Record<string, { rootCause: string; strategy: string }> = {
+  import: { rootCause: "stale-import-example", strategy: "re-fetch-import-docs" },
+  type: { rootCause: "stale-type-example", strategy: "re-fetch-type-docs" },
+  compile: { rootCause: "low-factuality", strategy: "demote-source" },
+  runtime: { rootCause: "low-factuality", strategy: "demote-source" },
+  test: { rootCause: "incomplete-coverage", strategy: "expand-context" },
+  unknown: { rootCause: "unknown", strategy: "monitor" },
+}
+
+function cflLookup(errorCategory?: string): { rootCause: string; strategy: string } {
+  if (!errorCategory) return CFL_TABLE.unknown
+  return CFL_TABLE[errorCategory] ?? CFL_TABLE.unknown
+}
+
 export interface FeedbackReport {
   /** Total entries yang diupdate */
   entriesUpdated: number
@@ -56,6 +85,10 @@ export interface FeedbackReport {
   flaggedForReview: string[]
   /** Topik yang sering gagal */
   failurePatterns: Array<{ topic: string; count: number }>
+  /** P0: CFL strategies per entry (backward-compat optional) */
+  strategies?: CFLStrategy[]
+  /** P0: correction lag per entry (backward-compat optional) */
+  correctionLag?: CorrectionLag[]
 }
 
 export class RAGFeedbackLoop {
@@ -85,6 +118,8 @@ export class RAGFeedbackLoop {
     const entryDetails: FeedbackReport["entryDetails"] = []
     const flaggedForReview: string[] = []
     const failurePatterns: Map<string, number> = new Map()
+    const strategies: CFLStrategy[] = []
+    const correctionLag: CorrectionLag[] = []
 
     // Cari EPISODE ASLI (bukan copy) di internal store
     const episodeMetadataMap = new Map<string, Record<string, unknown>>()
@@ -159,6 +194,33 @@ export class RAGFeedbackLoop {
           feedbackType,
         })
 
+        // P0: CFL lookup — record root-cause + strategy for this feedback type.
+        const cfl = cflLookup(feedback.success ? undefined : feedback.errorCategory)
+        strategies.push({
+          title: planGoal,
+          errorCategory: feedback.success ? "none" : (feedback.errorCategory ?? "unknown"),
+          rootCause: feedback.success ? "none" : cfl.rootCause,
+          strategy: feedback.success ? "reinforce" : cfl.strategy,
+        })
+
+        // P0: correction lag — steps since last negative in capped history.
+        // history already includes current feedback at this point.
+        const lastNegIdx = (() => {
+          for (let i = history.length - 2; i >= 0; i--) {
+            if (history[i].type === "negative") return i
+          }
+          return feedback.success ? -1 : history.length - 1
+        })()
+        if (lastNegIdx >= 0 && feedback.success) {
+          correctionLag.push({
+            title: planGoal,
+            stepsSinceNegative: history.length - 1 - lastNegIdx,
+            recovered: true,
+          })
+        } else if (!feedback.success) {
+          correctionLag.push({ title: planGoal, stepsSinceNegative: 0, recovered: false })
+        }
+
         // Flag for review
         const rec = this.qualityScorer.getRecommendation({
           quality, qualityScore: newScore, stalenessScore: staleness, usageStats: stats,
@@ -199,6 +261,8 @@ export class RAGFeedbackLoop {
         .sort((a, b) => b[1] - a[1])
         .slice(0, 10)
         .map(([topic, count]) => ({ topic, count })),
+      strategies,
+      correctionLag,
     }
   }
 

@@ -3,6 +3,9 @@ import type { SkillRecord } from "./skill-store.js"
 import type { ScoredResult } from "./vector-store.js"
 import { VectorStore } from "./vector-store.js"
 import { LocalEmbedder, type EmbedderConfig } from "./local-embedder.js"
+import { createLogger } from "../observability/logger.js"
+
+const log = createLogger("MultiIndexRAG")
 
 export interface QualityDimensions {
   /** Relevance: seberapa relevan konten dengan query target (0-1) */
@@ -166,6 +169,15 @@ const DEFAULT_CATEGORIES = [
 
 /** Index data shape — exported for type-safe deserialization from persistence. */
 export type IndexData = Record<string, { episodes: Episode[]; skills: SkillRecord[]; tfidfDocs?: import("./vector-store.js").TfIdfDoc[] }>
+
+/**
+ * Runtime shape check for IndexData (P1: M18).
+ * Remote/local payloads must pass this before importAll touches the index.
+ */
+export function isIndexData(data: unknown): data is IndexData {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return false
+  return true // per-bucket validation happens inside importAll (with warnings)
+}
 
 export class MultiIndexRAG {
   private indices = new Map<string, { episodes: Episode[]; skills: SkillRecord[] }>()
@@ -957,15 +969,29 @@ export class MultiIndexRAG {
   }
 
   /**
-   * Import persisted data.
+   * Import persisted data (P1: M18 — validates shape first; corrupt buckets are
+   * skipped with a warning instead of crashing the caller or poisoning the index).
    */
   importAll(data: IndexData): void {
-    for (const [cat, { episodes, skills, tfidfDocs }] of Object.entries(data)) {
+    if (!isIndexData(data)) {
+      log.warn("[MultiIndexRAG] importAll: top-level data invalid — skipping import")
+      return
+    }
+    for (const [cat, bucket] of Object.entries(data)) {
+      if (!bucket || typeof bucket !== "object" || !Array.isArray(bucket.episodes) || !Array.isArray(bucket.skills)) {
+        log.warn(`[MultiIndexRAG] importAll: skipping corrupt bucket "${cat}"`)
+        continue
+      }
+      const { episodes, skills, tfidfDocs } = bucket
+      const validEpisodes = episodes.filter(e => e && typeof e === "object" && typeof e.id === "string" && typeof e.planGoal === "string")
+      const validSkills = skills.filter(s => s && typeof s === "object" && typeof s.definition?.meta?.id === "string")
+      const dropped = (episodes.length - validEpisodes.length) + (skills.length - validSkills.length)
+      if (dropped > 0) log.warn(`[MultiIndexRAG] importAll: dropped ${dropped} invalid entries in "${cat}"`)
       const index = this.indices.get(cat)
       const epSet = new Set(index?.episodes.map(e => e.id) ?? [])
       const skSet = new Set(index?.skills.map(s => s.definition.meta.id) ?? [])
-      const dedupedEpisodes = episodes.filter(e => !epSet.has(e.id))
-      const dedupedSkills = skills.filter(s => !skSet.has(s.definition.meta.id))
+      const dedupedEpisodes = validEpisodes.filter(e => !epSet.has(e.id))
+      const dedupedSkills = validSkills.filter(s => !skSet.has(s.definition.meta.id))
       if (index) {
         index.episodes.push(...dedupedEpisodes)
         index.skills.push(...dedupedSkills)
@@ -978,24 +1004,24 @@ export class MultiIndexRAG {
           this.vectorStore.index(doc)
         }
       } else {
-        // Re-index from raw data
-        for (const ep of episodes) {
+        // Re-index from raw data (validated lists + defensive field access)
+        for (const ep of validEpisodes) {
           this.vectorStore.index({
             id: `ep-${ep.id}`,
             category: cat,
             title: ep.planGoal,
-            content: `${ep.summary}\n${ep.decisions.join("\n")}`,
-            keywords: ep.tags,
+            content: `${ep.summary ?? ""}\n${Array.isArray(ep.decisions) ? ep.decisions.join("\n") : ""}`,
+            keywords: Array.isArray(ep.tags) ? ep.tags : [],
             metadata: { type: "episode" },
           })
         }
-        for (const sk of skills) {
+        for (const sk of validSkills) {
           this.vectorStore.index({
             id: `sk-${sk.definition.meta.id}`,
             category: cat,
-            title: sk.definition.meta.name,
-            content: sk.definition.trigger.pattern,
-            keywords: sk.definition.trigger.keywords ?? [],
+            title: sk.definition.meta.name ?? sk.definition.meta.id,
+            content: sk.definition.trigger?.pattern ?? "",
+            keywords: sk.definition.trigger?.keywords ?? [],
             metadata: { type: "skill" },
           })
         }

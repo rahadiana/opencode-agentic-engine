@@ -52,6 +52,10 @@ export interface OptimizedContext {
   redundancyScore: number
   /** Entries that were excluded and why */
   excluded: Array<{ title: string; reason: string; tokens: number }>
+  /** P0: explicit redundancy budget (second MMKP dimension) */
+  redundancyBudget: number
+  /** P0: redundancy cost actually spent (similarity-weighted tokens) */
+  redundancyUsed: number
 }
 
 export interface ContextEntryScore {
@@ -72,6 +76,13 @@ const DEFAULT_TOKEN_BUDGET = 4000
 const MIN_TOKENS_PER_ENTRY = 50
 const MAX_TOKENS_PER_ENTRY = 2000
 const DIVERSITY_SIMILARITY_THRESHOLD = 0.6 // cosine similarity threshold for "redundant"
+// P0 fix: explicit redundancy budget (second knapsack dimension, cf. Self-Correcting RAG C_red).
+// Cumulative similarity-weighted cost that may be spent on overlapping entries.
+const DEFAULT_REDUNDANCY_BUDGET = 120
+// P0 fix: NLI-light contradiction penalty (negation-aware, no external model).
+const CONTRADICTION_PENALTY = 0.3
+const CONTRADICTION_VALUE_FLOOR = 0.4
+const NEGATION_RE = /\b(tidak|bukan|tanpa|jangan|belum|gagal|salah|never|not|no|n't|cannot|can't|won't|don't|doesn't)\b/gi
 
 // ── Context Optimizer ──────────────────────────────────────────
 
@@ -89,6 +100,7 @@ export class RAGContextOptimizer {
     entries: IndexEntry[],
     budget: number = DEFAULT_TOKEN_BUDGET,
     query?: string,
+    redundancyBudget: number = DEFAULT_REDUNDANCY_BUDGET,
   ): OptimizedContext {
     if (entries.length === 0) {
       return {
@@ -100,14 +112,16 @@ export class RAGContextOptimizer {
         totalValue: 0,
         redundancyScore: 0,
         excluded: [],
+        redundancyBudget,
+        redundancyUsed: 0,
       }
     }
 
     // Phase 1: Score all entries
     const scored = this._scoreEntries(entries, query)
 
-    // Phase 2: Greedy selection with diversity bonus
-    return this._selectWithKnapsack(scored, budget)
+    // Phase 2: Greedy selection with diversity bonus + redundancy budget + NLI-light check
+    return this._selectWithKnapsack(scored, budget, redundancyBudget)
   }
 
   /**
@@ -236,10 +250,12 @@ export class RAGContextOptimizer {
   private _selectWithKnapsack(
     scored: ContextEntryScore[],
     budget: number,
+    redundancyBudget: number = DEFAULT_REDUNDANCY_BUDGET,
   ): OptimizedContext {
     const selected: ContextEntryScore[] = []
     const excluded: OptimizedContext["excluded"] = []
     let remainingBudget = budget
+    let redundancyUsed = 0
 
     // Sort by value density (value per token)
     const sorted = [...scored]
@@ -260,27 +276,60 @@ export class RAGContextOptimizer {
         continue
       }
 
-      // Diversity check: jangan pilih entry yang terlalu mirip dengan yang sudah dipilih
-      const isRedundant = selected.some(sel => {
-        const kw1 = new Set(s.entry.keywords.map(k => k.toLowerCase()))
-        const kw2 = new Set(sel.entry.keywords.map(k => k.toLowerCase()))
-        const intersection = [...kw1].filter(k => kw2.has(k)).length
-        const union = new Set([...kw1, ...kw2]).size
-        const similarity = union > 0 ? intersection / union : 0
-        return similarity > DIVERSITY_SIMILARITY_THRESHOLD
-      })
-
-      if (isRedundant && s.value < 0.5) {
+      // P0: NLI-light contradiction check against already selected entries.
+      // If entry negates shared-topic content, penalize its effective value.
+      const contradictionPenalty = this._detectContradiction(
+        s.entry,
+        selected.map(sel => sel.entry),
+      )
+      const effectiveValue = s.value - contradictionPenalty
+      if (contradictionPenalty >= CONTRADICTION_PENALTY && effectiveValue < CONTRADICTION_VALUE_FLOOR) {
         excluded.push({
           title: s.entry.title,
-          reason: `Redundant with already selected entries (diversity too low)`,
+          reason: `Contradiction with already selected entries (penalty ${contradictionPenalty.toFixed(2)})`,
           tokens: s.tokens,
         })
         continue
       }
 
-      // Select
-      selected.push(s)
+      // Diversity: max Jaccard similarity to already selected entries.
+      let maxSimilarity = 0
+      for (const sel of selected) {
+        const kw1 = new Set(s.entry.keywords.map(k => k.toLowerCase()))
+        const kw2 = new Set(sel.entry.keywords.map(k => k.toLowerCase()))
+        const intersection = [...kw1].filter(k => kw2.has(k)).length
+        const union = new Set([...kw1, ...kw2]).size
+        const similarity = union > 0 ? intersection / union : 0
+        if (similarity > maxSimilarity) maxSimilarity = similarity
+      }
+      const isRedundant = maxSimilarity > DIVERSITY_SIMILARITY_THRESHOLD
+
+      // P0: second knapsack dimension — similarity-weighted redundancy cost.
+      // cost = maxSimilarity * tokens; must fit within redundancyBudget.
+      const redundancyCost = Math.round(maxSimilarity * s.tokens * 100) / 100
+      if (isRedundant) {
+        if (redundancyUsed + redundancyCost > redundancyBudget) {
+          excluded.push({
+            title: s.entry.title,
+            reason: `Redundancy budget exceeded (cost ${redundancyCost}, used ${redundancyUsed}/${redundancyBudget})`,
+            tokens: s.tokens,
+          })
+          continue
+        }
+        // Legacy guard retained: very low value + redundant → skip without spending budget.
+        if (effectiveValue < 0.5 && redundancyCost > 0) {
+          excluded.push({
+            title: s.entry.title,
+            reason: `Redundant with already selected entries (diversity too low)`,
+            tokens: s.tokens,
+          })
+          continue
+        }
+        redundancyUsed = Math.round((redundancyUsed + redundancyCost) * 100) / 100
+      }
+
+      // Select (store effective value so contradiction penalty is reflected downstream)
+      selected.push({ ...s, value: Math.round(effectiveValue * 100) / 100 })
       remainingBudget -= s.tokens
     }
 
@@ -314,7 +363,42 @@ export class RAGContextOptimizer {
       totalValue: Math.round(selected.reduce((sum, s) => sum + s.value, 0) * 100) / 100,
       redundancyScore: Math.round(redundancyScore * 100) / 100,
       excluded,
+      redundancyBudget,
+      redundancyUsed,
     }
+  }
+
+  /**
+   * P0: NLI-light contradiction detector (no external model).
+   * Returns CONTRADICTION_PENALTY if candidate shares a topic (≥2 keywords)
+   * with any selected entry but differs in negation polarity; else 0.
+   */
+  private _detectContradiction(candidate: IndexEntry, selected: IndexEntry[]): number {
+    if (selected.length === 0) return 0
+    const candText = this._entryText(candidate)
+    const candNeg = this._countNegations(candText)
+    const candKw = new Set(candidate.keywords.map(k => k.toLowerCase()))
+    for (const sel of selected) {
+      const selKw = new Set(sel.keywords.map(k => k.toLowerCase()))
+      const shared = [...candKw].filter(k => selKw.has(k)).length
+      if (shared < 2) continue
+      const selNeg = this._countNegations(this._entryText(sel))
+      if (Math.abs(candNeg - selNeg) >= 1) return CONTRADICTION_PENALTY
+    }
+    return 0
+  }
+
+  private _entryText(entry: IndexEntry): string {
+    const parts: string[] = [entry.title]
+    if (entry.episode?.summary) parts.push(entry.episode.summary)
+    if (entry.episode?.decisions) parts.push(entry.episode.decisions.join(" "))
+    if (entry.keywords) parts.push(entry.keywords.join(" "))
+    return parts.join(" ").toLowerCase()
+  }
+
+  private _countNegations(text: string): number {
+    const m = text.toLowerCase().match(NEGATION_RE)
+    return m ? m.length : 0
   }
 
   private _isStopWord(token: string): boolean {

@@ -122,7 +122,12 @@ export class StateStore {
     this._ensureLoaded(namespace, scope)
     const ns = this._getNS(namespace, scope)
     const entry = ns.get(key)
-    return entry?.data as T ?? null
+    if (!entry) return null
+    // P0 (M43): LRU promotion — accessed entry moves to MRU position so eviction
+    // removes the least-recently-USED entry, not the oldest-INSERTED (FIFO).
+    ns.delete(key)
+    ns.set(key, entry)
+    return entry.data as T
   }
 
   /** Dapatkan semua entry di satu namespace (opsional scope). */
@@ -278,7 +283,7 @@ export class StateStore {
           ns.set(entry.key, entry)
         }
       } catch (err) {
-        const isTest = typeof process !== "undefined" && process.env?.NODE_ENV === "test"
+        const isTest = typeof process !== "undefined" && process.env.NODE_ENV === "test"
         if (!isTest) {
           log.warn(`Failed to load ${filePath}`, { error: (err as Error).message })
         }

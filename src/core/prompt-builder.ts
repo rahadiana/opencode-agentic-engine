@@ -281,7 +281,7 @@ Tidak punya memori lintas sesi kecuali melalui tool/memory yang tersedia. Setiap
       } catch (e: unknown) {
         // Curator injection is best-effort — never block prompt building
         const err = e instanceof Error ? e.message : String(e)
-        if (typeof process !== "undefined" && process.env?.NODE_ENV !== "test") {
+        if (typeof process !== "undefined" && process.env.NODE_ENV !== "test") {
           console.warn(`[Agentic] Skill curator injection failed: ${err}`)
         }
       }

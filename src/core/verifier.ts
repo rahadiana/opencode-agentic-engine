@@ -682,7 +682,7 @@ export class Verifier {
     const lang = this.detectedLang === "unknown" ? this.detectLanguage(projectDir) : this.detectedLang
     const config = LANGUAGE_CONFIGS[lang] ?? LANGUAGE_CONFIGS.unknown
 
-    // Detect test runner from project config
+    // Detect test runner from project config (P0: jest/vitest/mocha/ava, not just jest)
     let customConfig = config
     if (lang === "typescript" || lang === "javascript") {
       const pkgPath = resolve(projectDir, "package.json")
@@ -690,13 +690,26 @@ export class Verifier {
         const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"))
         const scripts = (pkg.scripts as Record<string, string>) ?? {}
         if (scripts.test) {
-          const testBin = scripts.test.startsWith("jest") ? "npx" : "npx"
-          const testArgs = scripts.test.startsWith("jest")
-            ? ["jest", ...(testPattern ? ["--", testPattern] : [])]
-            : ["vitest", "run", "--reporter", "verbose", ...(testPattern ? ["--", testPattern] : [])]
+          const t = scripts.test.toLowerCase()
+          const runner: "jest" | "vitest" | "mocha" | "ava" = t.includes("jest")
+            ? "jest"
+            : t.includes("vitest")
+              ? "vitest"
+              : t.includes("mocha")
+                ? "mocha"
+                : t.includes("ava")
+                  ? "ava"
+                  : "vitest"
+          const testArgs = runner === "jest"
+            ? ["jest", ...(testPattern ? [testPattern] : [])]
+            : runner === "vitest"
+              ? ["vitest", "run", "--reporter", "verbose", ...(testPattern ? [testPattern] : [])]
+              : runner === "mocha"
+                ? ["mocha", ...(testPattern ? [testPattern] : [])]
+                : ["ava", ...(testPattern ? [testPattern] : [])]
           customConfig = {
             ...config,
-            testCmd: () => ({ bin: testBin, args: testArgs, timeout: 60000 }),
+            testCmd: () => ({ bin: "npx", args: testArgs, timeout: 60000 }),
           }
         }
       } catch (e) {
@@ -824,18 +837,30 @@ export class Verifier {
 
     const allTestFiles = [...new Set([...testFiles, ...inferredTestFiles])]
 
-    if (allTestFiles.length > 0) {
-      checks.push({
-        name: `test:${allTestFiles.length} related files`,
-        passed: true,
-        output: `Related test files: ${allTestFiles.join(", ")}`,
-      })
-    }
-
     if (lang !== "unknown") {
       checks.push(this.verifyLint(projectDir))
     }
-    checks.push(this.verifyTests(projectDir))
+    // P0 fix (M3): actually run related tests only. Fall back to ALL with explicit
+    // reason when no mapping found — no longer misleading.
+    if (allTestFiles.length > 0) {
+      const pattern = allTestFiles
+        .map(f => (f.split("/").pop() ?? f).replace(/\.\w+$/, ""))
+        .filter(Boolean)
+        .join("|")
+      const related = this.verifyTests(projectDir, pattern)
+      checks.push({
+        name: `test:related (${allTestFiles.length} related files)`,
+        passed: related.passed,
+        output: `Related test files: ${allTestFiles.join(", ")}\n${related.output}`,
+      })
+    } else {
+      const all = this.verifyTests(projectDir)
+      checks.push({
+        name: "test:all (no related mapping found)",
+        passed: all.passed,
+        output: `No related test mapping for: ${changedFiles.join(", ") || "(no files)"} — ran full suite as fallback.\n${all.output}`,
+      })
+    }
 
     const errors = checks.filter(c => !c.passed).map(c => c.output)
     return {

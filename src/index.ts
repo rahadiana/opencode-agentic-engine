@@ -59,12 +59,13 @@ import { LiveEvaluator } from "./evaluation/live-evaluator.js"
 import { DebateLoop } from "./core/debate-loop.js"
 import { RouterAgent, detectLifecyclePhase } from "./core/router-agent.js"
 import { DataCleaner } from "./core/data-cleaner.js"
-import { MultiIndexRAG } from "./memory/multi-index-rag.js"
+import { MultiIndexRAG, isIndexData } from "./memory/multi-index-rag.js"
 import { MCPClient } from "./core/mcp-client.js"
 import { ProtocolAdapter } from "./core/protocol-adapter.js"
 import { DynamicToolRegistry } from "./core/dynamic-tool-registry.js"
 import { MCPServer } from "./core/mcp-server.js"
-import { buildAgenticSystemInstructions, buildCompactToolBrief, type ToolEntry } from "./core/prompt-builder.js"
+import { buildAgenticSystemInstructions, type ToolEntry } from "./core/prompt-builder.js"
+import { detectSubAgentRole as detectSubAgentRoleMod, buildSubAgentInjection } from "./core/subagent-detect.js"
 import { AGENTIC_TOOL_REGISTRY } from "./core/tool-catalog.js"
 import { detectProjectContext, type ProjectContext } from "./core/project-context.js"
 import { PromptTemplate, type KnowledgeEntry } from "./core/prompt-template.js"
@@ -151,66 +152,10 @@ const createEngine: Plugin = async (input, _options) => {
   const TOOL_REGISTRY: ToolEntry[] = AGENTIC_TOOL_REGISTRY
 
   // ── Sub-agent detection (dynamic via RoleRegistry + fallback signatures) ──
-  // Sub-agents have limited tool sets and role-specific prompts. Injecting the
-  // full agentic prompt would conflict (wrong tool count, wrong workflow).
-  // Detection is dynamic: checks ALL registered roles (built-in + custom via
-  // agentic_evolve) plus orchestrator pipeline-stage prompts.
+  // Sub-agent detection/injection lives in core/subagent-detect.ts (P1 C1 extract).
+  // Thin wrappers bind the engine-scoped roleRegistry.
   function detectSubAgentRole(systemText: string): { role: string; tools: string[] } | null {
-    // 1) Check built-in roles
-    for (const def of roleRegistry.getAllBuiltIn()) {
-      if (def.prompt && systemText.includes(def.prompt.slice(0, 50))) {
-        return { role: def.role, tools: def.tools ?? [] }
-      }
-    }
-    // 2) Check custom roles (agentic_evolve register-role)
-    for (const def of roleRegistry.getAllCustom()) {
-      if (def.prompt && systemText.includes(def.prompt.slice(0, 50))) {
-        return { role: def.role, tools: def.tools ?? [] }
-      }
-    }
-    // 3) Fallback: orchestrator pipeline-stage hardcoded prompts
-    const pipelineSigs: Array<{ sig: string; role: string; tools: string[] }> = [
-      { sig: "You are a PM. Define requirements", role: "pm", tools: ["agentic_plan", "agentic_nav", "agentic_delegate", "agentic_episodes", "read"] },
-      { sig: "You are an architect. Design architecture", role: "architect", tools: ["read", "grep", "glob", "agentic_nav", "agentic_score", "agentic_delegate", "agentic_skill"] },
-      { sig: "Return JSON array of {path, content}", role: "developer", tools: ["read", "edit", "write", "bash", "glob", "grep", "agentic_skill"] },
-      { sig: "You are QA. Review the implementation", role: "qa", tools: ["read", "glob", "grep", "bash", "agentic_verify", "agentic_skill"] },
-      { sig: "You are a coordinator. Verify pipeline", role: "coordinator", tools: ["read", "agentic_verify", "agentic_plan"] },
-    ]
-    for (const ps of pipelineSigs) {
-      if (systemText.includes(ps.sig)) return { role: ps.role, tools: ps.tools }
-    }
-    // 4) Debate agents: pure text generation, no tools. Minimal injection.
-    const debateSigs: Array<{ sig: string; role: string }> = [
-      { sig: "You are an **executor agent**", role: "debate-executor" },
-      { sig: "You are a **critic agent**", role: "debate-critic" },
-      { sig: "You are a **data cleaner**", role: "debate-cleaner" },
-    ]
-    for (const ds of debateSigs) {
-      if (systemText.includes(ds.sig)) return { role: ds.role, tools: [] }
-    }
-    return null
-  }
-
-  function buildSubAgentInjection(role: string, tools: string[]): string {
-    const isDebateAgent = role.startsWith("debate-")
-    if (isDebateAgent) {
-      // Debate agents are pure text generation — they don't call tools.
-      // Inject nothing — their prompts are fully self-contained.
-      // Only add webfetch reminder since they might search for reference.
-      return "Note: the web fetch tool is `webfetch` (not `websearch`)."
-    }
-    const specificTools = tools.length > 0
-      ? `Your role-specific tools: ${tools.map(t => `\`${t}\``).join(", ")}`
-      : "Use the tools provided by your role definition."
-    return [
-      `## ⚠️ Role: ${role}`,
-      specificTools,
-      `- Web search: use \`webfetch\` (NOT \`websearch\`)`,
-      `- All agentic tools use \`agentic_\` prefix — no bare names`,
-      `- On failure: call \`agentic_reflect\` before retrying`,
-      ``,
-      buildCompactToolBrief(),
-    ].join("\n")
+    return detectSubAgentRoleMod(systemText, roleRegistry)
   }
 
   // ── Agent identity ──
@@ -558,6 +503,11 @@ const confidenceStore = new ConfidenceStore()
   }
   // Second Brain — active memory subsystem (decisions, TODOs, reflection, graph, checklist)
   const secondBrain = initSecondBrain(stateStore, sessionStore, memoryOrchestrator, llmEngine, agentRuntime)
+  // P0 (C11): persistent RAG cache — engine-scoped (was recreated per hook call,
+  // so it never hit). TTL 60s + LRU promotion on hit + max 50 entries.
+  const _ragCache = new Map<string, { entries: KnowledgeEntry[]; hasHigh: boolean; expiry: number }>()
+  const RAG_CACHE_TTL = 60_000
+  const RAG_CACHE_MAX = 50
   // Wire event-driven memory: auto-save on key events
   eventBus.onAny((event: { type: string; payload: Record<string, unknown> }) => {
     try { secondBrain.handleEvent(event.type, event.payload, event.payload?.sessionID as string | undefined) } catch (e) { log.warn("Silent catch: non-fatal", { error: String(e) }) }
@@ -644,6 +594,51 @@ const confidenceStore = new ConfidenceStore()
       })
     }
   })
+  // Pull (two-way sync, opt-in — P2). Default OFF: one-way push behavior unchanged.
+  // Contract: docs/guide/sync-design.md — GET {url}?since={etag} → {entries, etag} | 304.
+  const RAG_SYNC_ETAG_KEY = "sync:etag"
+  async function pullRemoteRAG(): Promise<void> {
+    const url = ragSyncCfg.remoteUrl
+    if (!url || ragSyncCfg.remotePullEnabled !== true) return
+    try {
+      const since = stateStore.get<string>("rag", RAG_SYNC_ETAG_KEY) ?? ""
+      const pullUrl = since ? `${url}?since=${encodeURIComponent(since)}` : url
+      const headers: Record<string, string> = {}
+      if (ragSyncCfg.remoteApiKey) headers["Authorization"] = `Bearer ${ragSyncCfg.remoteApiKey}`
+      const ctrl = new AbortController()
+      const timeout = setTimeout(() => ctrl.abort(), 5000)
+      let res: Response
+      try {
+        res = await fetch(pullUrl, { headers, signal: ctrl.signal })
+      } finally {
+        clearTimeout(timeout)
+      }
+      if (res.status === 304) return
+      if (!res.ok) {
+        log.warn(`[RAG] Remote pull from ${url} returned ${res.status}`)
+        return
+      }
+      const body = (await res.json()) as unknown
+      const rec = (body && typeof body === "object" ? body : {}) as Record<string, unknown>
+      const payload = "entries" in rec ? rec["entries"] : body
+      const etag = "etag" in rec ? rec["etag"] : undefined
+      if (!isIndexData(payload)) {
+        log.warn("[RAG] Remote pull payload invalid — ignoring (expected IndexData or {entries, etag})")
+        return
+      }
+      multiIndexRAG.importAll(payload)
+      stateStore.set("rag", RAG_SYNC_ETAG_KEY, typeof etag === "string" && etag ? etag : new Date().toISOString())
+    } catch (e) {
+      log.warn(`[RAG] Remote pull failed: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  if (ragSyncCfg.remoteUrl && ragSyncCfg.remotePullEnabled === true) {
+    const pullMs = Math.max(5000, ragSyncCfg.remotePullIntervalMs ?? 30000)
+    const pullTimer = setInterval(() => { void pullRemoteRAG() }, pullMs)
+    const maybeUnref = pullTimer as unknown as { unref?: () => void }
+    if (typeof maybeUnref.unref === "function") maybeUnref.unref()
+    void pullRemoteRAG()
+  }
   // Wire RAG into MemoryOrchestrator — single coordinator for all memory
   memoryOrchestrator.setRagStore(multiIndexRAG)
 
@@ -789,8 +784,12 @@ const confidenceStore = new ConfidenceStore()
 
   try { await traceLogger.init() } catch (e) { log.warn("Silent catch: non-fatal: cannot create trace dir", { error: String(e) }) }
 
-  // ── Auto-update: fire-and-forget version check + download ──
-  if (typeof __VERSION__ !== "undefined") autoUpdatePlugin(__VERSION__, import.meta.url)
+  // ── Auto-update: version check + download (P1: C7 — handle rejection, no unhandled promise) ──
+  if (typeof __VERSION__ !== "undefined") {
+    autoUpdatePlugin(__VERSION__, import.meta.url).catch((e) => {
+      log.warn("Auto-update check failed (non-fatal)", { error: String(e) })
+    })
+  }
 
   // ── Config hot-reload propagation ──
   // Ketika config berubah di disk, module-module berikut di-update
@@ -1204,10 +1203,8 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
           let queryForRag = ""
 
           // ── RAG cache: avoid redundant TF-IDF queries for similar inputs ──
-          // Simple TTL cache (60s) with exact-match + prefix-match for dedup.
-          const _ragCache = new Map<string, { entries: KnowledgeEntry[]; hasHigh: boolean; expiry: number }>()
-          const RAG_CACHE_TTL = 60_000
-
+          // Engine-scoped TTL cache (60s) with exact-match + prefix-match for dedup.
+          // P0: uses outer _ragCache (persists across hook calls) with LRU promotion.
           try {
             const sessionId = _input.sessionID
             if (sessionId) {
@@ -1226,10 +1223,10 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
             const now = Date.now()
             const cacheKey = queryForRag.slice(0, 200) // limit key length
             // Also try prefix match: if current query starts with a cached query, reuse
-            let cachedHit: { entries: KnowledgeEntry[]; hasHigh: boolean } | null = null
+            let cachedHit: { entries: KnowledgeEntry[]; hasHigh: boolean; hitKey: string } | null = null
             for (const [key, val] of _ragCache) {
               if (val.expiry > now && (cacheKey === key || cacheKey.startsWith(key) || key.startsWith(cacheKey))) {
-                cachedHit = { entries: val.entries, hasHigh: val.hasHigh }
+                cachedHit = { entries: val.entries, hasHigh: val.hasHigh, hitKey: key }
                 break
               }
             }
@@ -1237,6 +1234,9 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
             if (cachedHit) {
               knowledgeEntries = cachedHit.entries
               hasHighConfidenceKnowledge = cachedHit.hasHigh
+              // LRU promotion: re-insert hit entry as MRU
+              const hv = _ragCache.get(cachedHit.hitKey)
+              if (hv) { _ragCache.delete(cachedHit.hitKey); _ragCache.set(cachedHit.hitKey, hv) }
             } else {
               const { keywords, category } = routerAgent.extractKeywords(queryForRag)
               if (keywords.length > 0) {
@@ -1260,10 +1260,16 @@ Your full instructions, tool list, and domain-specific rules are injected dynami
               }
               // Populate cache (even if empty — prevents repeated empty queries)
               _ragCache.set(cacheKey, { entries: knowledgeEntries, hasHigh: hasHighConfidenceKnowledge, expiry: now + RAG_CACHE_TTL })
-              // Evict stale entries if cache grows too large
-              if (_ragCache.size > 50) {
+              // Evict expired first, then LRU-oldest (first key) while over budget
+              if (_ragCache.size > RAG_CACHE_MAX) {
                 for (const [k, v] of _ragCache) {
                   if (v.expiry < now) _ragCache.delete(k)
+                  if (_ragCache.size <= RAG_CACHE_MAX) break
+                }
+                while (_ragCache.size > RAG_CACHE_MAX) {
+                  const oldest = _ragCache.keys().next().value as string | undefined
+                  if (!oldest) break
+                  _ragCache.delete(oldest)
                 }
               }
             }

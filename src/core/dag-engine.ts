@@ -235,9 +235,11 @@ export class DAGEngine {
     const inDegree = new Map<string, number>()
     const adjacency = new Map<string, string[]>() // node → dependents
 
-    // Inisialisasi
+    // Inisialisasi (P1: M16 — hanya hitung dep yang ada di plan; missing dep
+    // sudah di-warn saat build dan dianggap external/root, bukan siklus)
+    const knownIds = new Set(nodes.map(n => n.id))
     for (const n of nodes) {
-      inDegree.set(n.id, n.deps.length)
+      inDegree.set(n.id, n.deps.filter(d => knownIds.has(d)).length)
       adjacency.set(n.id, [])
     }
 
@@ -383,9 +385,18 @@ export class DAGEngine {
         }
       }
 
-      // Abort signal
+      // Abort signal (P1: M17 — mark pending nodes skipped so no node stays
+      // "running" forever; in-flight runners receive the abort via combinedAbort
+      // in executeNode and must respect it — promises that ignore the signal
+      // cannot be force-killed in JS, but state stays consistent)
       if (signal?.aborted) {
         context.circuitBreakerTripped = true
+        for (const n of context.plan.nodes) {
+          const s = context.nodeStates.get(n.id)
+          if (s && (s.status === "pending" || s.status === "running")) {
+            context.nodeStates.set(n.id, { ...s, status: "skipped" })
+          }
+        }
         break
       }
 
@@ -411,13 +422,14 @@ export class DAGEngine {
       )
 
       // After phase: check for failures → recovery
+      // P1 (M15): notify recovery for ALL failed nodes, not just the first.
       const failed = results.filter(r => !r.success)
       if (failed.length > 0 && context.plan.metadata.recoveryStrategy !== "restart-node") {
         recoveryTriggered = true
 
         if (context.plan.metadata.recoveryStrategy === "escalate") {
           escalationRequired = true
-          this.notifyRecovery(failed[0].nodeId, "escalate")
+          for (const f of failed) this.notifyRecovery(f.nodeId, "escalate")
           break
         }
 
@@ -434,7 +446,7 @@ export class DAGEngine {
             }
           }
           escalationRequired = true
-          this.notifyRecovery(failed[0].nodeId, "restart-plan")
+          for (const f of failed) this.notifyRecovery(f.nodeId, "restart-plan")
           break
         }
       }
